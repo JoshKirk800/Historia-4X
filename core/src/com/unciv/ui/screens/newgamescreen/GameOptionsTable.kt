@@ -236,7 +236,7 @@ class GameOptionsTable(
         }
 
     private fun Table.addExcludeCongressScienceCheckbox() =
-        addCheckbox("Exclude World Congress shared-technology research bonus", gameParameters.excludeCongressScienceResolutions) {
+        addCheckbox("Exclude World Congress research bonus", gameParameters.excludeCongressScienceResolutions) {
             gameParameters.excludeCongressScienceResolutions = it
         }
 

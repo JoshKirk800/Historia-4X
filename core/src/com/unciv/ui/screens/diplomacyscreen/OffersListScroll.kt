@@ -24,10 +24,12 @@ import com.unciv.ui.components.widgets.AutoScrollPane as ScrollPane
 /**
  * Widget for one fourth of an [OfferColumnsTable] - instantiated for ours/theirs × available/traded
  * @param persistenceID  Part of ID added to [ExpanderTab.persistenceID] to distinguish the four usecases
+ * @param maxLabelWidth  A button text wider than this wraps onto more lines, so one long offer (a vote on a resolution, a Great Work) does not make the list scroll sideways
  * @param onOfferClicked What to do when a tradeButton is clicked
  */
 class OffersListScroll(
     private val persistenceID: String,
+    private val maxLabelWidth: Float,
     private val onOfferClicked: (TradeOffer) -> Unit
 ) : ScrollPane(null) {
     val table = Table(BaseScreen.skin).apply { defaults().pad(5f) }
@@ -103,6 +105,10 @@ class OffersListScroll(
                         iconCell.size(30f)
                     label.setAlignment(Align.center)
                     labelCell.pad(5f).grow()
+                    if (label.prefWidth > maxLabelWidth) {
+                        label.wrap = true
+                        labelCell.width(maxLabelWidth)
+                    }
                 }
 
                 val amountPerClick =

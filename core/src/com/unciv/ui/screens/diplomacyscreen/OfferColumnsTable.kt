@@ -43,16 +43,21 @@ class OfferColumnsTable(
         }
     }
 
-    private val ourAvailableOffersTable = OffersListScroll("OurAvail") {
+    private val columnWidth = screen.getTradeColumnsWidth() - 20f // Subtract padding: ours and OffersListScroll's
+
+    /** Room for a button text: the column less the scroll bar, the button's icon and padding */
+    private val labelWidth = columnWidth - 100f
+
+    private val ourAvailableOffersTable = OffersListScroll("OurAvail", labelWidth) {
         offerClickImplementation(it, false, tradeView.ourStagedOffers(), tradeView.theirStagedOffers(), ourCiv)
     }
-    private val ourOffersTable = OffersListScroll("OurTrade") {
+    private val ourOffersTable = OffersListScroll("OurTrade", labelWidth) {
         offerClickImplementation(it, true, tradeView.ourStagedOffers(), tradeView.theirStagedOffers(), ourCiv)
     }
-    private val theirOffersTable = OffersListScroll("TheirTrade") {
+    private val theirOffersTable = OffersListScroll("TheirTrade", labelWidth) {
         offerClickImplementation(it, true, tradeView.theirStagedOffers(), tradeView.ourStagedOffers(), theirCiv)
     }
-    private val theirAvailableOffersTable = OffersListScroll("TheirAvail") {
+    private val theirAvailableOffersTable = OffersListScroll("TheirAvail", labelWidth) {
         offerClickImplementation(it, false, tradeView.theirStagedOffers(), tradeView.ourStagedOffers(), theirCiv)
     }
 
@@ -60,8 +65,6 @@ class OfferColumnsTable(
         defaults().pad(5f)
 
         val isPortraitMode = screen.isNarrowerThan4to3()
-
-        val columnWidth = screen.getTradeColumnsWidth() - 20f // Subtract padding: ours and OffersListScroll's
 
         if (!isPortraitMode) {
             // In landscape, arrange in 4 panels: ours left / theirs right ; items top / offers bottom.

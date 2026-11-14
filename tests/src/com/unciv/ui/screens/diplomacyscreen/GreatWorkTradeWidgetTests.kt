@@ -44,7 +44,7 @@ class GreatWorkTradeWidgetTests {
         val offer = trade.ourAvailableOffers.single { it.type == TradeOfferType.GreatWork }
         val view = GameView(game.gameInfo, us)
         val selected = arrayListOf<String>()
-        val list = OffersListScroll("greatwork-smoke") { selected.add(it.name) }
+        val list = OffersListScroll("greatwork-smoke", 300f) { selected.add(it.name) }
         list.update(trade.ourAvailableOffers, trade.theirAvailableOffers,
             ourCiv = view.civView, theirCiv = view.getForeignCivView(other))
         val labels = UiTestSupport.labelTexts(list)

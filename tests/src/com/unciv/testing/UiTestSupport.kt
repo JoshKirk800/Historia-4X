@@ -5,9 +5,17 @@ import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.Group
 import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.InputEvent
+import com.badlogic.gdx.scenes.scene2d.ui.Button
+import com.unciv.logic.civilization.Civilization
+import com.unciv.ui.components.input.ActivationListener
+import com.unciv.ui.screens.worldscreen.WorldScreen
+import com.unciv.view.GameView
 import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.unciv.UncivGame
 import com.unciv.dev.FontDesktop
+import com.unciv.logic.files.UncivFiles
+import com.unciv.ui.audio.MusicController
 import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
@@ -30,6 +38,8 @@ object UiTestSupport {
     fun prepare(game: TestGame) {
         Fonts.fontImplementation = FontDesktop()
         UncivGame.Current.settings.alternativeRendering = true
+        UncivGame.Current.files = UncivFiles(Gdx.files)
+        UncivGame.Current.musicController = MusicController() // screens choose a track for the civilization they show
         // The runner installs a new GL mock per test class, so what was installed once is not necessarily still there
         if (Gdx.gl !== shaderGl) {
             installShaderCapableGl()
@@ -93,4 +103,53 @@ object UiTestSupport {
 
     /** Without the icon glyphs that translation puts in front of names of nations, techs and so on (private use characters) */
     fun plain(text: String): String = text.filter { it.code !in 0xE000..0xF8FF }
+
+    /** Activates [actor] the way a tap does, through its [ActivationListener] */
+    fun tap(actor: Actor) {
+        actor.listeners.filterIsInstance<ActivationListener>().first()
+            .tap(InputEvent().apply { listenerActor = actor }, 0f, 0f, 1, 0)
+    }
+
+    /** The first button at or below [root] that shows [text] */
+    fun button(root: Actor, text: String): Button =
+        actors(root).filterIsInstance<Button>().first { button -> labelTexts(button).any { it == text } }
+
+    /** The first button of the [stage] that shows [text] */
+    fun button(stage: Stage, text: String): Button =
+        actors(stage).filterIsInstance<Button>().first { button -> labelTexts(button).any { it == text } }
+
+    /** A screen that does nothing, to give popups and stubs a stage */
+    fun hostScreen(): BaseScreen = object : BaseScreen() {}
+
+    /**
+     * A [WorldScreen] for code that reaches it through `UncivGame.Current.worldScreen` or is handed it (popups, unit action buttons): a mock
+     * that shows [viewer]'s view of the game of [game], is the player's turn, and has [host]'s stage. Everything else it is asked for is a mock too. It is installed as the game's world screen.
+     */
+    fun installWorldScreen(game: TestGame, viewer: Civilization, host: BaseScreen): WorldScreen {
+        val view = GameView(game.gameInfo, viewer)
+        val world = Mockito.mock(WorldScreen::class.java, Mockito.RETURNS_DEEP_STUBS)
+        Mockito.`when`(world.stage).thenReturn(host.stage)
+        Mockito.`when`(world.gameInfo).thenReturn(game.gameInfo)
+        Mockito.`when`(world.canChangeState).thenReturn(true)
+        Mockito.`when`(world.isPlayersTurn).thenReturn(true)
+        Mockito.`when`(world.selectedCiv).thenReturn(viewer)
+        Mockito.`when`(world.selectedGameView).thenReturn(view)
+        UncivGame::class.java.getDeclaredField("worldScreen").apply { isAccessible = true }.set(UncivGame.Current, world)
+        return world
+    }
+
+    /**
+     * Makes [screen] the top of the game's screen stack above a [hostScreen], so that what its buttons do by `UncivGame.popScreen()`
+     * (the picker screens close themselves) has a screen to return to. Gives the host screen back.
+     */
+    fun putOnScreenStack(screen: BaseScreen): BaseScreen {
+        val host = hostScreen()
+        @Suppress("UNCHECKED_CAST")
+        val stack = UncivGame::class.java.getDeclaredField("screenStack").apply { isAccessible = true }
+            .get(UncivGame.Current) as ArrayDeque<BaseScreen>
+        stack.clear()
+        stack.addLast(host)
+        stack.addLast(screen)
+        return host
+    }
 }

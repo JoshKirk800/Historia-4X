@@ -12,6 +12,7 @@ import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.tile.ImprovementBuildingProblem
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.logic.map.tile.Tile
+import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.tile.TerrainType
 import com.unciv.models.ruleset.tile.TileImprovement
@@ -595,5 +596,32 @@ class TileImprovementConstructionTests {
         tiles[1].startWorkingOnImprovement(freeImprovement, civInfo, worker)
         Assert.assertEquals(3, civInfo.getResourceAmount(stockpiled.name))
         Assert.assertEquals(freeImprovement.name, tiles[1].improvementInProgress)
+    }
+
+    /** CvPlot::canHaveImprovement: a seen resource takes only its own improvement or a BuildableOnResources one; an unseen one does not count */
+    @Test
+    fun bnwResourceTileTakesOnlyItsOwnImprovement() {
+        val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        game.makeHexagonalMap(3)
+        val knowsAll = game.addCiv()
+        for (tech in game.ruleset.technologies.keys) knowsAll.tech.addTechnology(tech)
+        game.addCity(knowsAll, game.getTile(HexCoord(0, 0)))
+        val iron = game.setTileTerrain(HexCoord(1, 0), Constants.plains)
+        iron.setTileResource("Iron")
+        val farm = game.ruleset.tileImprovements["Farm"]!!
+        val mine = game.ruleset.tileImprovements["Mine"]!!
+        val fort = game.ruleset.tileImprovements["Fort"]!!
+        val knowing = GameContext(knowsAll, tile = iron)
+
+        Assert.assertFalse(iron.improvementFunctions.canBuildImprovement(farm, knowing))
+        Assert.assertTrue(iron.improvementFunctions.canBuildImprovement(mine, knowing))
+        Assert.assertTrue(iron.improvementFunctions.canBuildImprovement(fort, knowing))
+
+        // Iron is revealed by Bronze Working: a civilization without it may farm the tile
+        val farmer = game.addCiv()
+        farmer.tech.addTechnology("Agriculture")
+        game.addCity(farmer, game.getTile(HexCoord(-2, 0)))
+        iron.setOwningCity(farmer.cities.first())
+        Assert.assertTrue(iron.improvementFunctions.canBuildImprovement(farm, GameContext(farmer, tile = iron)))
     }
 }

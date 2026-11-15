@@ -11546,7 +11546,7 @@
       }
     },
     {
-      "name": "Formation II",
+      "name": "PROMOTION_FORMATION_2",
       "type": "PROMOTION_FORMATION_2",
       "unitCombatModifiers": {
         "UNITCOMBAT_MOUNTED": 33
@@ -11560,7 +11560,7 @@
       }
     },
     {
-      "name": "Ambush II",
+      "name": "PROMOTION_AMBUSH_2",
       "type": "PROMOTION_AMBUSH_2",
       "unitCombatModifiers": {
         "UNITCOMBAT_ARMOR": 33
@@ -11693,14 +11693,14 @@
       }
     },
     {
-      "name": "PROMOTION_AIR_AMBUSH_1",
+      "name": "Air Ambush I",
       "type": "PROMOTION_AIR_AMBUSH_1",
       "unitCombatModifiers": {
         "UNITCOMBAT_ARMOR": 33
       }
     },
     {
-      "name": "PROMOTION_AIR_AMBUSH_2",
+      "name": "Air Ambush II",
       "type": "PROMOTION_AIR_AMBUSH_2",
       "unitCombatModifiers": {
         "UNITCOMBAT_ARMOR": 33
@@ -11717,7 +11717,7 @@
       "numInterceptionChange": 1
     },
     {
-      "name": "PROMOTION_REPAIR",
+      "name": "Repair",
       "type": "PROMOTION_REPAIR",
       "alwaysHeal": true
     },

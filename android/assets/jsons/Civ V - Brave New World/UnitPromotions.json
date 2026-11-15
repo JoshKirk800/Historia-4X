@@ -157,14 +157,6 @@
         "column": 7,
         "row": 2
 	},
-	{
-		"name": "Formation II",
-		"prerequisites": ["Formation I"],
-		"uniques": ["[+33]% Strength <vs [Mounted] units>"],
-		"unitTypes": ["Sword","Gunpowder","Mounted"],
-        "column": 7,
-        "row": 3
-	},
 
 	{
 		"name": "Blitz",
@@ -602,6 +594,14 @@
         "row": 3
 	},
 	{
+		"name": "Repair", // PROMOTION_REPAIR: March's effect for Armored units (UnitPromotions_UnitCombats UNITCOMBAT_ARMOR)
+		"prerequisites": ["Shock III","Drill III"],
+		"uniques": ["Unit will heal every turn, even if it performs an action"],
+		"unitTypes": ["Armored"],
+        "column": 10,
+        "row": 4
+	},
+	{
 		"name": "Mobility",
 		"prerequisites": ["Shock III","Drill III","Targeting I",
 			"Bombardment I","Boarding Party I", "Coastal Raider I", "Wolfpack I", "Flight Deck I", "Armor Plating I"],
@@ -632,17 +632,25 @@
 		"name": "Ambush I",
 		"prerequisites": ["Shock II","Drill II"],
 		"uniques": ["[+33]% Strength <vs [Armored] units>", "[-100]% weight to this choice for AI decisions"],
-		"unitTypes": ["Sword","Gunpowder","Fighter","Bomber"],
+		"unitTypes": ["Sword","Gunpowder"],
         "column": 25,
         "row": 1
 	},
 	{
-		"name": "Ambush II",
-		"prerequisites": ["Ambush I"],
-		"uniques": ["[+33]% Strength <vs [Armored] units>"],
-		"unitTypes": ["Sword","Gunpowder","Fighter","Bomber"],
+		"name": "Air Ambush I", // PROMOTION_AIR_AMBUSH_1: its own prerequisites, which air units can have
+		"prerequisites": ["Interception I","Dogfighting I","Siege I","Bombardment I"],
+		"uniques": ["[+33]% Strength <vs [Armored] units>", "[-100]% weight to this choice for AI decisions"],
+		"unitTypes": ["Fighter","Bomber"],
         "column": 25,
         "row": 2
+	},
+	{
+		"name": "Air Ambush II",
+		"prerequisites": ["Air Ambush I"],
+		"uniques": ["[+33]% Strength <vs [Armored] units>"],
+		"unitTypes": ["Fighter","Bomber"],
+        "column": 25,
+        "row": 3
 	},
 
 

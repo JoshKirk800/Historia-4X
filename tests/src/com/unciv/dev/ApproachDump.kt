@@ -5,6 +5,7 @@ import com.unciv.UncivGame
 import com.unciv.logic.files.UncivFiles
 import com.unciv.logic.automation.diplomacy.ApproachAi
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.models.metadata.GameSettings
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.ai.MajorCivApproach
@@ -19,7 +20,7 @@ import java.io.File
 /**
  * Why does a civilization hold the approach it holds towards another? For a saved game (APPROACH_DUMP_SAVE, e.g. the `.checkpoint.save` of a
  * [FullGameSim] run), writes to APPROACH_DUMP_OUT, for every ordered pair of living major civilizations that have met, the weights of
- * [ApproachAi.approachWeights] (before the random part) next to the values that feed them: grand strategy and its priorities, opinion, war
+ * [ApproachAi.approachWeights] (before the random part) next to the values that feed them: grand strategy and its priorities, domination progress, opinion, war
  * projection and goal, warmonger threat, military strength compared to ours, proximity, and whether a war could be declared. A developer tool,
  * not a test: it does nothing unless APPROACH_DUMP_SAVE is set.
  */
@@ -46,7 +47,7 @@ class ApproachDump {
         val majors = game.civilizations.filter { it.isMajorCiv && it.isAlive() && it.cities.isNotEmpty() }
         for (civ in majors) {
             val ai = civ.ai
-            out.append("\n${civ.civName}: grand strategy ${ai.grandStrategy}, priorities ${ai.grandStrategyPriorities}; nuclear weapons ${civ.units.getCivUnits().count { it.isNuclearWeapon() }}, military units ${civ.units.getCivUnits().count { it.isMilitary() }}\n")
+            out.append("\n${civ.civName}: grand strategy ${ai.grandStrategy}, priorities ${ai.grandStrategyPriorities}; domination progress ${VictoryProgressAi.dominationVictoryProgress(civ)}; nuclear weapons ${civ.units.getCivUnits().count { it.isNuclearWeapon() }}, military units ${civ.units.getCivUnits().count { it.isMilitary() }}\n")
             for (other in majors) {
                 if (other == civ || !civ.knows(other)) continue
                 val memory = ai.diplomacy.memoryOf(other)

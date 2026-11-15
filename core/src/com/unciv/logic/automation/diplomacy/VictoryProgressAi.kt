@@ -82,6 +82,21 @@ object VictoryProgressAi {
         return isCompetingForVictory(civ) && isCloseToAnyVictoryCondition(other, rules)
     }
 
+    /** CvPlayer::GetNumCapitalCities and CvDiplomacyAI::GetPlayerNumMajorsConquered: the original capitals of other majors [civ] holds */
+    @Readonly
+    fun capitalsConquered(civ: Civilization): Int =
+        civ.cities.count { it.isOriginalCapital && it.foundingCivObject?.isMajorCiv == true && it.foundingCivObject != civ }
+
+    /** CvGame::IsAIAggressiveMode: no Diplomatic, Science or Culture victory is open (by their milestones), so only conquest can end the game */
+    @Readonly
+    fun isAiAggressiveMode(civ: Civilization): Boolean = civ.victoryManager.getAvailableVictories().none { victory ->
+        victory.milestoneObjects.any { it.type in PEACEFUL_MILESTONES }
+    }
+
+    /** The milestones of the Diplomatic (vote), Science (spaceship) and Culture (influence, or policy branches in other rulesets) victories */
+    private val PEACEFUL_MILESTONES = setOf(MilestoneType.WinDiplomaticVote, MilestoneType.AddedSSPartsInCapital,
+        MilestoneType.InfluentialOverAllCivs, MilestoneType.CompletePolicyBranches)
+
     /** Whether one of the victories open to [civ] is won by capturing every capital (the Domination victory, by its milestone, not its name) */
     @Readonly
     fun canAttemptDominationVictory(civ: Civilization): Boolean =

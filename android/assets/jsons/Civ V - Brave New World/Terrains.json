@@ -173,7 +173,8 @@
 		"defenceBonus": 0.25,
 		"RGB": [105,125,72],
 		"occursOn": ["Tundra","Plains","Grassland","Desert","Snow"],
-		"uniques": ["Rough terrain",
+		// Terrain_HillsYieldChanges has no row for Snow: a snow hill yields nothing (CvPlot::calculateNatureYield)
+		"uniques": ["Rough terrain", "[-2 Production] <in [Snow] tiles>",
 					"[+5] Strength for cities built on this terrain",
 					"Has an elevation of [1] for visibility calculations",
 					"Occurs in groups around high elevations",

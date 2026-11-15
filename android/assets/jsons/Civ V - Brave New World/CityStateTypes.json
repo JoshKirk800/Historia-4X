@@ -41,15 +41,17 @@
     },
     {
         "name": "Religious",
+        // Defines FRIENDS_/ALLIES_FAITH_FLAT_BONUS_AMOUNT_* (CvMinorCivAI::GetCurrentFaithFlatBonus: an ally gets both): 2 to the Classical era,
+        // 4 in the Medieval and Renaissance eras, 8 from the Industrial era
         "friendBonusUniques":  [
-            "[+3 Faith] <before the [Medieval era]>",
-            "[+6 Faith] <starting from the [Medieval era]> <before the [Industrial era]>",
-            "[+13 Faith] <starting from the [Industrial era]>"
+            "[+2 Faith] <before the [Medieval era]>",
+            "[+4 Faith] <starting from the [Medieval era]> <before the [Industrial era]>",
+            "[+8 Faith] <starting from the [Industrial era]>"
         ],
         "allyBonusUniques":  [
-            "[+6 Faith] <before the [Medieval era]>",
-            "[+12 Faith] <starting from the [Medieval era]> <before the [Industrial era]>",
-            "[+26 Faith] <starting from the [Industrial era]>"
+            "[+4 Faith] <before the [Medieval era]>",
+            "[+8 Faith] <starting from the [Medieval era]> <before the [Industrial era]>",
+            "[+16 Faith] <starting from the [Industrial era]>"
         ],
         "color": [255, 255, 255]
     }

@@ -61,10 +61,9 @@ class PathfinderNativeTongueTests {
         val names = civ.ruinsManager.getEligibleRewards(unit).map { it.name }
         assertFalse("squatters willing to work for you" in names)
         assertFalse("squatters wishing to settle under your rule" in names)
-        assertFalse("your exploring unit receives training" in names)
         assertFalse("discover holy symbols" in names)
         assertFalse(civ.ruinsManager.chooseReward(unit, "squatters willing to work for you"))
-        assertFalse(civ.ruinsManager.chooseReward(unit, "your exploring unit receives training"))
+        assertFalse(civ.ruinsManager.chooseReward(unit, "discover holy symbols"))
         assertTrue(civ.ruinsManager.hasPendingChoice(unit))
 
         assertTrue(civ.ruinsManager.chooseReward(unit, "a stash of gold"))

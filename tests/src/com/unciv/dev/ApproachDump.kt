@@ -46,7 +46,7 @@ class ApproachDump {
         val majors = game.civilizations.filter { it.isMajorCiv && it.isAlive() && it.cities.isNotEmpty() }
         for (civ in majors) {
             val ai = civ.ai
-            out.append("\n${civ.civName}: grand strategy ${ai.grandStrategy}, priorities ${ai.grandStrategyPriorities}\n")
+            out.append("\n${civ.civName}: grand strategy ${ai.grandStrategy}, priorities ${ai.grandStrategyPriorities}; nuclear weapons ${civ.units.getCivUnits().count { it.isNuclearWeapon() }}, military units ${civ.units.getCivUnits().count { it.isMilitary() }}\n")
             for (other in majors) {
                 if (other == civ || !civ.knows(other)) continue
                 val memory = ai.diplomacy.memoryOf(other)

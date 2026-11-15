@@ -3594,6 +3594,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Can only be built to improve a resource"
 	Applicable to: Improvement
 
+??? example  "Can be built on tiles with any resource"
+	Exempts the improvement from the rule of `improvementsOnResourcesLikeCivV` (Improvements.BuildableOnResources of Civ V)
+
+	Applicable to: Improvement
+
 ??? example  "Provides [positiveAmount] untradable copies of each Luxury resource connected by this City-State to the builder"
 	Example: "Provides [3] untradable copies of each Luxury resource connected by this City-State to the builder"
 

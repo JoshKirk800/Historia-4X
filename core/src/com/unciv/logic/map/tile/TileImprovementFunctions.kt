@@ -224,6 +224,12 @@ class TileImprovementFunctions(val tile: Tile) {
                     !resourceIsVisible || !tile.tileResource!!.isImprovedBy(improvement.name)
                     ) -> false
 
+            // CvPlot::canHaveImprovement: a tile with a resource the civilization sees takes only an improvement for that resource, unless the
+            // improvement may go on any resource (BuildableOnResources). Not when a loaded game's improvements are checked: they stay
+            !isNormalizeCheck && resourceIsVisible && tile.ruleset.modOptions.constants.improvementsOnResourcesLikeCivV
+                && !tile.tileResource!!.isImprovedBy(improvement.name)
+                && !improvement.hasUnique(UniqueType.BuildableOnAnyResource, gameContext) -> false
+
             // At this point we know this is a normal improvement and that there is no reason not to allow it to be built.
 
             // Lastly we check if the improvement may be built on this terrain or resource

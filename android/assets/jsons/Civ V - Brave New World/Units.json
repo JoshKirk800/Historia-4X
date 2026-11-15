@@ -632,7 +632,8 @@
 		"cost": 45,
 		"requiredTech": "Civil Service",
 		"uniques": ["[+50]% Strength <vs [Mounted] units>", "Can move immediately once bought",
-			"Unbuildable", "Can be purchased with [Gold] [in all cities]", "Only available <after adopting [Mercenary Army]>"],
+			"Unbuildable", "Can be purchased with [Gold] [in all cities]", "Only available <after adopting [Mercenary Army]>",
+			"No movement cost to pillage", "Earn [100]% of the damage done to [City] units as [Gold]"],
 		"upgradesTo": "Lancer",
 		"attackSound": "metalhit"
 		// XML: PurchaseOnly=true (CvCity.cpp:2332) and PolicyType=POLICY_TRADE_UNIONS, i.e. Mercenary Army (CvPlayer.cpp:6712-6719)
@@ -973,7 +974,7 @@
 		"requiredTech": "Gunpowder",
 		"upgradesTo": "Rifleman",
 		"obsoleteTech": "Rifling",
-		"uniques": ["Ignores terrain cost"],
+		"uniques": ["Ignores terrain cost", "Earn [100]% of killed [Military] unit's [Strength] as [Golden Age points]"],
 		"promotions": ["Drill I"],
 		"attackSound": "shot"
 	},
@@ -1696,8 +1697,8 @@
 		"cost": 425,
 		"requiredTech": "Computers",
 		"requiredResource": "Aluminum",
-		"uniques": ["[+100]% Strength <vs [Armored] units>", "No defensive terrain bonus", "Can move after attacking",
-			"All tiles cost 1 movement", "Ignores Zone of Control", "Unable to capture cities", "Never appears as a Barbarian unit"],
+		"uniques": ["[+100]% Strength <vs [Armored] units>", "No defensive terrain bonus",
+			"All tiles cost 1 movement", "Unable to capture cities", "Never appears as a Barbarian unit"],
 		"attackSound": "machinegun"
 	},
 
@@ -1731,12 +1732,11 @@
 		"strength": 80,
 		"rangedStrength": 100,
 		"range": 3,
-		"interceptRange": 2,
+		"interceptRange": 3,
 		"cost": 425,
 		"requiredTech": "Robotics",
 		"uniques": ["[100]% chance to intercept air attacks", "Can see invisible [Submarine] units",
 			"Can carry [3] [Missile] units", "[+100]% Strength <vs [Submarine] units>", "Never appears as a Barbarian unit"],
-		"promotions": ["Indirect Fire"],
 		"attackSound": "shipguns"
 	},
 	{

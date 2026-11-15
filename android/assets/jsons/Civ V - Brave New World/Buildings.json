@@ -63,7 +63,7 @@
 		"cost": 40,
 		"maintenance": 1,
 		"requiredTech": "Pottery",
-		"uniques": ["Only available <when religion is enabled>"]
+		"uniques": ["Only available <when religion is enabled>", "Destroyed when the city is captured"]
 	},
 	{
 		"name": "Temple of Artemis",
@@ -266,7 +266,7 @@
 		"uniques": ["[+15]% Production when constructing [Mounted] units [in this city]",
 			"[+1 Production] from [Cattle] tiles [in this city]",
 			"[+1 Production] from [Horses] tiles [in this city]",
-			"[+1 Production] from [Sheep] tiles [in this city]"],
+			"[+1 Production] from [Sheep] tiles [in this city]", "Destroyed when the city is captured"],
 		"requiredTech": "Horseback Riding"
 	},
 	{
@@ -301,7 +301,7 @@
 		"maintenance": 4,
 		"hurryCostModifier": 50,
 		"uniques": ["Removes extra unhappiness from annexed cities",
-			"Can only be built <in [Annexed] cities>"],
+			"Can only be built <in [Annexed] cities>", "Destroyed when the city is captured"],
 		"requiredTech": "Mathematics"
 	},
 	{
@@ -1008,7 +1008,7 @@
 		],
 		"culture": 2,
 		"isWonder": true,
-		"uniques": ["[2] free [Great Artist] units appear", "Only available <after adopting [Exploration]>", "Has [4] [Art/Artifact] Great Work slots"],
+		"uniques": ["Free [Great Artist] appears", "Only available <after adopting [Exploration]>", "Has [4] [Art/Artifact] Great Work slots"],
 		"requiredTech": "Archaeology",
 		"quote": "'Every genuine work of art has as much reason for being as the earth and the sun' - Ralph Waldo Emerson"
 	},
@@ -1131,7 +1131,7 @@
 		"themingBonuses": [
 			{"name": "Showplace for [era] [civ] Music", "bonus": 3, "aiPriority": 2, "sameEra": true, "requiresSamePlayer": true},
 		],
-		"uniques": ["Has [3] [Music] Great Work slots"],
+		"uniques": ["Has [3] [Music] Great Work slots", "Free [Great Musician] appears"],
 		"culture": 2,
 		"isWonder": true,
 		"requiredTech": "Radio",
@@ -1145,7 +1145,7 @@
 			"New spies start with [1] level(s)",
 			"Promotes all spies [1] time(s)",
 			"Gain an extra spy", // Order is significant here
-			"[-15]% enemy spy effectiveness [in this city]",
+			"[-15]% enemy spy effectiveness [in all cities]",
 			"Only available <if [Police Station] is constructed in all [non-[Puppeted]] cities>",
 			"Cost increases by [30] per owned city"],
 		"requiredTech": "Radio"
@@ -1161,16 +1161,15 @@
 		"name": "Hotel",
 		"cost": 300,
 		"hurryCostModifier": 25,
-		"uniques": ["[+50]% Tourism from Great Works [in this city]", "[50]% of the Culture from wonders, natural wonders and improved tiles becomes Tourism [in this city]"],
+		"uniques": ["[+50]% Tourism from Great Works [in this city]", "[50]% of the Culture from wonders, natural wonders and improved tiles becomes Tourism [in this city]", "Destroyed when the city is captured"],
 		"requiredTech": "Refrigeration"
 	},
 	{
 		"name": "National Visitor Center",
 		"cost": 400,
 		"maintenance": 2,
-		"hurryCostModifier": -1,
 		"isNationalWonder": true,
-		"uniques": ["Only available <if [Hotel] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city", "Cannot be hurried",
+		"uniques": ["Only available <if [Hotel] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city",
 			"[+100]% Tourism from Great Works [in this city]", "[100]% of the Culture from wonders, natural wonders and improved tiles becomes Tourism [in this city]"],
 		"requiredTech": "Telecommunications"
 	},
@@ -1187,7 +1186,7 @@
 		"name": "Statue of Liberty",
 		"culture": 1,
 		"isWonder": true,
-		"uniques": ["[+1 Production] from every specialist [in all cities]", "Only available <after adopting [Freedom]>"],
+		"uniques": ["[+1 Production] from every specialist [in all cities]", "Only available <after adopting [Freedom]>", "Free Social Policy"],
 		"requiredTech": "Replaceable Parts",
 		"quote": "'Give me your tired, your poor, your huddled masses yearning to breathe free, the wretched refuse of your teeming shore. Send these, the homeless, tempest-tossed to me, I lift my lamp beside the golden door!' - Emma Lazarus"
 	},
@@ -1338,7 +1337,7 @@
 		"isWonder": true,
 		"greatPersonPoints": {"Great Scientist": 1},
 		"uniques": ["[2] free [Great Scientist] units appear",
-			"[+25]% Production when constructing [Spaceship part] units [in this city]",
+			"[+25]% Production when constructing [Spaceship part] units [in all cities]",
 			"Gain a free [Spaceship Factory] [in this city]"],
 		"requiredTech": "Satellites",
 		"quote": "'The wonder is, not that the field of stars is so vast, but that man has measured it.' - Anatole France"

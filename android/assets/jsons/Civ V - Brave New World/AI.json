@@ -4369,13 +4369,6 @@
     },
     {
       "kind": "Building",
-      "name": "Walls of Babylon",
-      "flavors": {
-        "CityDefense": 40
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Statue of Zeus",
       "flavors": {
         "Offense": 25,
@@ -4388,8 +4381,9 @@
       "kind": "Building",
       "name": "Temple of Artemis",
       "flavors": {
-        "Ranged": 20,
-        "Growth": 50,
+        "Ranged": 10,
+        "Growth": 20,
+        "GreatPeople": 10,
         "Wonder": 15
       }
     },
@@ -4400,6 +4394,13 @@
         "Gold": 5,
         "GreatPeople": 10,
         "Wonder": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Walls of Babylon",
+      "flavors": {
+        "CityDefense": 40
       }
     },
     {
@@ -4756,15 +4757,6 @@
     },
     {
       "kind": "Unit",
-      "name": "Bowman",
-      "flavors": {
-        "Offense": 2,
-        "Defense": 2,
-        "Ranged": 8
-      }
-    },
-    {
-      "kind": "Unit",
       "name": "Keshik",
       "flavors": {
         "Offense": 5,
@@ -4827,16 +4819,27 @@
       "kind": "Unit",
       "name": "Turtle Ship",
       "flavors": {
-        "Naval": 24
+        "Offense": 3,
+        "Defense": 5,
+        "Naval": 20
       }
     },
     {
       "kind": "Unit",
       "name": "Hwach'a",
       "flavors": {
-        "Offense": 8,
-        "Defense": 8,
+        "Offense": 3,
+        "Defense": 4,
         "Ranged": 15
+      }
+    },
+    {
+      "kind": "Unit",
+      "name": "Bowman",
+      "flavors": {
+        "Offense": 2,
+        "Defense": 2,
+        "Ranged": 8
       }
     },
     {
@@ -7808,17 +7811,6 @@
   ],
   "unitAiTypes": [
     {
-      "name": "Bowman",
-      "defaultUnitAi": "UNITAI_RANGED",
-      "combatClass": "UNITCOMBAT_ARCHER",
-      "freePromotions": [
-        "PROMOTION_SMALL_CITY_PENALTY"
-      ],
-      "unitAiTypes": [
-        "UNITAI_RANGED"
-      ]
-    },
-    {
       "name": "Keshik",
       "defaultUnitAi": "UNITAI_RANGED",
       "combatClass": "UNITCOMBAT_ARCHER",
@@ -7835,6 +7827,7 @@
     {
       "name": "Khan",
       "defaultUnitAi": "UNITAI_GENERAL",
+      "civilianAttackPriority": "CIVILIAN_ATTACK_PRIORITY_HIGH",
       "freePromotions": [
         "PROMOTION_MEDIC_GENERAL"
       ],
@@ -7918,7 +7911,7 @@
     {
       "name": "Turtle Ship",
       "defaultUnitAi": "UNITAI_ATTACK_SEA",
-      "combatClass": "UNITCOMBAT_NAVAL",
+      "combatClass": "UNITCOMBAT_NAVALMELEE",
       "freePromotions": [],
       "unitAiTypes": [
         "UNITAI_ATTACK_SEA",
@@ -7931,9 +7924,17 @@
       "defaultUnitAi": "UNITAI_RANGED",
       "combatClass": "UNITCOMBAT_SIEGE",
       "freePromotions": [
-        "PROMOTION_NO_DEFENSIVE_BONUSES",
-        "PROMOTION_SMALL_CITY_PENALTY"
+        "PROMOTION_NO_DEFENSIVE_BONUSES"
       ],
+      "unitAiTypes": [
+        "UNITAI_RANGED"
+      ]
+    },
+    {
+      "name": "Bowman",
+      "defaultUnitAi": "UNITAI_RANGED",
+      "combatClass": "UNITCOMBAT_ARCHER",
+      "freePromotions": [],
       "unitAiTypes": [
         "UNITAI_RANGED"
       ]
@@ -11368,10 +11369,10 @@
     {
       "name": "PROMOTION_MEDIC_GENERAL",
       "type": "PROMOTION_MEDIC_GENERAL",
-      "enemyHealChange": 2,
-      "neutralHealChange": 2,
-      "friendlyHealChange": 2,
-      "adjacentTileHealChange": 2
+      "enemyHealChange": 15,
+      "neutralHealChange": 15,
+      "friendlyHealChange": 15,
+      "adjacentTileHealChange": 15
     },
     {
       "name": "PROMOTION_SKI_INFANTRY",
@@ -12196,17 +12197,17 @@
     }
   ],
   "unitPower": {
-    "Bowman": 20,
-    "Keshik": 41,
+    "Keshik": 58,
     "Khan": 0,
-    "Slinger": 13,
-    "Tercio": 85,
-    "Conquistador": 76,
-    "Maori Warrior": 14,
-    "Berserker": 64,
-    "Norwegian Ski Infantry": 176,
-    "Turtle Ship": 164,
-    "Hwach'a": 85,
+    "Slinger": 16,
+    "Tercio": 148,
+    "Conquistador": 89,
+    "Maori Warrior": 22,
+    "Berserker": 96,
+    "Norwegian Ski Infantry": 281,
+    "Turtle Ship": 216,
+    "Hwach'a": 90,
+    "Bowman": 24,
     "Settler": 0,
     "Worker": 0,
     "Work Boats": 0,

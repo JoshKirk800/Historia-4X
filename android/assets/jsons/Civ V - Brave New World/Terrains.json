@@ -173,7 +173,8 @@
 		"defenceBonus": 0.25,
 		"RGB": [105,125,72],
 		"occursOn": ["Tundra","Plains","Grassland","Desert","Snow"],
-		"uniques": ["Rough terrain",
+		// Terrain_HillsYieldChanges has no row for Snow: a snow hill yields nothing (CvPlot::calculateNatureYield)
+		"uniques": ["Rough terrain", "[-2 Production] <in [Snow] tiles>",
 					"[+5] Strength for cities built on this terrain",
 					"Has an elevation of [1] for visibility calculations",
 					"Occurs in groups around high elevations",
@@ -356,6 +357,7 @@
 		"production": 1,
 		"gold": 1,
 		"science": 2,
+		"overrideStats": true, // YieldNotAdditive: the reef's yield replaces the Coast's it turns into (CvPlot::calculateNatureYield)
 		"occursOn": ["Ocean"],
 		"uniques": ["Must be adjacent to [1] to [6] [Coast] tiles",
 			"Must be adjacent to [6] [Water] tiles",
@@ -510,9 +512,9 @@
 		"influenceCost": -3,
 		"type": "NaturalWonder",
 		"faith": 6,
-		"happiness": 2,
+		// Features.InBorderHappiness: counted for every owned plot, worked or not (CvPlayer::GetHappinessFromNaturalWonders)
 		"occursOn": ["Plains","Grassland"],
-		"uniques": ["Blocks line-of-sight as if [2] elevation higher", "Must be adjacent to [0] [Coast] tiles",
+		"uniques": ["Blocks line-of-sight as if [2] elevation higher", "[+2 Happiness] while this tile is in your borders", "Must be adjacent to [0] [Coast] tiles",
 			"Must be adjacent to [0] [Marsh] tiles",
 			"Must be adjacent to [0] to [1] [Desert] tiles",
 			"Must be adjacent to [4] to [6] [Elevated] tiles"],
@@ -543,9 +545,9 @@
 		"type": "NaturalWonder",
 		"food": 2,
 		"faith": 4,
-		"happiness": 2,
+		// Features.InBorderHappiness: counted for every owned plot, worked or not (CvPlayer::GetHappinessFromNaturalWonders)
 		"occursOn": ["Plains","Grassland"],
-		"uniques": ["Blocks line-of-sight as if [2] elevation higher", "Must be adjacent to [0] [Tundra] tiles",
+		"uniques": ["Blocks line-of-sight as if [2] elevation higher", "[+2 Happiness] while this tile is in your borders", "Must be adjacent to [0] [Tundra] tiles",
 			"Must be adjacent to [0] [Desert] tiles",
 			"Must be adjacent to [0] [Marsh] tiles",
 			"Must not be on [1] largest landmasses"],

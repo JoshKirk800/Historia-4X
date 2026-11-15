@@ -3,7 +3,8 @@
 	{
 		"name": "Heal Instantly",
 		"uniques": ["[This Unit] heals [50] HP", "Doing so will consume this opportunity to choose a Promotion"],
-		"unitTypes": ["Sword","Gunpowder","Mounted","Scout","Siege","Archery","Ranged Gunpowder","Armored","Melee Water","Ranged Water","Submarine"],
+		"unitTypes": ["Sword","Gunpowder","Mounted","Scout","Siege","Archery","Ranged Gunpowder","Armored","Melee Water","Ranged Water","Submarine",
+			"Aircraft Carrier","Fighter","Bomber","Helicopter"],
 		"innerColor": [195,53,43],
 		"outerColor": [253,236,234],
         "row": 0,
@@ -69,9 +70,9 @@
 	},
 	{
 		"name": "Extended Range",
-		"prerequisites": ["Accuracy III","Barrage III","Targeting II","Bombardment II", "Wolfpack II"],
+		"prerequisites": ["Accuracy III","Barrage III","Targeting II","Bombardment II"],
 		"uniques": ["[+1] Range"],
-		"unitTypes": ["Archery","Ranged Gunpowder","Siege","Ranged Water","Submarine"],
+		"unitTypes": ["Archery","Ranged Gunpowder","Siege","Ranged Water"],
         "column": 3,
         "row": 3
 	},
@@ -152,7 +153,7 @@
 		"name": "Formation I",
 		"prerequisites": ["Shock II","Drill II","Accuracy II","Barrage II"],
 		"uniques": ["[+33]% Strength <vs [Mounted] units>", "[-50]% weight to this choice for AI decisions"],
-		"unitTypes": ["Sword","Gunpowder","Mounted"],
+		"unitTypes": ["Sword","Gunpowder","Mounted","Armored"],
         "column": 7,
         "row": 2
 	},
@@ -168,7 +169,7 @@
 	{
 		"name": "Blitz",
 		"prerequisites": ["Shock III","Drill III"],
-		"uniques": ["[1] additional attacks per turn"],
+		"uniques": ["[1] additional attacks per turn", "Can move after attacking"],
 		"unitTypes": ["Sword","Gunpowder","Mounted","Armored"],
         "column": 6,
         "row": 4
@@ -315,7 +316,7 @@
 	{
 		"name": "Targeting I",
 		"uniques": ["[+15]% Strength <vs [Water] units>"],
-		"unitTypes": ["Ranged Water"],
+		"unitTypes": ["Ranged Water","Submarine"],
         "column": 13,
         "row": 1
 	},
@@ -323,7 +324,7 @@
 		"name": "Targeting II",
 		"prerequisites": ["Targeting I"],
 		"uniques": ["[+15]% Strength <vs [Water] units>"],
-		"unitTypes": ["Ranged Water"],
+		"unitTypes": ["Ranged Water","Submarine"],
         "column": 13,
         "row": 2
 	},
@@ -331,7 +332,7 @@
 		"name": "Targeting III",
 		"prerequisites": ["Targeting II"],
 		"uniques": ["[+15]% Strength <vs [Water] units>"],
-		"unitTypes": ["Ranged Water"],
+		"unitTypes": ["Ranged Water","Submarine"],
         "column": 13,
         "row": 3
 	},
@@ -414,7 +415,7 @@
 		"name" : "Supply",
 		"prerequisites": ["Bombardment II", "Targeting II", "Boarding Party II", "Coastal Raider II", "Wolfpack II", "Flight Deck II", "Armor Plating II"],
 		"uniques": ["May heal outside of friendly territory", "[+15] HP when healing <in [Foreign Land] tiles>"],
-		"unitTypes": ["Melee Water", "Ranged Water"],
+		"unitTypes": ["Melee Water", "Ranged Water", "Submarine", "Aircraft Carrier"],
         "column": 16,
         "row": 4
 	},
@@ -605,7 +606,7 @@
 		"prerequisites": ["Shock III","Drill III","Targeting I",
 			"Bombardment I","Boarding Party I", "Coastal Raider I", "Wolfpack I", "Flight Deck I", "Armor Plating I"],
 		"uniques": ["[+1] Movement"],
-		"unitTypes": ["Mounted","Melee Water","Ranged Water","Armored","Submarine"],
+		"unitTypes": ["Mounted","Melee Water","Ranged Water","Armored","Submarine","Aircraft Carrier"],
         "column": 24,
         "row": 3
 	},
@@ -613,7 +614,7 @@
 		"name": "Sentry",
 		"prerequisites": ["Shock I","Drill I","Bombardment I","Targeting I","Boarding Party I","Coastal Raider I","Wolfpack I","Flight Deck I","Armor Plating I"],
 		"uniques": ["[+1] Sight"],
-		"unitTypes": ["Sword","Gunpowder","Mounted","Ranged Water","Armored","Melee Water"],
+		"unitTypes": ["Mounted","Ranged Water","Armored","Melee Water","Submarine","Aircraft Carrier"],
         "column": 24,
         "row": 4
 	},
@@ -622,7 +623,7 @@
 		"prerequisites": ["Accuracy III","Barrage III","Targeting III", "Wolfpack III",
 			"Bombardment III", "Coastal Raider III","Boarding Party III","Siege III", "Mobility II", "Anti-Armor II"],
 		"uniques": ["[1] additional attacks per turn", "Can move after attacking"],
-		"unitTypes": ["Archery","Ranged Gunpowder","Siege","Melee Water","Ranged Water","Submarine","Fighter","Bomber","Helicopter"],
+		"unitTypes": ["Archery","Ranged Gunpowder","Siege","Melee Water","Ranged Water","Submarine","Bomber","Helicopter"],
         "column": 24,
         "row": 5
 	},
@@ -649,7 +650,7 @@
 	{
 		"name": "Bombardment I",
 		"uniques": ["[+33]% Strength <vs [Land] units>"],
-		"unitTypes": ["Ranged Water","Fighter","Bomber"],
+		"unitTypes": ["Ranged Water","Bomber"],
         "column": 26,
         "row": 1
 	},
@@ -657,7 +658,7 @@
 		"name": "Bombardment II",
 		"prerequisites": ["Bombardment I"],
 		"uniques": ["[+33]% Strength <vs [Land] units>"],
-		"unitTypes": ["Ranged Water","Fighter","Bomber"],
+		"unitTypes": ["Ranged Water","Bomber"],
         "column": 26,
         "row": 2
 	},
@@ -665,7 +666,7 @@
 		"name": "Bombardment III",
 		"prerequisites": ["Bombardment II"],
 		"uniques": ["[+34]% Strength <vs [Land] units>"],
-		"unitTypes": ["Ranged Water","Fighter","Bomber"],
+		"unitTypes": ["Ranged Water","Bomber"],
         "column": 26,
         "row": 3
 	},

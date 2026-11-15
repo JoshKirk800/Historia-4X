@@ -25,6 +25,9 @@ object ApproachAi {
     private val FRIENDLY = MajorCivApproach.Friendly.ordinal
     private val NEUTRAL = MajorCivApproach.Neutral.ordinal
 
+    /** A developer's view into [approachWeights]: called with the name of the step about to run and the weights so far (the live array: copy it). Null in the game. */
+    @JvmField var debugSink: ((String, IntArray) -> Unit)? = null
+
     /** The outcome of [bestApproach]: the approach, its weight, and the war face it would wear (null unless War) */
     class BestApproach(val approach: MajorCivApproach, val weight: Int, val warFace: WarFace?)
 
@@ -89,25 +92,32 @@ object ApproachAi {
         val ai = civ.ai.diplomacy
         val memory = ai.memoryOf(other)
         val w = IntArray(APPROACHES.size)
+        fun stage(name: String) { debugSink?.invoke(name, w) }
 
+        stage("Neutral default")
         // Neutral default
         w[NEUTRAL] += rules.define(AiDefine.APPROACH_NEUTRAL_DEFAULT)
 
+        stage("Current approach biases: stay where we are")
         // Current approach biases: stay where we are
         val old = oldApproach ?: MajorCivApproach.Neutral
         w[old.ordinal] += rules.define(AiDefine.APPROACH_BIAS_FOR_CURRENT)
         if (old == MajorCivApproach.Deceptive) w[WAR] += rules.define(AiDefine.APPROACH_WAR_CURRENTLY_DECEPTIVE)
         if (old == MajorCivApproach.Hostile) w[HOSTILE] += rules.define(AiDefine.APPROACH_HOSTILE_CURRENTLY_HOSTILE)
         val warState = WarStateAi.warState(civ, other)
+        stage("Wanted war last turn: the war must be going better than a stalemate")
         // Wanted war last turn: the war must be going better than a stalemate
         if (warState != null && warState > WarState.Stalemate && old == MajorCivApproach.War) w[WAR] += rules.define(AiDefine.APPROACH_WAR_CURRENTLY_WAR)
+        stage("Conquest grand strategy: not at war yet, or the war going better than defensive")
         // Conquest grand strategy: not at war yet, or the war going better than defensive
         if ((warState == null || warState > WarState.Defensive) && civ.ai.isGoingForWorldConquest())
             w[WAR] += rules.define(AiDefine.APPROACH_WAR_CONQUEST_GRAND_STRATEGY)
 
+        stage("Personality")
         // Personality
         for (approach in APPROACHES) w[approach.ordinal] += civ.ai.majorCivApproachBias(approach)
 
+        stage("Opinion")
         // Opinion
         when (memory.opinion) {
             MajorCivOpinion.Unforgivable -> {
@@ -144,6 +154,7 @@ object ApproachAi {
             MajorCivOpinion.Ally -> w[FRIENDLY] += rules.define(AiDefine.APPROACH_OPINION_ALLY_FRIENDLY)
         }
 
+        stage("Declaration of friendship")
         // Declaration of friendship
         if (OpinionAi.isDoFAccepted(civ, other)) {
             w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_WORKING_WITH_PLAYER)
@@ -152,6 +163,7 @@ object ApproachAi {
             w[GUARDED] += rules.define(AiDefine.APPROACH_GUARDED_WORKING_WITH_PLAYER)
         }
 
+        stage("Denouncements: we denounced them, a friend who denounced us, they denounced us")
         // Denouncements: we denounced them, a friend who denounced us, they denounced us
         val denouncements = (if (OpinionAi.isDenouncedPlayer(civ, other)) 1 else 0) + (if (memory.friendDenouncedUs) 1 else 0) +
             (if (OpinionAi.isDenouncedPlayer(other, civ)) 1 else 0)
@@ -163,6 +175,7 @@ object ApproachAi {
             w[DECEPTIVE] += denouncements * rules.define(AiDefine.APPROACH_DECEPTIVE_DENOUNCED)
         }
 
+        stage("Mistreated our protected minors")
         // Mistreated our protected minors
         val killedAnger = OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)
         if (killedAnger || OpinionAi.isAngryAboutProtectedMinorAttacked(memory, rules)) {
@@ -177,16 +190,21 @@ object ApproachAi {
             }
         }
 
+        stage("They made a demand of us")
         // They made a demand of us
         if (memory.demandCounter != -1) {
             w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_DEMAND)
             w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_DEMAND)
         }
 
+        stage("promises")
         addPromiseWeights(civ, other, memory, w, rules)
+        stage("military threat")
         addMilitaryThreatWeights(memory.militaryThreat, w, rules)
+        stage("nukes")
         addNukeWeights(civ, other, w)
 
+        stage("At war right now with someone else")
         // At war right now with someone else
         val stateAllWars = WarStateAi.stateAllWars(civ)
         for (third in civ.gameInfo.civilizations) {
@@ -202,6 +220,7 @@ object ApproachAi {
             w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_AT_WAR_WITH_PLAYER)
         }
 
+        stage("Approaches already given to players we feel more strongly about (this turn)")
         // Approaches already given to players we feel more strongly about (this turn)
         if (lookAtOtherPlayers) {
             for (third in civ.gameInfo.civilizations) {
@@ -233,6 +252,7 @@ object ApproachAi {
             }
         }
 
+        stage("Gold we get from trade routes with them (the original's untuned constants)")
         // Gold we get from trade routes with them (the original's untuned constants)
         val tradeGold = tradeGoldFrom(civ, other)
         if (tradeGold > 0) {
@@ -249,6 +269,7 @@ object ApproachAi {
             if (goldRate >= 0 && delta < 0) w[WAR] += delta
         }
 
+        stage("War projection")
         // War projection
         when (memory.warProjection) {
             WarProjection.Destruction -> {
@@ -282,12 +303,14 @@ object ApproachAi {
             null -> {}
         }
 
+        stage("Reckless expander")
         // Reckless expander
         if (WarStateAi.isPlayerRecklessExpander(civ, other)) {
             scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_RECKLESS_EXPANDER))
             scale(w, DECEPTIVE, rules.define(AiDefine.APPROACH_WAR_RECKLESS_EXPANDER))
         }
 
+        stage("Already in a war with someone else (their war states): dogpile")
         // Already in a war with someone else (their war states): dogpile
         val dogpiling = civ.gameInfo.civilizations.any {
             it.isMajorCiv && it != other && it != civ && WarStateAi.isPlayerValid(other, it) && WarStateAi.warState(other, it) != null
@@ -297,6 +320,7 @@ object ApproachAi {
             scale(w, DECEPTIVE, 150)
         }
 
+        stage("Distance")
         // Distance
         val proximityPercent = when (DiplomacyTurn.proximity(civ, other)) {
             DiplomacyTurn.PROXIMITY_NEIGHBORS -> rules.define(AiDefine.APPROACH_WAR_PROXIMITY_NEIGHBORS)
@@ -308,18 +332,22 @@ object ApproachAi {
         scale(w, WAR, proximityPercent)
         scale(w, DECEPTIVE, proximityPercent)
 
+        stage("Made peace recently")
         // Made peace recently
         if (memory.turnMadePeace > -1 && civ.gameInfo.turns - memory.turnMadePeace < rules.define(AiDefine.TURNS_SINCE_PEACE_WEIGHT_DAMPENER))
             scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_HAS_MADE_PEACE_BEFORE_PERCENT))
 
+        stage("Duel: no friendly or deceptive")
         // Duel: no friendly or deceptive
         if (civ.gameInfo.civilizations.count { it.isMajorCiv && it.isAlive() } == 2) {
             w[DECEPTIVE] = 0
             w[FRIENDLY] = 0
         }
 
+        stage("Agreed to a coop war against them")
         // Agreed to a coop war against them
         if (CoopWarAi.isLockedIntoCoopWar(civ, other, rules)) w[WAR] += rules.define(AiDefine.COOP_WAR_LOCKED_TURNS_WAR_WEIGHT)
+        stage("end")
         return w
     }
 

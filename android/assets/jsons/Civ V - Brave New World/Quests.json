@@ -50,9 +50,10 @@
     "name": "Conquer City State",
     "description": "It's time to erase the City-State of [cityState] from the map. You will be greatly rewarded for conquering them!",
     "influence": 80,
+      // CvMinorCivAI::GetPersonalityQuestBias: MINOR_CIV_QUEST_WEIGHT_MULTIPLIER_MILITARISTIC_ / HOSTILE_ / NEUTRAL_KILL_CITY_STATE
       "weightForCityStateType": {
           "Hostile": 2,
-          "Friendly": 0.2,
+          "Neutral": 0.4,
           "Militaristic": 2
       }
   },
@@ -106,12 +107,9 @@
     "type": "Global",
     "duration": 30,
     "minimumCivs": 3,
+      // CvMinorCivAI::GetPersonalityQuestBias: twice as likely from a Cultured city-state, unchanged from the others
       "weightForCityStateType": {
-          "Cultured": 2,
-          "Maritime": 0.5,
-          "Mercantile": 0.5,
-          "Militaristic": 0.5,
-          "Religious": 0.5
+          "Cultured": 2
       }
   },
   {

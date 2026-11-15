@@ -97,7 +97,7 @@
 	// Military improvement
 	{
 		"name": "Fort",
-		"terrainsCanBeBuiltOn": ["Plains","Grassland","Desert","Hill","Tundra","Snow","Forest","Jungle"],
+		"terrainsCanBeBuiltOn": ["Plains","Grassland","Desert","Hill","Tundra","Snow","Forest","Jungle","Flood plains"],
 		"turnsToBuild": 8,
 		"techRequired": "Engineering",
 		"uniques": ["Can be built outside your borders", "Gives a defensive bonus of [50]%", "Destroyed when pillaged"],
@@ -297,7 +297,7 @@
 	{
 		"name": "Chateau",
 		"uniqueTo": "France",
-		"terrainsCanBeBuiltOn": ["Plains","Grassland","Desert","Tundra","Snow"],
+		"terrainsCanBeBuiltOn": ["Plains","Grassland","Desert","Tundra","Snow","Hill","Flood plains"],
 		"culture": 2,
 		"gold": 1,
 		"turnsToBuild": 8,
@@ -308,18 +308,18 @@
 	{
 		"name": "Kasbah",
 		"uniqueTo": "Morocco",
-		"terrainsCanBeBuiltOn": ["Desert"],
+		"terrainsCanBeBuiltOn": ["Desert","Hill","Flood plains"],
 		"food": 1,
 		"production": 1,
 		"gold": 1,
 		"turnsToBuild": 8,
-		"uniques": ["Gives a defensive bonus of [50]%", "Pillaging this improvement yields approximately [+10 Gold]"],
+		"uniques": ["Gives a defensive bonus of [50]%", "Pillaging this improvement yields approximately [+10 Gold]", "Can only be built on [Desert] tiles"],
 		"techRequired": "Chivalry"
 	},
 	{
 		"name": "Feitoria",
 		"uniqueTo": "Portugal",
-		"terrainsCanBeBuiltOn": ["Grassland", "Plains", "Desert", "Tundra", "Snow", "Hill"],
+		"terrainsCanBeBuiltOn": ["Grassland", "Plains", "Desert", "Tundra", "Snow", "Hill", "Flood plains"],
 		"turnsToBuild": 8,
 		"techRequired": "Navigation",
 		"uniques": ["Can only be built in City-State territory", "Can only be built on [Coastal] tiles",

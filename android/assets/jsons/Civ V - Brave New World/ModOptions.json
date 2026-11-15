@@ -65,6 +65,8 @@
         "cityHealLikeCivV": true,
         // CvCity::DoSeedResourceDemandedCountdown, CvCity::DoTestResourceDemanded
         "resourceDemandLikeCivV": true,
+        // CvPlot::canHaveImprovement: a seen resource takes only its own improvement, or one with "Can be built on tiles with any resource"
+        "improvementsOnResourcesLikeCivV": true,
         // CvMap.cpp CvLandmass::isLake: LAKE_MAX_AREA_SIZE
         "maxLakeSize": 9,
         // CvGame::GetTurnsBetweenMinorCivElections

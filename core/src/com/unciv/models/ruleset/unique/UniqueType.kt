@@ -872,6 +872,8 @@ enum class UniqueType(
     CanOnlyBeBuiltOnTile("Can only be built on [tileFilter] tiles", UniqueTarget.Improvement),
     CannotBuildOnTile("Cannot be built on [tileFilter] tiles", UniqueTarget.Improvement),
     CanOnlyImproveResource("Can only be built to improve a resource", UniqueTarget.Improvement),
+    BuildableOnAnyResource("Can be built on tiles with any resource", UniqueTarget.Improvement,
+        docDescription = "Exempts the improvement from the rule of `improvementsOnResourcesLikeCivV` (Improvements.BuildableOnResources of Civ V)"),
     SiphonsLuxuriesFromCityState("Provides [positiveAmount] untradable copies of each Luxury resource connected by this City-State to the builder", UniqueTarget.Improvement),
     NoFeatureRemovalNeeded("Does not need removal of [terrainFeature]", UniqueTarget.Improvement),
     RemovesFeaturesIfBuilt("Removes removable features when built", UniqueTarget.Improvement),

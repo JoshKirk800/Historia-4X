@@ -373,6 +373,7 @@
       "Can only be built on [tileFilter] tiles",
       "Cannot be built on [tileFilter] tiles",
       "Can only be built to improve a resource",
+      "Can be built on tiles with any resource",
       "Does not need removal of [tileFilter]",
       "Removes removable features when built",
       "Gives a defensive bonus of [relativeAmount]%",

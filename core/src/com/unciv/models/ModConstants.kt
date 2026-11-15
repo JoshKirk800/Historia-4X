@@ -190,6 +190,10 @@ class ModConstants {
     // that and the length of the We Love the King Day (20) are scaled by the game speed. true: as in Civ V (CvCity::DoSeedResourceDemandedCountdown, DoTestResourceDemanded)
     // the capital adds 25 (RESOURCE_DEMAND_COUNTDOWN_CAPITAL_ADD) and neither is scaled by the game speed
     var resourceDemandLikeCivV = false
+    // Improvements on a tile with a resource. false: any improvement allowed on the terrain. true: as in Civ V (CvPlot::canHaveImprovement)
+    // a tile whose resource the civilization can see takes only an improvement that improves that resource, or one with the unique
+    // "Can be built on tiles with any resource" (Improvements.BuildableOnResources: Fort, Moai, the great person improvements)
+    var improvementsOnResourcesLikeCivV = false
     // How much more combat points the next Great General or Admiral needs. false: 50 more each. true: as in Civ V
     // (CvPlayer::createGreatGeneral) the threshold of 200 grows by 100 x (earned / 10 + 1) with the number earned so far
     var greatGeneralThresholdLikeCivV = false

@@ -1331,15 +1331,15 @@
 	{
 		"name": "Foreign Legion",
 		"unitType": "Gunpowder",
-		"replaces": "Great War Infantry",
-		"uniqueTo": "France",
 		"movement": 2,
 		"strength": 42,
 		"cost": 320,
 		"requiredTech": "Replaceable Parts",
 		"upgradesTo": "Infantry",
 		"obsoleteTech": "Plastics",
-		"uniques": ["[+20]% Strength <when fighting in [Foreign Land] tiles>"],
+		"uniques": ["[+20]% Strength <when fighting in [Foreign Land] tiles>", "Unbuildable"],
+		// XML: Class is UNITCLASS_GREAT_WAR_INFANTRY, whose unit is the Great War Infantry for every civilization, so CvPlayer::canTrain
+		// refuses it everywhere; the units come from Volunteer Army (Policy_FreeUnitClasses UNITCLASS_FOREIGNLEGION)
 		"attackSound": "shot"
 	},
 	{

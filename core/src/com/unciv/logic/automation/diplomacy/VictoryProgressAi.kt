@@ -49,6 +49,39 @@ object VictoryProgressAi {
     fun isCloseToWorldConquest(civ: Civilization, rules: AiRuleset): Boolean =
         dominationVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DOMINATION_VICTORY_THRESHOLD)
 
+    /**
+     *  CvDiplomacyAI::IsCloseToAnyVictoryCondition: nobody has won yet and [civ] is close to a victory. Only Domination so far; the
+     *  Diplomatic, Science and Culture tests (IsCloseToDiploVictory, IsCloseToSpaceshipVictory, IsCloseToCultureVictory) are step 6 of the plan.
+     */
+    @Readonly
+    fun isCloseToAnyVictoryCondition(civ: Civilization, rules: AiRuleset): Boolean =
+        civ.gameInfo.victoryData == null && isCloseToWorldConquest(civ, rules)
+
+    /**
+     *  CvDiplomacyAI::DoUpdateCompetingForVictory: a civilization competes for victory until somebody has won (CvGame::
+     *  IsVictoryCompetitionEnabled), unless another civilization resurrected it or it lost its original capital (CvPlayer::IsHasLostCapital:
+     *  it founded one and does not hold it). Not a vassal (no vassals, D3). VP's game options that switch the competition and the endgame
+     *  aggression off are not carried over. Computed when asked rather than stored at the start of the turn: its inputs change only when a
+     *  city changes hands or the game is won.
+     */
+    @Readonly
+    fun isCompetingForVictory(civ: Civilization): Boolean {
+        if (civ.gameInfo.victoryData != null) return false
+        if (civ.ai.diplomacy.memories.values.any { it.resurrectedUs }) return false
+        val lostCapital = civ.hasEverOwnedOriginalCapital && civ.cities.none { it.isOriginalCapital && it.foundingCivObject == civ }
+        return !lostCapital
+    }
+
+    /**
+     *  CvDiplomacyAI::IsEndgameAggressive and IsEndgameAggressiveTo (set in DoUpdateCompetingForVictory): a civilization that competes for
+     *  victory is aggressive towards every major it has met that is alive with a city and close to any victory (IsPlayerValid).
+     */
+    @Readonly
+    fun isEndgameAggressiveTo(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
+        if (other == civ || !other.isMajorCiv || !other.isAlive() || other.cities.isEmpty() || !civ.knows(other)) return false
+        return isCompetingForVictory(civ) && isCloseToAnyVictoryCondition(other, rules)
+    }
+
     /** Whether one of the victories open to [civ] is won by capturing every capital (the Domination victory, by its milestone, not its name) */
     @Readonly
     fun canAttemptDominationVictory(civ: Civilization): Boolean =

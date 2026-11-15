@@ -755,12 +755,11 @@
 		"uniqueTo": "Celts",
 		"culture": 1,
 		"happiness": 3,
-		"specialistSlots": {"Artist": 1},
 		"hurryCostModifier": 10,
 		"requiredBuilding": "Amphitheater",
-		"maintenance": 2,
+		"maintenance": 1,
 		"requiredTech": "Acoustics",
-		"uniques": ["Destroyed when the city is captured"]
+		"uniques": ["Destroyed when the city is captured", "Has [1] [Music] Great Work slots"]
 	},
 	{
 		"name": "Sistine Chapel",

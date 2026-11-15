@@ -674,7 +674,7 @@
       "Ignore": 4,
       "Friendly": 5,
       "Protective": 7,
-      "Conquest": 7,
+      "Conquest": 4,
       "Bully": 4
     }
   },
@@ -3379,7 +3379,7 @@
       "Ranged": 5,
       "Mobile": 6,
       "Naval": 8,
-      "NavalRecon": 10,
+      "NavalRecon": 8,
       "NavalGrowth": 6,
       "NavalTileImprovement": 6,
       "Air": 5,

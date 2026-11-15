@@ -23,7 +23,10 @@ import yairm210.purity.annotations.Readonly
 import kotlin.math.ceil
 
 /** A city a trade unit could send a route to, and what the route would be */
-class TradeDestination(val city: City, val kind: TradeRouteKind, val path: List<Tile>)
+class TradeDestination(val city: City, val kind: TradeRouteKind, private val pathSource: Lazy<List<Tile>>) {
+    /** The tiles from the origin to [city]; searched when first asked for, and shared by the destinations of the same city of one origin */
+    val path: List<Tile> get() = pathSource.value
+}
 
 /** A connection the trade AI considers: from one of our cities, in one domain (CvTradeAI's TradeConnection) */
 class TradeRouteCandidate(val origin: City, val destination: TradeDestination, val isSea: Boolean)
@@ -199,12 +202,16 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
         val maxDistance = (range * 100 + 99) / 50 // a step costs at least 50
         val result = ArrayList<TradeDestination>()
         val originTile = origin.getCenterTile()
+        // One pass tells which cities have a path at all; the path itself is searched only for those whose path somebody reads
+        val reachable = TradeRoutePathfinder.reachableTiles(civ, originTile, isSea, range)
         for (destination in civ.gameInfo.getCities()) {
             if (originTile.aerialDistanceTo(destination.getCenterTile()) > maxDistance) continue
+            val destinationTile = destination.getCenterTile()
+            if (destinationTile == originTile || destinationTile !in reachable || (isSea && !TradeRoutePathfinder.isOnWater(destinationTile))) continue
             val kinds = if (destination.civ == civ) getDomesticKinds(origin) else listOf(TradeRouteKind.International)
+            val path = lazy { TradeRoutePathfinder.findPath(civ, originTile, destinationTile, isSea, range)!! }
             for (kind in kinds) {
                 if (!canConnect(origin, destination, kind, ignoreExisting)) continue
-                val path = TradeRoutePathfinder.findPath(civ, originTile, destination.getCenterTile(), isSea, range) ?: continue
                 result.add(TradeDestination(destination, kind, path))
                 if (onlyOne) return result
             }

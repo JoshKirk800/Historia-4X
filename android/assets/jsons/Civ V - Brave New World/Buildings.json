@@ -68,6 +68,7 @@
 	{
 		"name": "Temple of Artemis",
 		"isWonder": true,
+		"culture": 1,
 		"greatPersonPoints": {"Great Engineer": 1},
 		"uniques": ["[+10]% [Food] [in all cities]", "[+15]% Production when constructing [Archery] units [in this city]",
 			"[+15]% Production when constructing [Ranged Gunpowder] units [in this city]"],
@@ -193,6 +194,7 @@
 		"name": "Mausoleum of Halicarnassus",
 		"greatPersonPoints": {"Great Merchant": 1},
 		"isWonder": true,
+		"culture": 1,
 		"uniques": ["Gain [100] [Gold] <upon expending a [Great Person] unit> <(modified by game speed)>",
 			"[+2 Gold] from [Marble] tiles [in this city]", "[+2 Gold] from [Stone] tiles [in this city]"],
 		"requiredTech": "Masonry",

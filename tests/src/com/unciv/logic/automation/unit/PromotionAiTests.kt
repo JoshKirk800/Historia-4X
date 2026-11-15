@@ -100,13 +100,14 @@ class PromotionAiTests {
 
     @Test
     fun `a promotion the original rates nothing of is not taken`() {
-        // A submarine's only choice is Wolfpack I: a plain attack bonus the rating does not read
+        // A submarine may take Wolfpack I (a plain attack bonus the rating does not read) or Targeting I (rated by its domain modifier)
         game.setTileTerrain(HexCoord(2, 0), "Ocean")
         val submarine = unit("Submarine", HexCoord(2, 0))
+        assertEquals(0, value(submarine, "Wolfpack I"))
         submarine.promotions.XP = 1000
         NextTurnAutomation.applyPromotions(GameView(game.gameInfo, civ).getMapUnitView(submarine))
+        assertTrue("Targeting I" in submarine.promotions.promotions)
         assertTrue(submarine.promotions.promotions.none { it.startsWith("Wolfpack") })
-        assertEquals(1000, submarine.promotions.XP)
     }
 
     @Test

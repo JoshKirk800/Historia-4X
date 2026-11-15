@@ -733,7 +733,7 @@
 	},
 	{
 		"name": "[Janissary] ability",
-		"uniques": ["Heals [50] damage if it kills a unit", "[+25]% Strength <when attacking>"]
+		"uniques": ["Heals [50] damage if it kills a non-Barbarian unit", "[+25]% Strength <when attacking>"]
 	},
 	{
 		"name": "[Sipahi] ability",
@@ -741,7 +741,7 @@
 	},
 	{
 		"name": "[Cossack] ability",
-		"uniques": ["[+50]% Strength <vs [Wounded] units>"]
+		"uniques": ["[+33]% Strength <vs [Wounded] units>"]
 	},
 	{
 		"name": "[Hussar] ability",

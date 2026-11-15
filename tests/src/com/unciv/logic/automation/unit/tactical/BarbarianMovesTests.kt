@@ -284,11 +284,14 @@ class BarbarianMovesTests {
     }
 
     @Test
-    fun `a barbarian next to a unit of ours that it beats attacks it`() {
+    fun `a barbarian next to a unit of ours that it can kill attacks it`() {
+        // A unit it can only wound is an attrition target (priority 6 plus a roll of 0-5), which the aggressive move (3 plus 0-5) outranks
+        // in 3 of 36 die rolls, as in EstablishBarbarianPriorities; a unit it can kill is a destroy target (14 plus 0-5), always first here
         val raider = game.addUnit("Swordsman", barbarians, tile(0))
         val victim = game.addUnit("Warrior", civ, tile(1))
+        victim.health = 30
         BarbarianAutomation(barbarians).automate()
-        assertTrue("the victim lost hit points or died", victim.isDestroyed || victim.health < 100)
+        assertTrue("the victim lost hit points or died", victim.isDestroyed || victim.health < 30)
         assertTrue(raider.attacksThisTurn > 0)
     }
     // endregion

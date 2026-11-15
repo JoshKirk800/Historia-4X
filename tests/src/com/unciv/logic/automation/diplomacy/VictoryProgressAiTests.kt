@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.diplomacy
 
+import com.unciv.logic.VictoryData
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
@@ -13,7 +14,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Domination progress after Vox Populi's CvDiplomacyAI::GetDominationVictoryProgress and IsCloseToWorldConquest (Release-5.4.8) */
+/** Domination progress and endgame aggression after Vox Populi's CvDiplomacyAI (Release-5.4.8): GetDominationVictoryProgress,
+ *  IsCloseToWorldConquest, DoUpdateCompetingForVictory, IsEndgameAggressiveTo */
 @RunWith(GdxTestRunner::class)
 class VictoryProgressAiTests {
     private lateinit var game: TestGame
@@ -82,5 +84,38 @@ class VictoryProgressAiTests {
         assertEquals(50, VictoryProgressAi.dominationVictoryProgress(a))
         assertTrue("exactly the threshold", VictoryProgressAi.isCloseToWorldConquest(a, game.ruleset.ai))
         assertFalse(VictoryProgressAi.isCloseToWorldConquest(c, game.ruleset.ai))
+    }
+    private fun meetAll() {
+        for (x in listOf(a, b, c, d)) for (y in listOf(a, b, c, d)) if (x != y && !x.knows(y)) x.diplomacyFunctions.makeCivilizationsMeet(y)
+    }
+
+    @Test
+    fun `endgame aggression towards a civilization follows its progress across the threshold`() {
+        meetAll()
+        val rules = game.ruleset.ai
+        assertFalse(VictoryProgressAi.isEndgameAggressiveTo(c, a, rules))
+        b.cities.first().moveToCiv(a)
+        assertTrue("a holds half the capitals", VictoryProgressAi.isEndgameAggressiveTo(c, a, rules))
+        assertTrue(VictoryProgressAi.isEndgameAggressiveTo(d, a, rules))
+        assertFalse("never towards itself", VictoryProgressAi.isEndgameAggressiveTo(a, a, rules))
+        assertFalse("not towards those far from victory", VictoryProgressAi.isEndgameAggressiveTo(a, c, rules))
+        a.cities.first { it.foundingCivObject == b }.moveToCiv(b)
+        assertFalse("back under the threshold", VictoryProgressAi.isEndgameAggressiveTo(c, a, rules))
+    }
+
+    @Test
+    fun `only a civilization that competes for victory is endgame aggressive, and only towards those it has met`() {
+        val rules = game.ruleset.ai
+        assertTrue(VictoryProgressAi.isCompetingForVictory(b))
+        game.addCity(b, game.getTile(HexCoord(10, 2)))
+        b.cities.first { it.isOriginalCapital }.moveToCiv(a)
+        assertFalse("b lost its original capital", VictoryProgressAi.isCompetingForVictory(b))
+        assertFalse("c has not met a", VictoryProgressAi.isEndgameAggressiveTo(c, a, rules))
+        meetAll()
+        assertFalse(VictoryProgressAi.isEndgameAggressiveTo(b, a, rules))
+        d.ai.diplomacy.memoryOf(c).resurrectedUs = true
+        assertFalse("d was resurrected", VictoryProgressAi.isEndgameAggressiveTo(d, a, rules))
+        game.gameInfo.victoryData = VictoryData(a.civName, "Domination", game.gameInfo.turns)
+        assertFalse("nobody competes once somebody won", VictoryProgressAi.isEndgameAggressiveTo(c, a, rules))
     }
 }

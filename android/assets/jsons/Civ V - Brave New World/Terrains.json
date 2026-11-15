@@ -324,7 +324,8 @@
     {
         "name": "River",
         "type": "TerrainFeature",
-        "gold": 1,
+        // No yield: BNW's Terrain_RiverYieldChanges and Feature_RiverYieldChanges are empty (CvPlot::calculateNatureYield adds only them);
+        // the +1 Gold of the base game and Gods & Kings is gone
         "movementCost": 0,  // So Civilopedia won't display a cost of 1
         "uniques": ["Doesn't generate naturally", "Excluded from map editor"],
         "civilopediaText": [

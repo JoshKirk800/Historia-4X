@@ -294,9 +294,15 @@ class ModConstants {
     var spyTechStealCostModifier = 1.25f
     
     // Score value of things
+    var scoreFromCities = 10 // 8 in BNW
     var scoreFromPopulation = 3 // 4 in BNW
     var scoreFromWonders = 40 // 25 in BNW
     var scoreFromGreatWorks = 0 // 4 in BNW
+    // Per adopted policy: the openers, policies and finishers of the branches and the ideology's tenets, not the choice of an ideology. 4 in BNW
+    var scoreFromPolicies = 0
+    // Per belief of the civilization's founded religion (not a pantheon alone), and per city of any owner that follows it. 20 and 1 in BNW
+    var scoreFromReligionBeliefs = 0
+    var scoreFromReligionCities = 0
     // The map size at which Cities, Population and Land score at face value; smaller maps score more, larger maps less. 4160 (80 x 52) in Civ V
     var scoreBaseMapTiles = 1276
 

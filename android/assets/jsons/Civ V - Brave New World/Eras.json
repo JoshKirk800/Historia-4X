@@ -136,7 +136,7 @@
         "uniques": ["May not generate great prophet equivalents naturally",
             "May buy [Great Prophet] units for [200] [Faith] [in all cities in which the majority religion is a major religion] at an increasing price ([100])",
             "Starting in this era disables religion",
-            "Every major Civilization gains a spy once a civilization enters this era",
+            "Gain an extra spy",
             "World Congress sessions: every [25] turns, [2] delegates per civilization, [1] for the host and [1] per allied City-State"
         ]
     },
@@ -171,7 +171,7 @@
         "uniques": ["May not generate great prophet equivalents naturally",
             "May buy [Great Prophet] units for [200] [Faith] [in all cities in which the majority religion is a major religion] at an increasing price ([100])",
             "Starting in this era disables religion",
-            "Every major Civilization gains a spy once a civilization enters this era",
+            "Gain an extra spy",
             "World Congress sessions: every [20] turns, [3] delegates per civilization, [2] for the host and [1] per allied City-State"
         ]
     },
@@ -207,7 +207,7 @@
         "uniques": ["May not generate great prophet equivalents naturally",
             "May buy [Great Prophet] units for [200] [Faith] [in all cities in which the majority religion is a major religion] at an increasing price ([100])",
             "Starting in this era disables religion",
-            "Every major Civilization gains a spy once a civilization enters this era",
+            "Gain an extra spy",
             "World Congress sessions: every [10] turns, [4] delegates per civilization, [2] for the host and [2] per allied City-State",
             "The World Congress becomes the United Nations"
         ]
@@ -245,7 +245,7 @@
         "uniques": ["May not generate great prophet equivalents naturally",
             "May buy [Great Prophet] units for [200] [Faith] [in all cities in which the majority religion is a major religion] at an increasing price ([100])",
             "Starting in this era disables religion",
-            "Every major Civilization gains a spy once a civilization enters this era"
+            "Gain an extra spy"
         ]
     },
     { // Technically, this Era doesn't exist in the original game.
@@ -282,7 +282,7 @@
         "uniques": ["May not generate great prophet equivalents naturally",
             "May buy [Great Prophet] units for [200] [Faith] [in all cities in which the majority religion is a major religion] at an increasing price ([100])",
             "Starting in this era disables religion",
-            "Every major Civilization gains a spy once a civilization enters this era"
+            "Gain an extra spy"
         ]
     }
 ]

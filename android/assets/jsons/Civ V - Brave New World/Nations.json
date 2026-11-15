@@ -739,10 +739,11 @@
 		"uniques": ["Units ignore terrain costs when moving into any tile with Hills",
 			"[-50]% maintenance on road & railroads",
 			"No Maintenance costs for improvements in [Hill] tiles"],
-		"cities": ["Tiwanaku","Machu","Ollantaytambo","Corihuayrachina","Huamanga","Vilcabamba","Vitcos","Andahuaylas","Ica","Arequipa",
+		// Civilization_CityNames order (DLC_02): Cusco is the capital
+		"cities": ["Cusco","Tiwanaku","Machu","Ollantaytambo","Corihuayrachina","Huamanga","Vilcas","Vilcabamba","Vitcos","Andahuaylas","Ica","Arequipa",
 			"Nasca","Atico","Juli","Chuito","Chuquiapo","Huanuco Pampa","Tamboccocha","Huaras","Riobamba","Caxamalca",
 			"Sausa","Tambo Colorado","Huaca","Tumbes","Chan Chan","Sipan","Pachacamac","Llactapata","Pisac","Kuelap",
-			"Pajaten","Chucuito","Cusco","Vilcas"],
+			"Pajaten","Chucuito"],
         "spyNames": ["Amaru", "Apichu", "Pariapichiu", "Puma", "Quenti", "Suyuntu", "Uturuncu", "Purutu", "Ozcollo"]
     },
 	{

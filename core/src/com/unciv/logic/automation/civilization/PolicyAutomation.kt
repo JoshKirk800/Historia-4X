@@ -293,86 +293,92 @@ object PolicyAutomation {
     }
 
     /**
-     *  The ideology [civ] chooses (CvPolicyAI::DoChooseIdeology), null if it cannot choose one now or has one. Each of Freedom, Autocracy and Order scores:
-     *  - IDEOLOGY_SCORE_GRAND_STRATS split by the grand strategy priorities (at least 0) it suits: Freedom diplomacy + science + culture,
-     *    Autocracy diplomacy + conquest + culture, Order science + conquest + culture, each over the sum of the three;
-     *  - IDEOLOGY_SCORE_PER_FREE_TENET per free tenet it would give ([numFreeTenets]);
-     *  - per valid major with that ideology, by the approach we show it: Hostile IDEOLOGY_SCORE_HOSTILE and Guarded IDEOLOGY_SCORE_GUARDED to
-     *    the two other ideologies, Afraid IDEOLOGY_SCORE_AFRAID and Friendly IDEOLOGY_SCORE_FRIENDLY to theirs;
-     *  - the happiness its tenets would give our buildings, per tenet that gives building happiness, × IDEOLOGY_SCORE_HAPPINESS;
-     *  - (100 − the public opinion unhappiness it would bring now, at least 0) × IDEOLOGY_SCORE_HAPPINESS;
-     *  - a random 0-9; then 0 for the one ruled out by a clear victory preference ([excludedIdeology]).
-     *  The highest wins, ties in the order Freedom, Autocracy, Order. A ruleset whose ideologies are not these three (no post-defines) gets a uniform pick.
+     *  The ideology [civ] chooses (CvPolicyAI::DoChooseIdeology, Vox Populi), null if it cannot choose one now or has one: the highest of
+     *  [scoreIdeologies], ties to the earlier in VP's order Freedom, Order, Autocracy. A ruleset whose ideologies are not these three
+     *  (no post-defines) gets a uniform pick. Masters and team leaders to follow: none (no vassals or teams).
      */
     fun chooseIdeology(civ: Civilization): PolicyBranch? = timeThis("AI.ChooseIdeology") {
         val manager = civ.policies
         if (!manager.canChooseIdeology()) return@timeThis null
         val ruleset = civ.gameInfo.ruleset
-        val random = civ.ai.random("PolicyAutomation.chooseIdeology")
         val ideologies = ideologiesOf(ruleset)
         if (ideologies == null) {
+            val random = civ.ai.random("PolicyAutomation.chooseIdeology")
             val options = ruleset.policyBranches.values.filter { it.isIdeology && manager.isAdoptable(it) }
             return@timeThis if (options.isEmpty()) null else options[random.nextInt(options.size)]
         }
-        val scores = scoreIdeologies(civ, ideologies, random)
-        val (freedom, autocracy, order) = scores
+        val (freedom, autocracy, order) = scoreIdeologies(civ, ideologies)
         val chosen = when {
-            freedom >= autocracy && freedom >= order -> ideologies.freedom
-            autocracy >= freedom && autocracy >= order -> ideologies.autocracy
-            else -> ideologies.order
+            freedom >= order && freedom >= autocracy -> ideologies.freedom
+            order >= autocracy -> ideologies.order
+            else -> ideologies.autocracy
         }
         chosen.takeIf { manager.isAdoptable(it) }
     }
 
-    /** The scores of [chooseIdeology] in the order Freedom, Autocracy, Order */
-    fun scoreIdeologies(civ: Civilization, ideologies: Ideologies, random: Random): IntArray {
+    /**
+     *  The scores of [chooseIdeology] in the order Freedom, Autocracy, Order (CvPolicyAI::DoChooseIdeology, Vox Populi):
+     *  - 1 plus the grand strategy priorities of the victories the ideology supports (PolicyBranch_Victories: Freedom space race,
+     *    diplomacy, culture; Order space race, domination, culture; Autocracy diplomacy, domination, culture), 0 when the highest
+     *    priority it does not support beats the highest it supports by IDEOLOGY_PERCENT_CLEAR_VICTORY_PREF %; then the share of
+     *    IDEOLOGY_SCORE_GRAND_STRATS by the sum over the three;
+     *  - IDEOLOGY_SCORE_PER_FREE_TENET per free tenet it would give ([numFreeTenets]);
+     *  - per valid major that follows it: our biggest competitor IDEOLOGY_SCORE_HOSTILE off, else our most valuable friend or ally
+     *    IDEOLOGY_SCORE_FRIENDLY on; and by our approach to them: hostile IDEOLOGY_SCORE_HOSTILE off, guarded _GUARDED off, afraid
+     *    _AFRAID on, friendly _FRIENDLY on;
+     *  - when another major has an ideology already and our empire is unhappy, (250 - the public opinion unhappiness it would bring,
+     *    at least 0) x IDEOLOGY_SCORE_HAPPINESS;
+     *  - the branch's policy weights ([weighBranch]) / 25.
+     *  A ruled-out ideology stays at 0.
+     */
+    fun scoreIdeologies(civ: Civilization, ideologies: Ideologies): IntArray {
         val rules = civ.gameInfo.ruleset.ai
         val priorities = VictoryPriorities(civ)
-        val conquest = maxOf(0, priorities.conquest)
-        val diplomacy = maxOf(0, priorities.diplomacy)
-        val science = maxOf(0, priorities.science)
-        val culture = maxOf(0, priorities.culture)
         val branches = arrayOf(ideologies.freedom, ideologies.autocracy, ideologies.order)
-        val scores = IntArray(3)
-
-        val totals = intArrayOf(diplomacy + science + culture, diplomacy + conquest + culture, science + conquest + culture)
-        val grandTotal = totals.sum()
-        if (grandTotal > 0) {
-            val toDivide = rules.define(AiDefine.IDEOLOGY_SCORE_GRAND_STRATS)
-            for (i in 0..2) scores[i] = totals[i] * toDivide / grandTotal
+        val supported = arrayOf(
+            listOf(priorities.science, priorities.diplomacy, priorities.culture),
+            listOf(priorities.diplomacy, priorities.conquest, priorities.culture),
+            listOf(priorities.science, priorities.conquest, priorities.culture))
+        val all = listOf(priorities.conquest, priorities.diplomacy, priorities.science, priorities.culture)
+        val scores = IntArray(3) { 1 + supported[it].sum() }
+        val grandTotal = scores.sum()
+        val clearPercent = rules.define(AiDefine.IDEOLOGY_PERCENT_CLEAR_VICTORY_PREF)
+        for (i in 0..2) {
+            val maxSupported = maxOf(0, supported[i].max())
+            // the unsupported victory of each ideology is the one priority missing from its three
+            val unsupported = all.toMutableList().apply { for (p in supported[i]) remove(p) }
+            val maxUnsupported = maxOf(0, unsupported.maxOrNull() ?: 0)
+            if (maxUnsupported > maxSupported * (100 + clearPercent) / 100) scores[i] = 0
         }
 
-        val perFreeTenet = rules.define(AiDefine.IDEOLOGY_SCORE_PER_FREE_TENET)
-        for (i in 0..2) scores[i] += numFreeTenets(civ, branches[i]) * perFreeTenet
-
-        val hostile = rules.define(AiDefine.IDEOLOGY_SCORE_HOSTILE)
-        val guarded = rules.define(AiDefine.IDEOLOGY_SCORE_GUARDED)
-        val afraid = rules.define(AiDefine.IDEOLOGY_SCORE_AFRAID)
-        val friendly = rules.define(AiDefine.IDEOLOGY_SCORE_FRIENDLY)
-        for (other in civ.gameInfo.civilizations) {
-            if (other == civ || !civ.ai.diplomacy.isPlayerValid(other)) continue
-            val theirs = branches.indexOf(other.getIdeology())
-            if (theirs < 0) continue
-            when (civ.ai.diplomacy.approachTowards(other, hideTrueFeelings = true)) {
-                MajorCivApproach.Hostile -> for (i in 0..2) if (i != theirs) scores[i] += hostile
-                MajorCivApproach.Guarded -> for (i in 0..2) if (i != theirs) scores[i] += guarded
-                MajorCivApproach.Afraid -> scores[theirs] += afraid
-                MajorCivApproach.Friendly -> scores[theirs] += friendly
-                else -> {} // War, Deceptive, Neutral: no change
+        val ai = civ.ai.diplomacy
+        val others = civ.gameInfo.civilizations.filter { it != civ && ai.isPlayerValid(it) }
+        for (i in 0..2) {
+            if (scores[i] == 0) continue
+            scores[i] = scores[i] * rules.define(AiDefine.IDEOLOGY_SCORE_GRAND_STRATS) / maxOf(grandTotal, 1)
+            scores[i] += numFreeTenets(civ, branches[i]) * rules.define(AiDefine.IDEOLOGY_SCORE_PER_FREE_TENET)
+            for (other in others) {
+                if (other.getIdeology() != branches[i]) continue
+                if (ai.biggestCompetitor == other.civID) scores[i] -= rules.define(AiDefine.IDEOLOGY_SCORE_HOSTILE)
+                else if (ai.mostValuableAlly == other.civID || ai.mostValuableFriend == other.civID) scores[i] += rules.define(AiDefine.IDEOLOGY_SCORE_FRIENDLY)
+                when (ai.approachTowards(other)) {
+                    MajorCivApproach.Hostile -> scores[i] -= rules.define(AiDefine.IDEOLOGY_SCORE_HOSTILE)
+                    MajorCivApproach.Guarded -> scores[i] -= rules.define(AiDefine.IDEOLOGY_SCORE_GUARDED)
+                    MajorCivApproach.Afraid -> scores[i] += rules.define(AiDefine.IDEOLOGY_SCORE_AFRAID)
+                    MajorCivApproach.Friendly -> scores[i] += rules.define(AiDefine.IDEOLOGY_SCORE_FRIENDLY)
+                    else -> {}
+                }
             }
         }
 
-        val happinessScore = rules.define(AiDefine.IDEOLOGY_SCORE_HAPPINESS)
-        for (i in 0..2) {
-            val happinessPolicies = numHappinessPolicies(civ, branches[i])
-            if (happinessPolicies > 0) scores[i] += branchBuildingHappiness(civ, branches[i]) * happinessScore / happinessPolicies
+        val firstIdeology = others.none { it.getIdeology() != null }
+        if (!firstIdeology && civ.stats.happiness < 0) for (i in 0..2) {
+            if (scores[i] == 0) continue
+            scores[i] += maxOf(0, 250 - civ.culture.publicOpinion.hypotheticalUnhappiness(branches[i])) * rules.define(AiDefine.IDEOLOGY_SCORE_HAPPINESS)
         }
-        for (i in 0..2)
-            scores[i] += maxOf(0, 100 - civ.culture.publicOpinion.hypotheticalUnhappiness(branches[i])) * happinessScore
-        for (i in 0..2) scores[i] += random.nextInt(10)
-
-        val excluded = excludedIdeology(conquest, diplomacy, science, culture, rules.define(AiDefine.IDEOLOGY_PERCENT_CLEAR_VICTORY_PREF), ideologies)
-        for (i in 0..2) if (branches[i] == excluded) scores[i] = 0
+        val tables = tablesOf(civ.gameInfo.ruleset)
+        val weights = policyWeights(civ)
+        for (i in 0..2) if (scores[i] != 0) scores[i] += weighBranch(civ, branches[i], weights, tables) / 25
         return scores
     }
 

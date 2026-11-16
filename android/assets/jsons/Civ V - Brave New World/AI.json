@@ -956,6 +956,8 @@
     "QUEST_DISABLED_ROUTE": 0,
     "QUEST_DISABLED_SPREAD_RELIGION": 0,
     "QUEST_DISABLED_TRADE_ROUTE": 0,
+    "RECKLESS_EXPANDER_CITIES_THRESHOLD": 200,
+    "RECKLESS_EXPANDER_LAND_THRESHOLD": 250,
     "RELIGION_ADJACENT_CITY_DISTANCE": 10,
     "RELIGION_ATHEISM_PRESSURE_PER_POP": 1000,
     "RELIGION_BASE_CHANCE_PROPHET_SPAWN": 5,
@@ -1124,6 +1126,7 @@
     "WONDER_DISPUTE_FIERCE_THRESHOLD": 10,
     "WONDER_DISPUTE_STRONG_THRESHOLD": 7,
     "WONDER_DISPUTE_WEAK_THRESHOLD": 5,
+    "WONDER_SPAMMER_THRESHOLD": 3,
     "WOUNDED_DAMAGE_MULTIPLIER": 33
   },
   "postDefines": {
@@ -9566,7 +9569,10 @@
         "VictoryDisputePercent": 50,
         "VictoryBlockPercent": 50,
         "AggressionIncrease": 0,
-        "PeaceTreatyDampenerTurns": 20
+        "PeaceTreatyDampenerTurns": 20,
+        "LandDisputePercent": 50,
+        "WonderBlockPercent": 50,
+        "WonderBlockMod": -2
       }
     },
     {
@@ -9604,7 +9610,10 @@
         "VictoryDisputePercent": 60,
         "VictoryBlockPercent": 60,
         "AggressionIncrease": 2,
-        "PeaceTreatyDampenerTurns": 20
+        "PeaceTreatyDampenerTurns": 20,
+        "LandDisputePercent": 60,
+        "WonderBlockPercent": 60,
+        "WonderBlockMod": -2
       }
     },
     {
@@ -9642,7 +9651,10 @@
         "VictoryDisputePercent": 80,
         "VictoryBlockPercent": 80,
         "AggressionIncrease": 4,
-        "PeaceTreatyDampenerTurns": 20
+        "PeaceTreatyDampenerTurns": 20,
+        "LandDisputePercent": 70,
+        "WonderBlockPercent": 80,
+        "WonderBlockMod": -2
       }
     },
     {
@@ -9680,7 +9692,10 @@
         "VictoryDisputePercent": 90,
         "VictoryBlockPercent": 90,
         "AggressionIncrease": 6,
-        "PeaceTreatyDampenerTurns": 18
+        "PeaceTreatyDampenerTurns": 18,
+        "LandDisputePercent": 80,
+        "WonderBlockPercent": 90,
+        "WonderBlockMod": -1
       }
     },
     {
@@ -9718,7 +9733,10 @@
         "VictoryDisputePercent": 110,
         "VictoryBlockPercent": 110,
         "AggressionIncrease": 9,
-        "PeaceTreatyDampenerTurns": 16
+        "PeaceTreatyDampenerTurns": 16,
+        "LandDisputePercent": 90,
+        "WonderBlockPercent": 110,
+        "WonderBlockMod": -1
       }
     },
     {
@@ -9756,7 +9774,10 @@
         "VictoryDisputePercent": 125,
         "VictoryBlockPercent": 125,
         "AggressionIncrease": 12,
-        "PeaceTreatyDampenerTurns": 14
+        "PeaceTreatyDampenerTurns": 14,
+        "LandDisputePercent": 100,
+        "WonderBlockPercent": 125,
+        "WonderBlockMod": 0
       }
     },
     {
@@ -9794,7 +9815,10 @@
         "VictoryDisputePercent": 134,
         "VictoryBlockPercent": 134,
         "AggressionIncrease": 14,
-        "PeaceTreatyDampenerTurns": 12
+        "PeaceTreatyDampenerTurns": 12,
+        "LandDisputePercent": 115,
+        "WonderBlockPercent": 134,
+        "WonderBlockMod": 0
       }
     },
     {
@@ -9832,7 +9856,10 @@
         "VictoryDisputePercent": 150,
         "VictoryBlockPercent": 150,
         "AggressionIncrease": 16,
-        "PeaceTreatyDampenerTurns": 11
+        "PeaceTreatyDampenerTurns": 11,
+        "LandDisputePercent": 125,
+        "WonderBlockPercent": 150,
+        "WonderBlockMod": 0
       }
     },
     {
@@ -9870,7 +9897,10 @@
         "VictoryDisputePercent": 100,
         "VictoryBlockPercent": 100,
         "AggressionIncrease": 0,
-        "PeaceTreatyDampenerTurns": 20
+        "PeaceTreatyDampenerTurns": 20,
+        "LandDisputePercent": 100,
+        "WonderBlockPercent": 100,
+        "WonderBlockMod": 0
       }
     }
   ],

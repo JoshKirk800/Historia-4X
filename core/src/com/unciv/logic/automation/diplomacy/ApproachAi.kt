@@ -479,6 +479,8 @@ object ApproachAi {
 
         stage("Unique units and a cramped empire (part 7)")
         ApproachAdditionalAi.addUniqueUnitAndCrampedWeights(civ, other, w, rules)
+        stage("Reckless expanders and wonder spammers (part 7)")
+        ExpanderAi.addExpanderWeights(civ, other, deception, w, rules)
         stage("Difficulty and war bonuses (part 7)")
         addWarBonuses(civ, other, closeToConquest, w, rules)
 

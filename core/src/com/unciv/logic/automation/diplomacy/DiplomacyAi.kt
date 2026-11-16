@@ -133,6 +133,10 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var liberatedCitiesTurn = -1
     /** CvDiplomacyAI::GetDemandAcceptedTurn (Vox Populi): the turn they last paid a tribute we demanded, -1 = never or refused since */
     var demandAcceptedTurn = -1
+    /** CvDiplomacyAI::IsRecklessExpander (Vox Populi): set each turn by [ExpanderAi.updateRecklessExpanders] */
+    var recklessExpander = false
+    /** CvDiplomacyAI::IsWonderSpammer (Vox Populi): set each turn by [ExpanderAi.updateWonderSpammers] */
+    var wonderSpammer = false
     /** CvDiplomacyAI::m_paiDeclaredWarOnFriendValue (decays) */
     var declaredWarOnFriendValue = 0
 
@@ -236,7 +240,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.doFCounter = doFCounter; copy.denouncedCounter = denouncedCounter; copy.denouncementActive = denouncementActive
         copy.friendDenouncedUs = friendDenouncedUs; copy.friendDeclaredWarOnUs = friendDeclaredWarOnUs
         copy.doFLevel = doFLevel; copy.doFBrokenTurn = doFBrokenTurn; copy.liberatedCitiesTurn = liberatedCitiesTurn
-        copy.demandAcceptedTurn = demandAcceptedTurn
+        copy.demandAcceptedTurn = demandAcceptedTurn; copy.recklessExpander = recklessExpander; copy.wonderSpammer = wonderSpammer
         copy.declaredWarOnFriendValue = declaredWarOnFriendValue
         for ((target, entry) in coopWars) copy.coopWars[target] = entry.clone()
         copy.demandCounter = demandCounter
@@ -288,6 +292,8 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     var militaryRating = -1
     /** CvDiplomacyAI::IsSaneDiplomaticTarget (Vox Populi) is false for these civIDs: set each turn by [WarSanityAi.updateSaneTargets] */
     var insaneTargets = HashSet<String>()
+    /** CvPlayer::GetWondersConstructed (Vox Populi): the world wonders this civilization has built */
+    var wondersConstructed = 0
 
     @Transient lateinit var civ: Civilization
 
@@ -301,6 +307,7 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         copy.biggestCompetitor = biggestCompetitor
         copy.militaryRating = militaryRating
         copy.insaneTargets.addAll(insaneTargets)
+        copy.wondersConstructed = wondersConstructed
         return copy
     }
 

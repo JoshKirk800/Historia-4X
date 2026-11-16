@@ -318,6 +318,11 @@ object DiplomacyEvents {
         if (loser.isMajorCiv && builder.isMajorCiv && loser != builder) loser.ai.diplomacy.memoryOf(builder).numWondersBeatenTo++
     }
 
+    /** CvCity::processBuilding (Vox Populi): [builder] completed a world wonder (CvPlayer::ChangeWondersConstructed) */
+    fun onWonderConstructed(builder: Civilization) {
+        if (builder.isMajorCiv) builder.ai.diplomacy.wondersConstructed++
+    }
+
     /** CvMinorCivAI::DoMajorBullied -> DoPlayerBulliedSomeone for every major that has met the bully */
     fun onCityStateBullied(bully: Civilization, cityState: Civilization) {
         for (protector in cityState.cityStateFunctions.getProtectorCivs()) {

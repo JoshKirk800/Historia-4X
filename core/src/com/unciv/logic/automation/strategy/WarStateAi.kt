@@ -394,23 +394,9 @@ object WarStateAi {
         return value
     }
 
-    /** CvDiplomacyAI::IsPlayerRecklessExpander */
-    fun isPlayerRecklessExpander(civ: Civilization, other: Civilization): Boolean {
-        if (proximityRank(civ.getProximity(other)) < proximityRank(Proximity.Close)) return false
-        val numCities = other.cities.size
-        if (numCities < 4) return false
-        var players = 0
-        var totalCities = 0
-        for (major in civ.gameInfo.civilizations) {
-            if (!major.isMajorCiv || !major.isAlive() || major == other) continue
-            players++
-            totalCities += major.cities.size
-        }
-        if (players == 0) return false
-        if (numCities < totalCities.toDouble() / players * 1.5) return false
-        val strength = civ.ai.warStates.militaryStrengths[other.civID]
-        return strength == null || strength < StrengthLevel.Average
-    }
+    /** CvDiplomacyAI::IsRecklessExpander (Vox Populi, D7): the flag [com.unciv.logic.automation.diplomacy.ExpanderAi] keeps each turn */
+    fun isPlayerRecklessExpander(civ: Civilization, other: Civilization): Boolean =
+        civ.ai.diplomacy.memories[other.civID]?.recklessExpander == true
 
     /** PlayerProximityTypes order of the original: DISTANT 0, FAR 1, CLOSE 2, NEIGHBORS 3; no cities (NO_PLAYER_PROXIMITY) -1 */
     fun proximityRank(proximity: Proximity): Int = when (proximity) {

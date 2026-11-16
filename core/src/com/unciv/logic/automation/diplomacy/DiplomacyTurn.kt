@@ -47,6 +47,8 @@ object DiplomacyTurn {
         DisputeAi.updateMilitaryPostures(civ, others, rules)
         DisputeAi.updateExpansionPostures(civ, others, rules)
         DisputeAi.updatePlotBuyingPostures(civ, others, rules)
+        ExpanderAi.updateRecklessExpanders(civ, others, rules)  // Vox Populi's DoUpdateRecklessExpanders and DoUpdateWonderSpammers
+        ExpanderAi.updateWonderSpammers(civ, others, rules)
         WarSanityAi.updateSaneTargets(civ, rules)  // Vox Populi's DoUpdateSaneDiplomaticTargets, before its opinions
         OpinionAi.updateOpinions(civ, others, rules)
         ApproachAi.updateApproaches(civ, others, rules)

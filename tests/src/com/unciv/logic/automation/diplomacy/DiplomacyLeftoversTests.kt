@@ -314,8 +314,9 @@ class DiplomacyLeftoversTests {
         game.gameInfo.league = league
         a.ai.setDiplomacyValue(DiplomacyPersonality.Chattiness, 10)
         for (other in listOf(b, human)) {
-            league.members.getValue(a.civID).alignmentMemory.getOrPut(other.civID) { LeagueAlignmentMemory() }
-                .likedProposalTurn = 49
+            val memory = league.members.getValue(a.civID).alignmentMemory.getOrPut(other.civID) { LeagueAlignmentMemory() }
+            memory.likedProposalTurn = 49
+            memory.proposalAgreementValue = rules.define(AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL)
             a.ai.diplomacy.setOpinion(other, MajorCivOpinion.Favorable)
         }
         assertEquals(DiploStatement.WeLikedTheirProposal, pick(a, b))

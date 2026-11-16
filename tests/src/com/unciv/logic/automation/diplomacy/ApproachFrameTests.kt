@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.AiRuleset
@@ -38,6 +39,8 @@ class ApproachFrameTests {
         game.makeHexagonalMap(12)
         rules = game.ruleset.ai
         rules.defines["APPROACH_RANDOM_PERCENT"] = 0f
+        // Part 10's proximity multipliers at 100%: the frame alone
+        for (proximity in listOf("NEIGHBORS", "CLOSE", "FAR", "DISTANT")) rules.defines["APPROACH_MULTIPLIER_PROXIMITY_$proximity"] = 100f
         a = civ(HexCoord(0, 0))
         b = civ(HexCoord(8, 0))
         c = civ(HexCoord(-8, 0))
@@ -97,7 +100,21 @@ class ApproachFrameTests {
         assertEquals(500, warScore(listOf(c)) - warScore(listOf(b, c)))
 
         a.ai.setDiplomacyValue(DiplomacyPersonality.Boldness, 9) // modifier 14: (14 - 10) x 10 = +40%, the reduction / 1.4
-        assertEquals(500 * 100 / 140, warScore(listOf(c)) - warScore(listOf(b, c)))
+        // Part 10 then halves war for a bad target and doubles it in aggressive mode: within 1 of the reduction after truncation
+        assertEquals(500.0 * 100 / 140, (warScore(listOf(c)) - warScore(listOf(b, c))).toDouble(), 1.0)
+    }
+
+    @Test
+    fun `before crossing oceans there is no war on a player we are not close to`() {
+        a.ai.diplomacy.setApproach(b, MajorCivApproach.War)
+        a.proximity[b.civID] = Proximity.Far
+        b.proximity[a.civID] = Proximity.Far
+        select(b, strategic = true)
+        assertEquals(0, memory(b).strategicApproachValues[war])
+        a.proximity[b.civID] = Proximity.Close
+        a.ai.diplomacy.setApproach(b, MajorCivApproach.War)
+        select(b, strategic = true)
+        assertTrue(memory(b).strategicApproachValues[war] > 0)
     }
 
     @Test

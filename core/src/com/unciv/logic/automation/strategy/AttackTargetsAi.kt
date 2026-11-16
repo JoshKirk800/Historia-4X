@@ -56,6 +56,7 @@ object AttackTargetsAi {
         val attackOptions = ArrayList<Pair<AttackTarget, Int>>()
         val defenseOptions = ArrayList<Pair<AttackTarget, Int>>()
         val economicValues = HashMap<City, Int>()
+        val closestCities = ClosestCities(civ)
         for (muster in civ.cities) {
             for (water in listOf(false, true)) {
                 for (path in armyPaths(civ, muster, water)) {
@@ -64,14 +65,14 @@ object AttackTargetsAi {
                     if (!isPlayerValid(civ, other)) continue
 
                     val target = makeTarget(path, civ)
-                    if (target != null && target.approachScore > 0 && armyPathIsGood(path, civ, other, 3)) {
+                    if (target != null && target.approachScore > 0 && armyPathIsGood(path, civ, other, 3, closestCities)) {
                         val score = scoreAttackTarget(civ, target, economicValues)
                         attackOptions.add(target to score)
                     }
 
                     val reversed = path.asReversed()
                     val reverseTarget = makeTarget(reversed, other) ?: continue
-                    if (target != null && target.approachScore > 0 && armyPathIsGood(reversed, other, civ, 6)) {
+                    if (target != null && target.approachScore > 0 && armyPathIsGood(reversed, other, civ, 6, closestCities)) {
                         val score = (reverseTarget.approachScore * 10 / sqrt(reversed.size.toDouble())).toInt()
                         defenseOptions.add(reverseTarget to score)
                     }
@@ -204,17 +205,16 @@ object AttackTargetsAi {
      *  (cities on the coast only for a path by sea), and those whose closest city belongs to a player [attacker] is at war with or that
      *  are owned by a third party whose territory is not friendly to [attacker]. Good if both counts stay below [threshold].
      */
-    fun armyPathIsGood(path: List<Tile>, attacker: Civilization, enemy: Civilization, threshold: Int): Boolean {
+    fun armyPathIsGood(path: List<Tile>, attacker: Civilization, enemy: Civilization, threshold: Int, closestCities: ClosestCities = ClosestCities(attacker)): Boolean {
         if (path.size < 4) return true
         val waterPath = path[1].isWater
         val muster = path.first().getCity()
         val target = path.last().getCity()
-        val cities = attacker.gameInfo.getCities().toList()
         var thirdPartyTiles = 0
         var wrongCityTiles = 0
         for (i in 3 until path.size - 3) {
             val tile = path[i]
-            val closest = cities.minByOrNull { it.getCenterTile().aerialDistanceTo(tile) } ?: continue
+            val closest = closestCities.of(tile) ?: continue
             if (closest.getCenterTile().aerialDistanceTo(tile) > 3 && tile.getOwner() == null) continue
             val owner = closest.civ
             when {
@@ -225,6 +225,13 @@ object AttackTargetsAi {
             }
         }
         return thirdPartyTiles < threshold && wrongCityTiles < threshold
+    }
+
+    /** CvGame::GetClosestCityByPlots, remembered per tile for one [updateAttackTargets] */
+    class ClosestCities(civ: Civilization) {
+        private val cities = civ.gameInfo.getCities().toList()
+        private val closest = HashMap<Tile, City>()
+        fun of(tile: Tile): City? = closest[tile] ?: cities.minByOrNull { it.getCenterTile().aerialDistanceTo(tile) }?.also { closest[tile] = it }
     }
 
     /** CvPlot::IsFriendlyTerritory: ours, a major's that opens its borders to us, or a city-state's that we are friends with */

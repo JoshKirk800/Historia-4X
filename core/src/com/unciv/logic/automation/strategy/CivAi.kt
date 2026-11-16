@@ -192,6 +192,8 @@ class CivAi : IsPartOfGameInfoSerialization {
         operations.setTransients(civ)
         tactical.setTransients(civ)
         plotDangerCache = null
+        // BNW's protective approach, which Vox Populi's city-state approach does not have: friendly takes its place
+        minorCivApproaches.replaceAll { _, approach -> if (approach == MinorCivApproach.Protective) MinorCivApproach.Friendly else approach }
         personalityVector = null
         activeFlavorVector = null
         strategyVersion++

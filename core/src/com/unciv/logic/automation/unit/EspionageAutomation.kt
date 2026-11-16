@@ -377,14 +377,13 @@ class EspionageAutomation(private val civInfo: Civilization) {
         when (plan.kind) {
             CityStatePlanKind.PlayNormal -> {
                 val approach = ai.minorCivApproaches[cityState.civID] ?: MinorCivApproach.Ignore
-                if (approach == MinorCivApproach.Protective || approach == MinorCivApproach.Friendly) {
+                if (approach == MinorCivApproach.Friendly) {
                     val trait = cityState.cityStateType.name
                     if (trait == MARITIME && civInfo.getHappiness() >= 0)
                         value += rules.define(AiDefine.MC_GIFT_WEIGHT_MARITIME_GROWTH).toLong() * growthFlavor * maxOf(1, civInfo.cities.size / 3)
                     if (trait == MILITARISTIC && !ai.isGoingForWorldConquest())
                         value += rules.define(AiDefine.MC_GIFT_WEIGHT_MILITARISTIC)
                     value += MinorCivHelpers.numResourcesMajorLacks(cityState, civInfo).toLong() * rules.define(AiDefine.MC_GIFT_WEIGHT_RESOURCE_WE_NEED)
-                    if (approach == MinorCivApproach.Protective) value += rules.define(AiDefine.MC_GIFT_WEIGHT_PROTECTIVE)
                     if (cityState.cityStatePersonality == CityStatePersonality.Hostile) value += rules.define(AiDefine.MC_GIFT_WEIGHT_HOSTILE)
                     value += when (civInfo.getProximity(cityState)) {
                         Proximity.Neighbors -> rules.define(AiDefine.MC_GIFT_WEIGHT_NEIGHBORS)

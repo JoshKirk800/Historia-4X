@@ -425,13 +425,13 @@ class EconomicMilitaryAiTests {
     }
 
     @Test
-    fun `city-state cities are liberated by friendly or protective conquerors and diplomats`() {
+    fun `city-state cities are liberated by friendly conquerors and diplomats`() {
         val (attacker, _, target) = conquestSetup()
         val cityState = game.addCiv(cityStateType = "Cultured")
         game.addCity(cityState, tile(0, 4))
         target.foundingCivObject = cityState
         assertEquals(ConquestChoice.Puppet, CityConquestAutomation.chooseConquest(attacker, target))
-        attacker.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Protective
+        attacker.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Friendly
         assertEquals(ConquestChoice.Liberate, CityConquestAutomation.chooseConquest(attacker, target))
         attacker.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Bully
         attacker.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS

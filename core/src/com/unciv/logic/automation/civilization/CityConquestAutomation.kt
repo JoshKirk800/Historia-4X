@@ -21,7 +21,7 @@ object CityConquestAutomation {
      *  Liberation, when the city's founder is neither the previous owner nor us and is alive or may be brought back
      *  (CvPlayer::CanLiberatePlayerCity; Unciv keeps no record of who destroyed a civilization, so any dead founder may be; a city gained
  *  by diplomatic marriage cannot be liberated in Unciv):
-     *  - a city-state: our approach to it is Friendly or Protective, or we go for a diplomatic victory (CvDiplomacyAI::DoPossibleMinorLiberation);
+     *  - a city-state: our approach to it is friendly, or we go for a diplomatic victory (CvDiplomacyAI::DoPossibleMinorLiberation);
      *  - a living major: we have a defensive pact with it and both of us are at war with the previous owner, or we have a declaration of
      *    friendship with it and go for a diplomatic victory;
      *  - a dead major that was not human: we go for a diplomatic victory.
@@ -35,7 +35,7 @@ object CityConquestAutomation {
         if (founder != null && founder != previousOwner && founder != conqueror && !city.hasDiplomaticMarriage()) {
             if (founder.isCityState) {
                 val approach = conqueror.ai.minorCivApproaches[founder.civID] ?: MinorCivApproach.Ignore
-                if (approach == MinorCivApproach.Friendly || approach == MinorCivApproach.Protective || conqueror.ai.isGoingForDiploVictory())
+                if (approach == MinorCivApproach.Friendly || conqueror.ai.isGoingForDiploVictory())
                     return ConquestChoice.Liberate
             } else if (founder.isAlive()) {
                 val diplomacy = conqueror.getDiplomacyManager(founder)

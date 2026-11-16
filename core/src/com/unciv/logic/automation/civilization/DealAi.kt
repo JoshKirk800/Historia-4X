@@ -469,7 +469,7 @@ object DealAi {
     /**
      *  CvDealAI::GetThirdPartyWarValue: we declare war on [third]: refused ([NEVER]) when our War approach bias is under 4; else
      *  400 / 600 / 1000 / 50000 by war projection, +50 per era, ±10% per point of War bias away from DEFAULT_FLAVOR_VALUE; never against
-     *  a city-state we are Friendly or Protective toward; × hatred of a major [third] (25-75%), × liking of [them] (50-125%).
+     *  a city-state we are friendly toward; × hatred of a major [third] (25-75%), × liking of [them] (50-125%).
      *  War [them] declare is worth 200 / 100 if we find [third] Unforgivable / Enemy, else -100000.
      */
     fun getThirdPartyWarValue(us: Civilization, them: Civilization, third: Civilization, fromMe: Boolean): Int {
@@ -495,7 +495,7 @@ object DealAi {
         value += warBias * 10 * value / 100
         if (third.isCityState) {
             val approach = us.ai.minorCivApproaches[third.civID]
-            if (approach == MinorCivApproach.Friendly || approach == MinorCivApproach.Protective) value = NEVER
+            if (approach == MinorCivApproach.Friendly) value = NEVER
         } else {
             when (us.ai.diplomacy.opinionOf(third)) {
                 MajorCivOpinion.Unforgivable -> value = value * 25 / 100

@@ -2,29 +2,40 @@ package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
-import com.unciv.logic.automation.diplomacy.WarGoal
+import com.unciv.logic.automation.diplomacy.OpinionAi
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
+import com.unciv.logic.automation.diplomacy.WarIntentAi
 import com.unciv.logic.automation.strategy.PurchaseType
 import com.unciv.logic.automation.strategy.EconomicAiRatios
 import com.unciv.logic.automation.strategy.StateAllWars
 import com.unciv.logic.automation.strategy.TargetValue
+import com.unciv.logic.automation.strategy.WarAlliesAi
 import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WarStateAi
+import com.unciv.logic.city.City
 import com.unciv.logic.civilization.diplomacy.CityStatePersonality
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
+import com.unciv.logic.civilization.managers.ReligionState
+import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.QuestName
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MinorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
+import com.unciv.models.ruleset.unique.Unique
+import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.stats.Stat
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
 /**
- *  What a major civilization's AI does about city-states (CvDiplomacyAI.cpp): the approach to each city-state
- *  (DoUpdateMinorCivApproaches / GetBestApproachTowardsMinorCiv), and DoContactMinorCivs: protection pledges and their withdrawal
+ *  What a major civilization's AI does about city-states (CvDiplomacyAI.cpp): the approach to each city-state (Vox Populi's
+ *  DoUpdateMinorCivApproaches / SelectBestApproachTowardsMinorCiv), and DoContactMinorCivs: protection pledges and their withdrawal
  *  (DoUpdateMinorCivProtection), Austria's buyout, gold gifts (with the econ AI's MINOR_CIV_GIFT savings), and tribute of a worker or of
  *  gold. Also CvMinorCivAI::DoPickPersonality's flavor change for a city-state ([pickInitialFlavors]).
  *
@@ -37,31 +48,69 @@ object CityStateAi {
     //region Approaches
 
     /**
-     *  CvDiplomacyAI::DoUpdateMinorCivApproaches: last turn's approaches are cleared, then the valid city-states are given a new one,
-     *  nearest first (ties in player order); each choice sees those already made this turn.
+     *  Vox Populi's CvDiplomacyAI::DoUpdateMinorCivApproaches (Release-5.4.8; D7) for the city-states we have met: a human player's AI
+     *  takes war at war, friendly with friends, allies or a pledge, else neutral; a city-state without cities gets war at war, else
+     *  neutral; without cities of our own, neutral. The others are chosen by [selectBestApproach], nearest first (1000 - the plot
+     *  distance of their capital to our closest city by path length; ties in player order). Then the first city-state that gets
+     *  hostile becomes the bully target and the first that gets war the war target ([DiplomacyAi.csBullyTarget],
+     *  [DiplomacyAi.csWarTarget]); a further hostile or war approach is set to neutral. As in VP, a target stays until another is
+     *  chosen. The potential war target flag has no reader here (none).
      */
     fun updateMinorCivApproaches(civ: Civilization) = timeThis("AI.MinorCivApproaches") {
         val ai = civ.ai
-        val minors = DiplomacyTurn.validPlayers(civ).filter { it.isCityState }
-        val previous = HashMap(ai.minorCivApproaches)
-        val assigned = HashMap<String, MinorCivApproach>()
-        for (minor in minors.sortedByDescending { DiplomacyTurn.proximity(civ, it) }) {
-            val old = previous[minor.civID] ?: MinorCivApproach.Ignore
-            val weights = approachWeights(civ, minor, old, assigned, ai.random("DiplomacyAI.MinorCivApproach" + minor.civID))
-            assigned[minor.civID] = bestOf(weights)
+        val human = civ.isHuman()
+        val noCities = civ.getCapital() == null
+        val toUpdate = ArrayList<Civilization>()
+        for (minor in civ.gameInfo.civilizations) {
+            if (!minor.isCityState || !minor.isAlive() || !civ.knows(minor)) continue
+            ai.minorCivApproaches[minor.civID] = when {
+                human -> when {
+                    civ.isAtWarWith(minor) -> MinorCivApproach.Conquest
+                    isAllies(minor, civ) || isFriends(minor, civ) || isProtectedBy(minor, civ) -> MinorCivApproach.Friendly
+                    else -> MinorCivApproach.Ignore
+                }
+                minor.getCapital() == null -> if (civ.isAtWarWith(minor)) MinorCivApproach.Conquest else MinorCivApproach.Ignore
+                noCities -> MinorCivApproach.Ignore
+                else -> { toUpdate.add(minor); continue }
+            }
         }
-        ai.minorCivApproaches.clear()
-        ai.minorCivApproaches.putAll(assigned)
+        if (human || noCities) return@timeThis
+        val ordered = toUpdate.mapNotNull { minor ->
+            val capital = minor.getCapital()!!.getCenterTile()
+            val (closest, _) = closestCityByPathLength(civ, minor, capital) ?: return@mapNotNull null
+            minor to 1000 - closest.getCenterTile().aerialDistanceTo(capital)
+        }.sortedByDescending { it.second }
+        for ((minor, _) in ordered) ai.minorCivApproaches[minor.civID] = selectBestApproach(civ, minor)
+        var bullySet = false
+        var warSet = false
+        for ((minor, _) in ordered) {
+            when (ai.minorCivApproaches[minor.civID]) {
+                MinorCivApproach.Bully -> if (!bullySet) {
+                    ai.diplomacy.csBullyTarget = minor.civID
+                    bullySet = true
+                } else ai.minorCivApproaches[minor.civID] = MinorCivApproach.Ignore
+                MinorCivApproach.Conquest -> if (!warSet) {
+                    ai.diplomacy.csWarTarget = minor.civID
+                    warSet = true
+                } else ai.minorCivApproaches[minor.civID] = MinorCivApproach.Ignore
+                else -> Unit
+            }
+        }
     }
 
-    /** CvWeightedVector::SortItems then GetElement(0): the highest weight, the first approach on a tie */
-    fun bestOf(weights: IntArray): MinorCivApproach {
-        var best = 0
-        for (i in 1 until weights.size) if (weights[i] > weights[best]) best = i
-        return MinorCivApproach.entries[best]
+    /**
+     *  CvPlayer::GetClosestCityByPathLength with GetCityDistancePathLength: our city with the shortest step route to [tile] (the
+     *  step finder's routes, which may enter [owner]'s territory) and that route's length; null if no city of ours reaches it
+     */
+    private fun closestCityByPathLength(civ: Civilization, owner: Civilization, tile: Tile): Pair<City, Int>? {
+        val lengths = civ.ai.military.steps.distances(civ, owner, tile, civ.cities.map { it.getCenterTile() })
+        var best: Pair<City, Int>? = null
+        for ((index, city) in civ.cities.withIndex()) {
+            val length = lengths[index]
+            if (length >= 0 && (best == null || length < best.second)) best = city to length
+        }
+        return best
     }
-
-    private fun MinorCivApproach.i() = ordinal
 
     /** CvMinorCivAI::IsFriends: influence at the friends threshold or more */
     fun isFriends(minor: Civilization, major: Civilization) = MinorCivHelpers.influence(minor, major) >= MinorCivHelpers.FRIENDS_THRESHOLD
@@ -100,253 +149,399 @@ object CityStateAi {
             && unique.modifiers.any { modifier -> modifier.params.any { it == "City-States" } }
     }
 
-    /** Gold per turn our trade routes to [minor] bring us (CvPlayerTrade::GetAllTradeValueFromPlayerTimes100(YIELD_GOLD) / 100) */
-    private fun tradeGoldFrom(civ: Civilization, minor: Civilization): Int {
-        var gold = 0f
-        for (route in civ.tradeRoutes.routes) if (route.getDestinationCiv() == minor) gold += route.originYields.gold
-        return gold.toInt()
+    /** VP's CivApproachTypes order of the four city-state approaches, for its stable sort: war, hostile, neutral, friendly */
+    private val VP_ORDER = listOf(MinorCivApproach.Conquest, MinorCivApproach.Bully, MinorCivApproach.Ignore, MinorCivApproach.Friendly)
+
+    /** A player modifier from the uniques of policies, beliefs and buildings, not the nation (VP keeps traits apart from these) */
+    private fun playerModifier(civ: Civilization, type: UniqueType, test: (Unique) -> Boolean): Boolean {
+        var found = false
+        civ.forEachMatchingUnique(type) { if (!found && it.sourceObjectType != UniqueTarget.Nation && test(it)) found = true }
+        return found
     }
 
     /**
-     *  CvDiplomacyAI::GetBestApproachTowardsMinorCiv: the weights of Ignore, Friendly, Protective, Conquest, Bully toward [minor]
-     *  (MinorCivApproach order), with [old] last turn's approach and [assigned] the approaches already given this turn. [random] adds the
-     *  original's random term (APPROACH_RANDOM_PERCENT of each positive weight); null leaves it out.
+     *  Vox Populi's CvDiplomacyAI::SelectBestApproachTowardsMinorCiv (CvDiplomacyAI.cpp 24035-25150): weights of war (Conquest),
+     *  hostile (Bully), neutral (Ignore) and friendly on VP's scale (personality bias x 100, [CivAi.minorCivApproachBias] of Conquest,
+     *  Bully, Ignore and Friendly; VP has no protective approach). The highest wins, in VP's order on ties; all zero is neutral.
+     *  Rule-dependent switches follow our BNW rules: BALANCE_QUEST_CHANGES off (the kill-city-state quest only gates on being enabled),
+     *  BALANCE_HEAVY_TRIBUTE off (bully score / 10), GLOBAL_CS_OVERSEAS_TERRITORY off; BNW's tribute rule is the bully score
+     *  (CityStateFunctions.getTributeWillingness, can bully when not negative: VP's "above 0"). MOD_BALANCE_VP's AI weight for the
+     *  city-state combat trait is taken (war x 5, no hostile). Inputs VP has and BNW not count as none: VP-only traits and player
+     *  modifiers (alliance CS strength or defense, influence per gifted unit, diplomatic marriage, yields from CS allies or minor
+     *  demands, bully annexing and its penalties, bully strength and value, bullying friendly city-states, the global bully
+     *  reduction, increased quest influence, spy strength, resources counting as monopolies, always religion), World Congress's
+     *  "no ally" and permanent allies, embassies, Nuclear Gandhi, a city-state's yield bonus in gold. Its state religion is the one we
+     *  founded (BNW has no other).
      */
-    fun approachWeights(civ: Civilization, minor: Civilization, old: MinorCivApproach, assigned: Map<String, MinorCivApproach>, random: Random?): IntArray {
+    fun selectBestApproach(civ: Civilization, minor: Civilization): MinorCivApproach {
         val ai = civ.ai
-        val w = IntArray(MinorCivApproach.entries.size)
-        val ignore = MinorCivApproach.Ignore.i()
-        val friendly = MinorCivApproach.Friendly.i()
-        val protective = MinorCivApproach.Protective.i()
-        val conquest = MinorCivApproach.Conquest.i()
-        val bully = MinorCivApproach.Bully.i()
+        val rules = civ.gameInfo.ruleset.ai
+        val w = IntArray(VP_ORDER.size)
+        val bias = IntArray(VP_ORDER.size) { ai.minorCivApproachBias(VP_ORDER[it]) * 100 }
+        val war = 0; val hostile = 1; val neutral = 2; val friendly = 3
+        for (i in w.indices) w[i] += bias[i]
+        val easy = WarStateAi.isEasyTarget(civ, minor)
+        val oldApproach = ai.minorCivApproaches[minor.civID] ?: MinorCivApproach.Ignore
+        val firstUpdate = civ.gameInfo.turns - ai.diplomacy.memoryOf(minor).turnMet <= 1
+        val atWar = civ.isAtWarWith(minor)
+        val trait = minor.cityStateType.name
+        fun has(category: TraitCategory) = ai.hasTraitCategory(category)
 
-        w[ignore] += civ.define(AiDefine.MINOR_APPROACH_IGNORE_DEFAULT)
-        w[old.i()] += civ.define(AiDefine.MINOR_APPROACH_BIAS_FOR_CURRENT)
-        if (old == MinorCivApproach.Conquest) {
-            w[ignore] += civ.define(AiDefine.MINOR_APPROACH_IGNORE_CURRENTLY_WAR)
-            val warState = WarStateAi.warState(civ, minor)
-            if (warState != null && warState > WarState.Stalemate) w[conquest] += civ.define(AiDefine.APPROACH_WAR_CURRENTLY_WAR)
-        } else if (old == MinorCivApproach.Protective) {
-            w[conquest] += civ.define(AiDefine.MINOR_APPROACH_WAR_CURRENTLY_PROTECTIVE)
-            w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_CURRENTLY_PROTECTIVE)
-            w[bully] += -10
+        // NEUTRAL DEFAULT WEIGHT
+        w[neutral] += bias[neutral] * civ.define(AiDefine.MINOR_APPROACH_IGNORE_DEFAULT)
+        // PREVIOUS APPROACH BIAS
+        if (!firstUpdate) {
+            if ((atWar || oldApproach == MinorCivApproach.Conquest) && WarStateAi.warState(civ, minor) != null && !WarStateAi.isNoNewWars(civ))
+                w[war] += bias[war] * 2
+            if (oldApproach == MinorCivApproach.Bully && (easy || (ai.diplomacy.targetValue(minor) ?: TargetValue.Average) >= TargetValue.Average))
+                w[hostile] += bias[hostile] * 2
         }
-        if (civ.isAtWarWith(minor)) {
-            w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_CURRENTLY_WAR)
-            w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_CURRENTLY_WAR)
-        }
-
+        // RESOURCES
         val numWeLack = MinorCivHelpers.numResourcesMajorLacks(minor, civ)
         if (numWeLack > 0) {
-            w[friendly] += numWeLack * civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_RESOURCES)
-            w[protective] += numWeLack * civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_RESOURCES)
-            w[conquest] += numWeLack
+            w[friendly] += bias[friendly] * numWeLack
+            w[war] += bias[war] * numWeLack
         }
-        if (isFriends(minor, civ)) {
-            w[conquest] += civ.define(AiDefine.MINOR_APPROACH_WAR_FRIENDS)
-            w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_FRIENDS)
-            w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_FRIENDS)
-            w[bully] -= 10
+        // FRIENDS WITH MINOR, PLEDGE TO PROTECT
+        if (isFriends(minor, civ)) w[friendly] += bias[friendly] * 2
+        if (isProtectedBy(minor, civ)) w[friendly] += bias[friendly] * 2
+        var goodWarTarget = false
+        var checkIfGoodWarTarget = true
+        // EASY TARGET
+        if (easy) {
+            w[war] += bias[war] * 2
+            w[hostile] += bias[hostile] * 2
         }
-        if (isProtectedBy(minor, civ)) {
-            w[protective] += 2
-            w[bully] += -1
-            w[conquest] += -2
+        // TRAITS THAT AFFECT MINORS
+        var friendshipBonus = false
+        var aggressionBonus = false
+        if (hasFriendshipTrait(civ)) { w[friendly] += bias[friendly] * 5; friendshipBonus = true }
+        if (hasBonusTrait(civ)) { w[friendly] += bias[friendly] * 5; friendshipBonus = true }
+        if (civ.hasUnique(UniqueType.CityStateCanBeBoughtForGold)) { w[friendly] += bias[friendly] * 10; friendshipBonus = true }
+        val playerFriendship = listOf(
+            playerModifier(civ, UniqueType.CityStateRestingPoint) { it.params[0].toInt() > 0 },
+            playerModifier(civ, UniqueType.CityStateInfluenceDegradation) { it.params[0].toInt() < 0 },
+            playerModifier(civ, UniqueType.CityStateGoldGiftsProvideMoreInfluence) { it.params[0].toInt() > 0 },
+            playerModifier(civ, UniqueType.CityStateStatPercent) { it.params[0] == Stat.Science.name },
+            playerModifier(civ, UniqueType.CityStateResources) { it.params[0].toInt() > 0 },
+            playerModifier(civ, UniqueType.RiggingElectionVotes) { it.params[0].toInt() > 0 })
+        for (modifier in playerFriendship) if (modifier) { w[friendly] += bias[friendly] * 2; friendshipBonus = true }
+        if (hasCombatTrait(civ)) { w[war] += bias[war] * 5; aggressionBonus = true }
+        if (playerModifier(civ, UniqueType.Strength) { unique -> unique.modifiers.any { it.params.any { p -> p == "City-States" } } }) {
+            w[hostile] += bias[hostile] * 2
+            w[war] += bias[war] * 2
+            aggressionBonus = true
         }
-        for (approach in MinorCivApproach.entries) w[approach.i()] += ai.minorCivApproachBias(approach)
-
+        // CONQUEST GRAND STRATEGY
+        val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
+        if (ai.isGoingForWorldConquest() || closeToConquest || has(TraitCategory.Warmonger) || has(TraitCategory.Expansionist)) {
+            if (trait == MILITARISTIC || trait == MERCANTILE) {
+                w[friendly] += bias[friendly] * 2
+                checkIfGoodWarTarget = false
+            } else if (closeToConquest || (!has(TraitCategory.Smaller) && !ai.isGoingForDiploVictory())) {
+                aggressionBonus = true
+                w[hostile] += bias[hostile] * 4
+                w[war] += bias[war] * 2
+            }
+        }
+        // DIPLO GRAND STRATEGY
+        val closeToDiplo = VictoryProgressAi.diplomaticVictoryProgress(civ) >= civ.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)
+        if (ai.isGoingForDiploVictory() || closeToDiplo || has(TraitCategory.Diplomat)) {
+            w[friendly] += bias[friendly] * 6
+            checkIfGoodWarTarget = false
+            friendshipBonus = true
+        }
+        // CULTURE GRAND STRATEGY
+        val closeToCulture = VictoryProgressAi.cultureVictoryProgress(civ, rules) >= civ.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD)
+        if (ai.isGoingForCultureVictory() || closeToCulture || has(TraitCategory.Tourism) || has(TraitCategory.Smaller)) {
+            when (trait) {
+                CULTURED, MARITIME -> { w[friendly] += bias[friendly] * 2; checkIfGoodWarTarget = false }
+                MERCANTILE -> w[friendly] += bias[friendly]
+                else -> w[hostile] += bias[hostile] * 2
+            }
+        }
+        // SCIENCE GRAND STRATEGY
+        val closeToScience = VictoryProgressAi.scienceVictoryProgress(civ) >= civ.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
+        if (ai.isGoingForSpaceshipVictory() || closeToScience || has(TraitCategory.Nerd) || has(TraitCategory.Smaller)) {
+            when (trait) {
+                MARITIME, MILITARISTIC -> { w[friendly] += bias[friendly] * 2; checkIfGoodWarTarget = false }
+                MERCANTILE -> w[friendly] += bias[friendly]
+                else -> w[hostile] += bias[hostile] * 2
+            }
+        }
+        // RELIGIOUS MINORS
+        if (trait == RELIGIOUS && civ.gameInfo.isReligionEnabled()) {
+            val religion = civ.religionManager.religion?.takeIf { it.isMajorReligion() }
+            if (religion != null) {
+                if (!religion.isEnhancedReligion()) {
+                    w[friendly] += bias[friendly] * 2
+                    checkIfGoodWarTarget = false
+                } else w[friendly] += bias[friendly]
+            } else if (civ.religionManager.remainingFoundableReligions() <= 0) {
+                when {
+                    civ.religionManager.religionState >= ReligionState.Pantheon -> {
+                        w[friendly] += bias[friendly] * 4
+                        checkIfGoodWarTarget = false
+                    }
+                    civ.gameInfo.religions.values.none { it.isMajorReligion() } -> {
+                        w[friendly] += bias[friendly] * 2
+                        checkIfGoodWarTarget = false
+                    }
+                    !has(TraitCategory.Religious) -> {
+                        w[hostile] += bias[hostile] * 2
+                        w[war] += bias[war]
+                        if (easy) { w[hostile] += bias[hostile]; w[war] += bias[war] }
+                        if (aggressionBonus) { w[hostile] += bias[hostile]; w[war] += bias[war] }
+                    }
+                }
+            } else {
+                w[war] += if (easy || aggressionBonus) bias[war] * 2 else 0
+                w[hostile] -= bias[hostile] * 2
+                w[neutral] += bias[neutral] * 4
+            }
+            if (has(TraitCategory.Religious) && (religion != null || civ.religionManager.religionState >= ReligionState.Pantheon)) {
+                w[friendly] += bias[friendly] * 2
+                checkIfGoodWarTarget = false
+            }
+        }
+        if (friendshipBonus && civ.cities.count { !it.isPuppet } < 4) {
+            w[hostile] = 0
+            w[war] = 0
+            checkIfGoodWarTarget = false
+            aggressionBonus = false
+        }
+        // Does this city-state own an original major capital? Allying it and conquering it both count towards domination.
+        // (VP also remembers it for Nuclear Gandhi, none here)
+        minor.cities.firstOrNull { it.isOriginalCapital && it.foundingCivObject?.isMajorCiv == true }?.let { capital ->
+            friendshipBonus = true
+            if (capital.foundingCivObject != civ) {
+                aggressionBonus = true
+                checkIfGoodWarTarget = true
+            }
+        }
+        // AT WAR RIGHT NOW
+        for (other in civ.gameInfo.civilizations) {
+            if (other == minor || !WarStateAi.isPlayerValid(civ, other)) continue
+            if (civ.isAtWarWith(other)) {
+                w[neutral] += bias[neutral]
+                w[friendly] += bias[friendly]
+                if (other.isMajorCiv) {
+                    w[war] -= bias[war] * 2
+                    w[hostile] -= bias[hostile] * 2
+                }
+                // VP clears its potential war target flag here and below (no reader of it here)
+            }
+            if (other.isMajorCiv) when (DiplomacyTurn.proximity(civ, other)) {
+                DiplomacyTurn.PROXIMITY_NEIGHBORS -> w[war] -= bias[war] * 2
+                DiplomacyTurn.PROXIMITY_CLOSE -> w[war] -= bias[war]
+            }
+        }
+        // PROXIMITY
         val proximity = DiplomacyTurn.proximity(civ, minor)
-        var isGoodWarTarget = false
-        var checkIfGoodWarTarget = false
-        when {
-            ai.isGoingForWorldConquest() -> {
-                w[conquest] += civ.define(AiDefine.MINOR_APPROACH_WAR_CONQUEST_GRAND_STRATEGY)
-                w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_CONQUEST_GRAND_STRATEGY)
-                w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_CONQUEST_GRAND_STRATEGY)
-                w[bully] += 8
-                if (proximity == DiplomacyTurn.PROXIMITY_NEIGHBORS) isGoodWarTarget = true
-            }
-            ai.isGoingForDiploVictory() -> {
-                w[conquest] += civ.define(AiDefine.MINOR_APPROACH_WAR_DIPLO_GRAND_STRATEGY)
-                w[ignore] += civ.define(AiDefine.MINOR_APPROACH_IGNORE_DIPLO_GRAND_STRATEGY)
-                w[bully] += -15
-                if (proximity >= DiplomacyTurn.PROXIMITY_CLOSE) w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_DIPLO_GRAND_STRATEGY_NEIGHBORS)
-            }
-            ai.isGoingForCultureVictory() -> {
-                w[conquest] += civ.define(AiDefine.MINOR_APPROACH_WAR_CULTURE_GRAND_STRATEGY)
-                w[ignore] += civ.define(AiDefine.MINOR_APPROACH_IGNORE_CULTURE_GRAND_STRATEGY)
-                w[bully] += -10
-                if (minor.cityStateType.name == CULTURED) w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_CULTURE_GRAND_STRATEGY_CST)
-                else checkIfGoodWarTarget = true
-            }
-            else -> checkIfGoodWarTarget = true
-        }
-        if (checkIfGoodWarTarget) isGoodWarTarget = isOnLandmassOfMajorWeWantToAttack(civ, minor)
-        if (isGoodWarTarget) {
-            w[conquest] += civ.define(AiDefine.MINOR_APPROACH_WAR_CONQUEST_GRAND_STRATEGY_NEIGHBORS)
-            w[bully] += 8
-        }
-
-        var bonusTraitMod = 0
-        if (hasFriendshipTrait(civ)) bonusTraitMod += 100
-        if (hasBonusTrait(civ)) bonusTraitMod += 100
-        val combatTrait = hasCombatTrait(civ)
-        if (combatTrait) bonusTraitMod -= 100
-        if (bonusTraitMod != 0) {
-            w[conquest] -= bonusTraitMod
-            w[bully] -= bonusTraitMod / 5
-            w[friendly] += bonusTraitMod / 5
-            w[protective] += bonusTraitMod
-        }
-        if (bonusTraitMod >= 0 && civ.cities.size <= 1) w[conquest] -= 200
-
-        val others = DiplomacyTurn.validPlayers(civ)
-        val stateAllWars = WarStateAi.stateAllWars(civ)
-        for (other in others) {
-            if (other == minor || !civ.isAtWarWith(other)) continue
-            w[conquest] += when (stateAllWars) {
-                StateAllWars.Neutral -> civ.define(AiDefine.APPROACH_WAR_AT_WAR_WITH_PLAYER_WARS_NEUTRAL)
-                StateAllWars.Winning -> civ.define(AiDefine.APPROACH_WAR_AT_WAR_WITH_PLAYER_WARS_WINNING)
-                StateAllWars.Losing -> civ.define(AiDefine.APPROACH_WAR_AT_WAR_WITH_PLAYER_WARS_LOSING)
-            }
-        }
-        for (other in others) {
-            if (other == minor) continue
-            if (ai.diplomacy.warGoal(other) == WarGoal.Prepare
-                || other.isMajorCiv && ai.diplomacy.approachTowards(other) == MajorCivApproach.War)
-                w[conquest] += civ.define(AiDefine.MINOR_APPROACH_WAR_PLANNING_WAR_WITH_ANOTHER_PLAYER)
-            if (other.isCityState) when (assigned[other.civID]) {
-                MinorCivApproach.Conquest -> w[conquest] += civ.define(AiDefine.MINOR_APPROACH_WAR_PLANNING_WAR_WITH_ANOTHER_PLAYER)
-                MinorCivApproach.Protective -> w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_WITH_ANOTHER_PLAYER)
-                MinorCivApproach.Bully -> w[bully] += -2
-                else -> {}
-            }
-        }
-
+        val aggressive = easy || aggressionBonus
         when (proximity) {
             DiplomacyTurn.PROXIMITY_NEIGHBORS -> {
-                w[ignore] += civ.define(AiDefine.MINOR_APPROACH_IGNORE_PROXIMITY_NEIGHBORS)
-                w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_PROXIMITY_NEIGHBORS)
-                w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_PROXIMITY_NEIGHBORS)
-                w[conquest] += civ.define(AiDefine.MINOR_APPROACH_CONQUEST_PROXIMITY_NEIGHBORS)
-                w[bully] += 1
+                w[friendly] += bias[friendly] * (if (friendshipBonus) 3 else 2)
+                w[hostile] += if (aggressive) bias[hostile] else bias[hostile] / 2
+                w[war] += if (aggressive) bias[war] * 2 else bias[war]
             }
             DiplomacyTurn.PROXIMITY_CLOSE -> {
-                w[ignore] += civ.define(AiDefine.MINOR_APPROACH_IGNORE_PROXIMITY_CLOSE)
-                w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_PROXIMITY_CLOSE)
-                w[conquest] += civ.define(AiDefine.MINOR_APPROACH_CONQUEST_PROXIMITY_CLOSE)
-                w[bully] += 1
+                w[friendly] += bias[friendly] * (if (friendshipBonus) 2 else 1)
+                w[hostile] += if (aggressive) bias[hostile] * 2 else bias[hostile]
+                w[war] += if (aggressive) bias[war] else bias[war] / 2
             }
-            DiplomacyTurn.PROXIMITY_FAR -> {
-                w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_PROXIMITY_FAR)
-                w[conquest] += civ.define(AiDefine.MINOR_APPROACH_CONQUEST_PROXIMITY_FAR)
-            }
-            DiplomacyTurn.PROXIMITY_DISTANT -> {
-                w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_PROXIMITY_DISTANT)
-                w[conquest] += civ.define(AiDefine.MINOR_APPROACH_CONQUEST_PROXIMITY_DISTANT)
-                w[bully] += -2
-            }
+            DiplomacyTurn.PROXIMITY_FAR -> w[neutral] += bias[neutral] * 4
+            else -> w[neutral] += bias[neutral] * 8
         }
-
+        // MINOR PERSONALITY
         when (minor.cityStatePersonality) {
-            CityStatePersonality.Friendly -> {
-                w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_PERSONALITY_FRIENDLY)
-                w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_PERSONALITY_PROTECTIVE)
-            }
-            CityStatePersonality.Neutral -> {
-                w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_PERSONALITY_NEUTRAL)
-                w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_PERSONALITY_NEUTRAL)
-            }
-            CityStatePersonality.Hostile -> {
-                w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_PERSONALITY_HOSTILE)
-                w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_PERSONALITY_HOSTILE)
-                w[conquest] += civ.define(AiDefine.MINOR_APPROACH_CONQUEST_PERSONALITY_HOSTILE)
-                w[bully] += 1
-            }
-            CityStatePersonality.Irrational -> {
-                w[friendly] += civ.define(AiDefine.MINOR_APPROACH_FRIENDLY_PERSONALITY_IRRATIONAL)
-                w[protective] += civ.define(AiDefine.MINOR_APPROACH_PROTECTIVE_PERSONALITY_IRRATIONAL)
+            CityStatePersonality.Friendly -> w[friendly] += bias[friendly] * 2
+            CityStatePersonality.Neutral -> w[neutral] += bias[neutral]
+            CityStatePersonality.Hostile -> { w[war] += bias[war] * 2; w[neutral] += bias[neutral] * 2 }
+            CityStatePersonality.Irrational -> { w[hostile] += bias[hostile] * 2; w[neutral] += bias[neutral] * 2 }
+        }
+        // TRIBUTE HISTORY
+        if (minor.civID in ai.deals.bulliedMinors) {
+            w[hostile] += if (easy || aggressionBonus) bias[hostile] * 4 else bias[hostile] * 2
+            w[war] += if (easy || aggressionBonus) bias[war] * 2 else bias[war]
+        }
+        // QUESTS
+        if (hasQuest(minor, civ, QuestName.PledgeToProtect)) w[friendly] += if (friendshipBonus) bias[friendly] * 2 else bias[friendly]
+        if (civ.gameInfo.ruleset.quests.containsKey(QuestName.ConquerCityState.value)) {
+            for (other in civ.gameInfo.civilizations) {
+                if (other == minor || !other.isCityState || !WarStateAi.isPlayerValid(civ, other)) continue
+                val wantsThem = other.questManager.getAssignedQuestsFor(civ)
+                    .any { it.questName == QuestName.ConquerCityState.value && it.data1 == minor.civName }
+                if (!wantsThem) continue
+                if ((ai.diplomacy.targetValue(minor) ?: TargetValue.Average) >= TargetValue.Favorable) {
+                    w[war] += if (easy || aggressionBonus) bias[war] * 4 else bias[war] * 2
+                    aggressionBonus = true
+                }
             }
         }
-        if (minor.cityStateType.name == MILITARISTIC) w[bully] += -2
-        if (minor.civID in ai.deals.bulliedMinors) w[bully] += 2
-        if (hasQuest(minor, civ, QuestName.PledgeToProtect)) w[protective] += 3
-
-        val tradeValue = tradeGoldFrom(civ, minor)
-        if (tradeValue > 0) {
-            w[protective] += 3
-            w[bully] -= 3
-            w[friendly] += 5
-            w[conquest] -= 5
-            val gpt = DealAi.goldRate(civ)
-            val deltaGpt = gpt - tradeValue
-            if (gpt >= 0 && deltaGpt < 0) w[conquest] += deltaGpt
+        // Are we getting yields from trade with them?
+        val tradeValue = tradeValueFrom(civ, minor)
+        if (tradeValue > 0) w[friendly] += bias[friendly] * tradeValue
+        else w[neutral] += bias[neutral] * 2
+        // See if this minor is on the same landmass as a major we want to attack
+        val goodWarTargetMajors = HashSet<Civilization>()
+        if (checkIfGoodWarTarget) {
+            val minorContinent = minor.getCapital()!!.getCenterTile().getContinent()
+            val ourContinent = civ.getCapital()?.getCenterTile()?.getContinent()
+            for (other in civ.gameInfo.civilizations) {
+                if (!other.isMajorCiv || other == civ || !WarStateAi.isPlayerValid(civ, other)) continue
+                if (!civ.isAtWarWith(other) && ai.diplomacy.approachTowards(other) != MajorCivApproach.War) continue
+                val theirCapital = other.getCapital() ?: continue
+                if (DiplomacyTurn.proximity(other, minor) < DiplomacyTurn.PROXIMITY_NEIGHBORS || proximity < DiplomacyTurn.PROXIMITY_NEIGHBORS) continue
+                if (ourContinent == minorContinent && theirCapital.getCenterTile().getContinent() == minorContinent) {
+                    goodWarTarget = true
+                    goodWarTargetMajors.add(other)
+                }
+            }
         }
-
-        var targetValue = ai.diplomacy.targetValue(minor)
-        if (combatTrait && targetValue != null)
-            targetValue = TargetValue.entries[min(targetValue.ordinal + 1, TargetValue.Soft.ordinal)]
-        val targetPercent = when (targetValue) {
-            TargetValue.Impossible -> civ.define(AiDefine.MINOR_APPROACH_WAR_TARGET_IMPOSSIBLE)
-            TargetValue.Bad -> civ.define(AiDefine.MINOR_APPROACH_WAR_TARGET_BAD)
-            TargetValue.Average -> civ.define(AiDefine.MINOR_APPROACH_WAR_TARGET_AVERAGE)
-            TargetValue.Favorable -> civ.define(AiDefine.MINOR_APPROACH_WAR_TARGET_FAVORABLE)
-            TargetValue.Soft -> civ.define(AiDefine.MINOR_APPROACH_WAR_TARGET_SOFT)
-            null -> 100
+        if (goodWarTarget) {
+            w[war] += bias[war] * 2
+            if (easy) w[war] += bias[war] * 2
+            if (aggressionBonus) w[war] += bias[war] * 2
+            if (ai.isGoingForWorldConquest() || closeToConquest) w[war] += bias[war] * 2
+        } else if (proximity <= DiplomacyTurn.PROXIMITY_FAR) {
+            w[war] = 0
+            w[hostile] = 0
         }
-        w[conquest] = w[conquest] * targetPercent / 100
-
+        // APPROACHES TOWARDS OTHER PLAYERS: a war we plan or fight against a close major leaves no room for this one
+        for (other in civ.gameInfo.civilizations) {
+            if (!other.isMajorCiv || other == civ || other in goodWarTargetMajors || !WarStateAi.isPlayerValid(civ, other)) continue
+            if (!civ.isAtWarWith(other) && ai.diplomacy.approachTowards(other) != MajorCivApproach.War) continue
+            if (!WarIntentAi.isPhonyWar(civ, other) && DiplomacyTurn.proximity(civ, other) >= DiplomacyTurn.PROXIMITY_CLOSE) {
+                w[war] = 0
+                w[neutral] += bias[neutral] * 2
+            }
+        }
+        // No bullying while at war!
+        if (atWar) w[hostile] = 0
+        // PREVIOUSLY CAPTURED OUR CITIES
+        val canDeclareWar = civ.getDiplomacyManager(minor)?.canDeclareWar() == true
+        // If we can't declare war, ignore any captures for the time being
+        val theyCapturedFromUs = (canDeclareWar || atWar) && minor.cities.any { it.foundingCivObject == civ }
+        val ally = minor.allyCiv
+        if (theyCapturedFromUs) {
+            w[war] += bias[war] * 10
+            w[friendly] = 0
+            w[neutral] = 0
+            w[hostile] = 0
+        } else if (ally == civ) {
+            w[war] = 0
+            w[hostile] = 0
+            w[friendly] += bias[friendly] * (if (friendshipBonus) 6 else 3)
+            w[neutral] = 0
+        } else if (ally != null && WarAlliesAi.avoidExchangesWithPlayer(civ, ally, warOnly = true)) w[hostile] = 0
+        // BULLY VIABILITY
+        if (w[hostile] > 0) {
+            val bullyScore = minor.cityStateFunctions.getTributeWillingness(civ)
+            if (bullyScore >= 0) w[hostile] += bullyScore * 100 / 10 else w[hostile] = 0
+        }
+        // MILITARY TARGET VALUE
+        for (i in w.indices) if (w[i] < 0) w[i] = 0
+        val goodAttackTarget = ai.military.havePreferredAttackTarget(minor) || theyCapturedFromUs
+        val wantsConquest = aggressionBonus && goodAttackTarget
+        val (conquestPercent, minorPercent, peacefulBonus) = when (ai.diplomacy.targetValue(minor) ?: TargetValue.Average) {
+            TargetValue.Impossible -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_IMPOSSIBLE, AiDefine.MINOR_APPROACH_WAR_TARGET_IMPOSSIBLE, 5)
+            TargetValue.Bad -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_BAD, AiDefine.MINOR_APPROACH_WAR_TARGET_BAD, 4)
+            TargetValue.Average -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_AVERAGE, AiDefine.MINOR_APPROACH_WAR_TARGET_AVERAGE, 2)
+            TargetValue.Favorable -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_FAVORABLE, AiDefine.MINOR_APPROACH_WAR_TARGET_FAVORABLE, 1)
+            TargetValue.Soft -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_SOFT, AiDefine.MINOR_APPROACH_WAR_TARGET_SOFT, 0)
+        }
+        val percent = civ.define(if (wantsConquest) conquestPercent else minorPercent)
+        w[war] = w[war] * percent / 100
+        w[hostile] = w[hostile] * percent / 100
+        w[neutral] += bias[neutral] * peacefulBonus
+        w[friendly] += bias[friendly] * peacefulBonus
+        // RECENTLY BULLIED
+        if (MinorCivHelpers.isRecentlyBulliedByMajor(minor, civ)) {
+            w[friendly] /= 2
+            w[hostile] = 0
+            if (!goodWarTarget) w[war] = 0
+        }
+        // CAN WE DECLARE WAR?
+        if (!canDeclareWar && !atWar) {
+            w[war] = 0
+            w[hostile] = 0
+        }
+        // No target? Don't waste our time on city-states that are not good targets either
+        if (!ai.military.havePossibleAttackTarget(minor)) {
+            w[war] = 0
+            w[hostile] = 0
+        } else if (!goodWarTarget && !goodAttackTarget) w[war] = 0
+        // If we're in bad shape, don't waste time trying to go after city-states
+        if (WarStateAi.isNoNewWars(civ)) {
+            w[hostile] = 0
+            if (!theyCapturedFromUs || WarStateAi.isInTerribleShapeForWar(civ)) w[war] = 0
+        }
+        // At war with this city-state and the war goes badly (VP: troubled or worse; ours: defensive or worse)
+        if (atWar && ((theyCapturedFromUs && WarStateAi.stateAllWars(civ) == StateAllWars.Losing) ||
+                (!theyCapturedFromUs && (WarStateAi.warState(civ, minor) ?: WarState.Calm) <= WarState.Defensive))) {
+            w[war] = 0
+            w[hostile] = 0
+        }
+        // PEACE TREATY: made peace with them recently
         val peaceTurn = ai.diplomacy.turnMadePeaceWith(minor)
-        if (peaceTurn > -1 && civ.gameInfo.turns - peaceTurn < civ.define(AiDefine.TURNS_SINCE_PEACE_WEIGHT_DAMPENER))
-            w[conquest] = w[conquest] * civ.define(AiDefine.APPROACH_WAR_HAS_MADE_PEACE_BEFORE_PERCENT) / 100
-
-        val randomPercent = civ.define(AiDefine.APPROACH_RANDOM_PERCENT)
-        for (i in w.indices) {
-            w[i] *= 100
-            val randAmount = w[i] * randomPercent
-            if (randAmount > 0 && random != null) {
-                val range = randAmount / 100
-                if (range > 0) w[i] += random.nextInt(range)
+        val dampener = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get("PeaceTreatyDampenerTurns") ?: 20
+        if (peaceTurn > -1 && civ.gameInfo.turns - peaceTurn < dampener) {
+            w[hostile] = 0
+            w[war] = 0
+        }
+        // Teammates and friends: not the city-states our friends are allied with or protect
+        if (!theyCapturedFromUs && (w[war] > 0 || w[hostile] > 0)) {
+            for (other in civ.gameInfo.civilizations) {
+                if (!other.isMajorCiv || other == civ || !other.isAlive()) continue
+                val friendOrAlly = OpinionAi.isDoFAccepted(civ, other) ||
+                    civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
+                if (friendOrAlly && (minor.allyCiv == other || isProtectedBy(minor, other))) {
+                    w[hostile] = 0
+                    w[war] = 0
+                    break
+                }
             }
         }
-
-        if (!canMajorProtect(minor, civ) && w[protective] > 0) w[protective] = 0
-        if (!civ.isAtWarWith(minor) && civ.getDiplomacyManager(minor)?.canDeclareWar() != true && w[conquest] > 0) w[conquest] = 0
-        if (isAllies(minor, civ)) {
-            if (w[conquest] > 0) w[conquest] = 0
-            if (w[bully] > 0) w[bully] = 0
+        // TOO FAR TO BULLY
+        if (w[hostile] > 0) {
+            val distance = closestCityByPathLength(civ, minor, minor.getCapital()!!.getCenterTile())?.second ?: Int.MAX_VALUE
+            if (distance > 23) w[hostile] = 0
         }
-        return w
+        // AGGRESSIVE MODE
+        if (VictoryProgressAi.isAiAggressiveMode(civ)) {
+            w[war] *= 2
+            w[hostile] *= 2
+        }
+        for (i in w.indices) if (w[i] < 0) w[i] = 0
+        if (w.all { it == 0 }) return MinorCivApproach.Ignore
+        var best = 0
+        for (i in 1 until w.size) if (w[i] > w[best]) best = i
+        return VP_ORDER[best]
     }
 
     /**
-     *  The landmass check of GetBestApproachTowardsMinorCiv: a major we are at peace with and plan war against has its capital on the
-     *  landmass of ours and of [minor]'s, and both of us are neighbours of [minor]
+     *  The trade value of SelectBestApproachTowardsMinorCiv: gold, culture and science our trade routes to [minor] bring us, averaged
+     *  (VP's sum x 100 / 300); VP's city-state gold bonus is none in BNW
      */
-    private fun isOnLandmassOfMajorWeWantToAttack(civ: Civilization, minor: Civilization): Boolean {
-        val ourCapital = civ.getCapital() ?: return false
-        val minorCapital = minor.getCapital() ?: return false
-        for (other in DiplomacyTurn.validPlayers(civ)) {
-            if (!other.isMajorCiv || other == civ || civ.isAtWarWith(other)) continue
-            if (civ.ai.diplomacy.approachTowards(other) != MajorCivApproach.War) continue
-            val theirCapital = other.getCapital() ?: continue
-            val continent = theirCapital.getCenterTile().getContinent()
-            if (continent != minorCapital.getCenterTile().getContinent() || ourCapital.getCenterTile().getContinent() != continent) continue
-            if (DiplomacyTurn.proximity(other, minor) >= DiplomacyTurn.PROXIMITY_NEIGHBORS
-                && DiplomacyTurn.proximity(civ, minor) >= DiplomacyTurn.PROXIMITY_NEIGHBORS) return true
-        }
-        return false
+    private fun tradeValueFrom(civ: Civilization, minor: Civilization): Int {
+        var sum = 0f
+        for (route in civ.tradeRoutes.routes) if (route.getDestinationCiv() == minor)
+            sum += route.originYields.gold + route.originYields.culture + route.originYields.science
+        return (sum / 3).toInt()
     }
     //endregion
 
     //region Contacts
 
-    /** CvDiplomacyAI::DoUpdateMinorCivProtection: an AI pledges to protect a Protective city-state when it can, and withdraws from the others */
+    /**
+     *  CvDiplomacyAI::DoUpdateMinorCivProtection: an AI pledges to protect a city-state it is friendly towards when it can (BNW's
+     *  protective approach; Vox Populi's approach has none, friendly takes its place), and withdraws from the others
+     */
     fun updateMinorCivProtection(civ: Civilization, minor: Civilization, approach: MinorCivApproach) {
         if (civ.isHuman()) return
         val functions = minor.cityStateFunctions
-        if (approach == MinorCivApproach.Protective) {
+        if (approach == MinorCivApproach.Friendly) {
             if (functions.otherCivCanPledgeProtection(civ)) functions.addProtectorCiv(civ)
         } else if (isProtectedBy(minor, civ) && functions.otherCivCanWithdrawProtection(civ)) {
             functions.removeProtectorCiv(civ)
@@ -403,7 +598,7 @@ object CityStateAi {
      *  buy it out (Austria), to give it gold, to take a worker, to take gold; then the buyout (one a turn, else saving), the gifts
      *  (several a turn, never below half of the turn's starting treasury, else saving), one worker, and every gold tribute.
      *  The route wish (SetWantToRouteConnectToMinor) is set for a neighbouring city-state with an active route quest for us that we are
-     *  Friendly or Protective towards, cleared otherwise, and kept for a city-state we are at war with; [BuilderTaskingAi] reads it.
+     *  friendly towards, cleared otherwise, and kept for a city-state we are at war with; [BuilderTaskingAi] reads it.
      *  Unciv has no intrusion state (SetMajorIntruding).
      */
     fun contactMinorCivs(civ: Civilization) = timeThis("AI.ContactMinorCivs") {
@@ -419,7 +614,7 @@ object CityStateAi {
             if (civ.isAtWarWith(minor)) continue
             val approach = civ.ai.minorCivApproaches[minor.civID] ?: MinorCivApproach.Ignore
             updateMinorCivProtection(civ, minor, approach)
-            if ((approach == MinorCivApproach.Protective || approach == MinorCivApproach.Friendly)
+            if (approach == MinorCivApproach.Friendly
                 && hasQuest(minor, civ, QuestName.Route) && DiplomacyTurn.proximity(civ, minor) == DiplomacyTurn.PROXIMITY_NEIGHBORS)
                 wantsRoute.add(minor.civID)
             var buyingOut = false
@@ -509,11 +704,11 @@ object CityStateAi {
     }
 
     /**
-     *  The gift desirability of DoContactMinorCivs for [minor], null when we are not Friendly or Protective toward it. Fills
+     *  The gift desirability of DoContactMinorCivs for [minor], null when we are not friendly toward it. Fills
      *  [gift]'s quick boost and rival. Counts only above MC_GIFT_WEIGHT_THRESHOLD.
      */
     fun goldGiftValue(civ: Civilization, minor: Civilization, approach: MinorCivApproach, gift: GoldGift): Int? {
-        if (approach != MinorCivApproach.Protective && approach != MinorCivApproach.Friendly) return null
+        if (approach != MinorCivApproach.Friendly) return null
         val ai = civ.ai
         var value = civ.define(AiDefine.MC_GIFT_WEIGHT_THRESHOLD)
         value += min(max(0, DealAi.goldRate(civ) - 50), 100)
@@ -533,7 +728,6 @@ object CityStateAi {
         if (trait == MILITARISTIC && !ai.isGoingForWorldConquest()) value += civ.define(AiDefine.MC_GIFT_WEIGHT_MILITARISTIC)
         val lacking = MinorCivHelpers.numResourcesMajorLacks(minor, civ)
         if (lacking > 0) value += lacking * civ.define(AiDefine.MC_GIFT_WEIGHT_RESOURCE_WE_NEED)
-        if (approach == MinorCivApproach.Protective) value += civ.define(AiDefine.MC_GIFT_WEIGHT_PROTECTIVE)
         if (minor.cityStatePersonality == CityStatePersonality.Hostile) value += civ.define(AiDefine.MC_GIFT_WEIGHT_HOSTILE)
         when (DiplomacyTurn.proximity(civ, minor)) {
             DiplomacyTurn.PROXIMITY_NEIGHBORS -> value += civ.define(AiDefine.MC_GIFT_WEIGHT_NEIGHBORS)
@@ -686,6 +880,7 @@ object CityStateAi {
     private const val MILITARISTIC = "Militaristic"
     private const val MARITIME = "Maritime"
     private const val MERCANTILE = "Mercantile"
+    private const val RELIGIOUS = "Religious"
     private const val FOUND_CITY = "ECONOMICAISTRATEGY_FOUND_CITY"
     private const val EXPAND_LIKE_CRAZY = "ECONOMICAISTRATEGY_EXPAND_LIKE_CRAZY"
     private const val EXPAND_TO_OTHER_CONTINENTS = "ECONOMICAISTRATEGY_EXPAND_TO_OTHER_CONTINENTS"

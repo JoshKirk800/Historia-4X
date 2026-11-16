@@ -2,6 +2,7 @@ package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.MajorCivApproach
@@ -137,12 +138,19 @@ class ConquestApproachTests {
         }
     }
     @Test
-    fun `close to world conquest, a hostile approach is enough to prepare a war`() {
+    fun `close to world conquest, a hostile approach far away is enough to prepare a war`() {
         val rules = game.ruleset.ai
-        a.ai.diplomacy.memoryOf(c).approach = MajorCivApproach.Hostile
-        WarAi.doMakeWarOnPlayer(a, c, rules)
-        assertEquals("not close yet: Hostile alone is no war target", null, a.ai.diplomacy.memoryOf(c).warGoal)
+        a.proximity[c.civID] = Proximity.Far
+        val values = IntArray(MajorCivApproach.entries.size)
+        values[MajorCivApproach.War.ordinal] = 500
+        values[MajorCivApproach.Hostile.ordinal] = 800
+        a.ai.diplomacy.memoryOf(c).approachValues = ArrayList(values.toList())
+        a.ai.diplomacy.setApproach(c, MajorCivApproach.Hostile)
+        WarTargetAi.updateWarTargets(a, listOf(b, c, d), rules)
+        assertEquals("not close yet: Hostile far away is no war target", MajorCivApproach.Hostile, a.ai.diplomacy.approachTowards(c))
         b.cities.first().moveToCiv(a)
+        WarTargetAi.updateWarTargets(a, listOf(c, d), rules)
+        assertEquals(MajorCivApproach.War, a.ai.diplomacy.approachTowards(c))
         WarAi.doMakeWarOnPlayer(a, c, rules)
         assertEquals(WarGoal.Prepare, a.ai.diplomacy.memoryOf(c).warGoal)
     }

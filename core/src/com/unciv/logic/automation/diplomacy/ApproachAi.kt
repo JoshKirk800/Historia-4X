@@ -532,6 +532,9 @@ object ApproachAi {
             if (civ.ai.isGoingForWorldConquest() || closeToConquest) w[WAR] += if (closeToConquest) 1000 else 100
         }
 
+        stage("Difficulty and war bonuses (part 7)")
+        addWarBonuses(civ, other, closeToConquest, w, rules)
+
         stage("Agreed to a coop war against them")
         // Agreed to a coop war against them
         if (CoopWarAi.isLockedIntoCoopWar(civ, other, rules)) w[WAR] += rules.define(AiDefine.COOP_WAR_LOCKED_TURNS_WAR_WEIGHT)
@@ -810,6 +813,69 @@ object ApproachAi {
                 }
             }
         }
+    }
+
+    /**
+     *  Part 7 of Vox Populi's SelectBestApproachTowardsMajorCiv, the VOX POPULI CHANGES: the difficulty bonus and the war bonus.
+     *  Difficulty: towards a player we view worse than neutral, AggressionIncrease of the game's difficulty less 2 per opinion step above
+     *  unforgivable adds bias x that / 2 to war, hostile (and deceptive, when deception applies), and x that more to war and hostile with
+     *  an opportunity attack. War bonus: going for world conquest (VP: a conqueror pursuit or traits, not ported), Honor opened and
+     *  finished, Exploration opened and finished (when we can cross the ocean from the Medieval era, have 2 coastal cities and they 1: the
+     *  non-VP-balance rule, our Exploration being BNW's), Autocracy, each more with an opportunity attack; scaled by boldness (war),
+     *  meanness (hostile), denounce willingness (deceptive, only when deception applies) x the difficulty's victory dispute or block
+     *  percent / 500; twice for one going for or close to world conquest; deceptive left out when close to it.
+     *  Left out until their inputs exist: unique unit periods, temporary attack bonuses, victory dispute levels, easy and good targets.
+     */
+    private fun addWarBonuses(civ: Civilization, other: Civilization, closeToConquest: Boolean, w: IntArray, rules: AiRuleset) {
+        fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
+        val handicap = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values
+        val opportunity = wantsOpportunityAttack(civ, other, rules)
+        val deception = appliesDeception(civ, other, rules)
+        val attack = 1 // iAttackMultiplier (branch C)
+        val opinion = civ.ai.diplomacy.memoryOf(other).opinion
+        if (opinion < MajorCivOpinion.Neutral) {
+            // VP's opinion order is the same up to neutral: Unforgivable 0, Enemy 1, Competitor 2
+            val difficultyBonus = (handicap?.get("AggressionIncrease") ?: 0) - opinion.ordinal * 2
+            if (difficultyBonus > 0) {
+                w[WAR] += bias(MajorCivApproach.War) * difficultyBonus / 2
+                w[HOSTILE] += bias(MajorCivApproach.Hostile) * difficultyBonus / 2
+                if (deception) w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * difficultyBonus / 2
+                if (opportunity) {
+                    w[WAR] += bias(MajorCivApproach.War) * difficultyBonus
+                    w[HOSTILE] += bias(MajorCivApproach.Hostile) * difficultyBonus
+                }
+            }
+        }
+        var war = 0
+        var hostile = 0
+        var deceptive = 0
+        fun add(withOpportunity: Int, without: Int) {
+            val factor = if (opportunity) withOpportunity else without
+            war += bias(MajorCivApproach.War) * factor * attack
+            hostile += bias(MajorCivApproach.Hostile) * factor * attack
+            deceptive += bias(MajorCivApproach.Deceptive) * factor * attack
+        }
+        val conqueror = civ.ai.isGoingForWorldConquest()
+        if (conqueror) add(2, 1)
+        val policies = civ.policies
+        if (policies.isAdopted("Honor")) add(3, 2)
+        if (policies.isAdopted("Honor Complete")) add(3, 2)
+        val canCrossOcean = (civ.tech.embarkedUnitsCanEnterOcean || civ.tech.allUnitsCanEnterOcean) &&
+            civ.getEra().eraNumber >= rules.define(AiDefine.MEDIEVAL_ERA)
+        if (policies.isAdopted("Exploration") && canCrossOcean && civ.cities.count { it.isCoastal() } > 1 && other.cities.any { it.isCoastal() }) {
+            add(3, 2)
+            if (policies.isAdopted("Exploration Complete")) add(3, 2)
+        }
+        if (policies.isAdopted("Autocracy")) add(6, 3)
+        val difficulty = maxOf(handicap?.get("VictoryDisputePercent") ?: 100, handicap?.get("VictoryBlockPercent") ?: 100)
+        war = war * civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) * difficulty / 500
+        hostile = hostile * civ.ai.diplomacyValue(DiplomacyPersonality.Meanness) * difficulty / 500
+        deceptive = if (deception) deceptive * civ.ai.diplomacyValue(DiplomacyPersonality.DenounceWillingness) * difficulty / 500 else 0
+        if (war <= 0 && hostile <= 0 && deceptive <= 0) return
+        val times = if (conqueror || closeToConquest) 2 else 1
+        w[WAR] += war * times
+        w[HOSTILE] += hostile * times
+        if (!closeToConquest) w[DECEPTIVE] += deceptive * times
     }
 
     /**

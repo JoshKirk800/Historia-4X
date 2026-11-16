@@ -85,11 +85,18 @@ class OperationTests {
         return second
     }
 
+    /** What Vox Populi's CheckUnitBuildSanity wants before a city trains a combat unit: a second building and a treasury that is not broke */
+    private fun developCity() {
+        city.cityConstructions.addBuilding("Monument")
+        civ.addGold(100)
+    }
+
     //region City demand (CvCity::GetUnitForOperation)
 
     @Test
     fun `a city offers the unit of the next open slot with the operation unit weight`() {
         civ.ai.setPersonalityFlavor(Flavor.Offense, 4)
+        developCity()
         closeDefense()
         val candidate = slotCandidate()
         assertNotNull(candidate)
@@ -105,6 +112,7 @@ class OperationTests {
     @Test
     fun `every offer that is not taken raises the next one by the flavor multiplier`() {
         civ.ai.setPersonalityFlavor(Flavor.Offense, 4)
+        developCity()
         closeDefense()
         val first = slotCandidate()!!.weight
         assertEquals(1, civ.ai.military.numberOfTimesOpsBuildSkippedOver)
@@ -115,6 +123,7 @@ class OperationTests {
     @Test
     fun `units for an attack army weigh 750 plus the offense flavor multiplier`() {
         civ.ai.setPersonalityFlavor(Flavor.Offense, 4)
+        developCity()
         civ.ai.military.requestArmy(bySea = false)
         civ.tech.addTechnology("Archery")
         val unit = MilitaryOperations.unitForArmy(city)!!

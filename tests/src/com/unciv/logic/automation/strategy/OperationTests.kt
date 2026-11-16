@@ -542,6 +542,24 @@ class OperationTests {
         assertTrue(MilitaryOperations.requestSneakAttack(civ, enemy))
         assertEquals(enemyCity.location, ops.firstOfType(AiOperationType.SNEAK_CITY_ATTACK)!!.targetTile)
     }
+
+    @Test
+    fun `at war a major attacks its preferred target unless the war goes badly`() {
+        civ.getDiplomacyManager(enemy)!!.declareWar()
+        fillAttackReserves()
+        repeat(6) { unit("Warrior") }
+        civ.ai.military.updateBaseData(civ)
+        civ.ai.military.updateAttackTargets(civ)
+        val targets = civ.ai.military.potentialAttackTargets
+        assertTrue("preferred: ${targets.map { it.targetCity.name to it.preferred }}", targets.any { it.preferred && it.targetCity == enemyCity })
+        // DoCityAttacks: troubled or worse (ours: defensive or worse) starts nothing
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Defensive
+        MilitaryOperations.doCityAttacks(civ, enemy)
+        assertTrue(ops.operations.isEmpty())
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Stalemate
+        MilitaryOperations.doCityAttacks(civ, enemy)
+        assertEquals(enemyCity.location, ops.firstOfType(AiOperationType.BASIC_CITY_ATTACK)?.targetTile)
+    }
     //endregion
 
     //region Barbarian camps and the kill rules (CvMilitaryAI::UpdateOperations)

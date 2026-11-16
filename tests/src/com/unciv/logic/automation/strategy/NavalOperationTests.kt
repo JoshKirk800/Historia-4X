@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
 
 /**
  *  The naval operations and the nukes (CvAIOperation: CvAINavalOperation and its subclasses, CvAINavalEscortedOperation, CvAIOperationNavalAttack,
- *  CvAIOperationNukeAttack; CvMilitaryAI: RequestPureNavalAttack, the naval part of UpdateOperations, RequestNukeAttack and its trigger;
+ *  CvAIOperationNukeAttack; CvMilitaryAI: RequestCityAttack's naval army (our pure naval attack), the naval part of UpdateOperations, RequestNukeAttack and its trigger;
  *  CvTacticalAI: the naval formation moves) with the BNW XML values. A channel of coast water separates our city at x=0 from the enemy's at x=14.
  */
 @RunWith(GdxTestRunner::class)
@@ -75,12 +75,17 @@ class NavalOperationTests {
     /** The four required ships of the pure naval formation: two that attack at sea, two assault ships */
     private fun fleet(): List<MapUnit> = listOf(ship("Quinquereme", 2, 0), ship("Quinquereme", 2, 1), ship("Galleass", 3, 0), ship("Galleass", 3, 1))
 
+    /** An attack target of Vox Populi's naval army: ships alone from our port to the enemy city */
+    private fun navalTarget() = MilitaryTarget(city, enemyCity).apply { attackBySea = true; pureNaval = true }
+
+    private fun requestNavalAttack(numUnitsWillingToBuild: Int) = MilitaryOperations.requestSpecificAttack(civ, navalTarget(), numUnitsWillingToBuild)
+
     // region Pure naval city attack
 
     @Test
     fun `a pure naval attack starts when all but the number of units we are willing to build of the required slots are filled`() {
         val ships = fleet()
-        assertTrue(MilitaryOperations.requestPureNavalAttack(civ, enemy, 0))
+        assertTrue(requestNavalAttack(0))
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         assertEquals(OperationState.GATHERING_FORCES, operation.state)
         assertTrue(ships.all { ops.armyOf(it) != null })
@@ -93,9 +98,9 @@ class NavalOperationTests {
     @Test
     fun `one missing ship is built when willing, two missing are too many`() {
         val ships = listOf(ship("Quinquereme", 2, 0), ship("Quinquereme", 2, 1), ship("Galleass", 3, 0))
-        assertFalse("one short and not willing", MilitaryOperations.requestPureNavalAttack(civ, enemy, 0))
+        assertFalse("one short and not willing", requestNavalAttack(0))
         assertNull(ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK))
-        assertTrue(MilitaryOperations.requestPureNavalAttack(civ, enemy, 1))
+        assertTrue(requestNavalAttack(1))
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
         assertEquals(1, operation.slotsToBuild.size)
@@ -104,13 +109,13 @@ class NavalOperationTests {
         assertTrue(operation.hasOneMoreSlotToFill())
         ops.kill(operation, OperationAbortReason.KILLED)
         ships[2].destroy()
-        assertFalse("two short", MilitaryOperations.requestPureNavalAttack(civ, enemy, 1))
+        assertFalse("two short", requestNavalAttack(1))
     }
 
     @Test
     fun `a pure naval attack ends in success once the fleet is within a tile of the city, the tactical AI gets a zone there`() {
         fleet()
-        MilitaryOperations.requestPureNavalAttack(civ, enemy, 0)
+        requestNavalAttack(0)
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         val army = operation.firstArmy!!
         operation.state = OperationState.MOVING_TO_TARGET
@@ -124,7 +129,7 @@ class NavalOperationTests {
     @Test
     fun `a pure naval attack is called off when its city is no longer the enemy's`() {
         fleet()
-        MilitaryOperations.requestPureNavalAttack(civ, enemy, 0)
+        requestNavalAttack(0)
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         assertFalse(AiOperationLogic.shouldAbort(civ, operation))
         enemyCity.getCenterTile().setOwningCity(null)

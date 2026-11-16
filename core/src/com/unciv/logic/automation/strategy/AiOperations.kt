@@ -203,6 +203,8 @@ class AiOperations : IsPartOfGameInfoSerialization {
     @Transient var statsAborted = 0
     /** Operations created and succeeded per type (for the simulation report): [created, succeeded] */
     @Transient val statsByType = HashMap<AiOperationType, IntArray>()
+    /** Operations ended other than by success, per type and reason (for the simulation report) */
+    @Transient val statsAbortReasons = HashMap<AiOperationType, HashMap<OperationAbortReason, Int>>()
 
     fun clone(): AiOperations {
         val toReturn = AiOperations()
@@ -341,7 +343,10 @@ class AiOperations : IsPartOfGameInfoSerialization {
         if (operation.abortReason == OperationAbortReason.SUCCESS) {
             statsSucceeded++
             statsByType.getOrPut(operation.type) { IntArray(2) }[1]++
-        } else statsAborted++
+        } else {
+            statsAborted++
+            statsAbortReasons.getOrPut(operation.type) { HashMap() }.merge(operation.abortReason, 1, Int::plus)
+        }
         operation.armies.clear()
         operation.slotsToBuild.clear()
         operation.committedCities.clear()

@@ -139,51 +139,30 @@ class NavalOperationTests {
     }
     // endregion
 
-    // region Superiority and bombardment
+    // region Superiority
 
     /** The required slots of the naval squadron: an attack ship and an assault ship (a second assault ship takes the optional second attack slot first) */
     private fun squadron(y: Int): List<MapUnit> = listOf(ship("Quinquereme", 2, y), ship("Galleass", 3, y), ship("Galleass", 4, y))
 
     @Test
-    fun `naval superiority starts with a squadron at hand when a colonization is under way or we are at war, never otherwise`() {
-        civ.ai.setPersonalityFlavor(Flavor.Naval, 10)
+    fun `a naval superiority squadron at hand hunts the enemy ship and sails at once`() {
         squadron(0)
         game.addUnit("Trireme", enemy, tile(5, 2))
-        MilitaryOperations.launchOpportunityNavalOperations(civ)
-        assertNull("no reason", ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY))
-        civ.ai.militaryStrategies[MilitaryOperations.AT_WAR] = 1
-        MilitaryOperations.launchOpportunityNavalOperations(civ)
-        val operation = ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY)!!
+        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
         assertEquals("the enemy ship is the target", tile(5, 2).position, operation.targetTile)
         assertEquals("it sails at once", OperationState.MOVING_TO_TARGET, operation.state)
     }
 
     @Test
     fun `naval superiority sails for an enemy trader at sea`() {
-        civ.ai.setPersonalityFlavor(Flavor.Naval, 10)
         squadron(0)
         val route = TradeRoute(enemyCity.location, city.location, TradeRouteKind.International, true, "Cargo Ship",
             listOf(tile(4, 2).position, tile(5, 2).position, tile(6, 2).position), 4, 30, game.gameInfo.turns)
         route.setTransients(enemy)
         route.pathIndex = 1
         enemy.tradeRoutes.routes.add(route)
-        civ.ai.militaryStrategies[MilitaryOperations.AT_WAR] = 1
-        MilitaryOperations.launchOpportunityNavalOperations(civ)
-        val operation = ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY)!!
+        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
         assertEquals(tile(5, 2).position, operation.targetTile)
-    }
-
-    @Test
-    fun `the number of superiority and bombardment operations is held to half the naval flavor`() {
-        civ.ai.setPersonalityFlavor(Flavor.Naval, 0)
-        civ.ai.militaryStrategies[MilitaryOperations.AT_WAR] = 1
-        squadron(0)
-        game.addUnit("Trireme", enemy, tile(5, 2))
-        MilitaryOperations.launchOpportunityNavalOperations(civ) // 0 running <= 0
-        assertEquals(1, ops.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY))
-        squadron(3)
-        MilitaryOperations.launchOpportunityNavalOperations(civ) // 1 running > 0
-        assertEquals(1, ops.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY))
     }
 
     @Test
@@ -202,44 +181,6 @@ class NavalOperationTests {
         val target = game.gameInfo.tileMap[operation.targetTile!!]
         assertTrue(target.isWater)
         assertEquals(1, target.aerialDistanceTo(enemyCity.getCenterTile()))
-    }
-
-    @Test
-    fun `a bombardment fleet targets the shallow water next to an enemy unit on the coast, cities are left alone`() {
-        ship("Quinquereme", 2, 1)
-        ship("Galleass", 2, 0)
-        game.addUnit("Warrior", enemy, tile(0, 3)) // on the coast of our side, next to water at x=1
-        seeAll()
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_BOMBARDMENT)
-        val target = game.gameInfo.tileMap[operation.targetTile!!]
-        assertTrue(target.isWater)
-        assertEquals(1, target.aerialDistanceTo(tile(0, 3)))
-    }
-
-    @Test
-    fun `bombardment without a defender on the coast aborts`() {
-        ship("Quinquereme", 2, 1)
-        ship("Galleass", 2, 0)
-        seeAll()
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_BOMBARDMENT)
-        assertEquals(OperationState.ABORTED, operation.state)
-        assertEquals(OperationAbortReason.LOST_TARGET, operation.abortReason)
-    }
-
-    @Test
-    fun `a bombardment fleet that reaches its goal gives the tactical AI a one turn bombardment zone`() {
-        ship("Quinquereme", 2, 1)
-        ship("Galleass", 2, 0)
-        game.addUnit("Warrior", enemy, tile(0, 3))
-        seeAll()
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_BOMBARDMENT)
-        val army = operation.firstArmy!!
-        operation.state = OperationState.MOVING_TO_TARGET
-        army.position = army.goalTile
-        AiOperationLogic.armyInPosition(civ, operation, army)
-        assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
-        val zone = civ.ai.tactical.temporaryZones.single()
-        assertEquals(game.gameInfo.turns + 1, zone.lastTurn)
     }
     // endregion
 

@@ -905,6 +905,8 @@ enum class AiDefine(val default: Float) {
     HISTORY_NUM_TURNS_TO_AVERAGE(10f),
     // CvMilitaryAI::SetRecommendedArmyNavySize (Vox Populi): an army's worth of offense weight per preferred attack target and for conquest (MilitaryAi)
     BALANCE_BASIC_ATTACK_ARMY_SIZE(6f),
+    // MilitaryAIHelpers::NeedShipInArea (Vox Populi): an area needs no more ships once we have one unit per this many of its tiles (MilitaryAi.findUselessShip)
+    AI_CONFIG_MILITARY_TILES_PER_SHIP(6f),
     // The index of the Ancient era (VP's GD_INT_GET(ANCIENT_ERA)): conquerors of capitals then draw the most war (ApproachWinningAi)
     ANCIENT_ERA(0f),
     // The index of the Classical era (VP's GD_INT_GET(CLASSICAL_ERA)): after it the biggest competitor weighs more (ApproachAi part 4)

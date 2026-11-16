@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.IsPartOfGameInfoSerialization
+import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.diplomacy.AiThreat
 import com.unciv.logic.automation.diplomacy.PactPlanningAi
@@ -8,6 +9,7 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.map.mapunit.MapUnit
+import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
@@ -356,25 +358,152 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  CvMilitaryAI::DisbandObsoleteUnits: majors at peace. When losing money (LOSING_MONEY, or more than 5 gold per unit) or, when not
-     *  going for conquest, with a land (naval) defense state of NEUTRAL or ENOUGH, finds the weakest obsolete land (naval) unit
-     *  ([findBestUnitToScrap]); scraps the land one if the land state is not worse than the naval one or it is not stronger, else the naval one.
+     *  CvMilitaryAI::DisbandObsoleteUnits (Vox Populi), after turn 25: not for a major losing all its wars, nor for a city-state at war
+     *  or with barbarians threatening it. A useless ship goes first ([findUselessShip]); else, when LOSING_MONEY (majors) or with more
+     *  than 1 unit over the supply (3 going for conquest), the cheaper of the land and the sea unit [findUnitToScrap] names, the sea one
+     *  on a tie.
+     *
+     *  Not here: the units that cannot heal and are hurt (no Brave New World unit is unable to heal); CvPlayer::GetBestGiftTarget (a
+     *  major gives the unit to a city-state instead of scrapping it) is not ported: the unit is scrapped.
      */
     fun disbandObsoleteUnits(civ: Civilization) {
-        if (WarStateAi.numberCivsAtWarWith(civ) > 0) return
-        if (civ.isCityState) return
-        val averageGoldPerUnit = civ.stats.getUnitMaintenance() / max(1, civ.units.getCivUnitsSize())
-        val inDeficit = civ.ai.isEconomicStrategyActive(EconomicAi.LOSING_MONEY) || averageGoldPerUnit > 5
-        val conquest = civ.ai.isGoingForWorldConquest()
+        if (civ.isBarbarian || civ.gameInfo.turns <= 25) return
+        var inDeficit = false
+        var conquest = false
+        if (civ.isCityState) {
+            if (civ.isAtWar()) return
+            if (civ.cityStateFunctions.getNumThreateningBarbarians() > 0) return
+        } else {
+            if (WarStateAi.numberCivsAtWarWith(civ) > 0 && WarStateAi.stateAllWars(civ) == StateAllWars.Losing) return
+            inDeficit = civ.ai.isEconomicStrategyActive(EconomicAi.LOSING_MONEY)
+            conquest = civ.ai.isGoingForWorldConquest()
+        }
+        val overSupplyCap = civ.stats.getUnitSupplyDeficit() > if (conquest) 3 else 1
 
-        var land: Pair<MapUnit, Int>? = null
-        var naval: Pair<MapUnit, Int>? = null
-        if (inDeficit || (landDefenseState <= DefenseState.Neutral && !conquest)) land = findBestUnitToScrap(civ, isLand = true)
-        if (inDeficit || (navalDefenseState <= DefenseState.Neutral && !conquest)) naval = findBestUnitToScrap(civ, isLand = false)
-        val landScore = land?.second ?: Int.MAX_VALUE
-        val navalScore = naval?.second ?: Int.MAX_VALUE
-        if (land != null && (landDefenseState <= navalDefenseState || landScore <= navalScore)) land.first.disband()
-        else naval?.first?.disband()
+        var scrap = findUselessShip(civ)
+        if (scrap == null && (inDeficit || overSupplyCap)) {
+            val naval = findUnitToScrap(civ, isLand = false)
+            val land = findUnitToScrap(civ, isLand = true)
+            scrap = if ((land?.second ?: Int.MAX_VALUE) < (naval?.second ?: Int.MAX_VALUE)) land?.first else naval?.first
+        }
+        scrap?.disband()
+    }
+
+    /**
+     *  CvMilitaryAI::FindUselessShip (Vox Populi): the least experienced combat ship that no area needs ([AreaCensus.needShipInArea]) - neither the
+     *  one it is in (a ship in port is in its continent) nor a water body it reaches within 2 turns.
+     *
+     *  Deviation: the 2 turns are 2 x its moves in water tiles it may enter (not the ocean for a ship that cannot), whatever their cost
+     *  and whoever stands or owns them (the original's path ignores stacking, enemies and right of passage).
+     */
+    private fun findUselessShip(civ: Civilization): MapUnit? {
+        val census = AreaCensus(civ)
+        val candidates = civ.units.getCivUnits()
+            .filter { it.isMilitary() && it.baseUnit.isWaterUnit && !census.needShipInArea(census.areaOf(it.getTile())) }
+            .sortedBy { it.promotions.XP }
+        for (ship in candidates) {
+            val range = 2 * ship.getMaxMovement()
+            val reached = HashSet<Tile>()
+            var frontier = listOf(ship.getTile())
+            reached.add(ship.getTile())
+            repeat(range) {
+                frontier = frontier.flatMap { tile -> tile.neighbors.filter { next ->
+                    next.isWater && !next.isImpassible() && (!next.isOcean || !ship.cache.cannotEnterOceanTiles) && reached.add(next)
+                }.toList() }
+            }
+            if (reached.filter { it.isWater }.map { census.areaOf(it) }.toSet().none { census.needShipInArea(it) }) return ship
+        }
+        return null
+    }
+
+    /**
+     *  The per-area counts of CvArea/CvLandmass that MilitaryAIHelpers::NeedShipInArea reads. An area is a water body or a continent; its
+     *  units are those standing on it, its cities those on it - for a water body, those next to it.
+     */
+    private class AreaCensus(private val civ: Civilization) {
+        private val bodies = WaterBodies.of(civ)
+        private val tileMap = civ.gameInfo.tileMap
+        private val ourUnits = HashMap<Int, Int>()
+        private val allUnits = HashMap<Int, Int>()
+        private val ourCities = HashMap<Int, Int>()
+        private val allCities = HashMap<Int, Int>()
+
+        init {
+            for (other in civ.gameInfo.civilizations) {
+                for (unit in other.units.getCivUnits()) {
+                    val area = areaOf(unit.getTile())
+                    allUnits.merge(area, 1, Int::plus)
+                    if (other == civ) ourUnits.merge(area, 1, Int::plus)
+                }
+                for (city in other.cities) {
+                    val center = city.getCenterTile()
+                    val areas = center.neighbors.filter { it.isWater }.map { areaOf(it) }.toSet() + areaOf(center)
+                    for (area in areas) {
+                        allCities.merge(area, 1, Int::plus)
+                        if (other == civ) ourCities.merge(area, 1, Int::plus)
+                    }
+                }
+            }
+        }
+
+        /** Water bodies as -1 - their id, continents as their id */
+        fun areaOf(tile: Tile): Int = if (tile.isWater) -1 - bodies.bodyOf(tile) else tile.getContinent()
+
+        private fun tiles(area: Int): Int = if (area < 0) bodies.size(-1 - area) else tileMap.continentSizes[area] ?: 0
+
+        /**
+         *  MilitaryAIHelpers::NeedShipInArea: unless we have more than one ship per AI_CONFIG_MILITARY_TILES_PER_SHIP tiles there (all our
+         *  units count), other civilizations' cities or units in the area
+         */
+        fun needShipInArea(area: Int): Boolean {
+            val ours = ourUnits[area] ?: 0
+            val tooManyUnits = tiles(area) < ours * civ.gameInfo.ruleset.ai.define(AiDefine.AI_CONFIG_MILITARY_TILES_PER_SHIP)
+            if (tooManyUnits) return false
+            val foreignCities = (allCities[area] ?: 0) - (ourCities[area] ?: 0)
+            val foreignUnits = (allUnits[area] ?: 0) - ours
+            return foreignCities > 0 || foreignUnits > 0
+        }
+    }
+
+    /**
+     *  CvMilitaryAI::FindUnitToScrap (Vox Populi, checking obsolescence): among our combat units of the domain, the obsolete ones (their
+     *  obsolete tech researched, unless they have an upgrade whose resources we have, counting what the unit itself uses) and those using a
+     *  resource we lack, the one with the lowest power x production cost + level (halved for a resource lack). Explorers are kept while
+     *  the recon state (naval for sea explorers) is NEEDED, units in an army always (CvUnit::canUseForAIOperation; its garrison, tactical
+     *  zone and nearby enemy checks are not ported).
+     */
+    fun findUnitToScrap(civ: Civilization, isLand: Boolean): Pair<MapUnit, Int>? {
+        var best: MapUnit? = null
+        var bestScore = Int.MAX_VALUE
+        for (unit in civ.units.getCivUnits()) {
+            if (!unit.isMilitary()) continue
+            val baseUnit = unit.baseUnit
+            if (isLand && !baseUnit.isLandUnit || !isLand && !baseUnit.isWaterUnit) continue
+            val unitAi = UnitAiTypes.current(unit)
+            if (unitAi == UnitAiType.EXPLORE_SEA && civ.ai.economic.navalReconState == ReconState.Needed) continue
+            if (unitAi == UnitAiType.EXPLORE && civ.ai.economic.reconState == ReconState.Needed) continue
+            if (civ.ai.operations.armyOf(unit) != null) continue
+
+            val ownResources = baseUnit.getResourceRequirementsPerTurn(civ.state)
+            var obsolete = baseUnit.obsoleteTech?.let { civ.tech.isResearched(it) } == true
+            if (obsolete) {
+                val upgrade = baseUnit.getRulesetUpgradeUnits(civ.state).firstOrNull()?.let { civ.getEquivalentUnit(it) }
+                if (upgrade != null)
+                    obsolete = upgrade.getResourceRequirementsPerTurn(civ.state).any { (resource, amount) ->
+                        civ.getResourceAmount(resource) + ownResources[resource] < amount
+                    }
+            }
+            val resourceDeficit = ownResources.keys.any { civ.getResourceAmount(it) < 0 }
+            if (!obsolete && !resourceDeficit) continue
+
+            var score = unit.getAiPower() * baseUnit.cost + unit.promotions.numberOfPromotions + 1
+            if (resourceDeficit) score /= 2
+            if (score < bestScore) {
+                bestScore = score
+                best = unit
+            }
+        }
+        return best?.let { it to bestScore }
     }
 
     /**
@@ -391,8 +520,8 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
 
         var land: Pair<MapUnit, Int>? = null
         var naval: Pair<MapUnit, Int>? = null
-        if (landDefenseState <= DefenseState.Neutral) land = findBestUnitToScrap(civ, isLand = true, deficitForced = true)
-        if (navalDefenseState <= DefenseState.Neutral) naval = findBestUnitToScrap(civ, isLand = false, deficitForced = true)
+        if (landDefenseState <= DefenseState.Neutral) land = findBestUnitToScrap(civ, isLand = true)
+        if (navalDefenseState <= DefenseState.Neutral) naval = findBestUnitToScrap(civ, isLand = false)
         val landScore = land?.second ?: Int.MAX_VALUE
         val navalScore = naval?.second ?: Int.MAX_VALUE
         val scrapped = when {
@@ -406,34 +535,16 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  CvMilitaryAI::FindBestUnitToScrap: among military units of the domain the one with the lowest power (CvUnit::GetPower: level and
-     *  health), null if none. Not [deficitForced] (the AI deciding to disband): skipping all if that domain's defense state is CRITICAL,
-     *  land units we can still build, units in an army, units without a researched obsolete tech, units with at least half the power of the
-     *  strongest unit we can build in the domain, and units whose upgrade needs a resource we have while that domain's state is worse than NEUTRAL.
-     *  When the game forces the disbanding (CvPlayer::DoDeficit), none of that applies.
+     *  CvMilitaryAI::FindBestUnitToScrap (Brave New World) as CvPlayer::DoDeficit forces it: among military units of the domain the one
+     *  with the lowest power (CvUnit::GetPower: level and health), null if none.
      */
-    fun findBestUnitToScrap(civ: Civilization, isLand: Boolean, deficitForced: Boolean = false): Pair<MapUnit, Int>? {
-        val state = if (isLand) landDefenseState else navalDefenseState
-        if (!deficitForced && state == DefenseState.Critical) return null
-        val strongestBuildable = if (deficitForced) 0 else powerOfStrongestBuildableUnit(civ, isLand)
+    fun findBestUnitToScrap(civ: Civilization, isLand: Boolean): Pair<MapUnit, Int>? {
         var best: MapUnit? = null
         var bestScore = Int.MAX_VALUE
         for (unit in civ.units.getCivUnits()) {
             if (!unit.isMilitary()) continue
             val baseUnit = unit.baseUnit
             if (isLand && !baseUnit.isLandUnit || !isLand && !baseUnit.isWaterUnit) continue
-            if (!deficitForced) {
-                if (civ.ai.operations.armyOf(unit) != null) continue
-                if (isLand && baseUnit.isBuildable(civ)) continue
-                val obsoleteTech = baseUnit.obsoleteTech ?: continue
-                if (!civ.tech.isResearched(obsoleteTech)) continue
-                if (baseUnit.getAiPower() * 2 >= strongestBuildable) continue
-                if (state > DefenseState.Neutral) {
-                    val upgradeTo = baseUnit.upgradesTo?.let { civ.getEquivalentUnit(it) }
-                    if (upgradeTo != null && upgradeTo.getResourceRequirementsPerTurn(civ.state).keys.any { civ.getResourceAmount(it) > 0 })
-                        continue // we'll wait and try to upgrade this one
-                }
-            }
             val score = unit.getAiPower()
             if (score < bestScore) {
                 bestScore = score
@@ -448,16 +559,5 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         const val AT_WAR = "MILITARYAISTRATEGY_AT_WAR"
         const val NAVAL_MAP = "ECONOMICAISTRATEGY_NAVAL_MAP"
         const val EXPAND_TO_OTHER_CONTINENTS = "ECONOMICAISTRATEGY_EXPAND_TO_OTHER_CONTINENTS"
-
-        /** CvMilitaryAI::GetPowerOfStrongestBuildableUnit: the highest unit type power among units of the domain we can train */
-        fun powerOfStrongestBuildableUnit(civ: Civilization, isLand: Boolean): Int {
-            var best = 0
-            for (baseUnit in civ.gameInfo.ruleset.units.values) {
-                if (isLand && !baseUnit.isLandUnit || !isLand && !baseUnit.isWaterUnit) continue
-                val power = baseUnit.getAiPower()
-                if (power > best && baseUnit.isBuildable(civ)) best = power
-            }
-            return best
-        }
     }
 }

@@ -30,8 +30,8 @@ import kotlin.math.min
  *  around the muster point (scored for safety and terrain, the gather range for the army's size, or 3); moving, the army's center of mass is
  *  pushed along the route to its goal by the average movement of its units plus 1 hex, the units take hexes around that point (melee out front,
  *  ranged behind; the hexes nearer the rear are the safe ones) and the units that are slow arrive later. Before it moves, the enemies next to the
- *  army's position are attacked by the army's units. An army with no room to gather or move aborts (NO_ROOM_DEPLOY), one with no route to its goal
- *  too (LOST_PATH).
+ *  army's position are attacked by the army's units. An army with too little room gathers or moves what fits (Vox Populi has no
+ *  NO_ROOM_DEPLOY abort); one with no route to its goal aborts (LOST_PATH).
  *
  *  Deviations:
  *  - the original's attack operations move only their first army, as here;
@@ -365,8 +365,9 @@ object OperationalMoves {
 
     /**
      *  CvTacticalAI::ExecuteGatherMoves: the units asked to move with the formation ([units]) gather around the army's position: everyone as a
-     *  melee unit, on hexes within the gather range for their number if there are twice as many hexes as units, else within 3. No room (even
-     *  one hex per unit) aborts the operation (NO_ROOM_DEPLOY).
+     *  melee unit, on hexes within the gather range for their number if there are twice as many hexes as units, else within 3. Too little room
+     *  only leaves some units where they are: Vox Populi never aborts an operation for it (BNW's NO_ROOM_DEPLOY kept a crowded empire's
+     *  sneak attacks from ever gathering).
      */
     private fun executeGatherMoves(ctx: TacticalContext, operation: AiOperation, army: AiArmy, units: List<OperationUnit>) {
         if (units.isEmpty()) return
@@ -377,13 +378,9 @@ object OperationalMoves {
         // Range around target based on number of units we need to place; try one time with the computed range
         val computedRange = AiOperationLogic.gatherRangeForXUnits(count)
         var scored = Deployment.scoreDeploymentPlots(ctx, operation, army, target, count, 0, computedRange)
-        // Did we get twice as many possible plots as units? If there are not enough at all, the same search again would find no more
-        if (scored.enough && scored.plots.size < count * 2) scored = Deployment.scoreDeploymentPlots(ctx, operation, army, target, count, 0, 3)
-        if (!scored.enough) {
-            ctx.log { "operation aborting, army ${army.id}: not enough spaces to deploy near target" }
-            civ.ai.operations.abort(operation, OperationAbortReason.NO_ROOM_DEPLOY)
-            return
-        }
+        // Not twice as many possible plots as units: the wider search
+        if (!scored.enough || scored.plots.size < count * 2) scored = Deployment.scoreDeploymentPlots(ctx, operation, army, target, count, 0, 3)
+        if (!scored.enough) ctx.log { "army ${army.id}: not enough spaces to gather near ${target.position}, gathering what fits" }
         gatherUnits(ctx, army, units, scored)
     }
 
@@ -412,20 +409,16 @@ object OperationalMoves {
     /**
      *  CvTacticalAI::ExecuteFormationMoves: the units asked to move with the formation ([units]) take the hexes [Deployment.scoreFormationPlots] finds
      *  around the army's goal for the turn, [forwardTarget]: melee units first, the nearest unit to each hex, then the ranged units on the hexes
-     *  nearer the rear, then wherever is left. A hex with a unit on it is not used. Not enough hexes aborts the operation (NO_ROOM_DEPLOY).
+     *  nearer the rear, then wherever is left. A hex with a unit on it is not used. Too few hexes leave units behind; as in Vox Populi the
+     *  operation goes on (BNW aborted it with NO_ROOM_DEPLOY).
      */
     private fun executeFormationMoves(ctx: TacticalContext, operation: AiOperation, army: AiArmy, forwardTarget: Tile, currentCenter: Tile, units: List<OperationUnit>) {
         if (units.isEmpty()) return
         val meleeUnits = units.count { !it.unit.baseUnit.isRanged() }
         val rangedUnits = units.size - meleeUnits
 
-        // See if we have enough places to put everyone
         val scored = Deployment.scoreFormationPlots(ctx, operation, army, forwardTarget, currentCenter, units.size)
-        if (!scored.enough) {
-            ctx.log { "operation aborting, army ${army.id}: not enough spaces to deploy along the formation's path" }
-            ctx.civ.ai.operations.abort(operation, OperationAbortReason.NO_ROOM_DEPLOY)
-            return
-        }
+        if (!scored.enough) ctx.log { "army ${army.id}: not enough spaces along the formation's path, moving what fits" }
 
         fun place(plot: DeployPlot, safeForRanged: Boolean, mustBeRanged: Boolean, what: String): Boolean {
             // Don't use if there's already someone here

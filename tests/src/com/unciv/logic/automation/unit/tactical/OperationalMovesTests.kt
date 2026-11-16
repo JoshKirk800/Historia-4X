@@ -107,7 +107,7 @@ class OperationalMovesTests {
     }
 
     @Test
-    fun `an army with too few free hexes around its muster point aborts`() {
+    fun `an army with too few free hexes around its muster point gathers what fits and goes on`() {
         val operation = gatheringAttack()
         val muster = AiOperationLogic.musterTile(civ, operation)!!
         // Ocean around the muster point but for the city and one hex: two hexes for three units
@@ -115,8 +115,7 @@ class OperationalMovesTests {
         for (tile in muster.getTilesInDistance(3)) if (tile != muster && tile != keep) game.setTileTerrain(tile.position, "Ocean")
         civ.ai.invalidateTurnCaches()
         OperationalMoves.moveOperation(civ, operation, AutomationCache())
-        assertEquals(OperationState.ABORTED, operation.state)
-        assertEquals(OperationAbortReason.NO_ROOM_DEPLOY, operation.abortReason)
+        assertNotEquals("Vox Populi never aborts for want of room", OperationState.ABORTED, operation.state)
     }
 
     /** Departure: an army moving to its target with no melee unit left cannot take it, and its ranged units never advance it */

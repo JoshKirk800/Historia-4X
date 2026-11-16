@@ -18,6 +18,8 @@ class MilitaryTarget(val musterCity: City, val targetCity: City) {
     var musterNearbyUnitPower = 0
     var targetNearbyUnitPower = 0
     var attackBySea = false
+    /** Ships alone take the city (Vox Populi's naval army, CITY_ATTACK_NAVAL): our pure naval city attack */
+    var pureNaval = false
     /** Step path length from the muster to the target city, -1 = no path (call off) */
     var pathLength = 0
 }
@@ -158,7 +160,7 @@ object MilitaryTargets {
     /**
      *  The targets Vox Populi's CvMilitaryAI::RequestCityAttack tries against [enemy], in turn: the potential attack targets among their
      *  cities ([MilitaryAi.potentialAttackTargets], best score first), only the preferred ones when [careful]; a naval or combined army
-     *  goes by sea.
+     *  goes by sea, a naval one with ships alone.
      */
     fun cityAttackTargets(civ: Civilization, enemy: Civilization, careful: Boolean): List<MilitaryTarget> =
         civ.ai.military.potentialAttackTargets
@@ -166,6 +168,7 @@ object MilitaryTargets {
             .map { target ->
                 MilitaryTarget(target.musterCity, target.targetCity).apply {
                     attackBySea = target.armyType != TargetArmyType.Land
+                    pureNaval = target.armyType == TargetArmyType.Naval
                     pathLength = target.pathLength
                 }
             }
@@ -191,14 +194,8 @@ object MilitaryTargets {
                 val candidate = MilitaryTarget(friendly, target)
                 candidate.musterNearbyUnitPower = ourPower.getValue(friendly)
                 candidate.targetNearbyUnitPower = theirPower.getValue(target)
-                if (type == AiOperationType.PURE_NAVAL_CITY_ATTACK) {
-                    candidate.attackBySea = true
-                    if (friendly.isCoastal() && target.isCoastal())
-                        candidate.pathLength = friendly.getCenterTile().aerialDistanceTo(target.getCenterTile())
-                } else {
-                    shouldAttackBySea(civ, candidate, lengths[index])
-                    if (!friendly.isCoastal() && candidate.attackBySea) continue
-                }
+                shouldAttackBySea(civ, candidate, lengths[index])
+                if (!friendly.isCoastal() && candidate.attackBySea) continue
                 if (candidate.pathLength > 0) preliminary.add(candidate to 10000 - candidate.pathLength)
             }
         }

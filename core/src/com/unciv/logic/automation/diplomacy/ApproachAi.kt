@@ -1034,25 +1034,46 @@ object ApproachAi {
     /**
      *  Part 4, KEY PLAYERS (Vox Populi), the final pass only (the competitors are chosen after the strategic pass). Their enemies are
      *  our friends: a player that denounced our biggest competitor adds friendly (WorkAgainstWillingness / 4), one at war with it more
-     *  (/ 2). Our biggest competitor: war and hostile up 5 times their bias after the Classical era (3 before), guarded and deceptive 5
+     *  (/ 2); one that denounced our most valuable friend or ally adds war and hostile by WorkWithWillingness / 4 (/ 2 at war with it)
+     *  while we are friends (or pact partners with the ally), else war and deceptive / 8 (/ 4). Our biggest competitor: war and hostile
+     *  up 5 times their bias after the Classical era (3 before), guarded and deceptive 5
      *  times after it. Else a major or early-game competitor: deceptive up 3 times, guarded 2, and when we go for world conquest, they
      *  are neighbours, [victoryConcern] or they provoked us, war and hostile 3 times (deceptive 2 more if deception applies). Else, from
      *  the Renaissance, competing for victory and with no victory concern: friendly and neutral up by our VictoryCompetitiveness (and its
      *  complement), deceptive down by it. With a World Congress, our diplomacy is glad of any player that is not our league competitor:
      *  friendly 2 times its bias unless they are untrustworthy, or provoked us while we do not go for a diplomatic victory.
      *  An easy target ([WarStateAi.isEasyTarget]) after the Ancient era adds war and hostile 5 times to either competitor when the war
-     *  reasons above hold (for the biggest competitor, also when we want an opportunity attack). As none (no input yet): the most
-     *  valuable friend and ally and the league's prime competitor and ally (`phaseE/vp-approach-plan.md`, C3b), sanctions.
+     *  reasons above hold (for the biggest competitor, also when we want an opportunity attack). Unless they are untrustworthy, our
+     *  most valuable friend while friends (ally while pact partners) with no victory concern and no provocation: friendly 10 times, the
+     *  bad approaches zeroed; else unprovoked: friendly 5 times, the bad approaches halved (when friends or without a victory concern);
+     *  provoked: friendly 2 times. As none (no input yet): the league's prime competitor and ally, sanctions.
      */
     private fun addKeyPlayerWeights(civ: Civilization, other: Civilization, strategic: Boolean, w: IntArray, rules: AiRuleset) {
         if (strategic) return
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
+        val ai = civ.ai.diplomacy
         val biggest = CompetitorAi.biggestCompetitor(civ)
-        if (biggest != null && biggest != other.civID) {
-            val against = civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)
-            val third = civ.gameInfo.getCivilization(biggest)
-            if (OpinionAi.isDenouncedPlayer(other, third)) w[FRIENDLY] += bias(MajorCivApproach.Friendly) * against / 4
-            if (other.isAtWarWith(third)) w[FRIENDLY] += bias(MajorCivApproach.Friendly) * against / 2
+        val against = civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)
+        val with = civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness)
+        for (third in civ.gameInfo.civilizations) {
+            if (third == civ || third == other || !third.isMajorCiv || !WarStateAi.isPlayerValid(civ, third)) continue
+            val keyPartner = ai.mostValuableFriend == third.civID || ai.mostValuableAlly == third.civID
+            val bound = OpinionAi.isDoFAccepted(civ, third) ||
+                (ai.mostValuableAlly == third.civID && civ.getDiplomacyManager(third)?.diplomaticStatus == DiplomaticStatus.DefensivePact)
+            // Denounced (divisor 4 / 8), then at war (2 / 4)
+            for ((applies, divisor) in listOf(OpinionAi.isDenouncedPlayer(other, third) to 4, other.isAtWarWith(third) to 2)) {
+                if (!applies) continue
+                if (biggest == third.civID) w[FRIENDLY] += bias(MajorCivApproach.Friendly) * against / divisor
+                else if (keyPartner) {
+                    if (bound) {
+                        w[WAR] += bias(MajorCivApproach.War) * with / divisor
+                        w[HOSTILE] += bias(MajorCivApproach.Hostile) * with / divisor
+                    } else {
+                        w[WAR] += bias(MajorCivApproach.War) * with / (divisor * 2)
+                        w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * with / (divisor * 2)
+                    }
+                }
+            }
         }
         val era = civ.getEra().eraNumber
         val concern = victoryConcern(civ, other, rules)
@@ -1090,6 +1111,20 @@ object ApproachAi {
         }
         if (civ.gameInfo.league != null && !OpinionAi.isUntrustworthyFriend(other) && (civ.ai.isGoingForDiploVictory() || !provoked))
             w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
+
+        if (OpinionAi.isUntrustworthyFriend(other)) return
+        val friends = OpinionAi.isDoFAccepted(civ, other)
+        fun keyPartnerWeights(bound: Boolean) {
+            if (bound && !concern && !provoked) {
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 10
+                zeroBadApproaches(w)
+            } else if (!provoked) {
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 5
+                if (friends || !concern) for (i in BAD_APPROACHES) w[i] /= 2
+            } else w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
+        }
+        if (ai.mostValuableFriend == other.civID) keyPartnerWeights(friends)
+        if (ai.mostValuableAlly == other.civID) keyPartnerWeights(civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact)
     }
 
     /**

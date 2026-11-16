@@ -5,6 +5,7 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
@@ -64,7 +65,7 @@ class ConquestApproachTests {
     @Test
     fun `others turn on a civilization close to world conquest`() {
         b.cities.first().moveToCiv(a)
-        val delta = stageDelta(c, a, "Close to world conquest")
+        val delta = stageDelta(c, a, "They are close to world conquest")
         assertEquals("War: bias x 5", 35, delta.of(MajorCivApproach.War))
         assertEquals("Hostile: bias x 5", 30, delta.of(MajorCivApproach.Hostile))
         assertEquals("Guarded: bias x 5", 20, delta.of(MajorCivApproach.Guarded))
@@ -75,11 +76,13 @@ class ConquestApproachTests {
     fun `a conqueror close to victory wants the rest, more so from those holding other capitals`() {
         a.ai.grandStrategy = GrandStrategyAi.CONQUEST
         b.cities.first().moveToCiv(a)
-        assertEquals("the war bias x 5 towards c", 35, stageDelta(a, c, "Close to world conquest").of(MajorCivApproach.War))
+        val flat = (a.ai.diplomacyValue(DiplomacyPersonality.Boldness) + a.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)) / 2
+        // flavors, the war bias x 2 for b's capital we hold, x 5 for being close
+        assertEquals(flat + 14 + 35, stageDelta(a, c, "Grand strategy: domination").of(MajorCivApproach.War))
         assertEquals("the war bias doubled by being close", 14, stageDelta(a, c, "Conquest bias").of(MajorCivApproach.War))
         c.cities.first().moveToCiv(d)
-        // d, holding 2 of 4 capitals, is close too: bias x 5 for that, and x 5 x (1 + 1) for the capital of another it holds
-        assertEquals(35 + 70, stageDelta(a, d, "Close to world conquest").of(MajorCivApproach.War))
+        // d holds another's capital: the war bias x 5 more for it (we must take all of them)
+        assertEquals(flat + 14 + 35 + 35, stageDelta(a, d, "Grand strategy: domination").of(MajorCivApproach.War))
     }
 
     @Test

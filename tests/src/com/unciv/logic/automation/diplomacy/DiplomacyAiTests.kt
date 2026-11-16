@@ -264,15 +264,22 @@ class DiplomacyAiTests {
 
     @Test
     fun `approach biases add to the weights, and the conquest grand strategy adds the war bias once more`() {
+        // What the stage named [stage] adds to a's war weight towards b (later stages scale the biases too)
+        fun warDelta(stage: String): Int {
+            val steps = ArrayList<Pair<String, IntArray>>()
+            ApproachAi.debugSink = { name, w -> steps.add(name to w.copyOf()) }
+            try { weights(a, b, null) } finally { ApproachAi.debugSink = null }
+            val index = steps.indexOfFirst { it.first.startsWith(stage) }
+            return steps[index + 1].second[MajorCivApproach.War.ordinal] - steps[index].second[MajorCivApproach.War.ordinal]
+        }
         val base = weights(a, b, null)
         a.ai.setMajorCivApproachBias(MajorCivApproach.Guarded, 6)
         assertEquals(6, weights(a, b, null)[MajorCivApproach.Guarded.ordinal] - base[MajorCivApproach.Guarded.ordinal])
         a.ai.setMajorCivApproachBias(MajorCivApproach.War, 7)
-        val warBias = weights(a, b, null)
-        assertEquals(7, warBias[MajorCivApproach.War.ordinal] - base[MajorCivApproach.War.ordinal])
-        // Vox Populi's conquest bias (SelectBestApproachTowardsMajorCiv, WORLD CONQUEST), not BNW's APPROACH_WAR_CONQUEST_GRAND_STRATEGY
+        assertEquals(7, warDelta("Personality"))
+        // Vox Populi's conquest bias (part 1, WORLD CONQUEST), not BNW's APPROACH_WAR_CONQUEST_GRAND_STRATEGY
         a.ai.grandStrategy = GrandStrategyAi.CONQUEST
-        assertEquals(7, weights(a, b, null)[MajorCivApproach.War.ordinal] - warBias[MajorCivApproach.War.ordinal])
+        assertEquals(7, warDelta("Conquest bias"))
     }
 
     //endregion

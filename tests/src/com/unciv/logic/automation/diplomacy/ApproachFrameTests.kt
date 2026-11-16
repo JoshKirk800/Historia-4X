@@ -82,23 +82,22 @@ class ApproachFrameTests {
 
     @Test
     fun `an approach weighs less towards a player who ranks below another for it, less so for a bold leader`() {
-        // b ranks above c for war in the strategic pass, so c, second, loses the war bias (5 x 100) x rank 1, scaled by the war modifier
+        // b ranks above c for war in the strategic pass, so c, second, loses the war bias (5 x 100) x rank 1, scaled by the war modifier.
+        // War was last turn's approach towards c (each time, as a selection replaces it): a war score high enough for the whole
+        // reduction to show. The scores are compared raw, without the curve.
+        fun warScore(valid: List<Civilization>): Int {
+            a.ai.diplomacy.setApproach(c, MajorCivApproach.War)
+            memory(c).approachValues.clear()
+            select(c, strategic = false, valid = valid)
+            return memory(c).approachValues[war]
+        }
         memory(b).strategicApproachValues = arrayListOf(9000, 0, 0, 0, 0, 0, 0)
         memory(c).strategicApproachValues = arrayListOf(100, 0, 0, 0, 0, 0, 0)
-        select(c, strategic = false)
-        val alone = memory(c).approachValues[war]
-        memory(c).approachValues.clear() // no curve: compare the raw scores
-        select(c, strategic = false, valid = listOf(b, c))
         // war modifier = bias 5 + boldness 5 = 10: no scaling, the whole 500
-        assertEquals(500, alone - memory(c).approachValues[war])
+        assertEquals(500, warScore(listOf(c)) - warScore(listOf(b, c)))
 
         a.ai.setDiplomacyValue(DiplomacyPersonality.Boldness, 9) // modifier 14: (14 - 10) x 10 = +40%, the reduction / 1.4
-        memory(c).approachValues.clear()
-        select(c, strategic = false)
-        val boldAlone = memory(c).approachValues[war]
-        memory(c).approachValues.clear()
-        select(c, strategic = false, valid = listOf(b, c))
-        assertEquals(500 * 100 / 140, boldAlone - memory(c).approachValues[war])
+        assertEquals(500 * 100 / 140, warScore(listOf(c)) - warScore(listOf(b, c)))
     }
 
     @Test

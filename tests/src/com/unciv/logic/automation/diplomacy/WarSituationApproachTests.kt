@@ -1,6 +1,8 @@
 package com.unciv.logic.automation.diplomacy
 
+import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.automation.strategy.StrengthLevel
+import com.unciv.logic.automation.strategy.TargetValue
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
@@ -76,5 +78,26 @@ class WarSituationApproachTests {
         assertEquals(-20, delta[MajorCivApproach.Hostile.ordinal])
         assertEquals(20, delta[MajorCivApproach.Afraid.ordinal])
         assertEquals(20, delta[MajorCivApproach.Guarded.ordinal])
+    }
+
+    @Test
+    fun `before the Renaissance, a far player out of our way draws friendliness`() {
+        val delta = stageDelta("Early game strategy")
+        // 2 x bias, 2 x more for a non-scientist, 1 x more for being far
+        assertEquals(25, delta[MajorCivApproach.Friendly.ordinal])
+        assertEquals(10, delta[MajorCivApproach.Neutral.ordinal])
+        assertEquals("2 x, and 2 x more for being far", -20, delta[MajorCivApproach.Deceptive.ordinal])
+        assertEquals(-10, delta[MajorCivApproach.War.ordinal])
+    }
+
+    @Test
+    fun `a conqueror not yet close to victory seeks friendship with the strong`() {
+        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        a.ai.warStates.militaryStrengths[b.civID] = StrengthLevel.Powerful
+        a.ai.warStates.targetValues[b.civID] = TargetValue.Average
+        val delta = stageDelta("Grand strategy: domination")
+        // (powerful - average) x 2 = 4 times the bias; war also gains the flavors (boldness + work-against) / 2
+        assertEquals(20, delta[MajorCivApproach.Friendly.ordinal])
+        assertEquals(5 - 20, delta[MajorCivApproach.War.ordinal])
     }
 }

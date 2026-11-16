@@ -166,6 +166,8 @@ enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = tr
     RefusedToHelpUs("You refused to help us"),
     DislikedTheirProposal("We dislike your proposals in the World Congress"),
     FoiledOurProposal("You foiled our proposal in the World Congress"),
+    DislikedVotingHistory("You vote against our interests in the World Congress"),
+    SanctionedUs("You tried to sanction us in the World Congress"),
 
     IgnoredRequestToStopDigging("You refused to stop digging in our lands"),
     // Positive
@@ -198,7 +200,9 @@ enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = tr
     SameIdeology("We share the same ideology"),
     LikedTheirProposal("We like your proposals in the World Congress"),
     SupportedOurProposal("You supported our proposal in the World Congress"),
-    SupportedOurHosting("You supported us as host of the World Congress");
+    SupportedOurHosting("You supported us as host of the World Congress"),
+    LikedVotingHistory("You vote for our interests in the World Congress"),
+    UnsanctionedUs("You tried to lift sanctions against us in the World Congress");
 
     companion object{
         @Immutable private val valuesAsMap = entries.associateBy { it.name }

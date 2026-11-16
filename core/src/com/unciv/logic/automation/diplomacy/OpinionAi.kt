@@ -190,16 +190,18 @@ object OpinionAi {
         val assist = recentAssistScore(civ, other, rules)
         term(if (assist < 0) DiplomaticModifiers.HelpedUs else DiplomaticModifiers.RefusedToHelpUs, assist)
 
-        // World Congress
-        val league = civ.gameInfo.league
-        val turn = civ.gameInfo.turns
-        val ourMemory = league?.members?.get(civ.civID)?.alignmentMemory?.get(other.civID)
+        // World Congress (Vox Populi)
+        val ourMemory = civ.gameInfo.league?.members?.get(civ.civID)?.alignmentMemory?.get(other.civID)
         if (ourMemory != null) {
-            term(DiplomaticModifiers.LikedTheirProposal, likedTheirProposalScore(ourMemory, turn, rules))
-            term(DiplomaticModifiers.DislikedTheirProposal, dislikedTheirProposalScore(ourMemory, turn, rules))
-            term(DiplomaticModifiers.SupportedOurProposal, supportedMyProposalScore(ourMemory, turn, rules))
-            term(DiplomaticModifiers.FoiledOurProposal, foiledMyProposalScore(ourMemory, turn, rules))
-            term(DiplomaticModifiers.SupportedOurHosting, supportedMyHostingScore(ourMemory, turn, rules))
+            val history = votingHistoryScore(civ, ourMemory, rules)
+            term(if (history < 0) DiplomaticModifiers.LikedVotingHistory else DiplomaticModifiers.DislikedVotingHistory, history)
+            term(DiplomaticModifiers.LikedTheirProposal, likedTheirProposalScore(civ, ourMemory, rules))
+            term(DiplomaticModifiers.DislikedTheirProposal, dislikedTheirProposalScore(civ, ourMemory, rules))
+            val support = supportedOurProposalScore(civ, ourMemory, rules)
+            term(if (support < 0) DiplomaticModifiers.SupportedOurProposal else DiplomaticModifiers.FoiledOurProposal, support)
+            term(DiplomaticModifiers.SupportedOurHosting, supportedMyHostingScore(civ, ourMemory, rules))
+            val sanction = sanctionedUsScore(civ, ourMemory, rules)
+            term(if (sanction < 0) DiplomaticModifiers.UnsanctionedUs else DiplomaticModifiers.SanctionedUs, sanction)
         }
         return total
     }
@@ -454,6 +456,7 @@ object OpinionAi {
                 m.numDemandsMade = c; m.demandMadeTurn = t }
             PromiseAi.testPromiseExpiry(civ, m)
             testBackstabbingPenalties(civ, m, rules)
+            civ.gameInfo.league?.members?.get(civ.civID)?.alignmentMemory?.get(other.civID)?.let { testCongressModifiers(civ, it, rules) }
             // checkAndUpdateNonStackingOpinionModifier for the protected city-states (bullying stays, IsAngryAboutProtectedMinorBullied times it)
             val minorFriendly = civ.ai.minorCivApproachBias(MinorCivApproach.Friendly)
             if (m.turnsSinceSidedWithProtectedMinor >= OpinionTimers.adjustDuration(civ,
@@ -1272,29 +1275,151 @@ object OpinionAi {
     fun isCapitalCapturedBy(civ: Civilization, other: Civilization): Boolean =
         other.cities.any { it.isOriginalCapital && it.foundingCivObject == civ }
 
-    private fun recent(turnSet: Int, turn: Int, numTurns: Int): Boolean = turnSet >= 0 && turn - turnSet < numTurns
+    /** IsDiplomat || IsSecondaryDiplomat || the diplomat trait: the World Congress multipliers apply */
+    private fun isCongressDiplomat(civ: Civilization) = civ.ai.isDiplomat() || civ.ai.isSecondaryDiplomat() || civ.ai.hasTraitCategory(TraitCategory.Diplomat)
 
-    /** The opposing memory does not exist or is older (DLL: iTurnsSince < iOpposingTurnsSince) */
-    private fun newerThan(turnSet: Int, opposing: Int): Boolean = opposing < 0 || turnSet > opposing
+    private fun diplomatScaled(civ: Civilization, weight: Int, multiplier: AiDefine, rules: AiRuleset) =
+        if (isCongressDiplomat(civ)) weight * rules.define(multiplier) / 100 else weight
 
-    fun likedTheirProposalScore(memory: LeagueAlignmentMemory, turn: Int, rules: AiRuleset): Int =
-        if (recent(memory.likedProposalTurn, turn, rules.define(AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_NUM_TURNS)) &&
-            newerThan(memory.likedProposalTurn, memory.dislikedProposalTurn)) rules.define(AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL) else 0
+    /**
+     *  GetVotingHistoryOpinionScore: OPINION_WEIGHT_VOTING_HISTORY_MAX (as a bonus for a good history) x the voting history score's share
+     *  of VOTING_HISTORY_SCORE_MAX; x OPINION_WEIGHT_VOTING_HISTORY_DIPLOMAT_MULTIPLIER % for a diplomat
+     */
+    fun votingHistoryScore(civ: Civilization, memory: LeagueAlignmentMemory, rules: AiRuleset): Int {
+        val score = memory.votingHistoryScore
+        val max = maxOf(rules.define(AiDefine.VOTING_HISTORY_SCORE_MAX), 1)
+        val weight = when {
+            score > 0 -> -rules.define(AiDefine.OPINION_WEIGHT_VOTING_HISTORY_MAX) * (score * 100 / max) / 100
+            score < 0 -> rules.define(AiDefine.OPINION_WEIGHT_VOTING_HISTORY_MAX) * (score * 100 / -max) / 100
+            else -> 0
+        }
+        return diplomatScaled(civ, weight, AiDefine.OPINION_WEIGHT_VOTING_HISTORY_DIPLOMAT_MULTIPLIER, rules)
+    }
 
-    fun dislikedTheirProposalScore(memory: LeagueAlignmentMemory, turn: Int, rules: AiRuleset): Int =
-        if (recent(memory.dislikedProposalTurn, turn, rules.define(AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_NUM_TURNS)) &&
-            newerThan(memory.dislikedProposalTurn, memory.likedProposalTurn)) rules.define(AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL) else 0
+    /** GetLikedTheirProposalScore: the agreement value (x 134% for a diplomat), fading over its NUM_TURNS adjusted by work-with willingness */
+    fun likedTheirProposalScore(civ: Civilization, memory: LeagueAlignmentMemory, rules: AiRuleset): Int {
+        if (memory.likedProposalTurn < 0) return 0
+        val weight = diplomatScaled(civ, memory.proposalAgreementValue, AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_DIPLOMAT_MULTIPLIER, rules)
+        val duration = OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_NUM_TURNS),
+            civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness))
+        return OpinionTimers.adjust(weight, duration, memory.likedProposalTurn, turn(civ), OpinionTimers.Type.Standard)
+    }
 
-    fun supportedMyProposalScore(memory: LeagueAlignmentMemory, turn: Int, rules: AiRuleset): Int =
-        if (recent(memory.supportedProposalTurn, turn, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL_NUM_TURNS)) &&
-            newerThan(memory.supportedProposalTurn, memory.foiledProposalTurn)) rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL) else 0
+    /** GetDislikedTheirProposalScore: the agreement value (x 134% for a diplomat), fading over its NUM_TURNS adjusted by work-against willingness */
+    fun dislikedTheirProposalScore(civ: Civilization, memory: LeagueAlignmentMemory, rules: AiRuleset): Int {
+        if (memory.dislikedProposalTurn < 0) return 0
+        val weight = diplomatScaled(civ, memory.proposalAgreementValue, AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_DIPLOMAT_MULTIPLIER, rules)
+        val duration = OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_NUM_TURNS),
+            civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness))
+        return OpinionTimers.adjust(weight, duration, memory.dislikedProposalTurn, turn(civ), OpinionTimers.Type.Standard)
+    }
 
-    fun foiledMyProposalScore(memory: LeagueAlignmentMemory, turn: Int, rules: AiRuleset): Int =
-        if (recent(memory.foiledProposalTurn, turn, rules.define(AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_NUM_TURNS)) &&
-            newerThan(memory.foiledProposalTurn, memory.supportedProposalTurn)) rules.define(AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL) else 0
+    /**
+     *  The duration and turn of the support delta's term (VP's GetSupportedOurProposalScore and its expiry): by the foiled or supported
+     *  NUM_TURNS adjusted by work-against or work-with willingness, from the turn of the latest action, shortened by forgiveness (foiled
+     *  then supported) or neediness (supported then foiled) above 5
+     */
+    private fun supportTiming(civ: Civilization, memory: LeagueAlignmentMemory, rules: AiRuleset): Pair<Int, Int> {
+        val foiled = memory.proposalSupportDelta > 0
+        var duration = OpinionTimers.adjustDuration(civ, rules.define(if (foiled) AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_NUM_TURNS
+            else AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL_NUM_TURNS),
+            civ.ai.diplomacyValue(if (foiled) DiplomacyPersonality.WorkAgainstWillingness else DiplomacyPersonality.WorkWithWillingness))
+        val reversed = if (foiled) memory.supportedProposalTurn > -1 else memory.foiledProposalTurn > -1
+        val turn = if (foiled != reversed) memory.foiledProposalTurn else memory.supportedProposalTurn
+        if (reversed) {
+            val mod = (civ.ai.diplomacyValue(if (foiled) DiplomacyPersonality.Forgiveness else DiplomacyPersonality.Neediness) - 5) * 2 *
+                DiplomacyTurn.opinionDurationPercent(civ) / 100
+            if (mod > 0) duration -= mod
+        }
+        return duration to turn
+    }
 
-    fun supportedMyHostingScore(memory: LeagueAlignmentMemory, turn: Int, rules: AiRuleset): Int =
-        if (recent(memory.supportedHostingTurn, turn, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_HOSTING_NUM_TURNS)))
-            rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_HOSTING) else 0
+    /**
+     *  GetSupportedOurProposalScore: for foiling (support delta > 0) OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL up to _MAX by 2% per percent
+     *  of the vote (OPINION_WEIGHT_PER_VOTE_PERCENT), for supporting (< 0) _THEY_SUPPORTED_OUR_PROPOSAL up to its _MAX; x 167% for a
+     *  diplomat; fading over [supportTiming]
+     */
+    fun supportedOurProposalScore(civ: Civilization, memory: LeagueAlignmentMemory, rules: AiRuleset): Int {
+        val delta = memory.proposalSupportDelta
+        if (delta == 0) return 0
+        val foiled = delta > 0
+        val (duration, stamp) = supportTiming(civ, memory, rules)
+        val min = if (foiled) maxOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL))
+            else minOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL))
+        val max = if (foiled) maxOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_MAX))
+            else minOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL_MAX))
+        val award = minOf(100, kotlin.math.abs(delta) * maxOf(1, rules.define(AiDefine.OPINION_WEIGHT_PER_VOTE_PERCENT)))
+        val weight = diplomatScaled(civ, min + (max - min) * award / 100, if (foiled) AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_DIPLOMAT_MULTIPLIER
+            else AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL_DIPLOMAT_MULTIPLIER, rules)
+        return OpinionTimers.adjust(weight, duration, stamp, turn(civ), OpinionTimers.Type.Standard)
+    }
+
+    /**
+     *  GetSupportedMyHostingScore: OPINION_WEIGHT_THEY_SUPPORTED_OUR_HOSTING up to _MAX by 2% per percent of the votes for us they
+     *  cast, x 150% for a diplomat, fading over its NUM_TURNS adjusted by work-with willingness
+     */
+    fun supportedMyHostingScore(civ: Civilization, memory: LeagueAlignmentMemory, rules: AiRuleset): Int {
+        if (memory.supportedHostingTurn < 0) return 0
+        val min = minOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_HOSTING))
+        val max = minOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_HOSTING_MAX))
+        val award = minOf(100, memory.supportedHostingValue * maxOf(1, rules.define(AiDefine.OPINION_WEIGHT_PER_VOTE_PERCENT)))
+        val weight = diplomatScaled(civ, min + (max - min) * award / 100, AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_HOSTING_DIPLOMAT_MULTIPLIER, rules)
+        val duration = OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_HOSTING_NUM_TURNS),
+            civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness))
+        return OpinionTimers.adjust(weight, duration, memory.supportedHostingTurn, turn(civ), OpinionTimers.Type.Standard)
+    }
+
+    /** The duration of an attempted sanction (by meanness once one passed, else work-against willingness) or unsanction (loyalty / work-with) */
+    private fun sanctionDuration(civ: Civilization, memory: LeagueAlignmentMemory, rules: AiRuleset, unsanction: Boolean): Int =
+        if (!unsanction) OpinionTimers.adjustDuration(civ, rules.define(AiDefine.SANCTIONED_US_TURNS_UNTIL_FORGIVEN), civ.ai.diplomacyValue(
+            if (memory.everSanctioned) DiplomacyPersonality.Meanness else DiplomacyPersonality.WorkAgainstWillingness))
+        else OpinionTimers.adjustDuration(civ, rules.define(AiDefine.UNSANCTIONED_US_TURNS_UNTIL_FORGOTTEN), civ.ai.diplomacyValue(
+            if (memory.everUnsanctioned) DiplomacyPersonality.Loyalty else DiplomacyPersonality.WorkWithWillingness))
+
+    /**
+     *  GetSanctionedUsScore: an attempted sanction OPINION_WEIGHT_THEY_SANCTIONED_US (x 200% for a diplomat, / FAILURE_DIVISOR % unless
+     *  one ever passed), else an attempted unsanction OPINION_WEIGHT_THEY_UNSANCTIONED_US likewise; fading over [sanctionDuration]
+     */
+    fun sanctionedUsScore(civ: Civilization, memory: LeagueAlignmentMemory, rules: AiRuleset): Int {
+        val unsanction = memory.sanctionedTurn < 0
+        val stamp = if (unsanction) memory.unsanctionedTurn else memory.sanctionedTurn
+        if (stamp < 0) return 0
+        var weight = if (unsanction) diplomatScaled(civ, rules.define(AiDefine.OPINION_WEIGHT_THEY_UNSANCTIONED_US),
+            AiDefine.OPINION_WEIGHT_THEY_UNSANCTIONED_US_DIPLOMAT_MULTIPLIER, rules)
+        else diplomatScaled(civ, rules.define(AiDefine.OPINION_WEIGHT_THEY_SANCTIONED_US), AiDefine.OPINION_WEIGHT_THEY_SANCTIONED_US_DIPLOMAT_MULTIPLIER, rules)
+        if (!(if (unsanction) memory.everUnsanctioned else memory.everSanctioned))
+            weight = weight * 100 / maxOf(rules.define(if (unsanction) AiDefine.OPINION_WEIGHT_THEY_UNSANCTIONED_US_FAILURE_DIVISOR
+                else AiDefine.OPINION_WEIGHT_THEY_SANCTIONED_US_FAILURE_DIVISOR), 1)
+        return OpinionTimers.adjust(weight, sanctionDuration(civ, memory, rules, unsanction), stamp, turn(civ), OpinionTimers.Type.Standard)
+    }
+
+    /**
+     *  TestOpinionModifiers for the World Congress: liked or disliked proposals, the support delta, supported hosting and attempted
+     *  (un)sanctions are forgotten once their durations have passed
+     */
+    private fun testCongressModifiers(civ: Civilization, memory: LeagueAlignmentMemory, rules: AiRuleset) {
+        val now = turn(civ)
+        fun expired(stamp: Int, duration: Int) = stamp >= 0 && now - stamp >= maxOf(duration, 1)
+        if (expired(memory.likedProposalTurn, OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_NUM_TURNS),
+                civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness)))) memory.likedProposalTurn = -1
+        if (expired(memory.dislikedProposalTurn, OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_NUM_TURNS),
+                civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)))) memory.dislikedProposalTurn = -1
+        if (memory.likedProposalTurn < 0 && memory.dislikedProposalTurn < 0) memory.proposalAgreementValue = 0
+        if (memory.proposalSupportDelta != 0) {
+            val (duration, stamp) = supportTiming(civ, memory, rules)
+            if (now - stamp >= maxOf(duration, 1)) {
+                memory.supportedProposalTurn = -1
+                memory.foiledProposalTurn = -1
+                memory.proposalSupportDelta = 0
+            }
+        }
+        if (expired(memory.supportedHostingTurn, OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_HOSTING_NUM_TURNS),
+                civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness)))) {
+            memory.supportedHostingTurn = -1
+            memory.supportedHostingValue = 0
+        }
+        if (expired(memory.sanctionedTurn, sanctionDuration(civ, memory, rules, unsanction = false))) memory.sanctionedTurn = -1
+        if (expired(memory.unsanctionedTurn, sanctionDuration(civ, memory, rules, unsanction = true))) memory.unsanctionedTurn = -1
+    }
     //endregion
 }

@@ -1,6 +1,8 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.diplomacy.AiThreat
+import com.unciv.logic.automation.diplomacy.DiplomacyTurn
+import com.unciv.logic.automation.diplomacy.OpinionTimers
 import com.unciv.logic.city.CityStats.Companion.EXCESS_FOOD_TO_PRODUCTION
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
@@ -13,6 +15,9 @@ import com.unciv.logic.league.LeagueProposal
 import com.unciv.logic.league.VoteCommitment
 import com.unciv.models.ruleset.Resolution
 import com.unciv.models.ruleset.ResolutionDecision
+import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.ai.AiRuleset
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
 import kotlin.math.max
@@ -28,43 +33,221 @@ object LeagueAutomation {
     const val MAX_LOOPS = 100
     /** LeagueHelpers::AI_CHOOSE_PROPOSAL_FROM_TOP (CvVotingClasses.h:77) */
     const val CHOOSE_PROPOSAL_FROM_TOP = 6
-    /** CvLeague::DoProposeEnact/Repeal: an AI remembers proposals it strongly likes/dislikes when they enter the table. */
+    /** The Congress memory [observer] keeps of [other] */
+    private fun memoryOf(league: League, observer: String, other: String): LeagueAlignmentMemory? =
+        league.members[observer]?.alignmentMemory?.getOrPut(other) { LeagueAlignmentMemory() }
+
+    /** VP's IsSanctionAgainstUs: an embargo on [civId] (BNW's player embargo is VP's sanction) */
+    private fun isSanctionAgainst(resolution: Resolution, choice: String?, civId: String) = resolution.embargoesPlayer && choice == civId
+
+    /**
+     * CvLeague::DoEnactProposalDiplomacy / DoRepealProposalDiplomacy (Vox Populi): every AI member but the proposer judges the
+     * proposal as it enters the table. An embargo on it is the most disliked proposal (agreement value
+     * OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_OVERWHELMING) and an attempted sanction; repealing one on it the most liked, and an
+     * attempted unsanction unless the proposer ever sanctioned it. Otherwise the desire level of the proposal ([LeagueDesire.of] of our
+     * score) above or below neutral makes it liked or disliked with the matching agreement value. The sanction's diplomacy towards
+     * third parties (DoEnact/RepealSanctionsDiplomacy) and its assist values: none.
+     */
     fun recordProposal(league: League, proposal: LeagueProposal) {
         val proposer = proposal.proposer ?: return
-        val resolution = league.gameInfo.ruleset.resolutions[proposal.resolution] ?: return
         val active = if (proposal.repeal) league.activeResolutions.firstOrNull { it.id == proposal.targetId } ?: return else null
+        val resolution = league.gameInfo.ruleset.resolutions[active?.resolution ?: proposal.resolution] ?: return
+        val rules = league.gameInfo.ruleset.ai
+        val turn = league.gameInfo.turns
         for (observer in league.gameInfo.getAliveMajorCivs()) {
             if (observer.civID == proposer || observer.isHuman() || observer.civID !in league.members) continue
+            val memory = memoryOf(league, observer.civID, proposer) ?: continue
+            val sanction = isSanctionAgainst(resolution, active?.choice ?: proposal.proposerChoice, observer.civID)
+            if (sanction && active == null) {
+                memory.dislikedProposalTurn = turn
+                memory.likedProposalTurn = -1
+                memory.proposalAgreementValue = rules.define(AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_OVERWHELMING)
+                memory.sanctionedTurn = turn
+                memory.unsanctionedTurn = -1
+                continue
+            }
+            if (sanction) {
+                memory.likedProposalTurn = turn
+                memory.dislikedProposalTurn = -1
+                memory.proposalAgreementValue = rules.define(AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_OVERWHELMING)
+                if (!memory.everSanctioned) {
+                    memory.unsanctionedTurn = turn
+                    memory.sanctionedTurn = -1
+                }
+                continue
+            }
             val evaluator = LeagueEvaluator(observer, league)
-            val score = if (active != null) evaluator.scoreRepeal(active) else evaluator.scoreProposal(resolution, proposal.proposerChoice)
-            if (score <= -46 || score >= 46) {
-                val memory = league.members.getValue(observer.civID).alignmentMemory.getOrPut(proposer) { LeagueAlignmentMemory() }
-                if (score >= 46) memory.likedProposalTurn = league.gameInfo.turns
-                else memory.dislikedProposalTurn = league.gameInfo.turns
+            val desire = LeagueDesire.of(if (active != null) evaluator.scoreRepeal(active) else evaluator.scoreProposal(resolution, proposal.proposerChoice))
+            val value = when (desire) {
+                LeagueDesire.ALWAYS -> AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_OVERWHELMING
+                LeagueDesire.STRONG_LIKE -> AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_STRONG
+                LeagueDesire.LIKE -> AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL
+                LeagueDesire.WEAK_LIKE -> AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_WEAK
+                LeagueDesire.NEUTRAL -> continue
+                LeagueDesire.WEAK_DISLIKE -> AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_WEAK
+                LeagueDesire.DISLIKE -> AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL
+                LeagueDesire.STRONG_DISLIKE -> AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_STRONG
+                LeagueDesire.NEVER -> AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_OVERWHELMING
+            }
+            if (desire > LeagueDesire.NEUTRAL) {
+                memory.likedProposalTurn = turn
+                memory.dislikedProposalTurn = -1
+            } else {
+                memory.dislikedProposalTurn = turn
+                memory.likedProposalTurn = -1
+            }
+            memory.proposalAgreementValue = rules.define(value)
+        }
+    }
+
+    /**
+     * CvVoterDecision::GetPercentContributionToOutcome (or, [against], GetPercentContributionAgainstOutcome): [voter]'s share of the
+     * votes for (against) [outcome] and the share of its own delegates it gave to it; votes the other way are taken off (not for a
+     * [host] election). 0 when none.
+     */
+    private fun contribution(league: League, proposal: LeagueProposal, voter: String, outcome: String, against: Boolean,
+                             host: Boolean = false): Pair<Int, Int> {
+        var total = 0
+        var votes = 0
+        for (vote in proposal.votes) {
+            val forOutcome = vote.choice == outcome
+            if (forOutcome != against) {
+                total += vote.delegates
+                if (vote.voter == voter) votes += vote.delegates
+            } else if (vote.voter == voter && !host) votes -= vote.delegates
+        }
+        if (votes <= 0 || total <= 0) return 0 to 0
+        val civ = league.gameInfo.getCivilizationOrNull(voter)
+        val own = if (host || civ == null) 0 else votes * 100 / maxOf(league.getDelegates(civ), 1)
+        return votes * 100 / total to own
+    }
+
+    /** VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_* by desire level, negative for the dislikes */
+    private fun historyMultiplier(desire: LeagueDesire, rules: AiRuleset): Int = when (desire) {
+        LeagueDesire.NEVER -> -rules.define(AiDefine.VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_OVERWHELMING)
+        LeagueDesire.STRONG_DISLIKE -> -rules.define(AiDefine.VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_STRONG)
+        LeagueDesire.DISLIKE -> -rules.define(AiDefine.VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_STANDARD)
+        LeagueDesire.WEAK_DISLIKE -> -rules.define(AiDefine.VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_WEAK)
+        LeagueDesire.NEUTRAL -> 0
+        LeagueDesire.WEAK_LIKE -> rules.define(AiDefine.VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_WEAK)
+        LeagueDesire.LIKE -> rules.define(AiDefine.VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_STANDARD)
+        LeagueDesire.STRONG_LIKE -> rules.define(AiDefine.VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_STRONG)
+        LeagueDesire.ALWAYS -> rules.define(AiDefine.VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_OVERWHELMING)
+    }
+
+    /**
+     * CvLeague::FinishSession's diplomacy (Vox Populi): for each voter that helped the outcome (a tie counts as No) and each that voted
+     * against it, every other AI member changes its voting history score of the voter by ((share of the voter's own delegates) x
+     * VOTING_HISTORY_SCORE_PLAYER_VOTE_PERCENT_VALUE % + (share of the outcome's votes) x _OUTCOME_VOTE_PERCENT_VALUE %) x the
+     * multiplier of its desire for the outcome (against: reversed; a proposer that dislikes its own outcome changes nothing); for
+     * an embargo on that member, the multiplier is the overwhelming one and the voter's help or harm becomes an attempted sanction or
+     * unsanction (ever: when it passed or a repeal failed). The proposer remembers who helped (support delta minus the share) or who
+     * foiled (plus the share) its proposal; an elected host who voted for it with their share. VP stamps these one turn ahead, as its
+     * opinions are next updated then; ours are updated in the session's turn, so the current turn is stamped.
+     */
+    fun recordSessionOutcome(league: League, proposal: LeagueProposal, decision: String?, passed: Boolean) {
+        val resolution = league.gameInfo.ruleset.resolutions[proposal.resolution] ?: return
+        val active = if (proposal.repeal) league.activeResolutions.firstOrNull { it.id == proposal.targetId } else null
+        val sanctionTarget = if ((active?.let { league.gameInfo.ruleset.resolutions[it.resolution] } ?: resolution).embargoesPlayer)
+            active?.choice ?: proposal.proposerChoice else null
+        val outcome = decision ?: League.NO
+        val rules = league.gameInfo.ruleset.ai
+        val stamp = league.gameInfo.turns
+        val proposer = proposal.proposer
+        val host = !proposal.repeal && resolution.isHostElection
+        // Whether the outcome sanctions the target (an embargo passed or its repeal failed) or lifts it
+        val outcomeSanctions = proposal.repeal != passed
+        val observers = league.gameInfo.getAliveMajorCivs().filter { !it.isHuman() && it.civID in league.members }
+        val desires = HashMap<String, LeagueDesire>()
+        fun desireOf(observer: Civilization) = desires.getOrPut(observer.civID) {
+            LeagueDesire.of(LeagueEvaluator(observer, league).scoreVote(proposal, outcome))
+        }
+        for (voter in proposal.votes.map { it.voter }.distinct()) {
+            for (against in listOf(false, true)) {
+                val (share, own) = contribution(league, proposal, voter, outcome, against)
+                if (share <= 0) continue
+                for (observer in observers) {
+                    if (observer.civID == voter) continue
+                    val memory = memoryOf(league, observer.civID, voter) ?: continue
+                    val multiplier = if (sanctionTarget == observer.civID) {
+                        // Helping a sanction or harming its lifting is an attempted sanction, and the reverse an unsanction
+                        if (outcomeSanctions != against) {
+                            memory.sanctionedTurn = stamp
+                            memory.unsanctionedTurn = -1
+                            if (outcomeSanctions) memory.everSanctioned = true
+                        } else {
+                            memory.unsanctionedTurn = stamp
+                            memory.sanctionedTurn = -1
+                            if (!outcomeSanctions) memory.everUnsanctioned = true
+                        }
+                        rules.define(AiDefine.VOTING_HISTORY_SCORE_DESIRE_MULTIPLIER_OVERWHELMING) * (if (outcomeSanctions) -1 else 1)
+                    } else historyMultiplier(desireOf(observer), rules)
+                    if (multiplier < 0 && observer.civID == proposer) continue
+                    val change = (own * rules.define(AiDefine.VOTING_HISTORY_SCORE_PLAYER_VOTE_PERCENT_VALUE) / 100 +
+                        share * rules.define(AiDefine.VOTING_HISTORY_SCORE_OUTCOME_VOTE_PERCENT_VALUE) / 100) * multiplier / 100
+                    val max = rules.define(AiDefine.VOTING_HISTORY_SCORE_MAX)
+                    memory.votingHistoryScore = (memory.votingHistoryScore + if (against) -change else change).coerceIn(-max, max)
+                }
+                if (against || proposer == null || proposer == voter || sanctionTarget == proposer) continue
+                // The proposer is grateful to those who helped it pass, angry at those who helped it fail
+                val memory = memoryOf(league, proposer, voter) ?: continue
+                val ai = league.gameInfo.getCivilizationOrNull(proposer) ?: continue
+                if (passed) {
+                    setProposalSupportDelta(ai, memory, -share, rules)
+                    memory.supportedProposalTurn = stamp
+                    memory.foiledProposalTurn = -1
+                } else {
+                    setProposalSupportDelta(ai, memory, share, rules)
+                    memory.foiledProposalTurn = stamp
+                    memory.supportedProposalTurn = -1
+                }
+            }
+            if (host && passed && voter != outcome) {
+                val (share, _) = contribution(league, proposal, voter, outcome, against = false, host = true)
+                if (share > 0) memoryOf(league, outcome, voter)?.let {
+                    it.supportedHostingValue = share
+                    it.supportedHostingTurn = stamp
+                }
             }
         }
     }
 
     /**
-     * CvLeague::FinishSession: supporters of the actual winning choice help a passed proposal or foil a failed one.
-     * For a passed host election its winner also remembers the voters who elected them. A tied/no-vote
-     * decision has no supporters; abstentions and votes for other choices create no memory.
-     * Call before the session clears its proposals/votes, with the actual [decision] and [passed].
+     * CvDiplomacyAI::SetProposalSupportDelta (Vox Populi): a new support (< 0) or opposition (> 0) share adds to what is left of the
+     * previous one: its opinion weight faded by the turns passed over its duration, shortened by forgiveness (or
+     * neediness) above 5 when the latest action reversed it, converted back to a share; -100..100.
      */
-    fun recordSessionOutcome(league: League, proposal: LeagueProposal, decision: String?, passed: Boolean) {
-        if (decision == null) return
-        val turn = league.gameInfo.turns
-        val supporters = proposal.votes.asSequence().filter { it.delegates > 0 && it.choice == decision }.map { it.voter }.distinct()
-        val proposerMemory = proposal.proposer?.let { league.members[it]?.alignmentMemory }
-        for (voter in supporters) {
-            if (voter !in league.members) continue
-            if (proposerMemory != null) {
-                val memory = proposerMemory.getOrPut(voter) { LeagueAlignmentMemory() }
-                if (passed) memory.supportedProposalTurn = turn else memory.foiledProposalTurn = turn
-            }
-            if (passed && !proposal.repeal && league.gameInfo.ruleset.resolutions[proposal.resolution]?.isHostElection == true)
-                league.members[decision]?.alignmentMemory?.getOrPut(voter) { LeagueAlignmentMemory() }?.supportedHostingTurn = turn
+    private fun setProposalSupportDelta(civ: Civilization, memory: LeagueAlignmentMemory, value: Int, rules: AiRuleset) {
+        val current = memory.proposalSupportDelta
+        if (current == 0 || value == 0) {
+            memory.proposalSupportDelta = value
+            return
         }
+        val foiledBefore = current > 0
+        // VP's IsFoiledOurProposalAndThenSupportedUs / IsSupportedOurProposalAndThenFoiledUs
+        val reversed = if (foiledBefore) memory.supportedProposalTurn > -1 else memory.foiledProposalTurn > -1
+        var duration = OpinionTimers.adjustDuration(civ, rules.define(if (foiledBefore) AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_NUM_TURNS
+            else AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL_NUM_TURNS), civ.ai.diplomacyValue(if (foiledBefore)
+            DiplomacyPersonality.WorkAgainstWillingness else DiplomacyPersonality.WorkWithWillingness))
+        val turn = if (foiledBefore == reversed) memory.supportedProposalTurn else memory.foiledProposalTurn
+        if (turn < 0) return
+        if (reversed && (if (foiledBefore) value < 0 else value > 0)) {
+            val mod = (civ.ai.diplomacyValue(if (foiledBefore) DiplomacyPersonality.Forgiveness else DiplomacyPersonality.Neediness) - 5) * 2 *
+                DiplomacyTurn.opinionDurationPercent(civ) / 100
+            if (mod > 0) duration -= mod
+        }
+        val left = 100 - (civ.gameInfo.turns - turn) * 100 / maxOf(duration, 1)
+        val minWeight = if (foiledBefore) maxOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL))
+            else minOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL))
+        val maxWeight = if (foiledBefore) maxOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_MAX))
+            else minOf(0, rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL_MAX))
+        val difference = maxWeight - minWeight
+        val perVote = maxOf(1, rules.define(AiDefine.OPINION_WEIGHT_PER_VOTE_PERCENT))
+        val award = minOf(100, kotlin.math.abs(current) * perVote)
+        val weight = (minWeight + difference * award / 100) * left / 100 - minWeight
+        val leftValue = if ((weight <= 0 && foiledBefore) || (weight >= 0 && !foiledBefore)) 0
+            else weight * 100 / maxOf(1, difference) / perVote
+        memory.proposalSupportDelta = (value + leftValue).coerceIn(-100, 100)
     }
 
     /**

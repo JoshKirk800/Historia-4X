@@ -39,8 +39,13 @@ class ApproachFrameTests {
         game.makeHexagonalMap(12)
         rules = game.ruleset.ai
         rules.defines["APPROACH_RANDOM_PERCENT"] = 0f
-        // Part 10's proximity multipliers at 100%: the frame alone
-        for (proximity in listOf("NEIGHBORS", "CLOSE", "FAR", "DISTANT")) rules.defines["APPROACH_MULTIPLIER_PROXIMITY_$proximity"] = 100f
+        // Part 10's proximity multipliers at 100% and its conquest variants as the plain ones: the frame alone
+        for (proximity in listOf("NEIGHBORS", "CLOSE", "FAR", "DISTANT")) {
+            rules.defines["APPROACH_MULTIPLIER_PROXIMITY_$proximity"] = 100f
+            rules.defines["APPROACH_WAR_PROXIMITY_$proximity"] = 100f
+        }
+        for (target in listOf("IMPOSSIBLE", "BAD", "AVERAGE", "FAVORABLE", "SOFT"))
+            rules.defines["CONQUEST_WAR_MULTIPLIER_TARGET_$target"] = rules.defines["MAJOR_WAR_MULTIPLIER_TARGET_$target"]!!
         a = civ(HexCoord(0, 0))
         b = civ(HexCoord(8, 0))
         c = civ(HexCoord(-8, 0))
@@ -63,6 +68,12 @@ class ApproachFrameTests {
         ApproachAi.selectApproach(a, other, strategic, valid, rules, Random(0))
 
     private fun memory(other: Civilization) = a.ai.diplomacy.memoryOf(other)
+
+    /** [a] sees the whole map and works out its attack targets: without a possible target, part 12 zeroes war and hostility */
+    private fun withAttackTargets() {
+        for (tile in game.tileMap.values) tile.setExplored(a, true)
+        a.ai.military.updateAttackTargets(a)
+    }
 
     /** Part 14: round(0.3 x this turn + 0.7 x last turn), at least one step towards this turn */
     private fun curved(value: Int, last: Int): Int {
@@ -94,6 +105,7 @@ class ApproachFrameTests {
             select(c, strategic = false, valid = valid)
             return memory(c).approachValues[war]
         }
+        withAttackTargets()
         memory(b).strategicApproachValues = arrayListOf(9000, 0, 0, 0, 0, 0, 0)
         memory(c).strategicApproachValues = arrayListOf(100, 0, 0, 0, 0, 0, 0)
         // war modifier = bias 5 + boldness 5 = 10: no scaling, the whole 500
@@ -106,6 +118,7 @@ class ApproachFrameTests {
 
     @Test
     fun `before crossing oceans there is no war on a player we are not close to`() {
+        withAttackTargets()
         a.ai.diplomacy.setApproach(b, MajorCivApproach.War)
         a.proximity[b.civID] = Proximity.Far
         b.proximity[a.civID] = Proximity.Far
@@ -115,6 +128,29 @@ class ApproachFrameTests {
         a.ai.diplomacy.setApproach(b, MajorCivApproach.War)
         select(b, strategic = true)
         assertTrue(memory(b).strategicApproachValues[war] > 0)
+    }
+
+    @Test
+    fun `without a possible attack target on their cities there is no war or hostility`() {
+        a.proximity[b.civID] = Proximity.Close
+        a.ai.diplomacy.setApproach(b, MajorCivApproach.War)
+        select(b, strategic = true)
+        assertEquals(0, memory(b).strategicApproachValues[war])
+        assertEquals(0, memory(b).strategicApproachValues[MajorCivApproach.Hostile.ordinal])
+        withAttackTargets()
+        assertTrue(a.ai.military.havePossibleAttackTarget(b))
+        a.ai.diplomacy.setApproach(b, MajorCivApproach.War)
+        select(b, strategic = true)
+        assertTrue(memory(b).strategicApproachValues[war] > 0)
+    }
+
+    @Test
+    fun `a preferred attack target raises our attack multiplier, our exposure to them theirs`() {
+        assertEquals(1 to 1, ApproachAi.attackMultipliers(a, b))
+        withAttackTargets()
+        assertTrue(a.ai.military.havePreferredAttackTarget(b))
+        assertTrue(a.ai.military.isExposedToEnemy(a, null, b))
+        assertEquals(2 to 2, ApproachAi.attackMultipliers(a, b))
     }
 
     @Test

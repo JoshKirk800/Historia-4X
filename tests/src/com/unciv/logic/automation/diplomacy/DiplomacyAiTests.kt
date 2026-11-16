@@ -85,15 +85,16 @@ class DiplomacyAiTests {
     }
 
     @Test
-    fun `declaration of friendship and denouncements are opinion terms of 35`() {
+    fun `a declaration of friendship weighs 35, being denounced 50, both denouncing each other 50, our own denouncement nothing`() {
         a.getDiplomacyManager(b)!!.signDeclarationOfFriendship()
         assertEquals(35f, modifier(a, b, DiplomaticModifiers.DeclarationOfFriendship), 0.001f)
         assertEquals(35f, modifier(b, a, DiplomaticModifiers.DeclarationOfFriendship), 0.001f)
 
         a.getDiplomacyManager(c)!!.denounce()
-        // OPINION_WEIGHT_DENOUNCED_ME and OPINION_WEIGHT_DENOUNCED_THEM
-        assertEquals(-35f, modifier(c, a, DiplomaticModifiers.Denunciation), 0.001f)
-        assertEquals(-35f, modifier(a, c, DiplomaticModifiers.WeDenouncedThem), 0.001f)
+        assertEquals(-50f, modifier(c, a, DiplomaticModifiers.Denunciation), 0.001f)
+        assertEquals(0f, modifier(a, c, DiplomaticModifiers.Denunciation), 0.001f)
+        c.getDiplomacyManager(a)!!.denounce()
+        assertEquals(-50f, modifier(a, c, DiplomaticModifiers.Denunciation), 0.001f)
         // C is no friend of B's: B does not mind A denouncing C
         assertEquals(0f, modifier(b, a, DiplomaticModifiers.DenouncedOurAllies), 0.001f)
     }

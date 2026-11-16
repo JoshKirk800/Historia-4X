@@ -94,16 +94,20 @@ object DiplomacyTurn {
 
     private fun doCounters(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
         val ai = civ.ai.diplomacy
-        val dealDecay = rules.define(AiDefine.DEAL_VALUE_PER_TURN_DECAY)
         val relationshipDuration = relationshipDuration(civ)
         for (other in others) {
             val memory = ai.memoryOf(other)
             if (memory.turnsLockedIntoWar > 0) memory.turnsLockedIntoWar--   // CvTeam::doTurn
             if (!other.isMajorCiv) continue
-            memory.recentTradeValue = max(0, memory.recentTradeValue - dealDecay)
-            memory.commonFoeValue = max(0, memory.commonFoeValue - rules.define(AiDefine.COMMON_FOE_VALUE_PER_TURN_DECAY))
-            if (memory.recentAssistValue > 0) memory.recentAssistValue -= min(memory.recentAssistValue, dealDecay)
-            else if (memory.recentAssistValue < 0) memory.recentAssistValue += min(-memory.recentAssistValue, dealDecay)
+            // Vox Populi's TestOpinionModifiers: the trade and common foe values go down, help (ours < 0) decays unless a coop war with
+            // them is being prepared, refusals decay too
+            ai.changeRecentTradeValue(other, -rules.define(AiDefine.DEAL_VALUE_PER_TURN_DECAY))
+            ai.changeCommonFoeValue(other, -rules.define(AiDefine.COMMON_FOE_VALUE_PER_TURN_DECAY))
+            val assistDecay = rules.define(AiDefine.ASSIST_VALUE_PER_TURN_DECAY)
+            if (memory.recentAssistValue < 0) {
+                val preparing = memory.coopWars.values.any { it.state == CoopWarState.Soon || it.state == CoopWarState.Accepted }
+                if (!preparing) ai.changeRecentAssistValue(other, assistDecay, decay = true)
+            } else if (memory.recentAssistValue > 0) ai.changeRecentAssistValue(other, -assistDecay, decay = true)
             PromiseAi.decayPromiseValues(memory, rules, civ.gameInfo.turns)
             memory.declaredWarOnFriendValue = max(0, memory.declaredWarOnFriendValue - rules.define(AiDefine.DECLARED_WAR_ON_FRIEND_PER_TURN_DECAY))
 

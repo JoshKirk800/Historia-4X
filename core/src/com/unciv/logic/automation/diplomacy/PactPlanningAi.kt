@@ -222,7 +222,7 @@ object PactPlanningAi {
                 else -> -20
             }
         }
-        value += OpinionAi.commonFoeScore(memory.commonFoeValue, rules) / -2
+        value += OpinionAi.commonFoeScore(civ, other, rules) / -2
         if (memory.resurrectedUs) value += 50
         val ourCitiesTheyOwn = other.cities.count { it.foundingCivObject == civ }
         if (ourCitiesTheyOwn > 0) value -= ourCitiesTheyOwn * 25

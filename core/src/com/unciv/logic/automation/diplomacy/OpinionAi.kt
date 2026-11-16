@@ -182,16 +182,16 @@ object OpinionAi {
         // Friends not getting along: the worst of the traitor terms
         term(DiplomaticModifiers.BetrayedDeclarationOfFriendship, traitorScore(civ, other, rules))
 
-        // Denouncing
-        term(DiplomaticModifiers.Denunciation, if (isDenouncedPlayer(other, civ)) rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_ME) else 0)
-        term(DiplomaticModifiers.WeDenouncedThem, if (isDenouncedPlayer(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_THEM) else 0)
-        term(DiplomaticModifiers.DenouncedOurAllies, if (isPlayerDenouncedFriend(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_FRIEND) else 0)
-        term(DiplomaticModifiers.DenouncedOurEnemies, if (isPlayerDenouncedEnemy(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_ENEMY) else 0)
+        // Denouncing (Vox Populi)
+        term(DiplomaticModifiers.Denunciation, denouncedScore(civ, other, rules))
+        term(DiplomaticModifiers.DenouncedOurAllies, denouncedFriendScore(civ, other, rules))
+        term(DiplomaticModifiers.DenouncedOurEnemies, denouncedEnemyScore(civ, other, rules))
+        term(DiplomaticModifiers.DenouncedByOurFriends, denouncedByOurFriendScore(civ, other, rules))
 
-        // June 2011 additions
-        term(DiplomaticModifiers.TradedWithUs, recentTradeScore(memory.recentTradeValue, rules))
-        term(DiplomaticModifiers.SharedEnemy, commonFoeScore(memory.commonFoeValue, rules))
-        val assist = recentAssistScore(memory.recentAssistValue, rules)
+        // Recent trade, assistance, common foes (Vox Populi)
+        term(DiplomaticModifiers.TradedWithUs, recentTradeScore(civ, other, rules))
+        term(DiplomaticModifiers.SharedEnemy, commonFoeScore(civ, other, rules))
+        val assist = recentAssistScore(civ, other, rules)
         term(if (assist < 0) DiplomaticModifiers.HelpedUs else DiplomaticModifiers.RefusedToHelpUs, assist)
 
         // World Congress
@@ -650,10 +650,6 @@ object OpinionAi {
     fun isPlayerDenouncedFriend(civ: Civilization, other: Civilization): Boolean =
         civ.diplomacy.values.any { it.otherCiv != other && it.hasFlag(DiplomacyFlags.DeclarationOfFriendship) && isDenouncedPlayer(other, it.otherCiv) }
 
-    /** IsPlayerDenouncedEnemy: they denounced someone we have denounced */
-    fun isPlayerDenouncedEnemy(civ: Civilization, other: Civilization): Boolean =
-        civ.diplomacy.values.any { it.otherCiv != other && it.hasFlag(DiplomacyFlags.Denunciation) && isDenouncedPlayer(other, it.otherCiv) }
-
     /** IsUntrustworthyFriend: declared war on a friend, or denounced at least 2 friends */
     fun isUntrustworthyFriend(civ: Civilization): Boolean =
         weDeclaredWarOnFriendCount(civ) > 0 || weDenouncedFriendCount(civ) >= 2
@@ -699,19 +695,146 @@ object OpinionAi {
         return score
     }
 
-    /** GetRecentTradeScore */
-    fun recentTradeScore(value: Int, rules: AiRuleset): Int =
-        if (value <= 0) 0 else maxOf(-value / rules.define(AiDefine.DEAL_VALUE_PER_OPINION_WEIGHT), rules.define(AiDefine.OPINION_WEIGHT_TRADE_MAX))
+    /** GetRecentTradeScore: OPINION_WEIGHT_TRADE_MAX x the recent trade value's share of its maximum (VP's strategic trade partners: none) */
+    fun recentTradeScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val value = civ.ai.diplomacy.memoryOf(other).recentTradeValue
+        if (value <= 0) return 0
+        val percent = value * 100 / maxOf(civ.ai.diplomacy.maxRecentTradeValue(), 1)
+        return if (percent > 0) rules.define(AiDefine.OPINION_WEIGHT_TRADE_MAX) * percent / 100 else 0
+    }
 
-    /** GetCommonFoeScore */
-    fun commonFoeScore(value: Int, rules: AiRuleset): Int =
-        if (value <= 0) 0 else maxOf(-value / rules.define(AiDefine.COMMON_FOE_VALUE_PER_OPINION_WEIGHT), rules.define(AiDefine.OPINION_WEIGHT_COMMON_FOE_MAX))
+    /** GetCommonFoeScore: OPINION_WEIGHT_COMMON_FOE_MAX x the common foe value's share of its maximum */
+    fun commonFoeScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val value = civ.ai.diplomacy.memoryOf(other).commonFoeValue
+        if (value <= 0) return 0
+        val percent = value * 100 / maxOf(civ.ai.diplomacy.maxCommonFoeValue(), 1)
+        return if (percent > 0) rules.define(AiDefine.OPINION_WEIGHT_COMMON_FOE_MAX) * percent / 100 else 0
+    }
 
-    /** GetRecentAssistScore */
-    fun recentAssistScore(value: Int, rules: AiRuleset): Int {
+    /**
+     *  GetRecentAssistScore: help (our negative value) the size of OPINION_WEIGHT_ASSIST_MAX, as a bonus, x its share of the maximum;
+     *  refusals OPINION_WEIGHT_FAILED_ASSIST_MAX x theirs
+     */
+    fun recentAssistScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val value = civ.ai.diplomacy.memoryOf(other).recentAssistValue
         if (value == 0) return 0
-        val max = rules.define(AiDefine.OPINION_WEIGHT_ASSIST_MAX)
-        return (value / rules.define(AiDefine.DEAL_VALUE_PER_OPINION_WEIGHT)).coerceIn(-max, max)
+        val failed = value > 0
+        val percent = kotlin.math.abs(value) * 100 / maxOf(civ.ai.diplomacy.maxRecentAssistValue(failed), 1)
+        if (percent <= 0) return 0
+        return if (failed) kotlin.math.abs(rules.define(AiDefine.OPINION_WEIGHT_FAILED_ASSIST_MAX)) * percent / 100
+            else -kotlin.math.abs(rules.define(AiDefine.OPINION_WEIGHT_ASSIST_MAX)) * percent / 100
+    }
+
+    /**
+     *  CvDiplomacyAI::AdjustConditionalModifier: [value] x 50% .. 150% by a personality value from 1 to 10 (x 0.5, 0.625, 0.75, 0.875,
+     *  1 at 5, 1.1, 1.2, 1.3, 1.4, 1.5), the other way round when [invert]ed
+     */
+    fun adjustConditional(value: Int, personality: Int, invert: Boolean = false): Int {
+        if (value == 0 || personality == 0) return value
+        val permille = when (personality) {
+            1 -> if (invert) 1500 else 500
+            2 -> if (invert) 1375 else 625
+            3 -> if (invert) 1250 else 750
+            4 -> if (invert) 1125 else 875
+            6 -> if (invert) 900 else 1100
+            7 -> if (invert) 800 else 1200
+            8 -> if (invert) 700 else 1300
+            9 -> if (invert) 600 else 1400
+            10 -> if (invert) 500 else 1500
+            else -> 1000
+        }
+        return value * permille / 1000
+    }
+
+    /** GetDenouncedScore: OPINION_WEIGHT_MUTUAL_DENOUNCEMENT, else OPINION_WEIGHT_DENOUNCED_ME for theirs, else _DENOUNCED_THEM for ours */
+    fun denouncedScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val theirs = isDenouncedPlayer(other, civ)
+        val ours = isDenouncedPlayer(civ, other)
+        return when {
+            theirs && ours -> rules.define(AiDefine.OPINION_WEIGHT_MUTUAL_DENOUNCEMENT)
+            theirs -> rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_ME)
+            ours -> rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_THEM)
+            else -> 0
+        }
+    }
+
+    /** The living majors with a city (a human's shadow AI does not count other humans) */
+    private fun countedMajors(civ: Civilization) = civ.gameInfo.civilizations.filter {
+        it.isMajorCiv && it.isAlive() && it.cities.isNotEmpty() && !(civ.isHuman() && it.isHuman())
+    }
+
+    /**
+     *  GetDenouncedFriendScore: OPINION_WEIGHT_DENOUNCED_FRIEND, _SUBSEQUENT for each further friend of ours (a DoF) they denounced,
+     *  plus OPINION_WEIGHT_DENOUNCED_MOST_VALUED_FRIEND / _ALLY when they denounced our most valuable friend (a DoF) or ally (a DoF and a
+     *  defensive pact; with both, the larger weight checked first); scaled by loyalty
+     */
+    fun denouncedFriendScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val friends = countedMajors(civ).count { isDoFAccepted(civ, it) && isDenouncedPlayer(other, it) }
+        if (friends <= 0) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_FRIEND) + rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_FRIEND_SUBSEQUENT) * (friends - 1)
+        val ai = civ.ai.diplomacy
+        fun valid(id: String?, pact: Boolean) = id?.let { civ.gameInfo.getCivilizationOrNull(it) }?.takeIf {
+            it.isAlive() && it.cities.isNotEmpty() && isDoFAccepted(civ, it) &&
+                (!pact || civ.getDiplomacyManager(it)?.diplomaticStatus == DiplomaticStatus.DefensivePact)
+        }
+        val bestFriend = valid(ai.mostValuableFriend, pact = false)
+        val bestAlly = valid(ai.mostValuableAlly, pact = true)
+        val friendWeight = rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_MOST_VALUED_FRIEND)
+        val allyWeight = rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_MOST_VALUED_ALLY)
+        val friendDenounced = bestFriend != null && isDenouncedPlayer(other, bestFriend)
+        val allyDenounced = bestAlly != null && isDenouncedPlayer(other, bestAlly)
+        weight += when {
+            bestFriend != null && bestAlly != null ->
+                if (friendWeight >= allyWeight) (if (friendDenounced) friendWeight else if (allyDenounced) allyWeight else 0)
+                else (if (allyDenounced) allyWeight else if (friendDenounced) friendWeight else 0)
+            friendDenounced || allyDenounced -> maxOf(friendWeight, allyWeight)
+            else -> 0
+        }
+        return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.Loyalty))
+    }
+
+    /**
+     *  GetDenouncedEnemyScore: OPINION_WEIGHT_DENOUNCED_ENEMY, _SUBSEQUENT for each further player we denounced or fight that they
+     *  denounced too, plus OPINION_WEIGHT_DENOUNCED_BIGGEST_COMPETITOR when that one is our biggest competitor; scaled by work-against
+     *  willingness. (VP's league rival has no counterpart: none.)
+     */
+    fun denouncedEnemyScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val enemies = countedMajors(civ).count { (isDenouncedPlayer(civ, it) || civ.isAtWarWith(it)) && isDenouncedPlayer(other, it) }
+        if (enemies <= 0) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_ENEMY) + rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_ENEMY_SUBSEQUENT) * (enemies - 1)
+        val competitor = CompetitorAi.biggestCompetitor(civ)?.let { civ.gameInfo.getCivilizationOrNull(it) }
+        if (competitor != null && competitor.isAlive() && competitor.cities.isNotEmpty() &&
+            (isDenouncedPlayer(civ, competitor) || civ.isAtWarWith(competitor)) && isDenouncedPlayer(other, competitor))
+            weight += rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_BIGGEST_COMPETITOR)
+        return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness))
+    }
+
+    /**
+     *  GetDenouncedByOurFriendScore, unless they are our friend or ally or liberated us: over the majors that denounced them and that we
+     *  like at least as much (a DoF level not below theirs, a lower opinion weight): OPINION_WEIGHT_DENOUNCED_BY_THEIR_KEY_FRIEND for our
+     *  most valuable friend or ally among them, OPINION_WEIGHT_DENOUNCED_BY_THEIR_FRIEND, _SUBSEQUENT for each further friend or ally
+     *  of ours; scaled by work-against willingness
+     */
+    fun denouncedByOurFriendScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (isDoFAccepted(civ, other) || civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact) return 0
+        if (WarSanityAi.isLiberator(civ, other, onlyMajorCities = false)) return 0
+        val ai = civ.ai.diplomacy
+        val theirMemory = ai.memoryOf(other)
+        var weight = 0
+        var denouncements = 0
+        for (third in countedMajors(civ)) {
+            if (third == civ || third == other || !isDenouncedPlayer(third, other)) continue
+            val thirdMemory = ai.memoryOf(third)
+            if (theirMemory.doFLevel > thirdMemory.doFLevel || theirMemory.opinionWeight <= thirdMemory.opinionWeight) continue
+            val dof = isDoFAccepted(civ, third)
+            val pact = civ.getDiplomacyManager(third)?.diplomaticStatus == DiplomaticStatus.DefensivePact
+            if (dof || pact) denouncements++
+            if ((ai.mostValuableFriend == third.civID && dof) || (ai.mostValuableAlly == third.civID && pact))
+                weight += rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_BY_THEIR_KEY_FRIEND)
+        }
+        if (denouncements > 0) weight += rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_BY_THEIR_FRIEND) +
+            rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_BY_THEIR_FRIEND_SUBSEQUENT) * (denouncements - 1)
+        return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness))
     }
 
     /** IsCapitalCapturedBy: [other] holds our original capital */

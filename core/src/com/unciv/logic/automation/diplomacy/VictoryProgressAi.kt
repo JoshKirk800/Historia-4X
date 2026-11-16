@@ -110,8 +110,9 @@ object VictoryProgressAi {
         return minOf(99, lowest)
     }
 
+    /** Whether one of the victories open to [civ] has [milestone] */
     @Readonly
-    private fun isVictoryOpen(civ: Civilization, milestone: MilestoneType) =
+    fun isVictoryOpen(civ: Civilization, milestone: MilestoneType) =
         civ.victoryManager.getAvailableVictories().any { victory -> victory.milestoneObjects.any { it.type == milestone } }
 
     /**

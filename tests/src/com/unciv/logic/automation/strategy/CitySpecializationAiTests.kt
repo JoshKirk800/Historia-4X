@@ -45,7 +45,7 @@ class CitySpecializationAiTests {
         assertEquals(4 * 20 + 2 * 10, yieldWeight(weights, 3))
         assertEquals(200, yieldWeight(weights, 4))
         // AIGrandStrategy_Yields of CULTURE: gold +50, science +50
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         weights = CitySpecializationAi.weightSpecializations(civ)
         assertEquals(3 * 20 + 50, yieldWeight(weights, 2))
         assertEquals(4 * 20 + 2 * 10 + 50, yieldWeight(weights, 3))

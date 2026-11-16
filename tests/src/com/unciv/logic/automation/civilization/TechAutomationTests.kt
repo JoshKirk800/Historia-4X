@@ -119,7 +119,7 @@ class TechAutomationTests {
         val grandStrategies = game.ruleset.ai.grandStrategies
         grandStrategies[grandStrategies.indexOfFirst { it.name == GrandStrategyAi.CULTURE }] =
             GrandStrategyDef().apply { name = GrandStrategyAi.CULTURE; flavorMods = linkedMapOf("Religion" to 1) }
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(6 * ((10 * 100 + 3 * 900) / 1000), theologyAt(480))
     }
 

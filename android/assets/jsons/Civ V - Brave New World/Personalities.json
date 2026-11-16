@@ -123,6 +123,10 @@
     "traitCategories": {
       "Diplomat": 1,
       "Smaller": 1
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1,
+      "Culture": 2
     }
   },
   {
@@ -222,6 +226,10 @@
     },
     "traitCategories": {
       "Diplomat": 1
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1,
+      "Domination": 2
     }
   },
   {
@@ -317,6 +325,10 @@
     "traitCategories": {
       "Warmonger": 1,
       "Nerd": 1
+    },
+    "victoryPursuits": {
+      "Science": 1,
+      "Domination": 2
     }
   },
   {
@@ -416,6 +428,9 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1
     }
   },
   {
@@ -515,6 +530,9 @@
     },
     "traitCategories": {
 
+    },
+    "victoryPursuits": {
+      "Domination": 1
     }
   },
   {
@@ -614,6 +632,10 @@
     },
     "traitCategories": {
 
+    },
+    "victoryPursuits": {
+      "Culture": 1,
+      "Domination": 2
     }
   },
   {
@@ -713,6 +735,9 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1
     }
   },
   {
@@ -812,6 +837,9 @@
     },
     "traitCategories": {
       "Religious": 1
+    },
+    "victoryPursuits": {
+
     }
   },
   {
@@ -906,6 +934,9 @@
     },
     "traitCategories": {
       "Tourism": 1
+    },
+    "victoryPursuits": {
+
     }
   },
   {
@@ -1000,6 +1031,10 @@
     },
     "traitCategories": {
 
+    },
+    "victoryPursuits": {
+      "Domination": 1,
+      "Science": 2
     }
   },
   {
@@ -1094,6 +1129,9 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1
     }
   },
   {
@@ -1188,6 +1226,10 @@
     },
     "traitCategories": {
 
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1,
+      "Domination": 2
     }
   },
   {
@@ -1282,6 +1324,10 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1,
+      "Science": 2
     }
   },
   {
@@ -1377,6 +1423,9 @@
     "traitCategories": {
       "Diplomat": 1,
       "Smaller": 1
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1
     }
   },
   {
@@ -1471,6 +1520,10 @@
     },
     "traitCategories": {
       "Expansionist": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1,
+      "Diplomacy": 2
     }
   },
   {
@@ -1565,6 +1618,10 @@
     },
     "traitCategories": {
 
+    },
+    "victoryPursuits": {
+      "Science": 1,
+      "Culture": 2
     }
   },
   {
@@ -1659,6 +1716,9 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1
     }
   },
   {
@@ -1753,6 +1813,9 @@
     },
     "traitCategories": {
       "Tourism": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1
     }
   },
   {
@@ -1847,6 +1910,10 @@
     },
     "traitCategories": {
 
+    },
+    "victoryPursuits": {
+      "Culture": 1,
+      "Science": 2
     }
   },
   {
@@ -1941,6 +2008,9 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1
     }
   },
   {
@@ -2036,6 +2106,9 @@
     "traitCategories": {
       "Diplomat": 1,
       "Religious": 1
+    },
+    "victoryPursuits": {
+      "Culture": 1
     }
   },
   {
@@ -2130,6 +2203,10 @@
     },
     "traitCategories": {
       "Expansionist": 1
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1,
+      "Domination": 2
     }
   },
   {
@@ -2224,6 +2301,10 @@
     },
     "traitCategories": {
       "Expansionist": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1,
+      "Diplomacy": 2
     }
   },
   {
@@ -2318,6 +2399,9 @@
     },
     "traitCategories": {
       "Expansionist": 1
+    },
+    "victoryPursuits": {
+      "Culture": 1
     }
   },
   {
@@ -2412,6 +2496,10 @@
     },
     "traitCategories": {
       "Diplomat": 1
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1,
+      "Culture": 2
     }
   },
   {
@@ -2506,6 +2594,9 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1
     }
   },
   {
@@ -2601,6 +2692,10 @@
     "traitCategories": {
       "Tourism": 1,
       "Smaller": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1,
+      "Culture": 2
     }
   },
   {
@@ -2696,6 +2791,9 @@
     "traitCategories": {
       "Nerd": 1,
       "Smaller": 1
+    },
+    "victoryPursuits": {
+      "Science": 1
     }
   },
   {
@@ -2790,6 +2888,10 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1,
+      "Culture": 2
     }
   },
   {
@@ -2884,6 +2986,10 @@
     },
     "traitCategories": {
       "Nerd": 1
+    },
+    "victoryPursuits": {
+      "Science": 1,
+      "Culture": 2
     }
   },
   {
@@ -2978,6 +3084,9 @@
     },
     "traitCategories": {
       "Expansionist": 1
+    },
+    "victoryPursuits": {
+      "Science": 1
     }
   },
   {
@@ -3072,6 +3181,9 @@
     },
     "traitCategories": {
       "Tourism": 1
+    },
+    "victoryPursuits": {
+      "Culture": 1
     }
   },
   {
@@ -3167,6 +3279,9 @@
     "traitCategories": {
       "Warmonger": 1,
       "Expansionist": 1
+    },
+    "victoryPursuits": {
+
     }
   },
   {
@@ -3262,6 +3377,9 @@
     "traitCategories": {
       "Tourism": 1,
       "Smaller": 1
+    },
+    "victoryPursuits": {
+      "Culture": 1
     }
   },
   {
@@ -3356,6 +3474,9 @@
     },
     "traitCategories": {
       "Diplomat": 1
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1
     }
   },
   {
@@ -3451,6 +3572,9 @@
     "traitCategories": {
       "Nerd": 1,
       "Smaller": 1
+    },
+    "victoryPursuits": {
+      "Science": 1
     }
   },
   {
@@ -3545,6 +3669,9 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Domination": 1
     }
   },
   {
@@ -3639,6 +3766,10 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Science": 1,
+      "Domination": 2
     }
   },
   {
@@ -3733,6 +3864,9 @@
     },
     "traitCategories": {
       "Religious": 1
+    },
+    "victoryPursuits": {
+
     }
   },
   {
@@ -3828,6 +3962,9 @@
     "traitCategories": {
       "Warmonger": 1,
       "Expansionist": 1
+    },
+    "victoryPursuits": {
+
     }
   },
   {
@@ -3922,6 +4059,9 @@
     },
     "traitCategories": {
       "Diplomat": 1
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1
     }
   },
   {
@@ -4016,6 +4156,10 @@
     },
     "traitCategories": {
       "Warmonger": 1
+    },
+    "victoryPursuits": {
+      "Science": 1,
+      "Domination": 2
     }
   },
   {
@@ -4095,6 +4239,9 @@
     },
     "traitCategories": {
 
+    },
+    "victoryPursuits": {
+      "Diplomacy": 1
     }
   }
 ]

@@ -381,7 +381,7 @@ class DealAiTests {
         val base = DealAi.getOpenBordersValue(a, b, false, false)
         val other = DealAi.getOpenBordersValue(a, c, false, false)
         assertFalse("not neighbours", DealAi.wantsOpenBordersWith(a, b))
-        a.ai.grandStrategy = GrandStrategyAi.CULTURE
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         // b comes first among the civs we have no influence on: CvDealAI::GetOpenBordersValue × 1000%
         assertEquals(base * 10, DealAi.getOpenBordersValue(a, b, false, false))
         assertEquals("neither the least influenced nor a cramped neighbour", other, DealAi.getOpenBordersValue(a, c, false, false))

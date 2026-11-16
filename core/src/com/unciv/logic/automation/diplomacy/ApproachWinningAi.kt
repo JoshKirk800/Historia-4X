@@ -186,7 +186,7 @@ object ApproachWinningAi {
     }
 
     /** CvGame::getCurrentEra: the rounded average era of the living majors */
-    private fun gameEra(civ: Civilization): Int {
+    fun gameEra(civ: Civilization): Int {
         val majors = civ.gameInfo.civilizations.filter { it.isMajorCiv && it.isAlive() }
         if (majors.isEmpty()) return 0
         return (majors.sumOf { it.getEra().eraNumber }.toFloat() / majors.size + 0.5f).toInt()

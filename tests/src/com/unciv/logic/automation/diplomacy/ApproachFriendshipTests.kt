@@ -84,7 +84,7 @@ class ApproachFriendshipTests {
         a.getDiplomacyManager(b)!!.setFlag(DiplomacyFlags.ResearchAgreement, 30)
         val (before, after) = section("Research agreement")
         assertEquals(5 * 3, after[friendly] - before[friendly])
-        a.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         val (before2, after2) = section("Research agreement")
         assertEquals(5 * 5, after2[friendly] - before2[friendly])
     }

@@ -5,6 +5,7 @@ import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.diplomacy.DiplomacyAi
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
+import com.unciv.logic.automation.diplomacy.VictoryPursuitAi
 import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.automation.unit.tactical.TacticalState
 import com.unciv.logic.map.mapunit.MapUnit
@@ -20,6 +21,7 @@ import com.unciv.models.ruleset.ai.MilitaryStrategyDef
 import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.ai.StrategyDef
 import com.unciv.models.ruleset.ai.TraitCategory
+import com.unciv.models.ruleset.ai.VictoryPursuit
 import com.unciv.utils.hashOf
 import org.jetbrains.annotations.VisibleForTesting
 import yairm210.purity.annotations.Cache
@@ -81,6 +83,14 @@ class CivAi : IsPartOfGameInfoSerialization {
     /** By [MinorCivApproach] name */
     var minorCivApproachBiases = LinkedHashMap<String, Int>()
     var personalityInitialized = false
+    /**
+     *  CvDiplomacyAI::m_ePrimaryVictoryPursuit and m_eSecondaryVictoryPursuit, picked once with the personality
+     *  ([VictoryPursuitAi.selectDefaultVictoryPursuits]); null for none, and for city-states
+     */
+    var primaryVictoryPursuit: VictoryPursuit? = null
+    var secondaryVictoryPursuit: VictoryPursuit? = null
+    /** CvDiplomacyAI::m_eCurrentVictoryPursuit, what [isGoingForWorldConquest] and the others read; [VictoryPursuitAi.updateCurrentVictoryPursuit] */
+    var currentVictoryPursuit: VictoryPursuit? = null
 
     /** The active grand strategy (AIGRANDSTRATEGY_* name), null before the first [GrandStrategyAi.doTurn] */
     var grandStrategy: String? = null
@@ -159,6 +169,9 @@ class CivAi : IsPartOfGameInfoSerialization {
         toReturn.majorCivApproachBiases.putAll(majorCivApproachBiases)
         toReturn.minorCivApproachBiases.putAll(minorCivApproachBiases)
         toReturn.personalityInitialized = personalityInitialized
+        toReturn.primaryVictoryPursuit = primaryVictoryPursuit
+        toReturn.secondaryVictoryPursuit = secondaryVictoryPursuit
+        toReturn.currentVictoryPursuit = currentVictoryPursuit
         toReturn.grandStrategy = grandStrategy
         toReturn.turnsSinceGrandStrategySet = turnsSinceGrandStrategySet
         toReturn.apolloProgramBuilt = apolloProgramBuilt
@@ -354,7 +367,7 @@ class CivAi : IsPartOfGameInfoSerialization {
         rules.militaryStrategies.asSequence().filter { it.name in militaryStrategies }
     //endregion
 
-    //region Grand strategy (CvGrandStrategyAI, CvDiplomacyAI::IsGoingFor*)
+    //region Grand strategy (CvGrandStrategyAI) and victory pursuits (CvDiplomacyAI::IsGoingFor*)
 
     /** The active grand strategy's definition, null if none */
     fun grandStrategyDef(): GrandStrategyDef? = grandStrategy?.let { name -> rules.getGrandStrategies().firstOrNull { it.name == name } }
@@ -374,14 +387,27 @@ class CivAi : IsPartOfGameInfoSerialization {
         return Pair(guess.grandStrategy, guess.confidence)
     }
 
-    /** CvDiplomacyAI::IsGoingForWorldConquest */
-    @Readonly fun isGoingForWorldConquest() = grandStrategy == GrandStrategyAi.CONQUEST
-    /** CvDiplomacyAI::IsGoingForDiploVictory */
-    @Readonly fun isGoingForDiploVictory() = grandStrategy == GrandStrategyAi.UNITED_NATIONS
-    /** CvDiplomacyAI::IsGoingForCultureVictory */
-    @Readonly fun isGoingForCultureVictory() = grandStrategy == GrandStrategyAi.CULTURE
-    /** CvDiplomacyAI::IsGoingForSpaceshipVictory */
-    @Readonly fun isGoingForSpaceshipVictory() = grandStrategy == GrandStrategyAi.SPACESHIP
+    /** CvDiplomacyAI::IsGoingForWorldConquest: the current victory pursuit is Domination */
+    @Readonly fun isGoingForWorldConquest() = currentVictoryPursuit == VictoryPursuit.Domination
+    /** CvDiplomacyAI::IsGoingForDiploVictory: the current victory pursuit is Diplomacy */
+    @Readonly fun isGoingForDiploVictory() = currentVictoryPursuit == VictoryPursuit.Diplomacy
+    /** CvDiplomacyAI::IsGoingForCultureVictory: the current victory pursuit is Culture */
+    @Readonly fun isGoingForCultureVictory() = currentVictoryPursuit == VictoryPursuit.Culture
+    /** CvDiplomacyAI::IsGoingForSpaceshipVictory: the current victory pursuit is Science */
+    @Readonly fun isGoingForSpaceshipVictory() = currentVictoryPursuit == VictoryPursuit.Science
+
+    /** Sets the grand strategy and the current victory pursuit a serious AI takes from it, none without one (scenario setup and tests) */
+    @VisibleForTesting
+    fun setGrandStrategyAndPursuit(grandStrategy: String?) {
+        this.grandStrategy = grandStrategy
+        currentVictoryPursuit = when (grandStrategy) {
+            GrandStrategyAi.CONQUEST -> VictoryPursuit.Domination
+            GrandStrategyAi.UNITED_NATIONS -> VictoryPursuit.Diplomacy
+            GrandStrategyAi.CULTURE -> VictoryPursuit.Culture
+            GrandStrategyAi.SPACESHIP -> VictoryPursuit.Science
+            else -> null
+        }
+    }
     //endregion
 
     //region Economic and military strategies
@@ -473,8 +499,8 @@ class CivAi : IsPartOfGameInfoSerialization {
 
     /**
      *  The strategic AI turn of this civilization, in CvPlayer::doTurn / doTurnPostDiplomacy order:
-     *  DoUpdateCramped, CvGrandStrategyAI::DoTurn (majors), the war states of CvDiplomacyAI::DoTurn (majors, [WarStateAi.doTurn]),
-     *  the rest of CvDiplomacyAI::DoTurn (majors, [DiplomacyTurn.doTurn]),
+     *  DoUpdateCramped, CvGrandStrategyAI::DoTurn (majors), the current victory pursuit and the war states of CvDiplomacyAI::DoTurn
+     *  (majors, [VictoryPursuitAi.updateCurrentVictoryPursuit], [WarStateAi.doTurn]), the rest of CvDiplomacyAI::DoTurn (majors, [DiplomacyTurn.doTurn]),
      *  then CvEconomicAI::DoTurn (recon state and antiquity sites, the strategy loop, then for AI players plot purchases and worker
      *  disbanding - [EconomicAi]), CvMilitaryAI::DoTurn (base data and defense states, the strategy loop, the attack targets, then for AI
      *  players offensive purchases and obsolete unit disbanding - [MilitaryAi]), CvCitySpecializationAI::DoTurn (as in doTurnPostDiplomacy), then each
@@ -487,6 +513,7 @@ class CivAi : IsPartOfGameInfoSerialization {
         timeThis("AI.Cramped") { updateCramped() }
         if (civ.isMajorCiv || civ.isCityState) com.unciv.logic.automation.diplomacy.WarDamageAi.doTurn(civ)
         if (civ.isMajorCiv) timeThis("AI.GrandStrategy") { GrandStrategyAi.doTurn(civ) }
+        if (civ.isMajorCiv) VictoryPursuitAi.updateCurrentVictoryPursuit(civ)
         if (civ.isMajorCiv) timeThis("AI.WarStates") { WarStateAi.doTurn(civ) }
         if (civ.isCityState) minorCivStatus = MinorCivStatusAi.status(civ)
         if (civ.isMajorCiv) timeThis("AI.Diplomacy") { DiplomacyTurn.doTurn(civ) }

@@ -50,6 +50,7 @@ class ReligionAiTests {
     private fun neutralCiv(vararg uniques: String): Civilization {
         val civ = game.addCiv(*uniques)
         for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
+        civ.ai.setGrandStrategyAndPursuit(null)
         return civ
     }
 
@@ -64,7 +65,7 @@ class ReligionAiTests {
         civ.ai.setPersonalityFlavor(Flavor.Offense, 5)
         // God of War: 50 faith from kills × 4 distance × offense / 100
         assertEquals(50 * 4 * 5 / 100, playerScore(civ, "God of War"))
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         assertEquals(50 * 4 * 5 / 100 * 2, playerScore(civ, "God of War"))
     }
 
@@ -306,13 +307,13 @@ class ReligionAiTests {
         assertEquals("Great Scientist", desired(civ))
         // one scientist bought from faith: 1000 / 2 = 500, below each grand strategy's 1000 (engineer: 2000 in the homestretch)
         civ.civConstructions.boughtItemsWithIncreasingPrice.add("Great Scientist", 1)
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals("Great Writer", desired(civ))
-        civ.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.UNITED_NATIONS)
         assertEquals("Great Merchant", desired(civ))
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         assertEquals("Great General", desired(civ))
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         civ.ai.economicStrategies["ECONOMICAISTRATEGY_GS_SPACESHIP_HOMESTRETCH"] = 0
         assertEquals("Great Engineer", desired(civ))
     }
@@ -320,7 +321,7 @@ class ReligionAiTests {
     @Test
     fun `great generals are divided by the ones we already have`() {
         val civ = greatPersonCiv()
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         civ.civConstructions.boughtItemsWithIncreasingPrice.add("Great Scientist", 3) // 250
         civ.civConstructions.boughtItemsWithIncreasingPrice.add("Great Engineer", 1) // 250
         game.addUnit("Great General", civ, tile(1, 1))

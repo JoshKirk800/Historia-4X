@@ -929,6 +929,14 @@ enum class AiDefine(val default: Float) {
     CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD(55f),
     CLOSE_TO_SCIENCE_VICTORY_THRESHOLD(80f),
     CLOSE_TO_CULTURE_VICTORY_THRESHOLD(60f),
+    // CvDiplomacyAI::SelectDefaultVictoryPursuits (VictoryPursuitAi; VP database values)
+    VICTORY_PURSUIT_DISABLED_VICTORY_PENALTY(-20f),
+    VICTORY_PURSUIT_PRIMARY_ONLY_HINT_WEIGHT(16f),
+    VICTORY_PURSUIT_PRIMARY_HINT_WEIGHT(10f),
+    VICTORY_PURSUIT_SECONDARY_HINT_WEIGHT(6f),
+    VICTORY_PURSUIT_FEW_CITY_STATES_PENALTY(-20f),
+    VICTORY_PURSUIT_MAX_RANDOMNESS(18f),
+    VICTORY_PURSUIT_DIFFERENTIAL_DIVISOR(200f),
     // CvDiplomacyAI::GetLowestTourismInfluence starts from the influence percent of Influential (GlobalDefines CULTURE_LEVEL_INFLUENTIAL)
     CULTURE_LEVEL_INFLUENTIAL(100f),
     // SelectBestApproachTowardsMajorCiv part 14: this turn's score counts this much, last turn's the rest (APPROACH_SHIFT_PERCENT)

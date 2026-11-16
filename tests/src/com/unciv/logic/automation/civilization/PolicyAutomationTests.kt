@@ -65,7 +65,7 @@ class PolicyAutomationTests {
         assertEquals(140, weight("Legalism"))
         assertEquals(35, weight("Oligarchy"))
         // the culture grand strategy adds its FlavorMod CULTURE +2
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         PolicyAutomation.flavorUpdate(civ)
         // and its GOLD +1 weighs Monarchy (GOLD 10), a quarter of which goes to Legalism
         assertEquals(180 + 10 / 4, weight("Legalism"))
@@ -135,7 +135,7 @@ class PolicyAutomationTests {
     @Test
     fun `under the culture grand strategy a new branch weighs a third`() {
         civ.ai.setPersonalityFlavor(Flavor.Culture, 7)
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         PolicyAutomation.flavorUpdate(civ)
         civ.policies.storedCulture = 100000
         val branchWeight = weight("Tradition") + weight("Aristocracy") + weight("Oligarchy")
@@ -182,11 +182,11 @@ class PolicyAutomationTests {
         reachEra(civ, "Modern era")
         adoptTenetsUpToLevel3(branch("Freedom"))
         assertNull("no grand strategy", PolicyAutomation.weighChoices(civ).immediate)
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         assertEquals("Space Procurements", PolicyAutomation.chooseNextPolicy(civ, Random(1))!!.name)
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals("Media Culture", PolicyAutomation.chooseNextPolicy(civ, Random(1))!!.name)
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST // Freedom has no level-3 tenet with OFFENSE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST) // Freedom has no level-3 tenet with OFFENSE
         assertNull(PolicyAutomation.weighChoices(civ).immediate)
     }
 

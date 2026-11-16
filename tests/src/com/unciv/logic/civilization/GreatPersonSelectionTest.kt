@@ -173,7 +173,7 @@ class GreatPersonSelectionTest {
         val blocker = game.addUnit("Worker", civ, city.getCenterTile())
         civ.greatPeople.freeGreatPeople = 1
         civ.ai.setDiplomacyValue(DiplomacyPersonality.WonderCompetitiveness, 0)
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         val originalUnits = civ.units.getCivUnits().toList()
 
         GreatPersonAutomation.chooseFreeGreatPeople(civ)

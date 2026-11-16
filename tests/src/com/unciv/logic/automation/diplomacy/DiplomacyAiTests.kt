@@ -279,7 +279,7 @@ class DiplomacyAiTests {
         a.ai.setMajorCivApproachBias(MajorCivApproach.War, 7)
         assertEquals(7, warDelta("Personality"))
         // Vox Populi's conquest bias (part 1, WORLD CONQUEST), not BNW's APPROACH_WAR_CONQUEST_GRAND_STRATEGY
-        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         assertEquals(7, warDelta("Conquest bias"))
     }
 

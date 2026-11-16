@@ -37,6 +37,7 @@ class UniqueUnitApproachTests {
         for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 5)
         for (value in DiplomacyPersonality.entries) civ.ai.setDiplomacyValue(value, 5)
         for (approach in MajorCivApproach.entries) civ.ai.setMajorCivApproachBias(approach, 5)
+        civ.ai.setGrandStrategyAndPursuit(null)
         game.addCity(civ, game.getTile(at))
         return civ
     }

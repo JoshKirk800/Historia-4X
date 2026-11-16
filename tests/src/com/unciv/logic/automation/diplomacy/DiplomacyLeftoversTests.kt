@@ -326,7 +326,7 @@ class DiplomacyLeftoversTests {
     private fun wantWarOn(target: Civilization) {
         a.ai.diplomacy.setApproach(target, MajorCivApproach.War)
         a.ai.diplomacy.setOpinion(target, MajorCivOpinion.Unforgivable)
-        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
     }
 
     @Test

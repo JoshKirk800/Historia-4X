@@ -60,8 +60,13 @@ class LeagueAutomationTests {
 
     private fun resolution(name: String) = game.ruleset.resolutions[name]!!
 
-    /** The scores that depend on the strategy a civilization seeks: what the original adds then, computed from the same preference */
-    private fun seeks(civ: Civilization, strategy: String) = civ.ai.grandStrategyDef()?.victoryType == strategy
+    /** The scores that depend on the victory a civilization goes for (its current victory pursuit): what the original adds then */
+    private fun seeks(civ: Civilization, victoryType: String) = when (victoryType) {
+        "Domination" -> civ.ai.isGoingForWorldConquest()
+        "Scientific" -> civ.ai.isGoingForSpaceshipVictory()
+        "Cultural" -> civ.ai.isGoingForCultureVictory()
+        else -> civ.ai.isGoingForDiploVictory()
+    }
 
     private fun evaluator(civ: Civilization) = LeagueEvaluator(civ, league)
 
@@ -430,20 +435,20 @@ class LeagueAutomationTests {
         setProduction(a, 30f)
         setProduction(b, 20f)
         setProduction(c, 10f)
-        a.ai.grandStrategy = GrandStrategyAi.CULTURE
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         // first of three: ratio 1, +40 and strong production
         assertEquals(40 + 30, evaluator(a).scoreEffects(resolution("World's Fair"), null))
         assertEquals(40 + 40, evaluator(a).scoreEffects(resolution("International Games"), null))
         assertEquals("not seeking science", 40 + 10, evaluator(a).scoreEffects(resolution("International Space Station"), null))
-        a.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         assertEquals(40 + 50, evaluator(a).scoreEffects(resolution("International Space Station"), null))
         assertEquals(40 + 10, evaluator(a).scoreEffects(resolution("World's Fair"), null))
 
         // second of three: ratio 2/3, +20 and still strong
-        b.ai.grandStrategy = GrandStrategyAi.CULTURE
+        b.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(20 + 30, evaluator(b).scoreEffects(resolution("World's Fair"), null))
         // last of three: ratio 1/3, -20 and weak, so the strategy bonus is not given
-        c.ai.grandStrategy = GrandStrategyAi.CULTURE
+        c.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(-20 + 10, evaluator(c).scoreEffects(resolution("World's Fair"), null))
     }
 
@@ -453,7 +458,7 @@ class LeagueAutomationTests {
         setProduction(a, 30f, fromFood = 25f)
         setProduction(b, 20f)
         setProduction(c, 10f)
-        a.ai.grandStrategy = GrandStrategyAi.CULTURE
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(-20 + 10, evaluator(a).scoreEffects(resolution("World's Fair"), null))
     }
     //endregion

@@ -41,11 +41,12 @@ class EconomicMilitaryAiTests {
         game.makeHexagonalMap(6, Constants.grassland)
     }
 
-    /** A major whose personality is all zero except what the test sets */
+    /** A major whose personality is all zero except what the test sets, with no victory pursuit */
     private fun neutralCiv(): Civilization {
         val civ = game.addCiv()
         for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
         for (value in DiplomacyPersonality.entries) civ.ai.setDiplomacyValue(value, 0)
+        civ.ai.setGrandStrategyAndPursuit(null)
         return civ
     }
 
@@ -230,7 +231,7 @@ class EconomicMilitaryAiTests {
         assertTrue(EconomicMilitaryStrategyTests.enoughUnits(civ, Flavor.Ranged, 6, 4))
         assertFalse(EconomicMilitaryStrategyTests.enoughUnits(civ, Flavor.Ranged, 5, 5))
         // the grand strategy's flavor mod counts (GetPersonalityAndGrandStrategy)
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         val conquestRanged = civ.ai.grandStrategyDef()!!.flavorModVector[Flavor.Ranged.ordinal]
         assertEquals(6 + conquestRanged, civ.ai.personalityAndGrandStrategy(Flavor.Ranged))
     }
@@ -248,7 +249,7 @@ class EconomicMilitaryAiTests {
         civ.ai.diplomacy.memoryOf(preparedAgainst).approach = MajorCivApproach.Hostile // ignored: preparing counts instead
         civ.ai.diplomacy.memoryOf(guarded).approach = MajorCivApproach.Guarded
         civ.ai.diplomacy.memoryOf(hostile).approach = MajorCivApproach.Afraid
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         assertEquals(25 + 100 + 25 + 50, EconomicMilitaryStrategyTests.warMobilizationWeight(civ))
     }
 
@@ -329,7 +330,7 @@ class EconomicMilitaryAiTests {
         assertFalse(EconomicMilitaryStrategyTests.expandLikeCrazy(civ, def))
         civ.ai.setPersonalityFlavor(Flavor.Expansion, 10)
         assertTrue(EconomicMilitaryStrategyTests.expandLikeCrazy(civ, def))
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         // 20 - 10 (the culture grand strategy's EXPANSION mod) would pass the threshold, but cities raise policy costs on this map size
         civ.ai.setPersonalityFlavor(Flavor.Expansion, 20)
         assertTrue(civ.ai.personalityAndGrandStrategy(Flavor.Expansion) >= def.weightThreshold)
@@ -434,7 +435,7 @@ class EconomicMilitaryAiTests {
         attacker.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Friendly
         assertEquals(ConquestChoice.Liberate, CityConquestAutomation.chooseConquest(attacker, target))
         attacker.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Bully
-        attacker.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS
+        attacker.ai.setGrandStrategyAndPursuit(GrandStrategyAi.UNITED_NATIONS)
         assertEquals(ConquestChoice.Liberate, CityConquestAutomation.chooseConquest(attacker, target))
     }
 
@@ -453,9 +454,9 @@ class EconomicMilitaryAiTests {
         // only the top 50% (capital, strong) count: the puppet is third
         assertNull(CityConquestAutomation.considerAnnex(civ))
         strong.isPuppet = true
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertNull(CityConquestAutomation.considerAnnex(civ))
-        civ.ai.grandStrategy = null
+        civ.ai.setGrandStrategyAndPursuit(null)
         assertEquals(strong, CityConquestAutomation.considerAnnex(civ))
         assertFalse(strong.isPuppet)
         assertTrue(weak.isPuppet)

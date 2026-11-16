@@ -3,15 +3,16 @@ package com.unciv.logic.automation.diplomacy
 import com.unciv.logic.automation.civilization.CityStateAi
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomacyManager
 import com.unciv.logic.civilization.diplomacy.DiplomaticModifiers
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.league.LeagueAlignmentMemory
+import com.unciv.models.Religion
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
+import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.TraitCategory
 
@@ -130,19 +131,10 @@ object OpinionAi {
         term(DiplomaticModifiers.StealingTerritory, memory.numTimesCultureBombed * rules.define(AiDefine.OPINION_WEIGHT_CULTURE_BOMBED))
         val eraName = DiplomacyTurn.gameEraName(civ)
         val religionEmphasis = rules.eraDiplomacy(eraName).diploEmphasisReligion
-        term(DiplomaticModifiers.ReligiousConversions,
-            memory.negativeReligiousConversionPoints * religionEmphasis * rules.define(AiDefine.OPINION_WEIGHT_PER_NEGATIVE_CONVERSION))
-        val weFollowTheirs = hasOthersReligionInMostCities(civ, other)
-        term(DiplomaticModifiers.WeAdoptedTheirReligion, if (weFollowTheirs) rules.define(AiDefine.OPINION_WEIGHT_ADOPTING_HIS_RELIGION) * religionEmphasis else 0)
-        term(DiplomaticModifiers.TheyAdoptedOurReligion,
-            if (!weFollowTheirs && hasOthersReligionInMostCities(other, civ)) rules.define(AiDefine.OPINION_WEIGHT_ADOPTING_MY_RELIGION) * religionEmphasis else 0)
-        val latePolicies = rules.eraDiplomacy(eraName).diploEmphasisLatePolicies
-        val ourIdeology = civ.getIdeology()
-        val theirIdeology = other.getIdeology()
-        if (ourIdeology != null && theirIdeology != null) {
-            if (ourIdeology == theirIdeology) term(DiplomaticModifiers.SameIdeology, rules.define(AiDefine.OPINION_WEIGHT_SAME_LATE_POLICIES) * latePolicies)
-            else term(DiplomaticModifiers.DifferentIdeology, rules.define(AiDefine.OPINION_WEIGHT_DIFFERENT_LATE_POLICIES) * latePolicies)
-        }
+        term(DiplomaticModifiers.ReligiousConversions, religiousConversionScore(civ, other, rules))
+        religionScore(civ, other, rules)?.let { (modifier, weight) -> term(modifier, weight) }
+        val ideology = ideologyScore(civ, other, rules)
+        if (ideology != 0) term(if (ideology < 0) DiplomaticModifiers.SameIdeology else DiplomaticModifiers.DifferentIdeology, ideology)
         term(DiplomaticModifiers.SpiedOnUs, robbedScore(civ, other, rules))
         term(DiplomaticModifiers.StoleArtifacts, stoleArtifactsScore(civ, other, rules))
 
@@ -611,13 +603,154 @@ object OpinionAi {
             rules.define(AiDefine.EXCAVATED_ARTIFACT_TURNS_UNTIL_FORGIVEN), forgiveness(civ), invert = true)
     }
 
-    /** CvPlayerReligions::HasOthersReligionInMostCities: [civ] founded no religion and more than half its cities follow [other]'s */
-    fun hasOthersReligionInMostCities(civ: Civilization, other: Civilization): Boolean {
-        if (civ.religionManager.religionState >= ReligionState.Religion) return false
-        val theirReligion = other.religionManager.religion ?: return false
-        if (other.religionManager.religionState < ReligionState.Religion) return false
-        val following = civ.cities.count { it.religion.getMajorityReligionName() == theirReligion.name }
-        return following * 2 > civ.cities.size
+    /**
+     *  GetReligiousConversionPointsScore: the conversion points x the era's religion emphasis x OPINION_WEIGHT_PER_NEGATIVE_CONVERSION,
+     *  fading (stacked) over RELIGIOUS_CONVERSION_TURNS_UNTIL_FORGIVEN adjusted by inverted forgiveness
+     */
+    fun religiousConversionScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val m = civ.ai.diplomacy.memoryOf(other)
+        val each = rules.eraDiplomacy(DiplomacyTurn.gameEraName(civ)).diploEmphasisReligion * rules.define(AiDefine.OPINION_WEIGHT_PER_NEGATIVE_CONVERSION)
+        return stacked(civ, m.negativeReligiousConversionPoints, m.religiousConversionTurn, each,
+            rules.define(AiDefine.RELIGIOUS_CONVERSION_TURNS_UNTIL_FORGIVEN), forgiveness(civ), invert = true)
+    }
+
+    /**
+     *  CvPlayerReligions::UpdateStateReligion: the religion we founded while we hold its holy city, else the one whose holy city we
+     *  hold with the most followers in our cities, else the religion of most of our cities (pantheons do not count). The second of the
+     *  pair is whether we hold its holy city (GetOwnedReligion is the state religion then).
+     */
+    fun stateReligion(civ: Civilization): Pair<Religion, Boolean>? {
+        civ.religionManager.getFounderBenefitsReligion()?.let { return it to true }
+        val held = civ.gameInfo.religions.values.filter { religion ->
+            religion.isMajorReligion() && civ.cities.any { it.religion.religionThisIsTheHolyCityOf == religion.name }
+        }.maxByOrNull { religion -> civ.cities.sumOf { it.religion.getFollowersOf(religion.name) } }
+        if (held != null) return held to true
+        return civ.religionManager.getMajorityReligion()?.takeIf { it.isMajorReligion() }?.let { it to false }
+    }
+
+    /** The civilization that holds the holy city of [religion] (VP's controller of a religion), if any */
+    private fun holyCityOwner(civ: Civilization, religion: Religion): Civilization? =
+        civ.gameInfo.getCities().firstOrNull { it.religion.religionThisIsTheHolyCityOf == religion.name }?.civ
+
+    /**
+     *  The era's emphasis for a belief score adjusted by a diplomacy flavor (GetPersonalityFlavorForDiplomacy: the leader's flavor, 0 as
+     *  1): one less below 5 (not below 0), one more above 7
+     */
+    private fun flavoredEmphasis(civ: Civilization, emphasis: Int, flavor: Flavor): Int {
+        val value = civ.ai.personality(flavor).let { if (it == 0) 1 else it }
+        return when {
+            value < 5 -> maxOf(0, emphasis - 1)
+            value > 7 -> emphasis + 1
+            else -> emphasis
+        }
+    }
+
+    /**
+     *  GetReligionScore: with no owned religion but a state religion, a bonus when we adopted their owned religion (x the World
+     *  Religion modifier when it is the World Religion) or share their state religion, unless they converted our cities or took our
+     *  holy city; a penalty for different state religions. With an owned religion: a penalty when they own one too (x the World
+     *  Religion modifier), a bonus when they adopted ours (likewise), else the different owned religions penalty when their state
+     *  religion is controlled (its holy city held) by them, nothing when by us, else the different state religions penalty. Each x the
+     *  era's religion emphasis (adjusted by the religion flavor, +1 with the religious trait). Penalties end when we ignore religious
+     *  differences ([isIgnoreReligionDifferences]). The modifier names the case.
+     */
+    fun religionScore(civ: Civilization, other: Civilization, rules: AiRuleset): Pair<DiplomaticModifiers, Int>? {
+        val ourState = stateReligion(civ)
+        val theirState = stateReligion(other)
+        val ours = ourState?.takeIf { it.second }?.first
+        val theirs = theirState?.takeIf { it.second }?.first
+        var eraMod = flavoredEmphasis(civ, rules.eraDiplomacy(DiplomacyTurn.gameEraName(civ)).diploEmphasisReligion, Flavor.Religion)
+        if (civ.ai.hasTraitCategory(TraitCategory.Religious)) eraMod++
+        val league = civ.gameInfo.league
+        fun world(weight: Int, religion: Religion) =
+            if (league != null && league.getReligionSpreadPercent(religion.name) > 0) weight * rules.define(AiDefine.OPINION_WEIGHT_WORLD_RELIGION_MODIFIER) / 100
+            else weight
+        var result: Pair<DiplomaticModifiers, Int>? = null
+        if (ours == null && ourState != null) {
+            val state = ourState.first
+            if (civ.ai.diplomacy.memoryOf(other).negativeReligiousConversionPoints <= 0 && !holyCityCaptured(civ, other)) {
+                if (state == theirs) result = DiplomaticModifiers.WeAdoptedTheirReligion to
+                    world(rules.define(AiDefine.OPINION_WEIGHT_ADOPTING_HIS_RELIGION) * eraMod, theirs)
+                else if (state == theirState?.first) result = DiplomaticModifiers.SameReligion to rules.define(AiDefine.OPINION_WEIGHT_SAME_STATE_RELIGIONS) * eraMod
+            }
+            if (theirState != null && state != theirState.first)
+                result = DiplomaticModifiers.DifferentReligion to rules.define(AiDefine.OPINION_WEIGHT_DIFFERENT_STATE_RELIGIONS) * eraMod
+        } else if (ours != null) {
+            if (theirs != null) result = DiplomaticModifiers.DifferentReligion to world(rules.define(AiDefine.OPINION_WEIGHT_DIFFERENT_OWNED_RELIGIONS) * eraMod, theirs)
+            else if (theirState != null) {
+                val state = theirState.first
+                if (state == ours) result = DiplomaticModifiers.TheyAdoptedOurReligion to world(rules.define(AiDefine.OPINION_WEIGHT_ADOPTING_MY_RELIGION) * eraMod, ours)
+                else {
+                    val controller = holyCityOwner(civ, state)
+                    if (controller == civ) return null
+                    result = DiplomaticModifiers.DifferentReligion to if (controller == other)
+                        world(rules.define(AiDefine.OPINION_WEIGHT_DIFFERENT_OWNED_RELIGIONS) * eraMod, state)
+                    else rules.define(AiDefine.OPINION_WEIGHT_DIFFERENT_STATE_RELIGIONS) * eraMod
+                }
+            }
+        }
+        if (result != null && result.second > 0 && isIgnoreReligionDifferences(civ, other)) return null
+        return result
+    }
+
+    /** Their coop war with us against anyone is being prepared or fought (VP's GetGlobalCoopWarWithState >= COOP_WAR_STATE_PREPARING) */
+    private fun isPreparingCoopWarWith(civ: Civilization, other: Civilization) =
+        civ.ai.diplomacy.memoryOf(other).coopWars.values.any { it.state == CoopWarState.Soon || it.state == CoopWarState.Accepted }
+
+    /**
+     *  IsIgnoreReligionDifferences: never when they converted our cities, took our holy city or capital (when they resurrected us,
+     *  only taking it counts), are at war with us or untrustworthy; always with the same ideology, when they liberated our capital or
+     *  holy city, resurrected us, are battle brothers, liberated a city of ours recently or prepare a coop war with us. The returned
+     *  capital or holy city by deal, the coop war agreement score and the Celtic no-spread trait have no counterpart: none.
+     */
+    fun isIgnoreReligionDifferences(civ: Civilization, other: Civilization): Boolean {
+        if (!civ.isMajorCiv || !other.isMajorCiv) return true
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        if (memory.negativeReligiousConversionPoints > 0 || holyCityCaptured(civ, other)) return false
+        if (if (memory.resurrectedUs) memory.capturedCapital else capitalCaptured(civ, other)) return false
+        if (civ.isAtWarWith(other) || isUntrustworthyFriend(other)) return false
+        if (civ.getIdeology() != null && civ.getIdeology() == other.getIdeology()) return true
+        if (memory.liberatedCapital || memory.liberatedHolyCity || memory.resurrectedUs || memory.doFLevel == DoFLevel.BattleBrothers) return true
+        if (WarSanityAi.isCityRecentlyLiberatedBy(civ, other)) return true
+        return isPreparingCoopWarWith(civ, other)
+    }
+
+    /**
+     *  GetIdeologyScore: with ideologies on both sides, the same ideology a bonus (x the World Ideology modifier when it has World
+     *  Ideology pressure) and different ones a penalty (likewise when either has), x the era's late policy emphasis adjusted by the
+     *  culture flavor, +1 for the tourism trait or a cultural pursuit (primary or secondary), +1 when close to a culture victory. The
+     *  penalty ends when we ignore ideological differences ([isIgnoreIdeologyDifferences]). Vassal divisors: none.
+     */
+    fun ideologyScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val ours = civ.getIdeology() ?: return 0
+        val theirs = other.getIdeology() ?: return 0
+        var eraMod = flavoredEmphasis(civ, rules.eraDiplomacy(DiplomacyTurn.gameEraName(civ)).diploEmphasisLatePolicies, Flavor.Culture)
+        if (civ.ai.hasTraitCategory(TraitCategory.Tourism) || civ.ai.isCultural() || civ.ai.isSecondaryCultural()) eraMod++
+        if (VictoryProgressAi.cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD)) eraMod++
+        val league = civ.gameInfo.league
+        fun pressure(name: String) = league != null && league.getIdeologyPressure(name) > 0
+        var weight = if (ours == theirs) eraMod * rules.define(AiDefine.OPINION_WEIGHT_SAME_LATE_POLICIES)
+            else eraMod * rules.define(AiDefine.OPINION_WEIGHT_DIFFERENT_LATE_POLICIES)
+        if (pressure(ours.name) || (ours != theirs && pressure(theirs.name)))
+            weight = weight * rules.define(AiDefine.OPINION_WEIGHT_WORLD_IDEOLOGY_MODIFIER) / 100
+        if (weight > 0 && isIgnoreIdeologyDifferences(civ, other)) return 0
+        return weight
+    }
+
+    /**
+     *  IsIgnoreIdeologyDifferences: never when at war or untrustworthy, or when they took our capital (when they resurrected us, only
+     *  taking our capital or holy city counts); always when they liberated our capital, resurrected us, are battle brothers or prepare a
+     *  coop war with us, or liberated our holy city or a city of ours recently. The ideology embargo (Cold War) and the coop war
+     *  agreement score have no counterpart: none.
+     */
+    fun isIgnoreIdeologyDifferences(civ: Civilization, other: Civilization): Boolean {
+        if (!civ.isMajorCiv || !other.isMajorCiv) return true
+        if (civ.isAtWarWith(other) || isUntrustworthyFriend(other)) return false
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        if (if (memory.resurrectedUs) memory.capturedCapital || memory.capturedHolyCity else capitalCaptured(civ, other)) return false
+        if (memory.liberatedCapital || memory.resurrectedUs || memory.doFLevel == DoFLevel.BattleBrothers) return true
+        if (isPreparingCoopWarWith(civ, other)) return true
+        return memory.liberatedHolyCity || WarSanityAi.isCityRecentlyLiberatedBy(civ, other)
     }
 
     private fun hasBrokenMilitaryPromiseWithAnybody(other: Civilization): Boolean =

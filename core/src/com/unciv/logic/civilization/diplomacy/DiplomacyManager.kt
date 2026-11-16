@@ -128,6 +128,7 @@ enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = tr
     StoleArtifacts("You dug up artifacts in our lands"),
     DeclaredFriendshipWithOurEnemies("You have declared friendship with our enemies!"),
     DefensivePactWithOurEnemies("You have a defensive pact with our enemies!"),
+    DifferentReligion("We do not share your faith"),
     BetrayedDeclarationOfFriendship("Your so-called 'friendship' is worth nothing."),
     Denunciation("You have publicly denounced us!"),
     /** No longer written: Vox Populi folds our own denouncement into [Denunciation]; kept so old saves drop it */
@@ -179,6 +180,7 @@ enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = tr
     HasDiplomat("We welcome your diplomat in our capital"),
     ResurrectedUs("You brought us back to life!"),
     DeclarationOfFriendship("We have signed a public declaration of friendship"),
+    SameReligion("We share the same faith"),
     DeclaredFriendshipWithOurAllies("You have declared friendship with our allies"),
     DefensivePact("We have a defensive pact"),
     DefensivePactWithOurAllies("You have a defensive pact with our allies"),

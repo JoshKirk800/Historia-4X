@@ -16,7 +16,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
  *  cost 10 each (5 for an easy target after the Classical era; a phony war 5, 10 in the first two eras). The budget is 10 plus 5 per
  *  major whose original capital we hold (10 in the first two eras). At the limit nobody else keeps a war approach. Below it, a new
  *  war needs: no recent peace treaty with them (PeaceTreatyDampenerTurns, VP's handicap), room in the budget, a war score above 0,
- *  them not immense (VP's exception for an easy and preferred target has no preferred-target input), no 'no new wars' unless endgame
+ *  them not immense unless an easy target with a preferred attack target ([MilitaryAi.havePreferredAttackTarget]), no 'no new wars' unless endgame
  *  aggression or they hold our capital, a declarable war, no recent liberation by them, and a valid approach - war; hostile when
  *  close to world conquest or endgame-aggressive, or close (or, competing for conquest, anywhere) once we cross oceans, or
  *  neighbours; deceptive when close to world conquest or endgame-aggressive, or with neighbours (close across oceans) for a
@@ -72,7 +72,8 @@ object WarTargetAi {
             }
             if (score + cost(other) > limit) continue
             if (warValue(civ, other) <= 0) continue
-            if (WarStateAi.militaryStrengthComparedToUs(civ, other) == StrengthLevel.Immense) continue
+            if (WarStateAi.militaryStrengthComparedToUs(civ, other) == StrengthLevel.Immense
+                && !(WarStateAi.isEasyTarget(civ, other) && civ.ai.military.havePreferredAttackTarget(other))) continue
             val endgame = VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)
             if (WarStateAi.isNoNewWars(civ) && !endgame && !OpinionAi.isCapitalCapturedBy(civ, other)) continue
             if (civ.getDiplomacyManager(other)?.canDeclareWar() != true) continue

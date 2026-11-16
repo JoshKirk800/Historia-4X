@@ -517,26 +517,29 @@ object ApproachAi {
 
     /**
      *  Part 10, MULTIPLIERS (Vox Populi), after part 9 and its cap at zero, on VP's scale. War and hostility by our target value of
-     *  them (MAJOR_WAR_MULTIPLIER_TARGET_*: impossible 25% to soft 150%; none, nothing). By the closer of the two proximities: afraid,
-     *  friendly, deceptive and guarded by APPROACH_MULTIPLIER_PROXIMITY_* (neighbours 150% to distant 50%), war and hostility too when
-     *  neighbours or close, or able to cross the ocean; unable to, war and hostility are 0 towards one we are not close to. With
-     *  Domination off, war and hostility halve (towards an AI, unless only war can end the game); in the AI's aggressive mode war,
-     *  hostility and (when it applies) deception double towards an AI. VP's conquest variants, for an opportunity attack on a good
-     *  attack target (CvMilitaryAI), have no input; nor the vassal and sanction multipliers.
+     *  them (MAJOR_WAR_MULTIPLIER_TARGET_*: impossible 25% to soft 150%; none, nothing) - by CONQUEST_WAR_MULTIPLIER_TARGET_* (50% to
+     *  200%) when we want conquest: an opportunity attack ([wantsOpportunityAttack]) on a player with a preferred attack target
+     *  ([MilitaryAi.havePreferredAttackTarget]). By the closer of the two proximities: afraid, friendly, deceptive and guarded by
+     *  APPROACH_MULTIPLIER_PROXIMITY_* (neighbours 150% to distant 50%), war and hostility too when neighbours or close, or able to cross
+     *  the ocean - by APPROACH_WAR_PROXIMITY_* (200% to 75%) when we want conquest and our own proximity is that one (any for distant);
+     *  unable to cross, war and hostility are 0 towards one we are not close to. With Domination off, war and hostility halve (towards an
+     *  AI, unless only war can end the game); in the AI's aggressive mode war, hostility and (when it applies) deception double towards
+     *  an AI. The vassal and sanction multipliers have no input.
      */
     private fun applyMultipliers(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
         fun warAndHostile(modifier: Int) {
             w[WAR] = percent(w[WAR], modifier)
             w[HOSTILE] = percent(w[HOSTILE], modifier)
         }
+        val wantsConquest = wantsOpportunityAttack(civ, other, rules) && civ.ai.military.havePreferredAttackTarget(other)
         when (WarStateAi.targetValue(civ, other)) {
-            TargetValue.Impossible -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_IMPOSSIBLE)
-            TargetValue.Bad -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_BAD)
-            TargetValue.Average -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_AVERAGE)
-            TargetValue.Favorable -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_FAVORABLE)
-            TargetValue.Soft -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_SOFT)
+            TargetValue.Impossible -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_IMPOSSIBLE else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_IMPOSSIBLE
+            TargetValue.Bad -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_BAD else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_BAD
+            TargetValue.Average -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_AVERAGE else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_AVERAGE
+            TargetValue.Favorable -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_FAVORABLE else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_FAVORABLE
+            TargetValue.Soft -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_SOFT else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_SOFT
             null -> null
-        }?.let { warAndHostile(it) }
+        }?.let { warAndHostile(rules.define(it)) }
         val ours = DiplomacyTurn.proximity(civ, other)
         val closest = maxOf(ours, DiplomacyTurn.proximity(other, civ))
         val canCrossOcean = civ.tech.embarkedUnitsCanEnterOcean || civ.tech.allUnitsCanEnterOcean
@@ -546,8 +549,15 @@ object ApproachAi {
             DiplomacyTurn.PROXIMITY_FAR -> AiDefine.APPROACH_MULTIPLIER_PROXIMITY_FAR
             else -> AiDefine.APPROACH_MULTIPLIER_PROXIMITY_DISTANT
         })
+        val conquestProximity = wantsConquest && (ours == closest || closest < DiplomacyTurn.PROXIMITY_FAR)
+        val warProximityModifier = if (!conquestProximity) proximityModifier else rules.define(when (closest) {
+            DiplomacyTurn.PROXIMITY_NEIGHBORS -> AiDefine.APPROACH_WAR_PROXIMITY_NEIGHBORS
+            DiplomacyTurn.PROXIMITY_CLOSE -> AiDefine.APPROACH_WAR_PROXIMITY_CLOSE
+            DiplomacyTurn.PROXIMITY_FAR -> AiDefine.APPROACH_WAR_PROXIMITY_FAR
+            else -> AiDefine.APPROACH_WAR_PROXIMITY_DISTANT
+        })
         for (i in intArrayOf(AFRAID, FRIENDLY, DECEPTIVE, GUARDED)) w[i] = percent(w[i], proximityModifier)
-        if (canCrossOcean || closest >= DiplomacyTurn.PROXIMITY_CLOSE) warAndHostile(proximityModifier)
+        if (canCrossOcean || closest >= DiplomacyTurn.PROXIMITY_CLOSE) warAndHostile(warProximityModifier)
         if (!canCrossOcean && ours < DiplomacyTurn.PROXIMITY_CLOSE) {
             w[WAR] = 0
             w[HOSTILE] = 0
@@ -567,16 +577,17 @@ object ApproachAi {
 
     /**
      *  Part 12, zero-out conditions (Vox Populi), each also setting the approach's last-turn value to 0 in [overrides]:
-     *  a recent peace treaty (after a war, within TURNS_SINCE_PEACE_WEIGHT_DAMPENER turns) zeroes war and hostile in the final pass; a war
-     *  we cannot declare does too (not in the strategic pass when only the treaty stops it); afraid goes when they cannot declare war on
-     *  us; hostile (and war, if they resurrected us) towards a liberator. Not yet: no possible attack target, war bankruptcy, liberated
-     *  capitals and recent liberations (inputs of branch B2).
+     *  no possible attack target among their cities ([MilitaryAi.havePossibleAttackTarget]) zeroes war and hostile; so does a recent
+     *  peace treaty (after a war, within TURNS_SINCE_PEACE_WEIGHT_DAMPENER turns) in the final pass, and a war we cannot declare (not in
+     *  the strategic pass when only the treaty stops it); afraid goes when they cannot declare war on us; hostile (and war, if they
+     *  resurrected us) towards a liberator. Not yet: war bankruptcy, liberated capitals and recent liberations (inputs of branch B2).
      *  @return VP's bNoFriendlyObvious as far as we have it (we or they denounced, or they are untrustworthy), else its bNoFriendly (they
-     *  provoked us, are an easy target and we want an opportunity attack; a good attack target has no input); either sets friendly to 0
-     *  in the strategic pass
+     *  provoked us, we want an opportunity attack, and they are an easy target or not stronger than Strong with a preferred attack
+     *  target); either sets friendly to 0 in the strategic pass
      */
     private fun zeroOut(civ: Civilization, other: Civilization, strategic: Boolean, w: IntArray, overrides: IntArray, rules: AiRuleset): NoFriendly {
         fun zero(i: Int) { w[i] = 0; overrides[i] = 0 }
+        if (!civ.ai.military.havePossibleAttackTarget(other)) { zero(WAR); zero(HOSTILE) }
         val memory = civ.ai.diplomacy.memoryOf(other)
         val atWar = civ.isAtWarWith(other)
         val recentPeace = memory.numWarsFought > 0 && memory.turnMadePeace > -1 &&
@@ -591,9 +602,11 @@ object ApproachAi {
         val liberator = memory.resurrectedUs && memory.numCitiesCapturedBy <= memory.numCitiesLiberated
         if (liberator && !capturedKeyCity && !atWar && !untrustworthy) { zero(HOSTILE); zero(WAR) }
         val obvious = OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ) || untrustworthy
+        val goodTarget = WarStateAi.isEasyTarget(civ, other) || (WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average) < StrengthLevel.Strong
+            && civ.ai.military.havePreferredAttackTarget(other)
         val noFriendly = when {
             obvious -> NoFriendly.Obvious
-            provokedUs(civ, other) && WarStateAi.isEasyTarget(civ, other) && wantsOpportunityAttack(civ, other, rules) -> NoFriendly.Opportunity
+            provokedUs(civ, other) && goodTarget && wantsOpportunityAttack(civ, other, rules) -> NoFriendly.Opportunity
             else -> NoFriendly.None
         }
         if (strategic && noFriendly != NoFriendly.None) w[FRIENDLY] = 0
@@ -753,18 +766,29 @@ object ApproachAi {
     }
 
     /**
+     *  iAttackMultiplier and iTheirAttackMultiplier of SelectBestApproachTowardsMajorCiv (Vox Populi): 1, + 1 when they are our easy
+     *  target ([WarStateAi.isEasyTarget]), + 1 with a preferred attack target among their cities ([MilitaryAi.havePreferredAttackTarget]);
+     *  theirs 1, + 1 when we are their easy target, + 1 when our cities are exposed to them ([MilitaryAi.isExposedToEnemy])
+     */
+    fun attackMultipliers(civ: Civilization, other: Civilization): Pair<Int, Int> {
+        var attack = if (WarStateAi.isEasyTarget(civ, other)) 2 else 1
+        var theirAttack = if (WarStateAi.isEasyTarget(other, civ)) 2 else 1
+        if (civ.ai.military.havePreferredAttackTarget(other)) attack++
+        if (civ.ai.military.isExposedToEnemy(civ, null, other)) theirAttack++
+        return attack to theirAttack
+    }
+
+    /**
      *  Part 5 of Vox Populi's SelectBestApproachTowardsMajorCiv, WARMONGER THREAT and STRENGTH COMPARED TO US (in place of BNW's military
      *  threat term): a severe or critical warmonger is met with war, hostility and caution by our warmonger hate, a minor one with
      *  friendliness; a weaker player invites war (more when we want an opportunity attack, deceptive only when deception applies), a
      *  stronger one friendliness, caution or fear. Economic strength counts the same way, but a rich player is feared only when also
-     *  strong. The attack multipliers: 2 against an easy target of ours, 2 for them if we are theirs (VP's good attack targets and
-     *  exposure, CvMilitaryAI, have no input).
+     *  strong. Our weights scale by the attack multipliers ([attackMultipliers]).
      */
     private fun addStrengthWeights(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
         val hate = civ.ai.diplomacyValue(DiplomacyPersonality.WarmongerHate)
-        val attack = if (WarStateAi.isEasyTarget(civ, other)) 2 else 1 // iAttackMultiplier
-        val theirAttack = if (WarStateAi.isEasyTarget(other, civ)) 2 else 1 // iTheirAttackMultiplier
+        val (attack, theirAttack) = attackMultipliers(civ, other) // iAttackMultiplier, iTheirAttackMultiplier
         when (civ.ai.diplomacy.warmongerThreat(other)) {
             AiThreat.Critical -> {
                 w[WAR] += bias(MajorCivApproach.War) * hate * 2
@@ -902,15 +926,17 @@ object ApproachAi {
      *  finished, Exploration opened and finished (when we can cross the ocean from the Medieval era, have 2 coastal cities and they 1: the
      *  non-VP-balance rule, our Exploration being BNW's), Autocracy, each more with an opportunity attack; scaled by boldness (war),
      *  meanness (hostile), denounce willingness (deceptive, only when deception applies) x the difficulty's victory dispute or block
-     *  percent / 500; twice for one going for or close to world conquest; deceptive left out when close to it.
-     *  Left out until their inputs exist: temporary attack bonuses, victory dispute levels, easy and good targets.
+     *  percent / 500; twice for one going for or close to world conquest; deceptive left out when close to it or against an easy target
+     *  with a preferred attack target (bNoHiding). The bonuses scale by our attack multiplier ([attackMultipliers]).
+     *  Left out until their inputs exist: temporary attack bonuses, victory dispute levels.
      */
     private fun addWarBonuses(civ: Civilization, other: Civilization, closeToConquest: Boolean, w: IntArray, rules: AiRuleset) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
         val handicap = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values
         val opportunity = wantsOpportunityAttack(civ, other, rules)
         val deception = appliesDeception(civ, other, rules)
-        val attack = if (WarStateAi.isEasyTarget(civ, other)) 2 else 1 // iAttackMultiplier
+        val easy = WarStateAi.isEasyTarget(civ, other)
+        val attack = attackMultipliers(civ, other).first // iAttackMultiplier
         val opinion = civ.ai.diplomacy.memoryOf(other).opinion
         if (opinion < MajorCivOpinion.Neutral) {
             // VP's opinion order is the same up to neutral: Unforgivable 0, Enemy 1, Competitor 2
@@ -923,7 +949,7 @@ object ApproachAi {
                     w[WAR] += bias(MajorCivApproach.War) * difficultyBonus
                     w[HOSTILE] += bias(MajorCivApproach.Hostile) * difficultyBonus
                 }
-                if (attack > 1) { // an easy target
+                if (easy) {
                     w[WAR] += bias(MajorCivApproach.War) * difficultyBonus / 2
                     w[HOSTILE] += bias(MajorCivApproach.Hostile) * difficultyBonus / 2
                 }
@@ -967,7 +993,8 @@ object ApproachAi {
         val times = if (conqueror || closeToConquest) 2 else 1
         w[WAR] += war * times
         w[HOSTILE] += hostile * times
-        if (!closeToConquest) w[DECEPTIVE] += deceptive * times
+        val noHiding = closeToConquest || (easy && civ.ai.military.havePreferredAttackTarget(other))
+        if (!noHiding) w[DECEPTIVE] += deceptive * times
     }
 
     /**
@@ -996,10 +1023,11 @@ object ApproachAi {
      *  We have weapons and they do not: War and Hostile + bias × 8, only when we want an opportunity attack ([wantsOpportunityAttack]).
      *  They have them and we do not, likely 60 and up: Afraid + bias × 5. Both, likely 30 and up: Guarded + bias × 2 - caution only.
      *  They nuked us (at most 10 times counted): War and Hostile + bias × times / 2, Guarded and Afraid + bias × times.
-     *  VP's attack multipliers for an easy or exposed target are 1: we have neither notion (step 0 of the plan).
+     *  Our war and hostility scale by our attack multiplier, their afraid and guarded terms by theirs ([attackMultipliers]), as in VP.
      */
     private fun addNukeWeights(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
+        val (attack, theirAttack) = attackMultipliers(civ, other)
         val theirNukes = other.units.getCivUnits().any { it.isNuclearWeapon() }
         val ourNukes = civ.units.getCivUnits().any { it.isNuclearWeapon() }
         val timesNukedByThem = civ.ai.diplomacy.memories[other.civID]?.numTimesNuked ?: 0
@@ -1013,13 +1041,13 @@ object ApproachAi {
             }
             if (ourNukes && !theirNukes) {
                 if (wantsOpportunityAttack(civ, other, rules)) {
-                    w[WAR] += bias(MajorCivApproach.War) * 8
-                    w[HOSTILE] += bias(MajorCivApproach.Hostile) * 8
+                    w[WAR] += bias(MajorCivApproach.War) * 8 * attack
+                    w[HOSTILE] += bias(MajorCivApproach.Hostile) * 8 * attack
                 }
             } else if (theirNukes && !ourNukes && likelihood >= 60) {
-                w[AFRAID] += bias(MajorCivApproach.Afraid) * 5
+                w[AFRAID] += bias(MajorCivApproach.Afraid) * 5 * theirAttack
             } else if (theirNukes && ourNukes && likelihood >= 30) {
-                w[GUARDED] += bias(MajorCivApproach.Guarded) * 2
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * 2 * theirAttack
             }
         }
         if (timesNukedByThem > 0) {
@@ -1027,7 +1055,7 @@ object ApproachAi {
             w[WAR] += bias(MajorCivApproach.War) * times / 2
             w[HOSTILE] += bias(MajorCivApproach.Hostile) * times / 2
             w[GUARDED] += bias(MajorCivApproach.Guarded) * times
-            w[AFRAID] += bias(MajorCivApproach.Afraid) * times
+            w[AFRAID] += bias(MajorCivApproach.Afraid) * times * theirAttack
         }
     }
 
@@ -1149,15 +1177,16 @@ object ApproachAi {
      *  ([WarStateAi.isNoNewWars]: then only when endgame-aggressive towards them, they took a key city of ours or they are close to world
      *  conquest), with a reason that depends on whether we hold back: we hold back from distant players and, unless they are
      *  untrustworthy, took our capital or holy city, or the game is conquest-only, from those with a declaration of friendship or a
-     *  defensive pact with us. Holding back, a reason is: we or they are close to world conquest, they provoked us, they took a key city
-     *  of ours, their warmonger threat is severe, they are an early-game competitor or our biggest competitor, [victoryConcern], or the
-     *  game is conquest-only. Not holding back: we go for world conquest from the Medieval era, they took a key city, [victoryConcern],
-     *  a severe warmonger threat, either of us close to world conquest, a major competitor, or a conquest-only game; and when they are
-     *  close or neighbours, also: we go for world conquest, they provoked us, our opinion of them is Enemy or worse, an early-game
-     *  competitor, or a reckless expander.
-     *  Left out (no counterpart): easy and good targets, the league competitor, wonder spammers, our own backstabber flag, the conqueror
-     *  traits, earlier friendship that ended. "Provoked" is a demand of theirs while we are at war (VP also counts a demand we accepted or
-     *  a second demand, which we do not track).
+     *  defensive pact with us (unless we are bold and they are an easy target with a preferred attack target) and earlier friends (unless
+     *  we are bold and they are an easy target or have a preferred attack target). Holding back, a reason is: we or they are close to
+     *  world conquest, they provoked us, they took a key city of ours, their warmonger threat is severe, they are an early-game
+     *  competitor or our biggest competitor, [victoryConcern], or the game is conquest-only. Not holding back: we go for world conquest
+     *  from the Medieval era, they took a key city, [victoryConcern], a severe warmonger threat, either of us close to world conquest, a
+     *  major competitor, or a conquest-only game; and when they are close or neighbours, also: we go for world conquest, they provoked
+     *  us, our opinion of them is Enemy or worse, an early-game competitor, an easy target we see as a competitor or worse, or a reckless
+     *  expander.
+     *  Left out (no counterpart): the league competitor, wonder spammers, our own backstabber flag, the conqueror traits. "Provoked" is a
+     *  demand of theirs while we are at war (VP also counts a demand we accepted or a second demand, which we do not track).
      */
     fun wantsOpportunityAttack(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
         if (CoopWarAi.isLockedIntoCoopWar(civ, other, rules)) return true
@@ -1174,15 +1203,19 @@ object ApproachAi {
         val severeThreat = civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe
         val concern = victoryConcern(civ, other, rules)
         val earlyGameCompetitor = CompetitorAi.isEarlyGameCompetitor(civ, other, rules)
-        val friendOrAlly = OpinionAi.isDoFAccepted(civ, other) || civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
+        val easy = WarStateAi.isEasyTarget(civ, other)
+        val goodTarget = civ.ai.military.havePreferredAttackTarget(other)
         val bold = civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 ||
             (VictoryProgressAi.isCompetingForVictory(civ) && civ.ai.isGoingForWorldConquest())
-        // Friends before (a DoF level of friends or more), not competitors, still liked: held back too, unless bold against an easy target
+        // Friends or allies now: held back, unless bold against an easy target with a preferred attack target
+        val friendOrAlly = (OpinionAi.isDoFAccepted(civ, other) || civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact)
+        val heldFriend = friendOrAlly && (!bold || !easy || !goodTarget)
+        // Friends before (a DoF level of friends or more), not competitors, still liked: held back too, unless bold against an easy or good target
         val pastFriends = !friendOrAlly && (memory?.doFLevel ?: DoFLevel.New) >= DoFLevel.Friends &&
             !CompetitorAi.isMajorCompetitor(civ, other) && !earlyGameCompetitor &&
-            (memory?.opinion ?: MajorCivOpinion.Neutral) >= MajorCivOpinion.Competitor && (!bold || !WarStateAi.isEasyTarget(civ, other))
+            (memory?.opinion ?: MajorCivOpinion.Neutral) >= MajorCivOpinion.Competitor && (!bold || !(easy || goodTarget))
         val holdBack = proximity <= DiplomacyTurn.PROXIMITY_FAR || (!OpinionAi.isUntrustworthyFriend(other) && !tookKeyCity && !aggressiveMode
-            && (friendOrAlly || pastFriends))
+            && (heldFriend || pastFriends))
         if (holdBack)
             return closeToConquest || provokedUs || tookKeyCity || severeThreat || earlyGameCompetitor
                 || CompetitorAi.biggestCompetitor(civ) == other.civID || concern || theyAreClose || aggressiveMode
@@ -1191,7 +1224,7 @@ object ApproachAi {
             || theyAreClose || CompetitorAi.isMajorCompetitor(civ, other) || aggressiveMode) return true
         return proximity >= DiplomacyTurn.PROXIMITY_CLOSE && (civ.ai.isGoingForWorldConquest() || provokedUs
             || (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Enemy || earlyGameCompetitor
-            || (WarStateAi.isEasyTarget(civ, other) && (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Competitor)
+            || (easy && (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Competitor)
             || WarStateAi.isPlayerRecklessExpander(civ, other))
     }
 

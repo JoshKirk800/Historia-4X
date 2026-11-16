@@ -177,11 +177,12 @@ object WarStateAi {
      *  city of theirs for 30 turns: not easy. A city-state: easy when a favourable target or better. Not easy either when another war of
      *  ours (unless this one is phony) goes defensive or worse, or (for a major target) calm or worse against a foe still taking new
      *  wars. Easy when they are in terrible shape. Otherwise deterrents (we are unhappy, they took more of our cities than we of theirs,
-     *  their combat rating beats ours, we are less aggressive, we do not want to conquer them) against aggravators (a coop war against
-     *  them, they are unhappy and we are not, we took more of their cities, our rating beats theirs, we are more aggressive, we want to
-     *  conquer them) choose between their raw and adjusted target value and strength (one form each here) and settle it by VP's table.
-     *  VP's preferred attack target and exposure (CvMilitaryAI), Nuclear Gandhi and the leader traits have no input: a conqueror is one
-     *  going for world conquest, a scientist one going for a spaceship.
+     *  their combat rating beats ours, we are less aggressive, we do not want to conquer them, our cities are exposed to them -
+     *  [MilitaryAi.isExposedToEnemy]) against aggravators (a coop war against them, they are unhappy and we are not, we took more of their
+     *  cities, our rating beats theirs, we are more aggressive, we want to conquer them, a preferred attack target among their cities -
+     *  [MilitaryAi.havePreferredAttackTarget]) choose between their raw and adjusted target value and strength (one form each here) and
+     *  settle it by VP's table. Nuclear Gandhi and the leader traits have no input: a conqueror is one going for world conquest, a
+     *  scientist one going for a spaceship.
      */
     fun updateEasyTargets(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
         val conqueror = civ.ai.isGoingForWorldConquest()
@@ -228,9 +229,10 @@ object WarStateAi {
             ourMemory.opinion == MajorCivOpinion.Unforgivable || civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe ||
             CoopWarAi.isLockedIntoCoopWar(civ, other, rules) || CompetitorAi.isEarlyGameCompetitor(civ, other, rules)
         val deterrents = listOf(unhappy, skillPenalty, ourMemory.numCitiesCapturedBy > theirMemory.numCitiesCapturedBy,
-            lessAggressive, !wantsConquest).count { it }
+            lessAggressive, !wantsConquest, civ.ai.military.isExposedToEnemy(civ, null, other)).count { it }
         val aggravators = listOf(coop == CoopWarState.Soon || coop == CoopWarState.Accepted, !unhappy && other.getHappiness() < 0,
-            theirMemory.numCitiesCapturedBy > ourMemory.numCitiesCapturedBy, skillBoost, moreAggressive, wantsConquest).count { it }
+            theirMemory.numCitiesCapturedBy > ourMemory.numCitiesCapturedBy, skillBoost, moreAggressive, wantsConquest,
+            civ.ai.military.havePreferredAttackTarget(other)).count { it }
         val noNewWars = memory.noNewWars && !civ.isAtWarWith(other)
         val military = memory.militaryStrengths[other.civID] ?: StrengthLevel.Average
         val economic = ourMemory.economicStrength ?: StrengthLevel.Average

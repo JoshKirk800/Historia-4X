@@ -22,7 +22,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
  *  As none (no input yet): vassals, the league's prime competitor and ally, sanctions, victory dispute and block levels, plots and coups
  *  against us, the coop war agreement score, liberated or returned capitals and holy cities, strategic trade partners, DoF-to-votes
  *  policies, victory pursuits (conqueror, diplomat, scientist, cultural) and leader traits, teams. VP's defensive pact half follows
- *  in its own branch (`phaseE/vp-approach-plan.md`, C3b-2).
+ *  ([PactPlanningAi.updatePacts]).
  */
 object FriendshipPlanningAi {
 
@@ -99,6 +99,7 @@ object FriendshipPlanningAi {
             }
         }
         ai.mostValuableFriend = mostValuableFriend?.civID
+        PactPlanningAi.updatePacts(civ, valid, acceptable, mostValuableFriend, bestFriendPossible)
     }
 
     /** The order DoUpdatePlanningExchanges walks the candidates in: by their strategic friendly, neutral, afraid, then deceptive values */

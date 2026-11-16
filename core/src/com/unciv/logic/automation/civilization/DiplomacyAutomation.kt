@@ -26,6 +26,7 @@ import com.unciv.logic.automation.diplomacy.WarSanityAi
 import com.unciv.logic.automation.strategy.PurchaseType
 import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.automation.strategy.TargetValue
+import com.unciv.logic.automation.strategy.WarAlliesAi
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.Civilization
@@ -115,10 +116,11 @@ object DiplomacyAutomation {
         if (doCoopWarStatement(civ, other, rules)) return
         if (doMakeDemand(civ, other, rules)) return
         if (InformationalStatementAi.contact(civ, other)) return
-        // VP's order: end a friendship (or denounce the friend), denounce, then offer one
+        // VP's order: end a friendship (or denounce the friend), denounce, offer a friendship, then a defensive pact
         if (doEndDoFStatement(civ, other)) return
         if (doDenounceStatement(civ, other)) return
         if (doDoFStatement(civ, other)) return
+        if (doDefensivePactOffer(civ, other)) return
         doRequestFriendDenounceStatement(civ, other)
     }
 
@@ -228,6 +230,31 @@ object DiplomacyAutomation {
             sendStatement(civ, other, DiploStatement.EndWorkWithUs)
             civ.getDiplomacyManager(other)!!.endDeclarationOfFriendship()
         }
+        return true
+    }
+
+    /**
+     *  CvDiplomacyAI::DoDefensivePactOffer: no exchanges to avoid with them, both want the pact ([PactPlanningAi.updatePacts]; a human
+     *  is asked anyway), 20 turns since the last offer, and a balanced deal ([DealAi.isMakeOfferForDefensivePact]). A human gets the
+     *  trade request; an AI's deal is carried out.
+     */
+    private fun doDefensivePactOffer(civ: Civilization, other: Civilization): Boolean {
+        if (WarAlliesAi.avoidExchangesWithPlayer(civ, other)) return false
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        if (!memory.wantsDefensivePact) return false
+        if (!other.isHuman() && !other.ai.diplomacy.memoryOf(civ).wantsDefensivePact) return false
+        if (turnsSinceStatement(civ, memory, DiploStatement.DefensivePactRequest) < 20) return false
+        val trade = Trade()
+        if (!DealAi.isMakeOfferForDefensivePact(civ, other, trade)) return false
+        sendStatement(civ, other, DiploStatement.DefensivePactRequest)
+        if (!TradeEvaluation().isTradeValid(trade, civ, other)) return true
+        if (other.isHuman()) {
+            if (other.tradeRequests.none { it.requestingCiv == civ.civID }) other.tradeRequests.add(TradeRequest(civ.civID, trade.reverse()))
+            return true
+        }
+        val logic = TradeLogic(civ, other)
+        logic.currentTrade.set(trade)
+        logic.acceptTrade()
         return true
     }
 

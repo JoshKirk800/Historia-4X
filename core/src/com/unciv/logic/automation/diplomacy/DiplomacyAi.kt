@@ -170,6 +170,9 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     /** CvDiplomacyAI::IsWantsDoFWithPlayer / IsWantsToEndDoFWithPlayer (Vox Populi): set each turn by [FriendshipPlanningAi.updateFriendships] */
     var wantsDoF = false
     var wantsToEndDoF = false
+    /** CvDiplomacyAI::IsWantsDefensivePactWithPlayer / IsWantsToEndDefensivePactWithPlayer (Vox Populi): set by [PactPlanningAi.updatePacts] */
+    var wantsDefensivePact = false
+    var wantsToEndDefensivePact = false
     /** CvDiplomacyAI::m_paiPlayerMadeExpansionPromiseTurn: turn they promised not to expand towards us, -1 = never (EverMadeExpansionPromise) */
     var expansionPromiseTurn = -1
     /** CvDiplomacyAI::m_paePlayerExpansionPromiseData: their expansion posture when they promised; the promise breaks when it rises above it */
@@ -260,6 +263,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.brokenNoDiggingPromise = brokenNoDiggingPromise; copy.ignoredNoDiggingPromise = ignoredNoDiggingPromise
         copy.brokenCoopWarPromise = brokenCoopWarPromise; copy.wantsResearchAgreement = wantsResearchAgreement
         copy.wantsDoF = wantsDoF; copy.wantsToEndDoF = wantsToEndDoF
+        copy.wantsDefensivePact = wantsDefensivePact; copy.wantsToEndDefensivePact = wantsToEndDefensivePact
         copy.expansionPromiseTurn = expansionPromiseTurn; copy.expansionPromisePosture = expansionPromisePosture
         copy.borderPromiseTurn = borderPromiseTurn; copy.borderPromisePosture = borderPromisePosture
         copy.protectedMinorAttacked = protectedMinorAttacked; copy.protectedMinorAttackedUnseen = protectedMinorAttackedUnseen
@@ -300,6 +304,8 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     var wondersConstructed = 0
     /** CvDiplomacyAI::GetMostValuableFriend (Vox Populi), civID; null = none. Set each turn by [FriendshipPlanningAi.updateFriendships] */
     var mostValuableFriend: String? = null
+    /** CvDiplomacyAI::GetMostValuableAlly (Vox Populi), civID; null = none. Set by [PactPlanningAi.updatePacts] */
+    var mostValuableAlly: String? = null
     /** The turn of CvDiplomacyAI::HasEndedFriendshipThisTurn: we last broke a friendship (war, denouncement or ending it), -1 = never */
     var endedFriendshipTurn = -1
 
@@ -317,6 +323,7 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         copy.insaneTargets.addAll(insaneTargets)
         copy.wondersConstructed = wondersConstructed
         copy.mostValuableFriend = mostValuableFriend
+        copy.mostValuableAlly = mostValuableAlly
         copy.endedFriendshipTurn = endedFriendshipTurn
         return copy
     }

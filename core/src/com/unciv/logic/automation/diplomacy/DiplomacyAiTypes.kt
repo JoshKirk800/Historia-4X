@@ -41,7 +41,7 @@ enum class CoopWarState { Rejected, Soon, Accepted }
 /** The DiploStatementTypes this port sends, kept in the statement log for their resend intervals */
 enum class DiploStatement {
     WorkWithUs, EndWorkWithUs, DenounceFriend, Denounce, DenounceRandFailed, RequestFriendDenounce, CoopWarRequest, CoopWarTime,
-    Demand, Request, RequestRandFailed, RequestPeace, AggressiveMilitaryWarning,
+    Demand, Request, RequestRandFailed, RequestPeace, AggressiveMilitaryWarning, DefensivePactRequest,
     // The informational statements before the friendship statement (InformationalStatementAi)
     AttackedProtectedCityState, BulliedProtectedCityState, ExpansionWarning, ExpansionBrokenPromise, PlotBuyingWarning, PlotBuyingBrokenPromise,
     WeAttackedYourMinor, WeBulliedYourMinor, KilledYourSpy, KilledMySpy, CaughtYourSpy,

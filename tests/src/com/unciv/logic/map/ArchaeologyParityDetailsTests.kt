@@ -2,6 +2,7 @@ package com.unciv.logic.map
 
 import com.unciv.json.json
 import com.unciv.logic.automation.diplomacy.OpinionAi
+import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.city.City
@@ -146,9 +147,10 @@ class ArchaeologyParityDetailsTests {
         game.gameInfo.currentPlayerCiv = owner
         game.gameInfo.nextTurn()
         assertFalse(diplomacy.hasFlag(DiplomacyFlags.AgreedToNotDigInOurLands))
-        // GetBrokenNoDiggingPromiseScore: 30, permanent
+        // GetBrokenNoDiggingPromiseScore: in full on the turn of the break
         OpinionAi.updateOpinion(owner, builder)
-        assertEquals(-30f, diplomacy.diplomaticModifiers[DiplomaticModifiers.BetrayedPromiseToNotDigInOurLands.name]!!, 0.001f)
+        val broken = game.ruleset.ai.define(AiDefine.OPINION_WEIGHT_BROKEN_NO_DIG_PROMISE).toFloat()
+        assertEquals(-broken, diplomacy.diplomaticModifiers[DiplomaticModifiers.BetrayedPromiseToNotDigInOurLands.name]!!, 0.001f)
         assertTrue(builder.popupAlerts.any { it.type == AlertType.DugInOurLandsDespitePromise })
         assertEquals(10, diplomacy.clone().negativeArchaeologyPoints)
         val restored = json().fromJson(DiplomacyManager::class.java, json().toJson(diplomacy))
@@ -158,16 +160,17 @@ class ArchaeologyParityDetailsTests {
     }
 
     @Test
-    fun `refusing the dig promise costs twenty opinion and remains remembered`() {
+    fun `refusing the dig promise costs its opinion weight and the refusal stays remembered`() {
         val diplomacy = owner.getDiplomacyManager(builder)!!
         builder.getDiplomacyManager(owner)!!.refuseDemand(Demand.DoNotDigInOurLands)
         OpinionAi.updateOpinion(owner, builder)
-        assertEquals(-20f, diplomacy.diplomaticModifiers[DiplomaticModifiers.IgnoredRequestToStopDigging.name] ?: 0f, 0.001f)
+        val ignored = game.ruleset.ai.define(AiDefine.OPINION_WEIGHT_IGNORED_NO_DIG_PROMISE).toFloat()
+        assertEquals(-ignored, diplomacy.diplomaticModifiers[DiplomaticModifiers.IgnoredRequestToStopDigging.name] ?: 0f, 0.001f)
         assertFalse(diplomacy.hasModifier(DiplomaticModifiers.BetrayedPromiseToNotDigInOurLands))
         repeat(120) { with(DiplomacyTurnManager) { diplomacy.nextTurn() } }
         assertTrue(diplomacy.hasFlag(DiplomacyFlags.IgnoreThemDiggingInOurLands))
         OpinionAi.updateOpinion(owner, builder)
-        assertEquals(-20f, diplomacy.diplomaticModifiers[DiplomaticModifiers.IgnoredRequestToStopDigging.name] ?: 0f, 0.001f)
+        assertEquals(-ignored, diplomacy.diplomaticModifiers[DiplomaticModifiers.IgnoredRequestToStopDigging.name] ?: 0f, 0.001f)
     }
 
     @Test

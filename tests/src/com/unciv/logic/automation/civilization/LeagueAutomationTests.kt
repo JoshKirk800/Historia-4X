@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.city.CityStats
 import com.unciv.logic.civilization.Civilization
@@ -170,6 +171,38 @@ class LeagueAutomationTests {
         assertEquals(LeagueAlignment.RIVAL, LeagueAutomation.evaluateAlignment(b, c))
         gameInfo.turns += 45
         assertEquals(LeagueAlignment.NEUTRAL, LeagueAutomation.evaluateAlignment(b, a))
+    }
+
+    @Test
+    fun `the proposer weighs the support it got by the share of the votes each supporter cast`() {
+        for (member in league.members.values) member.proposalsLeft = 0
+        league.members.getValue(b.civID).proposalsLeft = 1
+        league.proposeEnact(resolution("World's Fair"), null, b)
+        startSession()
+        val fair = onTable().single()
+        for (civ in majors) league.vote(fair.id, civ, league.getDelegatesLeft(civ), League.YES)
+        val share = league.getDelegates(a) * 100 / majors.sumOf { league.getDelegates(it) }
+        league.doTurn()
+        val memory = league.members.getValue(b.civID).alignmentMemory.getValue(a.civID)
+        assertEquals(-share, memory.proposalSupportDelta)
+        // OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL (-10) towards _MAX (-60) by 2% per percent of the vote
+        val rules = game.ruleset.ai
+        val expected = -10 + (-60 + 10) * minOf(100, share * 2) / 100
+        val score = OpinionAi.supportedOurProposalScore(b, memory, rules)
+        assertTrue("support share $share: $score", score == expected || score == expected * 167 / 100)
+    }
+
+    @Test
+    fun `an attempted embargo on us counts half until one passes`() {
+        for (member in league.members.values) member.proposalsLeft = 0
+        league.members.getValue(b.civID).proposalsLeft = 1
+        league.proposeEnact(resolution("Embargo"), a.civID, b)
+        val memory = league.members.getValue(a.civID).alignmentMemory.getValue(b.civID)
+        val rules = game.ruleset.ai
+        val attempted = OpinionAi.sanctionedUsScore(a, memory, rules)
+        assertTrue("attempted: $attempted", attempted > 0)
+        memory.everSanctioned = true
+        assertEquals(attempted * 2, OpinionAi.sanctionedUsScore(a, memory, rules))
     }
     //endregion
 

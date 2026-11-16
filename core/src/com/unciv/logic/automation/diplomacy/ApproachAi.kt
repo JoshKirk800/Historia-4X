@@ -291,7 +291,7 @@ object ApproachAi {
         }
 
         // Part 2, friendship (Vox Populi). The coop war agreement score, liberation of the capital or holy city and returned cities need
-        // inputs we do not have yet (`phaseE/vp-approach-plan.md`, branch B2); the defensive pact desire comes with C3b-2.
+        // inputs we do not have yet (`phaseE/vp-approach-plan.md`, branch B2).
         val diplomacy = civ.getDiplomacyManager(other)
         val loyalty = civ.ai.diplomacyValue(DiplomacyPersonality.Loyalty)
         stage("Declaration of friendship (part 2)")
@@ -313,12 +313,18 @@ object ApproachAi {
         stage("Exchange desires: a friendship we want (part 2)")
         // Regardless of the first pass, to keep long-term relationships; when we were deceptive (last turn's approach in the strategic
         // pass, else the strategic approach), some deceptive weight instead
+        val keyPartner = ai.mostValuableFriend == other.civID || ai.mostValuableAlly == other.civID
         if (memory.wantsDoF) {
             val before = (if (strategic) oldApproach else memory.strategicApproach) ?: MajorCivApproach.Neutral
             if (before.ordinal > MajorCivApproach.Deceptive.ordinal) {
-                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * (if (ai.mostValuableFriend == other.civID) 5 else 2)
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * (if (keyPartner) 5 else 2)
                 zeroBadApproaches(w)
             } else w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * 3
+        }
+        stage("Exchange desires: a defensive pact we want (part 2)")
+        if (memory.wantsDefensivePact) {
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * (if (keyPartner) 5 else 2)
+            zeroBadApproaches(w)
         }
         stage("Coop war with them against another (part 2)")
         var coopWar = false

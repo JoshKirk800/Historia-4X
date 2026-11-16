@@ -17,6 +17,9 @@ enum class WarGoal { Demand, Prepare, Conquest, Damage, Peace }
 /** PeaceTreatyTypes: what a side gives up for peace, nothing to everything. [None] = NO_PEACE_TREATY_TYPE */
 enum class PeaceTreatyType { None, WhitePeace, Armistice, Settlement, Backdown, Submission, Surrender, Cession, Capitulation, UnconditionalSurrender }
 
+/** Vox Populi's DoFLevelTypes, worst to best: a friendship betrayed, none yet, then one, two, three or more DoFs signed */
+enum class DoFLevel { Untrustworthy, New, Friends, Allies, BattleBrothers }
+
 /** ThreatTypes (military threat, warmonger threat) */
 enum class AiThreat { None, Minor, Major, Severe, Critical }
 

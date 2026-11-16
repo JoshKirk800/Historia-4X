@@ -122,6 +122,11 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var denouncementActive = false
     var friendDenouncedUs = false
     var friendDeclaredWarOnUs = false
+    /** CvDiplomacyAI::GetDoFType (Vox Populi): our friendship's history with them, kept by [DiplomacyEvents.onDoFSigned] and
+     *  [DiplomacyEvents.onDoFBetrayed] */
+    var doFLevel = DoFLevel.New
+    /** CvDiplomacyAI::GetDoFBrokenTurn (Vox Populi): the turn they broke a DoF with us (war or denouncement), -1 = never */
+    var doFBrokenTurn = -1
     /** CvDiplomacyAI::m_paiDeclaredWarOnFriendValue (decays) */
     var declaredWarOnFriendValue = 0
 
@@ -223,6 +228,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.turnsSinceSidedWithProtectedMinor = turnsSinceSidedWithProtectedMinor
         copy.doFCounter = doFCounter; copy.denouncedCounter = denouncedCounter; copy.denouncementActive = denouncementActive
         copy.friendDenouncedUs = friendDenouncedUs; copy.friendDeclaredWarOnUs = friendDeclaredWarOnUs
+        copy.doFLevel = doFLevel; copy.doFBrokenTurn = doFBrokenTurn
         copy.declaredWarOnFriendValue = declaredWarOnFriendValue
         for ((target, entry) in coopWars) copy.coopWars[target] = entry.clone()
         copy.demandCounter = demandCounter

@@ -691,6 +691,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         otherCivDiplomacy().setFlag(DiplomacyFlags.DeclarationOfFriendship, duration)
         if (civInfo.isMajorCiv) civInfo.ai.diplomacy.memoryOf(otherCiv).doFCounter = 0
         if (otherCiv.isMajorCiv) otherCiv.ai.diplomacy.memoryOf(civInfo).doFCounter = 0
+        com.unciv.logic.automation.diplomacy.DiplomacyEvents.onDoFSigned(civInfo, otherCiv)
 
         for (thirdCiv in getCommonKnownCivsWithSpectators()) {
             thirdCiv.addNotification("[${civInfo.civName}] and [${otherCiv.civName}] have signed a Declaration of Friendship!",
@@ -748,6 +749,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
                 memory.doFCounter = -666
                 theirMemory.doFCounter = -666
                 theirMemory.friendDenouncedUs = true
+                com.unciv.logic.automation.diplomacy.DiplomacyEvents.onDoFBetrayed(civInfo, otherCiv)
             }
             if (memory.warFace == WarFace.Friendly) memory.warFace = WarFace.Neutral
             for (entry in memory.coopWars.values) if (entry.state != null && entry.state!! >= CoopWarState.Soon) {

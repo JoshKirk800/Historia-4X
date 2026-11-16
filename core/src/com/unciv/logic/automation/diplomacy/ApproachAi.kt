@@ -440,6 +440,8 @@ object ApproachAi {
         addPromiseWeights(civ, other, memory, w, rules)
         stage("Warmonger threat and strength compared to us (part 5)")
         addStrengthWeights(civ, other, w, rules)
+        stage("DoF history (part 5)")
+        addDoFHistoryWeights(civ, other, w, rules)
         stage("nukes (Vox Populi)")
         addNukeWeights(civ, other, w, rules)
         stage("Close to world conquest, theirs or ours (Vox Populi)")
@@ -719,6 +721,45 @@ object ApproachAi {
             w[WAR] += rules.define(AiDefine.APPROACH_WAR_IGNORED_BORDER_PROMISE)
             w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_IGNORED_BORDER_PROMISE)
             w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_IGNORED_BORDER_PROMISE)
+        }
+    }
+
+    /**
+     *  Part 5, DOF HISTORY (Vox Populi): long friendships are kept and betrayals remembered, more as the eras go by. By our DoF level
+     *  with them ([MajorCivMemory.doFLevel]) times the era (at least 1) and a diplomacy multiplier (2 going for a diplomatic victory,
+     *  else 1; +1 with DiploBalance 8 or more, -1 with 3 or less; -1 when, competing for victory, a past friend is close to a diplomatic
+     *  victory; at least 0): betrayed, war, guarded and hostile; never friends, neutral and friendly; friends, friendly up and deceptive
+     *  down; allies twice, war down; battle brothers three times, war down twice. VP's league competitor term has no input.
+     */
+    private fun addDoFHistoryWeights(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
+        fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
+        val level = civ.ai.diplomacy.memoryOf(other).doFLevel
+        val competing = VictoryProgressAi.isCompetingForVictory(civ)
+        val diploBalance = civ.ai.diplomacyValue(DiplomacyPersonality.DiploBalance)
+        var multiplier = if (competing && civ.ai.isGoingForDiploVictory()) 2 else 1
+        if (diploBalance >= 8) multiplier++ else if (diploBalance <= 3) multiplier--
+        if (competing && level > DoFLevel.Untrustworthy &&
+            VictoryProgressAi.diplomaticVictoryProgress(other) >= rules.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)) multiplier--
+        multiplier = maxOf(multiplier, 0)
+        val era = maxOf(civ.getEra().eraNumber, 1)
+        val step = era * multiplier
+        when (level) {
+            DoFLevel.Untrustworthy -> for (i in intArrayOf(WAR, GUARDED, HOSTILE)) w[i] += bias(APPROACHES[i]) * step
+            DoFLevel.New -> for (i in intArrayOf(NEUTRAL, FRIENDLY)) w[i] += bias(APPROACHES[i]) * step
+            DoFLevel.Friends -> {
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * step
+                w[DECEPTIVE] -= bias(MajorCivApproach.Deceptive) * step
+            }
+            DoFLevel.Allies -> {
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * step * 2
+                w[DECEPTIVE] -= bias(MajorCivApproach.Deceptive) * step * 2
+                w[WAR] -= bias(MajorCivApproach.War) * era
+            }
+            DoFLevel.BattleBrothers -> {
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * step * 3
+                w[DECEPTIVE] -= bias(MajorCivApproach.Deceptive) * step * 3
+                w[WAR] -= bias(MajorCivApproach.War) * step * 2
+            }
         }
     }
 
@@ -1123,8 +1164,14 @@ object ApproachAi {
         val concern = victoryConcern(civ, other, rules)
         val earlyGameCompetitor = CompetitorAi.isEarlyGameCompetitor(civ, other, rules)
         val friendOrAlly = OpinionAi.isDoFAccepted(civ, other) || civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
+        val bold = civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 ||
+            (VictoryProgressAi.isCompetingForVictory(civ) && civ.ai.isGoingForWorldConquest())
+        // Friends before (a DoF level of friends or more), not competitors, still liked: held back too, unless bold against an easy target
+        val pastFriends = !friendOrAlly && (memory?.doFLevel ?: DoFLevel.New) >= DoFLevel.Friends &&
+            !CompetitorAi.isMajorCompetitor(civ, other) && !earlyGameCompetitor &&
+            (memory?.opinion ?: MajorCivOpinion.Neutral) >= MajorCivOpinion.Competitor && (!bold || !WarStateAi.isEasyTarget(civ, other))
         val holdBack = proximity <= DiplomacyTurn.PROXIMITY_FAR || (!OpinionAi.isUntrustworthyFriend(other) && !tookKeyCity && !aggressiveMode
-            && friendOrAlly)
+            && (friendOrAlly || pastFriends))
         if (holdBack)
             return closeToConquest || provokedUs || tookKeyCity || severeThreat || earlyGameCompetitor
                 || CompetitorAi.biggestCompetitor(civ) == other.civID || concern || theyAreClose || aggressiveMode

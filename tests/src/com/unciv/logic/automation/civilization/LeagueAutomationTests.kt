@@ -98,6 +98,7 @@ class LeagueAutomationTests {
 
         val toC = a.getDiplomacyManager(c)!!
         toC.setFlag(DiplomacyFlags.Denunciation, 20)
+        toC.diplomaticModifiers.clear()
         toC.diplomaticModifiers[DiplomaticModifiers.Denunciation.name] = -80f // opinion weight 80 (OPINION_THRESHOLD_ENEMY): Enemy, -1
         assertEquals(LeagueAlignment.RIVAL, LeagueAutomation.evaluateAlignment(a, c))
     }

@@ -92,7 +92,7 @@ class WarSituationApproachTests {
 
     @Test
     fun `a conqueror not yet close to victory seeks friendship with the strong`() {
-        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         a.ai.warStates.militaryStrengths[b.civID] = StrengthLevel.Powerful
         a.ai.warStates.targetValues[b.civID] = TargetValue.Average
         val delta = stageDelta("Grand strategy: domination")

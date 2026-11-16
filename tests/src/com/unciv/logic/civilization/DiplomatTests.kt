@@ -111,7 +111,7 @@ class DiplomatTests {
     @Test
     fun `AI going for a diplomatic victory makes a diplomat of a spy once the other civilizations are worth a whole one`() {
         // CvEspionageAI::FindTargetSpyNumbers: Globalization makes each other civilization worth 0.25 diplomats, floored after summing
-        a.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.UNITED_NATIONS)
         game.addCity(game.addCiv(), game.tileMap[5, 0], replacePalace = true)
         game.addCity(game.addCiv(), game.tileMap[-5, 0], replacePalace = true)
         game.gameInfo.league = League().also { it.setTransients(game.gameInfo) }

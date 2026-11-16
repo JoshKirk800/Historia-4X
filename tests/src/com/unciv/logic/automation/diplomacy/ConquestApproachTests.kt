@@ -49,6 +49,7 @@ class ConquestApproachTests {
         for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 5)
         for (value in DiplomacyPersonality.entries) civ.ai.setDiplomacyValue(value, 5)
         for ((approach, bias) in MajorCivApproach.entries.zip(listOf(7, 6, 5, 4, 3, 2, 1))) civ.ai.setMajorCivApproachBias(approach, bias)
+        civ.ai.setGrandStrategyAndPursuit(null)
         return civ
     }
 
@@ -91,7 +92,7 @@ class ConquestApproachTests {
 
     @Test
     fun `a conqueror close to victory wants the rest, more so from those holding other capitals`() {
-        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         b.cities.first().moveToCiv(a)
         val flat = (a.ai.diplomacyValue(DiplomacyPersonality.Boldness) + a.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)) / 2
         // flavors, the war bias x 2 for b's capital we hold, x 5 for being close
@@ -145,7 +146,7 @@ class ConquestApproachTests {
 
     @Test
     fun `the leader with weapons on both sides picks war, and the others do not befriend it`() {
-        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         b.cities.first().moveToCiv(a)
         game.gameInfo.civilizations.remove(b)
         for (civ in listOf(a, c, d)) nuke(civ)

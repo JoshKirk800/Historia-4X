@@ -174,7 +174,7 @@ class ArchaeologyParityDetailsTests {
     fun `diplomatic victory AI builds a landmark in peaceful city state territory`() {
         game.gameInfo.gameParameters.victoryTypes = ArrayList(game.ruleset.victories.keys)
         builder.playerType = PlayerType.AI
-        builder.ai.grandStrategy = "AIGRANDSTRATEGY_UNITED_NATIONS"
+        builder.ai.setGrandStrategyAndPursuit("AIGRANDSTRATEGY_UNITED_NATIONS")
         val state = game.addCiv(cityStateType = game.ruleset.cityStateTypes.keys.first())
         val stateCity = game.addCity(state, tile(-6, 2))
         builder.diplomacyFunctions.makeCivilizationsMeet(state)
@@ -184,9 +184,9 @@ class ArchaeologyParityDetailsTests {
         builder.ai.minorCivApproaches[state.civID] = MinorCivApproach.Conquest
         assertEquals("planned conquest rules out a Landmark", ArchaeologyChoice.ArtifactOfFirst, ArchaeologyFunctions.chooseForAi(builder, find, 0, 0))
         builder.ai.minorCivApproaches.remove(state.civID)
-        builder.ai.grandStrategy = "AIGRANDSTRATEGY_SPACESHIP"
+        builder.ai.setGrandStrategyAndPursuit("AIGRANDSTRATEGY_SPACESHIP")
         assertEquals(ArchaeologyChoice.ArtifactOfFirst, ArchaeologyFunctions.chooseForAi(builder, find, 0, 0))
-        builder.ai.grandStrategy = "AIGRANDSTRATEGY_UNITED_NATIONS"
+        builder.ai.setGrandStrategyAndPursuit("AIGRANDSTRATEGY_UNITED_NATIONS")
         val previousInfluence = state.getDiplomacyManager(builder)!!.getInfluence()
         ArchaeologyFunctions.onDigCompleted(builder, find, null)
         assertEquals("Landmark", find.improvement)
@@ -198,7 +198,7 @@ class ArchaeologyParityDetailsTests {
         // CvPlayerCulture::GetArchaeologyChoice only looks at the minor civ approach, not at war
         game.gameInfo.gameParameters.victoryTypes = ArrayList(game.ruleset.victories.keys)
         builder.playerType = PlayerType.AI
-        builder.ai.grandStrategy = "AIGRANDSTRATEGY_UNITED_NATIONS"
+        builder.ai.setGrandStrategyAndPursuit("AIGRANDSTRATEGY_UNITED_NATIONS")
         val state = game.addCiv(cityStateType = game.ruleset.cityStateTypes.keys.first())
         val stateCity = game.addCity(state, tile(-6, 2))
         builder.diplomacyFunctions.makeCivilizationsMeet(state)

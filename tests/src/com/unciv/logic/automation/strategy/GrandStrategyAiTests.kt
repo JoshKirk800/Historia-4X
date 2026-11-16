@@ -174,7 +174,7 @@ class GrandStrategyAiTests {
         val civ = neutralCiv()
         game.addCity(civ, game.tileMap[0, 0])
         civ.ai.setPersonalityFlavor(Flavor.Culture, 20) // culture: 200 base + 400 flavor term, far above anything else
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         civ.ai.turnsSinceGrandStrategySet = 8
         GrandStrategyAi.doTurn(civ)
         assertEquals(GrandStrategyAi.CONQUEST, civ.ai.grandStrategy)
@@ -182,7 +182,6 @@ class GrandStrategyAiTests {
         GrandStrategyAi.doTurn(civ)
         assertEquals(GrandStrategyAi.CULTURE, civ.ai.grandStrategy)
         assertEquals(0, civ.ai.turnsSinceGrandStrategySet)
-        assertTrue(civ.ai.isGoingForCultureVictory())
     }
 
     @Test

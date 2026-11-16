@@ -160,7 +160,7 @@ class CitizenAutomationTests {
         addCapital()
         val city = city(HexCoord(6, 0), Constants.grassland, true, 6)
         city.cityConstructions.addBuilding("Writers' Guild")
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
 
         game.gameInfo.turns = 3
         CitizenAutomation.doTurn(city)
@@ -179,7 +179,7 @@ class CitizenAutomationTests {
     fun `culture focus needs a surplus of 2 food and gives way to a money deficit`() {
         addCapital()
         val hungry = city(HexCoord(6, 0), Constants.desert, false, 6)
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         game.gameInfo.turns = 3
         CitizenAutomation.doTurn(hungry)
         assertEquals(CityFocus.NoFocus, hungry.getCityFocus())

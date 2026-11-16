@@ -386,7 +386,7 @@ class NavalOperationTests {
         assertTrue("an enemy in our opinion", MilitaryOperations.shouldLaunchNuke(civ, enemy))
         civ.ai.diplomacy.setOpinion(enemy, com.unciv.logic.automation.diplomacy.MajorCivOpinion.Competitor)
 
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         assertTrue("going for world conquest", MilitaryOperations.shouldLaunchNuke(civ, enemy))
     }
 

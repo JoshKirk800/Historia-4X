@@ -43,7 +43,8 @@ class TestGame(vararg addGlobalUniques: String, forUITesting: Boolean = false, b
 
     private var objectsCreated = 0
     val ruleset: Ruleset
-    val gameInfo = GameInfo()
+    /** A fixed game id: the AI's random rolls are seeded by it (CivAi.random), so a test sees the same personalities and pursuits each run */
+    val gameInfo = GameInfo().apply { gameId = "00000000-0000-0000-0000-000000000000" }
     /** [tileMap] has a default size of 1 tile, use [makeHexagonalMap] or [makeRectangularMap] to change that */
     val tileMap
         get() = gameInfo.tileMap

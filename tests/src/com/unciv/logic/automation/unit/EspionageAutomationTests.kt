@@ -146,6 +146,7 @@ class EspionageAutomationTests {
     // region spy numbers
     @Test
     fun `without a grand strategy a third of the spies sit in city-states and the rest guard when we lead in technologies`() {
+        a.ai.setGrandStrategyAndPursuit(null)
         game.addCity(a, game.tileMap[0, -3])
         addSpies(3)
         val targets = ai.findTargetSpyNumbers()
@@ -167,7 +168,7 @@ class EspionageAutomationTests {
 
     @Test
     fun `a spaceship strategy keeps spies out of city-states`() {
-        a.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         game.addCity(a, game.tileMap[0, -3])
         addSpies(3)
         assertEquals(0, ai.findTargetSpyNumbers().cityState)
@@ -183,7 +184,7 @@ class EspionageAutomationTests {
 
     @Test
     fun `a diplomatic strategy with nobody worth a diplomat spends the spies elsewhere`() {
-        a.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.UNITED_NATIONS)
         addSpies(1)
         val targets = ai.findTargetSpyNumbers()
         assertEquals(0, targets.diplomat)

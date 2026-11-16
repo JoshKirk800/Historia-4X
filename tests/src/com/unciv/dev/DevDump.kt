@@ -76,7 +76,7 @@ class DevDump {
                 // What each step of the weights did: the weights after it less those before, written as the change of each approach
                 val steps = ArrayList<Pair<String, IntArray>>()
                 ApproachAi.debugSink = { name, w -> steps.add(name to w.copyOf()) }
-                val weights = try { ApproachAi.approachWeights(civ, other, memory.approach, true, rules) } finally { ApproachAi.debugSink = null }
+                val weights = try { ApproachAi.approachWeights(civ, other, memory.approach, rules) } finally { ApproachAi.debugSink = null }
                 val manager = civ.getDiplomacyManager(other)!!
                 out.append("  -> ${other.civName}: approach ${memory.approach}, weights ${weights.joinToString(" ")}; opinion ${memory.opinion}, projection ${memory.warProjection}, " +
                     "goal ${memory.warGoal}, warmonger ${memory.warmongerThreat}, strength ${ai.diplomacy.militaryStrength(other)}, target ${ai.diplomacy.targetValue(other)}, " +

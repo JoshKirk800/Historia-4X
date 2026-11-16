@@ -50,7 +50,7 @@ class ConquestApproachTests {
     private fun stageDelta(civ: Civilization, other: Civilization, stage: String): IntArray {
         val steps = ArrayList<Pair<String, IntArray>>()
         ApproachAi.debugSink = { name, w -> steps.add(name to w.copyOf()) }
-        try { ApproachAi.approachWeights(civ, other, null, false, game.ruleset.ai) } finally { ApproachAi.debugSink = null }
+        try { ApproachAi.approachWeights(civ, other, null, game.ruleset.ai) } finally { ApproachAi.debugSink = null }
         val index = steps.indexOfFirst { it.first.startsWith(stage) }
         assertTrue("stage $stage", index >= 0)
         return IntArray(MajorCivApproach.entries.size) { steps[index + 1].second[it] - steps[index].second[it] }
@@ -129,10 +129,10 @@ class ConquestApproachTests {
         game.gameInfo.civilizations.remove(b)
         for (civ in listOf(a, c, d)) nuke(civ)
         val rules = game.ruleset.ai
-        val leader = ApproachAi.approachWeights(a, c, null, false, rules)
+        val leader = ApproachAi.approachWeights(a, c, null, rules)
         assertEquals("a holds 2 of 3 capitals", MajorCivApproach.War.ordinal, leader.indices.maxByOrNull { leader[it] })
         for (other in listOf(c, d)) {
-            val weights = ApproachAi.approachWeights(other, a, null, false, rules)
+            val weights = ApproachAi.approachWeights(other, a, null, rules)
             assertNotEquals("${other.civName} towards a", MajorCivApproach.Friendly.ordinal, weights.indices.maxByOrNull { weights[it] })
         }
     }

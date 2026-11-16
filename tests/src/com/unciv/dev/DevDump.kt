@@ -8,6 +8,7 @@ import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.AiOperationType
+import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.MilitaryTargets
 import com.unciv.logic.automation.strategy.NavalOperationLogic
@@ -32,7 +33,9 @@ import java.io.File
  *   and goal, warmonger threat, military strength, proximity, whether war could be declared);
  * - `operations`: every operation of every civilization: type, state, enemy, age, target and muster, its armies with their units;
  * - `nukes`: every nuclear weapon: where it stands, the enemy cities in its range with the value of a blast there
- *   ([NavalOperationLogic.nukeCityValue]).
+ *   ([NavalOperationLogic.nukeCityValue]);
+ * - `military`: per major, its unit supply, the soft supply cap, the recommended army and navy with the units it has, the defense
+ *   states and next turn's gold.
  * A developer tool, not a test: it does nothing unless DEV_DUMP_SAVE is set. Run it with tools/dev_dump.py.
  */
 @RunWith(GdxTestRunner::class)
@@ -60,7 +63,8 @@ class DevDump {
                 "operations" -> operations(game, out)
                 "nukes" -> nukes(game, out)
                 "targets" -> targets(game, out)
-                else -> out.append("unknown mode $mode (approach, operations, nukes, targets)\n")
+                "military" -> military(game, out)
+                else -> out.append("unknown mode $mode (approach, operations, nukes, targets, military)\n")
             }
             out.append("\n")
         }
@@ -111,6 +115,21 @@ class DevDump {
                         "at ${army.position}, goal ${army.goalTile}: $units\n")
                 }
             }
+        }
+    }
+
+    /** Per major: supply, soft supply cap, recommended army and navy against the units it has, defense states, gold */
+    private fun military(game: GameInfo, out: StringBuilder) {
+        out.append("army sizes at turn ${game.turns}\n")
+        for (civ in game.civilizations.filter { it.isMajorCiv && it.isAlive() }) {
+            val military = civ.ai.military
+            military.updateBaseData(civ)
+            military.updateDefenseState(civ)
+            out.append("${civ.civName}: cities ${civ.cities.size}, units ${civ.units.getCivUnitsSize()} of supply ${civ.stats.getUnitSupply()}, " +
+                "soft cap ${EconomicAi.softSupplyCap(civ)}; land ${military.numLandUnits} of ${military.recommendedLandArmySize} (${military.landDefenseState}), " +
+                "navy ${military.numNavalUnits} of ${military.recommendedNavySize} (${military.navalDefenseState}), air ${military.numAirUnits}, " +
+                "explorers ${military.recommendedExplorers}; gold ${civ.gold} (${"%+d".format(civ.stats.statsForNextTurn.gold.toInt())}), " +
+                "unit upkeep ${civ.stats.getStatMapForNextTurn()["Unit upkeep"]?.gold?.toInt()}\n")
         }
     }
 

@@ -1,5 +1,7 @@
 package com.unciv.logic.automation.diplomacy
 
+import com.unciv.logic.automation.civilization.CityStateAi
+import com.unciv.logic.automation.civilization.MinorCivHelpers
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -7,6 +9,7 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
@@ -91,8 +94,9 @@ object DisputeAi {
         return total
     }
 
-    /** CvDiplomacyAI::DoUpdateWonderDisputeLevels: wonders they beat us to × WonderCompetitiveness */
+    /** CvDiplomacyAI::DoUpdateWonderDisputeLevels (an AI's): wonders they beat us to × WonderCompetitiveness */
     fun updateWonderDisputes(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
+        if (civ.isHuman()) return
         val competitiveness = civ.ai.diplomacyValue(DiplomacyPersonality.WonderCompetitiveness)
         for (other in others) {
             val memory = civ.ai.diplomacy.memoryOf(other)
@@ -107,17 +111,68 @@ object DisputeAi {
     }
 
     /**
-     *  CvDiplomacyAI::DoUpdateMinorCivDisputeLevels: for each city-state we protect that they are allied with, MinorCivCompetitiveness² × 10.
-     *  The original's "friends" branch tests alliance a second time and so never counts; neither does this.
+     *  Vox Populi's CvDiplomacyAI::DoUpdateMinorCivDisputeLevels (an AI's): over the city-states we have met and do not mean to conquer or
+     *  bully, those that are our friends: one allied with them adds city-state competitiveness² / 2 when we are friendly towards it;
+     *  one friends with them adds competitiveness² when it is our ally, else takes it away. When either of us is its ally, our influence
+     *  / 5 more, and competitiveness² scaled by how close our influences are (x 4 within 20 down to x 0.2 / 0.4 within 200, by who
+     *  leads; x 1.5 more when we protect it) - or our influence when tied. MINOR_CIV_DISPUTE_FIERCE / STRONG / WEAK_THRESHOLD. The
+     *  times they lowered our influence (VP's coups and quests) have no counterpart: none.
      */
     fun updateMinorCivDisputes(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
+        if (civ.isHuman()) return
         val competitiveness = civ.ai.diplomacyValue(DiplomacyPersonality.MinorCivCompetitiveness)
         val personalityMod = competitiveness * competitiveness
-        val protectedByUs = civ.gameInfo.getAliveCityStates().filter { civ in it.cityStateFunctions.getProtectorCivs() }
+        val minors = civ.gameInfo.getAliveCityStates().filter { minor ->
+            civ.knows(minor) && civ.ai.minorCivApproaches[minor.civID].let { it != MinorCivApproach.Conquest && it != MinorCivApproach.Bully }
+        }
         for (other in others) {
             if (!other.isMajorCiv) continue
             var weight = 0
-            for (minor in protectedByUs) if (minor.allyCiv == other) weight += personalityMod * rules.define(AiDefine.MINOR_CIV_DISPUTE_ALLIES_WEIGHT)
+            for (minor in minors) {
+                if (!CityStateAi.isFriends(minor, civ)) continue
+                var oneIsAllied = false
+                if (CityStateAi.isAllies(minor, other)) {
+                    if (civ.ai.minorCivApproaches[minor.civID] == MinorCivApproach.Friendly) weight += personalityMod / 2
+                    oneIsAllied = true
+                } else if (CityStateAi.isFriends(minor, other)) {
+                    if (CityStateAi.isAllies(minor, civ)) {
+                        weight += personalityMod
+                        oneIsAllied = true
+                    } else weight -= personalityMod
+                }
+                if (!oneIsAllied) continue
+                val ours = MinorCivHelpers.influence(minor, civ)
+                val theirs = MinorCivHelpers.influence(minor, other)
+                weight += ours / 5
+                if (ours == theirs) {
+                    weight += ours
+                    continue
+                }
+                val tenths = if (theirs > ours) when (theirs - ours) {
+                    in 0..20 -> 40
+                    in 21..40 -> 35
+                    in 41..60 -> 30
+                    in 61..80 -> 20
+                    in 81..100 -> 10
+                    in 101..120 -> 5
+                    in 121..150 -> 3
+                    in 151..200 -> 2
+                    else -> 10
+                } else when (ours - theirs) {
+                    in 0..20 -> 40
+                    in 21..40 -> 30
+                    in 41..60 -> 20
+                    in 61..80 -> 15
+                    in 81..100 -> 10
+                    in 101..120 -> 8
+                    in 121..150 -> 6
+                    in 151..200 -> 4
+                    else -> 10
+                }
+                var influenceStart = personalityMod * tenths / 10
+                if (civ in minor.cityStateFunctions.getProtectorCivs()) influenceStart = influenceStart * 15 / 10
+                weight += influenceStart
+            }
             civ.ai.diplomacy.memoryOf(other).minorCivDispute = when {
                 weight >= rules.define(AiDefine.MINOR_CIV_DISPUTE_FIERCE_THRESHOLD) -> DisputeLevel.Fierce
                 weight >= rules.define(AiDefine.MINOR_CIV_DISPUTE_STRONG_THRESHOLD) -> DisputeLevel.Strong

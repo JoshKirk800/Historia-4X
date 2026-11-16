@@ -22,10 +22,14 @@ object ExpanderAi {
     private val DECEPTIVE = MajorCivApproach.Deceptive.ordinal
 
     /** CvPlayer::getTotalLand: the tiles the civilization owns */
-    private fun totalLand(civ: Civilization): Int = civ.cities.sumOf { it.tiles.size }
+    fun totalLand(civ: Civilization): Int = civ.cities.sumOf { it.tiles.size }
 
     /** CvGame::CalculateMedian*: the upper middle of the sorted values, 0 without any */
-    private fun median(values: List<Int>): Int = if (values.isEmpty()) 0 else values.sorted()[values.size / 2]
+    fun median(values: List<Int>): Int = if (values.isEmpty()) 0 else values.sorted()[values.size / 2]
+
+    /** CvGame::CalculateMedianNumWondersConstructed: over the majors that built any */
+    fun medianWonders(civ: Civilization): Int =
+        median(civ.gameInfo.civilizations.filter { it.isMajorCiv }.map { it.ai.diplomacy.wondersConstructed }.filter { it > 0 })
 
     private fun competing(civ: Civilization): Boolean =
         VictoryProgressAi.isCompetingForVictory(civ) && civ.gameInfo.civilizations.count { it.isMajorCiv && it.isAlive() } >= 2

@@ -61,9 +61,10 @@ object UnitAutomation {
             return
         }
 
-        // Note that not all nukes have to be air units. The nuke attack operation sets a nuke off; until then it only rebases
+        // Note that not all nukes have to be air units. The nuke attack operation sets a nuke off; until then it only rebases, at war
+        // towards bases in range of enemy cities (Vox Populi)
         if (unitView.isNuclearWeapon()) {
-            AirMoves.plotAircraftMove(unit)
+            AirMoves.plotNukeMove(unit)
             return
         }
 

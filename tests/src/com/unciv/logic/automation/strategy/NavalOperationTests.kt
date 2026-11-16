@@ -344,6 +344,20 @@ class NavalOperationTests {
         assertEquals("MUFORMATION_NAVAL_INVASION", AiOperationLogic.formationName(civ, AiOperationType.NAVAL_SNEAK_ATTACK))
         assertTrue(AiOperationType.NAVAL_ATTACK.isNavalInvasion && AiOperationType.NAVAL_ATTACK.mixedLandNaval)
     }
+
+    /** CvMilitaryAI::GetCoastalPlotAdjacentToTarget: the original's path check ignores units and borders, so neither hides the goal */
+    @Test
+    fun `an invasion's goal is the water next to the city even inside closed borders where the defender's ships stand`() {
+        civ.getDiplomacyManager(enemy)!!.makePeace()
+        // closed borders three tiles out, as a grown city has them, and its fleet on the waters next to it
+        for (tile in enemyCity.getCenterTile().getTilesInDistance(3)) if (tile.getOwner() == null) enemyCity.expansion.takeOwnership(tile)
+        for (water in enemyCity.getCenterTile().neighbors.filter { it.isWater }) game.addUnit("Quinquereme", enemy, water)
+        invasionForce()
+        val army = invade(AiOperationType.NAVAL_SNEAK_ATTACK).firstArmy!!
+        val goal = NavalOperationLogic.coastalPlotAdjacentToTarget(civ, enemyCity.getCenterTile(), army)
+        assertNotNull("a goal tile", goal)
+        assertTrue(goal!! in enemyCity.getCenterTile().neighbors)
+    }
     // endregion
 
     // region Escorting embarked units

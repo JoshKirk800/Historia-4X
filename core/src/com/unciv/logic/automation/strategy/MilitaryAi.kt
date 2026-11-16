@@ -5,6 +5,7 @@ import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.diplomacy.AiThreat
 import com.unciv.logic.automation.diplomacy.PactPlanningAi
+import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
@@ -73,6 +74,14 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     @Transient var visibleBarbarianCount = 0; private set
     //endregion
 
+    /**
+     *  CvMilitaryAI::m_potentialAttackTargets / m_exposedCities ([AttackTargetsAi.updateAttackTargets]): recomputed each turn after the
+     *  strategies, so the base data reads the last turn's
+     */
+    @Transient var potentialAttackTargets: List<AttackTarget> = emptyList(); private set
+    @Transient var exposedCities: List<AttackTarget> = emptyList(); private set
+    @Transient private var attackTargetsTurn = -1
+
     fun clone(): MilitaryAi {
         val toReturn = MilitaryAi()
         toReturn.lastTurnMilitaryThreats.putAll(lastTurnMilitaryThreats)
@@ -90,14 +99,46 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         armyTypeBeingBuilt = if (numLandAttacksRequested > numNavalAttacksRequested) ArmyType.Land else ArmyType.NavalInvasion
     }
 
-    /** What CvMilitaryAI::DoTurn does before its strategy loop: ScanForBarbarians, UpdateThreats, UpdateBaseData, UpdateDefenseState */
+    /**
+     *  What CvMilitaryAI::DoTurn does before its strategy loop: ScanForBarbarians, UpdateThreats, UpdateBaseData, UpdateDefenseState. The
+     *  attack targets are worked out first when there are none yet (the original keeps the last turn's in the save).
+     */
     fun doTurnBeforeStrategies(civ: Civilization) {
+        if (attackTargetsTurn < 0) updateAttackTargets(civ)
         scanForBarbarians(civ)
         updateThreats(civ)
         updateBaseData(civ)
         updateDefenseState(civ)
         dataTurn = civ.gameInfo.turns
     }
+
+    /** CvMilitaryAI::UpdateAttackTargets, after the strategy loop for every player (the AI relies on the data of humans too) */
+    fun updateAttackTargets(civ: Civilization) {
+        val (potential, exposed) = AttackTargetsAi.updateAttackTargets(civ)
+        potentialAttackTargets = potential
+        exposedCities = exposed
+        attackTargetsTurn = civ.gameInfo.turns
+    }
+
+    /** CvMilitaryAI::IsExposedToEnemy: [city] (null: any of ours) is exposed to [enemy] (null: anyone) by an army of [armyType] (null: any); city-states assume all */
+    fun isExposedToEnemy(civ: Civilization, city: City?, enemy: Civilization?, armyType: TargetArmyType? = null): Boolean {
+        if (civ.isCityState) return true
+        return exposedCities.any { (enemy == null || it.musterCity.civ == enemy) && (city == null || it.targetCity == city)
+            && (armyType == null || it.armyType == armyType) }
+    }
+
+    /** CvMilitaryAI::HavePreferredAttackTarget: a preferred target among [enemy]'s cities */
+    fun havePreferredAttackTarget(enemy: Civilization): Boolean = potentialAttackTargets.any { it.preferred && it.targetCity.civ == enemy }
+
+    /** CvMilitaryAI::HavePossibleAttackTarget: any target among [enemy]'s cities */
+    fun havePossibleAttackTarget(enemy: Civilization): Boolean = potentialAttackTargets.any { it.targetCity.civ == enemy }
+
+    /** CvMilitaryAI::IsPreferredAttackTarget: [city] is a preferred target */
+    fun isPreferredAttackTarget(city: City): Boolean = potentialAttackTargets.any { it.preferred && it.targetCity == city }
+
+    /** CvMilitaryAI::IsPossibleAttackTarget: [city], not ours, is a target for an army of [armyType] (null: any) */
+    fun isPossibleAttackTarget(civ: Civilization, city: City, armyType: TargetArmyType? = null): Boolean =
+        city.civ != civ && potentialAttackTargets.any { it.targetCity == city && (armyType == null || it.armyType == armyType) }
 
     /**
      *  What CvMilitaryAI::DoTurn does after its strategy loop for AI players: UpdateOperations, MakeEmergencyPurchases,
@@ -238,16 +279,15 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     /**
      *  CvMilitaryAI::SetRecommendedArmyNavySize (Vox Populi): splits the units we can afford ([EconomicAi.softSupplyCap]) between land
      *  and sea. City-states want 2 ships with a coastal capital, the rest on land. Majors weigh land defense 10 x (DEFEND_MY_LANDS_BASE_UNITS
-     *  + cities x UNITS_PER_CITY + settlers, by default unit AI and in training), naval defense 7 x effective coastal cities x
-     *  UNITS_PER_CITY, offense 10 x BALANCE_BASIC_ATTACK_ARMY_SIZE under conquest; the naval share of offense is effective coastal cities
-     *  x NAVAL (personality) x 7 / cities. Defense x (100 + 2 x DEFENSE), offense x (100 + boldness + OFFENSE) (personality and grand
-     *  strategy). Explorers (units whose default unit AI is EXPLORE) take their own share first: at most a quarter of the cap, no more
-     *  than the supply leaves room for. Land is truncated, sea rounded, as in the original; a share our units already exceed grows to
-     *  them at the other's expense.
+     *  + cities x UNITS_PER_CITY + settlers, by default unit AI and in training) + 10 per city exposed to an enemy by land, naval defense
+     *  7 x effective coastal cities x UNITS_PER_CITY + 10 per city exposed by sea (a combined exposure counts for both), offense 10 x
+     *  BALANCE_BASIC_ATTACK_ARMY_SIZE per major with a preferred attack target and once more under conquest; the naval share of offense
+     *  is effective coastal cities x NAVAL (personality) x 7 / cities. Defense x (100 + 2 x DEFENSE), offense x (100 + boldness + OFFENSE)
+     *  (personality and grand strategy). Explorers (units whose default unit AI is EXPLORE) take their own share first: at most a
+     *  quarter of the cap, no more than the supply leaves room for. Land is truncated, sea rounded, as in the original; a share our units
+     *  already exceed grows to them at the other's expense.
      *
-     *  Missing inputs, counted as none: the cities exposed to an enemy (10 land and 10 naval weight each) and the preferred attack
-     *  targets (10 x BALANCE_BASIC_ATTACK_ARMY_SIZE offense each) of CvMilitaryAI::UpdateAttackTargets, and the explorers needed of
-     *  Vox Populi's CvEconomicAI::DoReconState.
+     *  Missing input, counted as none: the explorers needed of Vox Populi's CvEconomicAI::DoReconState.
      */
     private fun setRecommendedArmyNavySize(civ: Civilization) {
         var maxPossibleUnits = EconomicAi.softSupplyCap(civ)
@@ -264,9 +304,21 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         landDefenseWeight += (civ.cities.size * 10 * unitsPerCity).toInt()
         landDefenseWeight += UnitAiTypes.numUnitsWithDefaultUnitAi(civ, UnitAiType.SETTLE, includeBeingTrained = true) * 10
         var navalDefenseWeight = (numCoastalCities * 7 * unitsPerCity).toInt()
+        for (city in civ.cities) {
+            if (isExposedToEnemy(civ, city, null, TargetArmyType.Combined)) {
+                landDefenseWeight += 10
+                navalDefenseWeight += 10
+            } else {
+                if (isExposedToEnemy(civ, city, null, TargetArmyType.Land)) landDefenseWeight += 10
+                if (isExposedToEnemy(civ, city, null, TargetArmyType.Naval)) navalDefenseWeight += 10
+            }
+        }
 
+        val attackArmySize = rules.define(AiDefine.BALANCE_BASIC_ATTACK_ARMY_SIZE)
         var totalOffenseWeight = 0
-        if (civ.ai.isGoingForWorldConquest()) totalOffenseWeight += rules.define(AiDefine.BALANCE_BASIC_ATTACK_ARMY_SIZE) * 10
+        for (other in civ.gameInfo.civilizations)
+            if (other != civ && other.isMajorCiv && havePreferredAttackTarget(other)) totalOffenseWeight += attackArmySize * 10
+        if (civ.ai.isGoingForWorldConquest()) totalOffenseWeight += attackArmySize * 10
 
         val navalPercent = numCoastalCities * civ.ai.personality(Flavor.Naval) * 7 / max(1, civ.cities.size)
         val defenseModifier = 100 + civ.ai.personalityAndGrandStrategy(Flavor.Defense) * 2

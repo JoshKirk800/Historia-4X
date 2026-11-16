@@ -118,11 +118,12 @@ class DevDump {
         }
     }
 
-    /** Per major: supply, soft supply cap, recommended army and navy against the units it has, defense states, gold */
+    /** Per major: supply, soft supply cap, recommended army and navy against the units it has, defense states, gold; its attack targets and exposed cities */
     private fun military(game: GameInfo, out: StringBuilder) {
         out.append("army sizes at turn ${game.turns}\n")
         for (civ in game.civilizations.filter { it.isMajorCiv && it.isAlive() }) {
             val military = civ.ai.military
+            military.updateAttackTargets(civ)
             military.updateBaseData(civ)
             military.updateDefenseState(civ)
             out.append("${civ.civName}: cities ${civ.cities.size}, units ${civ.units.getCivUnitsSize()} of supply ${civ.stats.getUnitSupply()}, " +
@@ -130,6 +131,11 @@ class DevDump {
                 "navy ${military.numNavalUnits} of ${military.recommendedNavySize} (${military.navalDefenseState}), air ${military.numAirUnits}, " +
                 "explorers ${military.recommendedExplorers}; gold ${civ.gold} (${"%+d".format(civ.stats.statsForNextTurn.gold.toInt())}), " +
                 "unit upkeep ${civ.stats.getStatMapForNextTurn()["Unit upkeep"]?.gold?.toInt()}\n")
+            for (target in military.potentialAttackTargets)
+                out.append("  target ${target.targetCity.name} (${target.targetCity.civ.civName}) from ${target.musterCity.name}: ${target.armyType}, " +
+                    "approach ${target.approachScore}, path ${target.pathLength}${if (target.preferred) ", preferred" else ""}\n")
+            for (exposed in military.exposedCities)
+                out.append("  exposed ${exposed.targetCity.name} to ${exposed.musterCity.civ.civName} from ${exposed.musterCity.name}: ${exposed.armyType}\n")
         }
     }
 

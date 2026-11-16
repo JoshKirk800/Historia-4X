@@ -82,7 +82,7 @@ object PeaceAi {
         }
 
     /** CvDiplomacyAI::AdjustConditionalModifier: scale [value] by a 1-10 flavor (5 neutral), the other way round if [invert] */
-    private fun adjustConditionalModifier(value: Int, flavor: Int, invert: Boolean = false): Int {
+    internal fun adjustConditionalModifier(value: Int, flavor: Int, invert: Boolean = false): Int {
         if (value == 0 || flavor == 0) return value
         val percentTimes10 = when (flavor) {
             1 -> if (invert) 1500 else 500

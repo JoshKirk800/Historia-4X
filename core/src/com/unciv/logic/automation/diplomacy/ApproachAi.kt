@@ -444,15 +444,16 @@ object ApproachAi {
         addDoFHistoryWeights(civ, other, w, rules)
         stage("nukes (Vox Populi)")
         addNukeWeights(civ, other, w, rules)
-        stage("They are close to world conquest (Vox Populi)")
-        addTheyAreCloseToConquestWeights(civ, other, w)
-
         stage("Bankruptcy and our lost capital (part 6)")
         ApproachPart6Ai.addBankruptcyWeights(civ, other, w)
         stage("At war right now, war states (part 6)")
         ApproachPart6Ai.addAtWarWeights(civ, other, w)
         stage("Dangerous neighbours (part 6)")
         ApproachPart6Ai.addDangerousNeighbourWeights(civ, other, w)
+        stage("They are close to winning (part 6)")
+        ApproachWinningAi.addCloseToWinningWeights(civ, other, w, rules)
+        stage("Dogpile: already at war with someone else (part 6)")
+        ApproachWinningAi.addDogpileWeights(civ, other, strategic, w, rules)
         val deception = appliesDeception(civ, other, rules)
         stage("Early game strategy (part 6)")
         ApproachGrandStrategyAi.addEarlyGameWeights(civ, other, deception, w, rules)
@@ -498,16 +499,6 @@ object ApproachAi {
         if (WarStateAi.isPlayerRecklessExpander(civ, other)) {
             scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_RECKLESS_EXPANDER))
             scale(w, DECEPTIVE, rules.define(AiDefine.APPROACH_WAR_RECKLESS_EXPANDER))
-        }
-
-        stage("Already in a war with someone else (their war states): dogpile")
-        // Already in a war with someone else (their war states): dogpile
-        val dogpiling = civ.gameInfo.civilizations.any {
-            it.isMajorCiv && it != other && it != civ && WarStateAi.isPlayerValid(other, it) && WarStateAi.warState(other, it) != null
-        }
-        if (dogpiling) {
-            scale(w, WAR, 200)
-            scale(w, DECEPTIVE, 150)
         }
 
         stage("Distance")
@@ -1008,19 +999,6 @@ object ApproachAi {
             w[HOSTILE] += bias(MajorCivApproach.Hostile) * times / 2
             w[GUARDED] += bias(MajorCivApproach.Guarded) * times
             w[AFRAID] += bias(MajorCivApproach.Afraid) * times
-        }
-    }
-
-    /**
-     *  THEY'RE CLOSE TO WINNING after Vox Populi, on our scale (VP's bias is ours x 100): one close to world conquest draws war, hostility
-     *  and guard 5 x bias. Our own domination weights are [ApproachGrandStrategyAi.addDominationWeights].
-     */
-    private fun addTheyAreCloseToConquestWeights(civ: Civilization, other: Civilization, w: IntArray) {
-        fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
-        if (VictoryProgressAi.isCloseToWorldConquest(other, civ.gameInfo.ruleset.ai)) {
-            w[WAR] += bias(MajorCivApproach.War) * 5
-            w[HOSTILE] += bias(MajorCivApproach.Hostile) * 5
-            w[GUARDED] += bias(MajorCivApproach.Guarded) * 5
         }
     }
 

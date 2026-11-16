@@ -3,6 +3,7 @@ package com.unciv.logic.automation.strategy
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.diplomacy.AggressivePosture
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
+import com.unciv.logic.automation.diplomacy.WarIntentAi
 import com.unciv.logic.battle.CityCombatant
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -127,33 +128,39 @@ object WarStateAi {
      *  in terrible shape for war, and taking no new wars, when losing all wars, bankrupt (no gold and no income), without our original
      *  capital, very unhappy (BNW's rule: excess happiness at or below VERY_UNHAPPY_THRESHOLD), or doing badly (defensive or worse: VP's
      *  troubled, which we lack) against a powerful major that is close; no new wars either while doing badly against another major,
-     *  or at a stalemate with a neighbour or a close player whose military posture is aggressive. VP leaves out easy targets and phony
-     *  wars from the stalemates (not ported: `phaseE/vp-approach-plan.md`, branch C).
+     *  or at a stalemate with a neighbour or a close player whose military posture is aggressive, unless that war is phony
+     *  ([WarIntentAi.isPhonyWar]). VP also leaves out easy targets from the stalemates (not ported yet: `phaseE/vp-approach-plan.md`, C5).
      */
     fun updateBadShapeForWar(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
-        memory.terribleShapeForWar = true
-        memory.noNewWars = true
-        if (memory.stateAllWars == StateAllWars.Losing) return
-        if (civ.gold <= 0 && civ.stats.statsForNextTurn.gold <= 0) return
-        if (VictoryProgressAi.hasLostCapital(civ)) return
-        if (civ.getHappiness() <= rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) return
-        var noNewWars = false
-        for (other in civ.gameInfo.civilizations) {
-            if (!other.isMajorCiv || !other.isAlive() || !civ.isAtWarWith(other)) continue
-            val state = memory.warStates[other.civID] ?: continue
+        val terrible = isTerribleShapeNow(civ, memory, rules)
+        // The phony-war test below reads last turn's flags, as VP sets them only at the end
+        val noNewWars = terrible || civ.gameInfo.civilizations.any { other ->
+            if (!other.isMajorCiv || !other.isAlive() || !civ.isAtWarWith(other)) return@any false
+            val state = memory.warStates[other.civID] ?: return@any false
             val theirProximity = proximityRank(other.getProximity(civ))
-            if (state <= WarState.Defensive) {
-                if ((memory.militaryStrengths[other.civID] ?: StrengthLevel.Average) >= StrengthLevel.Powerful &&
-                    theirProximity >= proximityRank(Proximity.Close)) return
-                noNewWars = true
-            } else if (state == WarState.Stalemate) {
-                if (theirProximity == proximityRank(Proximity.Neighbors)) noNewWars = true
-                else if (theirProximity == proximityRank(Proximity.Close) &&
-                    civ.ai.diplomacy.memoryOf(other).militaryPosture > AggressivePosture.None) noNewWars = true
+            when {
+                state <= WarState.Defensive -> true
+                state != WarState.Stalemate || WarIntentAi.isPhonyWar(civ, other) -> false
+                theirProximity == proximityRank(Proximity.Neighbors) -> true
+                else -> theirProximity == proximityRank(Proximity.Close) &&
+                    civ.ai.diplomacy.memoryOf(other).militaryPosture > AggressivePosture.None
             }
         }
-        memory.terribleShapeForWar = false
+        memory.terribleShapeForWar = terrible
         memory.noNewWars = noNewWars
+    }
+
+    private fun isTerribleShapeNow(civ: Civilization, memory: WarStateMemory, rules: AiRuleset): Boolean {
+        if (memory.stateAllWars == StateAllWars.Losing) return true
+        if (civ.gold <= 0 && civ.stats.statsForNextTurn.gold <= 0) return true
+        if (VictoryProgressAi.hasLostCapital(civ)) return true
+        if (civ.getHappiness() <= rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) return true
+        return civ.gameInfo.civilizations.any { other ->
+            other.isMajorCiv && other.isAlive() && civ.isAtWarWith(other) &&
+                (memory.warStates[other.civID] ?: WarState.Calm) <= WarState.Defensive &&
+                (memory.militaryStrengths[other.civID] ?: StrengthLevel.Average) >= StrengthLevel.Powerful &&
+                proximityRank(other.getProximity(civ)) >= proximityRank(Proximity.Close)
+        }
     }
 
     /** CvPlayer::IsNoNewWars (Vox Populi): see [updateBadShapeForWar] */

@@ -178,6 +178,9 @@ object DiplomacyEvents {
         if (conqueror.isMajorCiv) conqueror.ai.diplomacy.memoryOf(loser).theirWarValueLostToUs += value
         changeWarValueLost(loser, conqueror, value)
         if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesLiberated = 0
+        // CvPlayer::acquireCity (Vox Populi): the loser counts the cities the conqueror took, the conqueror the turn it last took one
+        if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesCapturedBy++
+        if (conqueror.isMajorCiv) conqueror.ai.diplomacy.memoryOf(loser).lastCityCaptureTurn = conqueror.gameInfo.turns
         // The loser's city count after the loss, as the original applies the penalties once the city has changed hands
         if (conqueror.isMajorCiv && city.foundingCivObject != conqueror) applyWarmongerPenalties(conqueror, loser, loser.cities.size - 1)
     }

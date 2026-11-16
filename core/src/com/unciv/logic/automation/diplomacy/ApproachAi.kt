@@ -313,8 +313,8 @@ object ApproachAi {
         val capturedKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other
         val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
         if (!capturedKeyCity && !untrustworthy && !civ.isAtWarWith(other)) {
-            // VP: liberated less the cities of ours they own or captured (we do not count captures: ours they own)
-            val liberationMod = memory.numCitiesLiberated - ourCitiesOwnedBy(civ, other)
+            // VP: liberated less the more of the cities of ours they own and the cities they captured from us
+            val liberationMod = memory.numCitiesLiberated - maxOf(ourCitiesOwnedBy(civ, other), memory.numCitiesCapturedBy)
             if (liberationMod > 0) {
                 w[FRIENDLY] += bias(MajorCivApproach.Friendly) * liberationMod * 2
                 zeroBadApproaches(w)
@@ -569,8 +569,10 @@ object ApproachAi {
         if (!atWar && other.getDiplomacyManager(civ)?.canDeclareWar() != true) zero(AFRAID)
         val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
         val capturedKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other
-        // IsLiberator(ePlayer, false, true) as far as we have it: they resurrected us, and took no key city of ours
-        if (memory.resurrectedUs && !capturedKeyCity && !atWar && !untrustworthy) { zero(HOSTILE); zero(WAR) }
+        // IsLiberator(ePlayer, false, true) as far as we have it: they resurrected us, captured no more of our cities than they liberated,
+        // and took no key city of ours
+        val liberator = memory.resurrectedUs && memory.numCitiesCapturedBy <= memory.numCitiesLiberated
+        if (liberator && !capturedKeyCity && !atWar && !untrustworthy) { zero(HOSTILE); zero(WAR) }
         val noFriendlyObvious = OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ) || untrustworthy
         if (strategic && noFriendlyObvious) w[FRIENDLY] = 0
         return noFriendlyObvious

@@ -302,6 +302,15 @@ object OperationalMoves {
 
             // MOVING TO TARGET
             ArmyState.MOVING_TO_DESTINATION -> {
+                // Departure (D7): with no melee unit left the army cannot take its target, and its ranged units, deployed on the hexes
+                // behind the turn target (executeFormationMoves), never move the center forward; the original keeps such an army while
+                // it is at half strength (its general counting), and in a Domination game three Rocket Artillery and a general held the
+                // one sneak attack in place for 200 turns
+                if (AiOperationLogic.armyUnits(civ, army).none { (_, unit) ->
+                        unit.isMilitary() && !unit.baseUnit.isRanged() && !Deployment.isGeneralOrAdmiral(unit) }) {
+                    civ.ai.operations.abort(operation, OperationAbortReason.HALF_STRENGTH)
+                    return
+                }
                 // Update army's current location
                 val (turnTarget, closestCurrent) = computeCenterOfMassForTurn(civ, operation, army) ?: run {
                     civ.ai.operations.abort(operation, OperationAbortReason.LOST_PATH)

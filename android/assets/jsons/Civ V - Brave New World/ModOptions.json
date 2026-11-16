@@ -2,9 +2,14 @@
     "isBaseRuleset": true,
     // Score values of Brave New World (GlobalDefines.xml SCORE_*_MULTIPLIER)
     "constants": {
+        "scoreFromCities": 8,
         "scoreFromPopulation": 4,
         "scoreFromWonders": 25,
         "scoreFromGreatWorks": 4,
+        "scoreFromPolicies": 4,
+        // SCORE_BELIEF_MULTIPLIER, SCORE_RELIGION_CITIES_MULTIPLIER
+        "scoreFromReligionBeliefs": 20,
+        "scoreFromReligionCities": 1,
         // CvGame::DoCacheMapScoreMod: 80 x 52, the standard world size
         "scoreBaseMapTiles": 4160,
         // CvMinorCivAI::CalculateBullyMetric: up to 75 for the military rank, up to 125 for the military near the City-State

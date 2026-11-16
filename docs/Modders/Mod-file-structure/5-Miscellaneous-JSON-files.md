@@ -340,7 +340,11 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | baseTurnsUntilRevolt                     | Int    | 4                             | [^Q]  |
 | cityStateElectionTurns                   | Int    | 15                            | [^R]  |
 | maxImprovementTechErasForward            | Int    | None                          | [^S]  |
+| scoreFromCities                          | Int    | 10                            | Score for each city, scaled by the map size. Brave New World uses 8 |
 | scoreFromGreatWorks                      | Int    | 0                             | Score for each Great Work. Brave New World uses 4 |
+| scoreFromPolicies                        | Int    | 0                             | Score for each adopted policy (branch openers, policies, finishers, ideology tenets; not the choice of an ideology). Brave New World uses 4 |
+| scoreFromReligionBeliefs                 | Int    | 0                             | Score for each belief of the civilization's founded religion (not a pantheon alone). Brave New World uses 20 |
+| scoreFromReligionCities                  | Int    | 0                             | Score for each city of any civilization that follows the civilization's founded religion. Brave New World uses 1 |
 | scoreBaseMapTiles                        | Int    | 1276                          | Map size, in tiles, at which the score from cities, population and land is not scaled; smaller maps score more of it (a third of the difference), larger maps less. Civ V uses 4160 |
 | greatWorkBaseCulture                     | Int    | 2                             | Culture each Great Work gives its city, before bonuses (see the unique `[stats] from each Great Work`) |
 | greatWorkBaseTourism                     | Int    | 2                             | Tourism each Great Work gives its city, before bonuses |

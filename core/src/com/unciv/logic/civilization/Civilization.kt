@@ -17,7 +17,6 @@ import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.logic.trade.TradeRequest
 import com.unciv.models.Counter
-import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.metadata.GameParameters
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.Policy
@@ -1007,10 +1006,7 @@ class Civilization : IsPartOfGameInfoSerialization {
             mapSizeModifier = (mapSizeModifier - 1) / 3 + 1
 
         val modConstants = gameInfo.ruleset.modOptions.constants
-        val isBraveNewWorld = gameInfo.ruleset.run {
-            name == BaseRuleset.Civ_V_BNW.fullName || BaseRuleset.Civ_V_BNW.fullName in mods
-        }
-        scoreBreakdown["Cities"] = cities.size * (if (isBraveNewWorld) 8 else 10) * mapSizeModifier
+        scoreBreakdown["Cities"] = cities.size * modConstants.scoreFromCities * mapSizeModifier
         scoreBreakdown["Population"] = cities.sumOf { it.population.population } * modConstants.scoreFromPopulation * mapSizeModifier
         scoreBreakdown["Tiles"] = cities.sumOf { city -> city.getTiles().count { !it.isWater } } * 1 * mapSizeModifier
         scoreBreakdown["Wonders"] = modConstants.scoreFromWonders * cities
@@ -1019,14 +1015,17 @@ class Civilization : IsPartOfGameInfoSerialization {
             }.toDouble()
         if (modConstants.scoreFromGreatWorks != 0)
             scoreBreakdown["Great Works"] = modConstants.scoreFromGreatWorks * cities.sumOf { it.greatWorks.getNumWorks() }.toDouble()
-        if (isBraveNewWorld) {
-            // Ordinary branch openers and finishers are DLL policies; ideology selection and
-            // its Unciv completion marker are not. Only an ideology's tenets score.
+        if (modConstants.scoreFromPolicies != 0) {
+            // CvPlayer::GetScoreFromPolicies: branch openers and finishers are policies of the game; the choice of an ideology and
+            // Unciv's completion marker of an ideology are not, only its tenets
             val rulesetPolicies = gameInfo.ruleset.policies
             scoreBreakdown["Policies"] = policies.getAdoptedPolicies().count { name ->
                 val policy = rulesetPolicies[name] ?: return@count false
                 !policy.branch.isIdeology || policy.isTenet
-            } * 4.0
+            } * modConstants.scoreFromPolicies.toDouble()
+        }
+        if (modConstants.scoreFromReligionBeliefs != 0 || modConstants.scoreFromReligionCities != 0) {
+            // CvPlayer::GetScoreFromReligion: the beliefs of the founded religion and the cities of any owner that follow it
             val foundedReligion = religionManager.religion
             scoreBreakdown["Religion"] =
                 if (gameInfo.isReligionEnabled() && foundedReligion != null && foundedReligion.isMajorReligion()) {
@@ -1034,7 +1033,7 @@ class Civilization : IsPartOfGameInfoSerialization {
                     val followingCities = gameInfo.civilizations.sumOf { civ ->
                         civ.cities.count { it.religion.getMajorityReligionName() == foundedReligion.name }
                     }
-                    beliefs * 20.0 + followingCities
+                    beliefs * modConstants.scoreFromReligionBeliefs.toDouble() + followingCities * modConstants.scoreFromReligionCities
                 } else 0.0
         }
         scoreBreakdown["Technologies"] = tech.techsResearched.size * 4.0

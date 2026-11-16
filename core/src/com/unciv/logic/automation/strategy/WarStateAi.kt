@@ -1,6 +1,8 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.IsPartOfGameInfoSerialization
+import com.unciv.logic.automation.diplomacy.AggressivePosture
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.battle.CityCombatant
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -38,6 +40,10 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
     var targetValues = HashMap<String, TargetValue>()
     /** CvDiplomacyAI::m_paePlayerMilitaryStrengthComparedToUs */
     var militaryStrengths = HashMap<String, StrengthLevel>()
+    /** CvPlayer::IsInTerribleShapeForWar (Vox Populi): see [WarStateAi.updateBadShapeForWar] */
+    var terribleShapeForWar = false
+    /** CvPlayer::IsNoNewWars (Vox Populi): see [WarStateAi.updateBadShapeForWar] */
+    var noNewWars = false
 
     fun clone() = WarStateMemory().also {
         it.turnsAtWar.putAll(turnsAtWar)
@@ -45,6 +51,8 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
         it.stateAllWars = stateAllWars
         it.targetValues.putAll(targetValues)
         it.militaryStrengths.putAll(militaryStrengths)
+        it.terribleShapeForWar = terribleShapeForWar
+        it.noNewWars = noNewWars
     }
 }
 
@@ -111,7 +119,48 @@ object WarStateAi {
             else memory.targetValues.remove(other.civID)
         }
         updateWarStates(civ, memory, rules)
+        updateBadShapeForWar(civ, memory, rules)
     }
+
+    /**
+     *  CvPlayer::DoTestEmpireInBadShapeForWar (Vox Populi, Release-5.4.8; D7), after the war states and strengths as VP's second call:
+     *  in terrible shape for war, and taking no new wars, when losing all wars, bankrupt (no gold and no income), without our original
+     *  capital, very unhappy (BNW's rule: excess happiness at or below VERY_UNHAPPY_THRESHOLD), or doing badly (defensive or worse: VP's
+     *  troubled, which we lack) against a powerful major that is close; no new wars either while doing badly against another major,
+     *  or at a stalemate with a neighbour or a close player whose military posture is aggressive. VP leaves out easy targets and phony
+     *  wars from the stalemates (not ported: `phaseE/vp-approach-plan.md`, branch C).
+     */
+    fun updateBadShapeForWar(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
+        memory.terribleShapeForWar = true
+        memory.noNewWars = true
+        if (memory.stateAllWars == StateAllWars.Losing) return
+        if (civ.gold <= 0 && civ.stats.statsForNextTurn.gold <= 0) return
+        if (VictoryProgressAi.hasLostCapital(civ)) return
+        if (civ.getHappiness() <= rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) return
+        var noNewWars = false
+        for (other in civ.gameInfo.civilizations) {
+            if (!other.isMajorCiv || !other.isAlive() || !civ.isAtWarWith(other)) continue
+            val state = memory.warStates[other.civID] ?: continue
+            val theirProximity = proximityRank(other.getProximity(civ))
+            if (state <= WarState.Defensive) {
+                if ((memory.militaryStrengths[other.civID] ?: StrengthLevel.Average) >= StrengthLevel.Powerful &&
+                    theirProximity >= proximityRank(Proximity.Close)) return
+                noNewWars = true
+            } else if (state == WarState.Stalemate) {
+                if (theirProximity == proximityRank(Proximity.Neighbors)) noNewWars = true
+                else if (theirProximity == proximityRank(Proximity.Close) &&
+                    civ.ai.diplomacy.memoryOf(other).militaryPosture > AggressivePosture.None) noNewWars = true
+            }
+        }
+        memory.terribleShapeForWar = false
+        memory.noNewWars = noNewWars
+    }
+
+    /** CvPlayer::IsNoNewWars (Vox Populi): see [updateBadShapeForWar] */
+    fun isNoNewWars(civ: Civilization): Boolean = civ.ai.warStates.noNewWars
+
+    /** CvPlayer::IsInTerribleShapeForWar (Vox Populi): see [updateBadShapeForWar] */
+    fun isInTerribleShapeForWar(civ: Civilization): Boolean = civ.ai.warStates.terribleShapeForWar
 
     /** CvDiplomacyAI::DoFirstContactInitRelationship: DoUpdateOnePlayerMilitaryStrength then DoUpdateOnePlayerTargetValue for the new contact [other] */
     fun updateOnContact(civ: Civilization, other: Civilization) {

@@ -875,4 +875,6 @@ enum class AiDefine(val default: Float) {
     CULTURE_LEVEL_INFLUENTIAL(100f),
     // SelectBestApproachTowardsMajorCiv part 14: this turn's score counts this much, last turn's the rest (APPROACH_SHIFT_PERCENT)
     APPROACH_SHIFT_PERCENT(0.3f),
+    // CvPlayer::IsEmpireVeryUnhappy without VP's happiness rules: excess happiness at or below this (BNW's -10; VP's 35 counts VP happiness)
+    VERY_UNHAPPY_THRESHOLD(-10f),
 }

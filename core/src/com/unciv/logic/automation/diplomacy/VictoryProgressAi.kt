@@ -125,9 +125,13 @@ object VictoryProgressAi {
     fun isCompetingForVictory(civ: Civilization): Boolean {
         if (civ.gameInfo.victoryData != null) return false
         if (civ.ai.diplomacy.memories.values.any { it.resurrectedUs }) return false
-        val lostCapital = civ.hasEverOwnedOriginalCapital && civ.cities.none { it.isOriginalCapital && it.foundingCivObject == civ }
-        return !lostCapital
+        return !hasLostCapital(civ)
     }
+
+    /** CvPlayer::IsHasLostCapital: it founded an original capital and does not hold it */
+    @Readonly
+    fun hasLostCapital(civ: Civilization): Boolean =
+        civ.hasEverOwnedOriginalCapital && civ.cities.none { it.isOriginalCapital && it.foundingCivObject == civ }
 
     /**
      *  CvDiplomacyAI::IsEndgameAggressive and IsEndgameAggressiveTo (set in DoUpdateCompetingForVictory): a civilization that competes for

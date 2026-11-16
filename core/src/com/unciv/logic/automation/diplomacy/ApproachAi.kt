@@ -602,7 +602,7 @@ object ApproachAi {
         var difference = (ourCitiesOwnedBy(other, civ) - ourCitiesOwnedBy(civ, other)) * 2
         val strength = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
         if (difference > 0) {
-            if (strength <= StrengthLevel.Average) {
+            if (strength <= StrengthLevel.Average && !WarStateAi.isNoNewWars(civ)) {
                 if (ourProximity >= DiplomacyTurn.PROXIMITY_CLOSE) {
                     w[WAR] += bias(MajorCivApproach.War) * difference
                     w[HOSTILE] += bias(MajorCivApproach.Hostile) * difference
@@ -613,7 +613,7 @@ object ApproachAi {
             }
         } else if (difference < 0) {
             difference = -difference
-            if (strength < StrengthLevel.Average) {
+            if (strength < StrengthLevel.Average && !WarStateAi.isNoNewWars(civ)) {
                 if (ourProximity >= DiplomacyTurn.PROXIMITY_CLOSE) {
                     w[WAR] += bias(MajorCivApproach.War) * difference
                     w[HOSTILE] += bias(MajorCivApproach.Hostile) * difference
@@ -967,7 +967,8 @@ object ApproachAi {
     /**
      *  CvDiplomacyAI::SelectBestApproachTowardsMajorCiv, OPPORTUNITY ATTACK DESIRE (Vox Populi): whether we want to exploit a weakness of
      *  [other]'s, over the inputs we have (`phaseE/vp-conquest-endgame-plan.md`, step 0 table). Always with a coop war against them; else,
-     *  unless the war state forbids new wars (VP's IsNoNewWars has no counterpart here, so never), with a reason that depends on whether we
+     *  unless we take no new wars ([WarStateAi.isNoNewWars]: then only when endgame-aggressive towards them, they took a key city of ours or
+     *  they are close to world conquest), with a reason that depends on whether we
      *  hold back: we hold back from distant players and, unless they are untrustworthy, took our capital or holy city, or the game is
      *  conquest-only, from friends and from those with a declaration of friendship. Holding back, a reason is: we or they are close to world
      *  conquest, they provoked us, they took a key city of ours, their warmonger threat is severe, they conquered 3 or more capitals, or the
@@ -987,6 +988,8 @@ object ApproachAi {
         val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
         val theyAreClose = VictoryProgressAi.isCloseToWorldConquest(other, rules)
         val provokedUs = memory != null && memory.demandCounter != -1 && civ.isAtWarWith(other)
+        if (WarStateAi.isNoNewWars(civ) && !VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules) && !tookKeyCity && !theyAreClose)
+            return false
         val severeThreat = civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe
         val victoryConcern = theyAreClose || VictoryProgressAi.capitalsConquered(other) >= 3
         val holdBack = proximity <= DiplomacyTurn.PROXIMITY_FAR || (!OpinionAi.isUntrustworthyFriend(other) && !tookKeyCity && !aggressiveMode

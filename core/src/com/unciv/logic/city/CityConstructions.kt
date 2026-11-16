@@ -644,6 +644,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
 
         if (construction is Building && construction.isWonder) {
             city.civ.popupAlerts.add(PopupAlert(AlertType.WonderBuilt, construction.name))
+            DiplomacyEvents.onWonderConstructed(city.civ)
             for (civ in city.civ.gameInfo.civilizations) {
                 if (civ.hasExplored(city.getCenterTile()))
                     civ.addNotification("[${construction.name}] has been built in [${city.name}]",

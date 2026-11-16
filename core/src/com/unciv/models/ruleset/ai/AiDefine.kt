@@ -887,6 +887,11 @@ enum class AiDefine(val default: Float) {
     APPROACH_MULTIPLIER_PROXIMITY_CLOSE(125f),
     APPROACH_MULTIPLIER_PROXIMITY_FAR(75f),
     APPROACH_MULTIPLIER_PROXIMITY_DISTANT(50f),
+    // DoUpdateRecklessExpanders (ExpanderAi): cities or land in % of the game's median above which a close player expands recklessly
+    RECKLESS_EXPANDER_CITIES_THRESHOLD(200f),
+    RECKLESS_EXPANDER_LAND_THRESHOLD(250f),
+    // DoUpdateWonderSpammers (ExpanderAi): world wonders above the median (less the handicap's WonderBlockMod) that make a spammer
+    WONDER_SPAMMER_THRESHOLD(3f),
     // The index of the Ancient era (VP's GD_INT_GET(ANCIENT_ERA)): conquerors of capitals then draw the most war (ApproachWinningAi)
     ANCIENT_ERA(0f),
     // The index of the Classical era (VP's GD_INT_GET(CLASSICAL_ERA)): after it the biggest competitor weighs more (ApproachAi part 4)

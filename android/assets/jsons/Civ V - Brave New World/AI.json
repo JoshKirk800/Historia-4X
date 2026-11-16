@@ -9526,7 +9526,10 @@
         "TechNumOptionsConsidered": 10,
         "CityProductionNumOptionsConsidered": 10,
         "BarbarianLandTargetRange": 2,
-        "BarbarianSeaTargetRange": 4
+        "BarbarianSeaTargetRange": 4,
+        "VictoryDisputePercent": 50,
+        "VictoryBlockPercent": 50,
+        "AggressionIncrease": 0
       }
     },
     {
@@ -9560,7 +9563,10 @@
         "TechNumOptionsConsidered": 4,
         "CityProductionNumOptionsConsidered": 4,
         "BarbarianLandTargetRange": 3,
-        "BarbarianSeaTargetRange": 6
+        "BarbarianSeaTargetRange": 6,
+        "VictoryDisputePercent": 60,
+        "VictoryBlockPercent": 60,
+        "AggressionIncrease": 2
       }
     },
     {
@@ -9594,7 +9600,10 @@
         "TechNumOptionsConsidered": 3,
         "CityProductionNumOptionsConsidered": 3,
         "BarbarianLandTargetRange": 4,
-        "BarbarianSeaTargetRange": 8
+        "BarbarianSeaTargetRange": 8,
+        "VictoryDisputePercent": 80,
+        "VictoryBlockPercent": 80,
+        "AggressionIncrease": 4
       }
     },
     {
@@ -9628,7 +9637,10 @@
         "TechNumOptionsConsidered": 2,
         "CityProductionNumOptionsConsidered": 2,
         "BarbarianLandTargetRange": 5,
-        "BarbarianSeaTargetRange": 10
+        "BarbarianSeaTargetRange": 10,
+        "VictoryDisputePercent": 90,
+        "VictoryBlockPercent": 90,
+        "AggressionIncrease": 6
       }
     },
     {
@@ -9662,7 +9674,10 @@
         "TechNumOptionsConsidered": 2,
         "CityProductionNumOptionsConsidered": 2,
         "BarbarianLandTargetRange": 5,
-        "BarbarianSeaTargetRange": 12
+        "BarbarianSeaTargetRange": 12,
+        "VictoryDisputePercent": 110,
+        "VictoryBlockPercent": 110,
+        "AggressionIncrease": 9
       }
     },
     {
@@ -9696,7 +9711,10 @@
         "TechNumOptionsConsidered": 2,
         "CityProductionNumOptionsConsidered": 2,
         "BarbarianLandTargetRange": 6,
-        "BarbarianSeaTargetRange": 15
+        "BarbarianSeaTargetRange": 15,
+        "VictoryDisputePercent": 125,
+        "VictoryBlockPercent": 125,
+        "AggressionIncrease": 12
       }
     },
     {
@@ -9730,7 +9748,10 @@
         "TechNumOptionsConsidered": 2,
         "CityProductionNumOptionsConsidered": 2,
         "BarbarianLandTargetRange": 7,
-        "BarbarianSeaTargetRange": 18
+        "BarbarianSeaTargetRange": 18,
+        "VictoryDisputePercent": 134,
+        "VictoryBlockPercent": 134,
+        "AggressionIncrease": 14
       }
     },
     {
@@ -9764,7 +9785,10 @@
         "TechNumOptionsConsidered": 2,
         "CityProductionNumOptionsConsidered": 2,
         "BarbarianLandTargetRange": 8,
-        "BarbarianSeaTargetRange": 20
+        "BarbarianSeaTargetRange": 20,
+        "VictoryDisputePercent": 150,
+        "VictoryBlockPercent": 150,
+        "AggressionIncrease": 16
       }
     },
     {
@@ -9798,7 +9822,10 @@
         "TechNumOptionsConsidered": 2,
         "CityProductionNumOptionsConsidered": 2,
         "BarbarianLandTargetRange": 5,
-        "BarbarianSeaTargetRange": 10
+        "BarbarianSeaTargetRange": 10,
+        "VictoryDisputePercent": 100,
+        "VictoryBlockPercent": 100,
+        "AggressionIncrease": 0
       }
     }
   ],

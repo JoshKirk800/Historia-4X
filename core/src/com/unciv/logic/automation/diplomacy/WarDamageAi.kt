@@ -73,6 +73,10 @@ object WarDamageAi {
         if (improvement.isGreatImprovement()) multiplier += 100
         val base = owner.gameInfo.ruleset.ai.define(AiDefine.PILLAGED_TILE_BASE_WAR_VALUE)
         applyWarDamage(pillager, owner, base * (100 + multiplier) / 100)
+        // A high-value tile: a strategic or luxury resource, or a great improvement (VP's chokepoints have no counterpart)
+        val highValue = resource?.resourceType == ResourceType.Strategic || resource?.resourceType == ResourceType.Luxury ||
+            improvement.isGreatImprovement()
+        WarProgressAi.onPillage(pillager, owner, highValue)
     }
 
     /**

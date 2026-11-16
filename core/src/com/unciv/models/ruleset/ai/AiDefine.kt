@@ -897,4 +897,21 @@ enum class AiDefine(val default: Float) {
     // CvPlayer::DoMilitaryRatingDecay: tenths of a percent of the gap to the starting rating recovered each turn at Standard speed
     // (VP's GameSpeeds column: 30 Quick, 20 Standard, 13 Epic, 7 Marathon; divided here by Unciv's speed modifier)
     MILITARY_RATING_DECAY_PERCENT(20f),
+    // CvDiplomacyAI's war progress score (WarProgressAi): its value when a war starts, its decay each turn by the enemy's strength,
+    // and what each event adds for the winner and the loser
+    WAR_PROGRESS_INITIAL_VALUE(100f),
+    WAR_PROGRESS_DECAY_VS_STRONGER(-5f),
+    WAR_PROGRESS_DECAY_VS_WEAKER(-3f),
+    WAR_PROGRESS_DECAY_VS_EQUAL(-4f),
+    WAR_PROGRESS_KILLED_UNIT(20f),
+    WAR_PROGRESS_LOST_UNIT(-10f),
+    WAR_PROGRESS_CAPTURED_SETTLER(20f),
+    WAR_PROGRESS_LOST_SETTLER(-10f),
+    WAR_PROGRESS_CAPTURED_WORKER(10f),
+    WAR_PROGRESS_LOST_WORKER(-5f),
+    WAR_PROGRESS_CAPTURED_CITY(100f),
+    WAR_PROGRESS_LOST_CITY(-50f),
+    WAR_PROGRESS_PILLAGED_IMPROVEMENT(10f),
+    WAR_PROGRESS_LOST_IMPROVEMENT(-5f),
+    WAR_PROGRESS_HIGH_VALUE_PILLAGE_MULTIPLIER(200f),
 }

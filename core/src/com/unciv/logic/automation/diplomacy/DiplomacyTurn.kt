@@ -34,6 +34,7 @@ object DiplomacyTurn {
         warDamageDecay(civ, others)
         updateWarDamageLevels(civ, others, rules)
         updateEconomicStrengths(civ, others, rules)
+        WarProgressAi.doTurn(civ, others)
         updateWarmongerThreats(civ, others, rules)
         updateMilitaryThreats(civ, others, rules)
         updateWarProjections(civ, others, rules)

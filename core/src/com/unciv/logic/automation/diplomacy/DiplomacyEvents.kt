@@ -54,6 +54,7 @@ object DiplomacyEvents {
         // wanted the war is one too
         if (declarer.isMajorCiv) declarer.ai.diplomacy.memoryOf(victim).aggressor = !isDefensivePact || wantedWar(declarer, victim)
         if (victim.isMajorCiv) victim.ai.diplomacy.memoryOf(declarer).aggressor = wantedWar(victim, declarer)
+        WarProgressAi.onWarDeclared(declarer, victim)
         if (!declarer.isMajorCiv) return
         for (observer in gameInfo.civilizations) {
             if (!observer.isMajorCiv || observer == declarer || !observer.isAlive() || !observer.knows(declarer)) continue
@@ -164,6 +165,7 @@ object DiplomacyEvents {
         if (owner.isBarbarian || killer.isBarbarian || unit.getAiPower() <= 0) return
         val value = WarDamageAi.unitWarValue(unit, owner)
         WarDamageAi.applyWarDamage(killer, owner, value)
+        WarProgressAi.onUnitKilled(owner, killer)
         if (killer.isMajorCiv) killer.ai.diplomacy.memoryOf(owner).theirWarValueLostToUs += value
     }
 
@@ -177,6 +179,7 @@ object DiplomacyEvents {
         val value = WarDamageAi.cityWarValue(city)
         if (conqueror.isMajorCiv) conqueror.ai.diplomacy.memoryOf(loser).theirWarValueLostToUs += value
         WarDamageAi.applyWarDamage(conqueror, loser, value)
+        WarProgressAi.onCityConquered(conqueror, loser, city)
         if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesLiberated = 0
         // CvPlayer::acquireCity (Vox Populi): the loser counts the cities the conqueror took, the conqueror the turn it last took one
         if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesCapturedBy++

@@ -100,7 +100,8 @@
       "Neediness": 6,
       "Forgiveness": 5,
       "Chattiness": 6,
-      "Meanness": 5
+      "Meanness": 5,
+      "WorkWithWillingness": 8
     },
     "majorCivApproachBiases": {
       "War": 5,
@@ -194,7 +195,8 @@
       "Neediness": 4,
       "Forgiveness": 5,
       "Chattiness": 7,
-      "Meanness": 7
+      "Meanness": 7,
+      "WorkWithWillingness": 5
     },
     "majorCivApproachBiases": {
       "War": 6,
@@ -283,7 +285,8 @@
       "Neediness": 4,
       "Forgiveness": 4,
       "Chattiness": 3,
-      "Meanness": 5
+      "Meanness": 5,
+      "WorkWithWillingness": 1
     },
     "majorCivApproachBiases": {
       "War": 8,
@@ -377,7 +380,8 @@
       "Neediness": 4,
       "Forgiveness": 4,
       "Chattiness": 5,
-      "Meanness": 6
+      "Meanness": 6,
+      "WorkWithWillingness": 2
     },
     "majorCivApproachBiases": {
       "War": 7,
@@ -471,7 +475,8 @@
       "Neediness": 3,
       "Forgiveness": 4,
       "Chattiness": 5,
-      "Meanness": 8
+      "Meanness": 8,
+      "WorkWithWillingness": 3
     },
     "majorCivApproachBiases": {
       "War": 8,
@@ -565,7 +570,8 @@
       "Neediness": 7,
       "Forgiveness": 4,
       "Chattiness": 4,
-      "Meanness": 7
+      "Meanness": 7,
+      "WorkWithWillingness": 5
     },
     "majorCivApproachBiases": {
       "War": 5,
@@ -659,7 +665,8 @@
       "Neediness": 7,
       "Forgiveness": 6,
       "Chattiness": 5,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 10
     },
     "majorCivApproachBiases": {
       "War": 6,
@@ -753,7 +760,8 @@
       "Neediness": 5,
       "Forgiveness": 3,
       "Chattiness": 5,
-      "Meanness": 7
+      "Meanness": 7,
+      "WorkWithWillingness": 6
     },
     "majorCivApproachBiases": {
       "War": 6,
@@ -842,7 +850,8 @@
       "Neediness": 5,
       "Forgiveness": 5,
       "Chattiness": 5,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 9
     },
     "majorCivApproachBiases": {
       "War": 6,
@@ -931,7 +940,8 @@
       "Neediness": 6,
       "Forgiveness": 4,
       "Chattiness": 7,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 5
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -1020,7 +1030,8 @@
       "Neediness": 6,
       "Forgiveness": 3,
       "Chattiness": 4,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 5
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -1109,7 +1120,8 @@
       "Neediness": 5,
       "Forgiveness": 5,
       "Chattiness": 7,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 8
     },
     "majorCivApproachBiases": {
       "War": 7,
@@ -1198,7 +1210,8 @@
       "Neediness": 7,
       "Forgiveness": 5,
       "Chattiness": 5,
-      "Meanness": 6
+      "Meanness": 6,
+      "WorkWithWillingness": 4
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -1287,7 +1300,8 @@
       "Neediness": 5,
       "Forgiveness": 5,
       "Chattiness": 7,
-      "Meanness": 3
+      "Meanness": 3,
+      "WorkWithWillingness": 10
     },
     "majorCivApproachBiases": {
       "War": 3,
@@ -1376,7 +1390,8 @@
       "Neediness": 5,
       "Forgiveness": 5,
       "Chattiness": 4,
-      "Meanness": 5
+      "Meanness": 5,
+      "WorkWithWillingness": 7
     },
     "majorCivApproachBiases": {
       "War": 5,
@@ -1465,7 +1480,8 @@
       "Neediness": 7,
       "Forgiveness": 3,
       "Chattiness": 6,
-      "Meanness": 3
+      "Meanness": 3,
+      "WorkWithWillingness": 12
     },
     "majorCivApproachBiases": {
       "War": 2,
@@ -1554,7 +1570,8 @@
       "Neediness": 5,
       "Forgiveness": 3,
       "Chattiness": 5,
-      "Meanness": 6
+      "Meanness": 6,
+      "WorkWithWillingness": 6
     },
     "majorCivApproachBiases": {
       "War": 7,
@@ -1643,7 +1660,8 @@
       "Neediness": 4,
       "Forgiveness": 6,
       "Chattiness": 6,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 1
     },
     "majorCivApproachBiases": {
       "War": 7,
@@ -1732,7 +1750,8 @@
       "Neediness": 7,
       "Forgiveness": 6,
       "Chattiness": 4,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 5
     },
     "majorCivApproachBiases": {
       "War": 3,
@@ -1821,7 +1840,8 @@
       "Neediness": 4,
       "Forgiveness": 5,
       "Chattiness": 4,
-      "Meanness": 6
+      "Meanness": 6,
+      "WorkWithWillingness": 3
     },
     "majorCivApproachBiases": {
       "War": 6,
@@ -1910,7 +1930,8 @@
       "Neediness": 6,
       "Forgiveness": 6,
       "Chattiness": 5,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 9
     },
     "majorCivApproachBiases": {
       "War": 3,
@@ -1999,7 +2020,8 @@
       "Neediness": 7,
       "Forgiveness": 6,
       "Chattiness": 3,
-      "Meanness": 3
+      "Meanness": 3,
+      "WorkWithWillingness": 8
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -2088,7 +2110,8 @@
       "Neediness": 7,
       "Forgiveness": 6,
       "Chattiness": 5,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 4
     },
     "majorCivApproachBiases": {
       "War": 6,
@@ -2177,7 +2200,8 @@
       "Neediness": 4,
       "Forgiveness": 6,
       "Chattiness": 6,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 9
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -2266,7 +2290,8 @@
       "Neediness": 6,
       "Forgiveness": 4,
       "Chattiness": 7,
-      "Meanness": 3
+      "Meanness": 3,
+      "WorkWithWillingness": 9
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -2355,7 +2380,8 @@
       "Neediness": 4,
       "Forgiveness": 4,
       "Chattiness": 4,
-      "Meanness": 5
+      "Meanness": 5,
+      "WorkWithWillingness": 2
     },
     "majorCivApproachBiases": {
       "War": 8,
@@ -2444,7 +2470,8 @@
       "Neediness": 4,
       "Forgiveness": 7,
       "Chattiness": 6,
-      "Meanness": 6
+      "Meanness": 6,
+      "WorkWithWillingness": 7
     },
     "majorCivApproachBiases": {
       "War": 8,
@@ -2533,7 +2560,8 @@
       "Neediness": 3,
       "Forgiveness": 3,
       "Chattiness": 6,
-      "Meanness": 7
+      "Meanness": 7,
+      "WorkWithWillingness": 7
     },
     "majorCivApproachBiases": {
       "War": 6,
@@ -2622,7 +2650,8 @@
       "Neediness": 6,
       "Forgiveness": 5,
       "Chattiness": 3,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 3
     },
     "majorCivApproachBiases": {
       "War": 7,
@@ -2711,7 +2740,8 @@
       "Neediness": 5,
       "Forgiveness": 5,
       "Chattiness": 3,
-      "Meanness": 5
+      "Meanness": 5,
+      "WorkWithWillingness": 7
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -2800,7 +2830,8 @@
       "Neediness": 6,
       "Forgiveness": 5,
       "Chattiness": 7,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 5
     },
     "majorCivApproachBiases": {
       "War": 5,
@@ -2889,7 +2920,8 @@
       "Neediness": 6,
       "Forgiveness": 5,
       "Chattiness": 5,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 10
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -2978,7 +3010,8 @@
       "Neediness": 5,
       "Forgiveness": 5,
       "Chattiness": 5,
-      "Meanness": 5
+      "Meanness": 5,
+      "WorkWithWillingness": 5
     },
     "majorCivApproachBiases": {
       "War": 3,
@@ -3067,7 +3100,8 @@
       "Neediness": 5,
       "Forgiveness": 3,
       "Chattiness": 4,
-      "Meanness": 6
+      "Meanness": 6,
+      "WorkWithWillingness": 5
     },
     "majorCivApproachBiases": {
       "War": 3,
@@ -3156,7 +3190,8 @@
       "Neediness": 7,
       "Forgiveness": 6,
       "Chattiness": 6,
-      "Meanness": 3
+      "Meanness": 3,
+      "WorkWithWillingness": 10
     },
     "majorCivApproachBiases": {
       "War": 5,
@@ -3245,7 +3280,8 @@
       "Neediness": 6,
       "Forgiveness": 7,
       "Chattiness": 4,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 10
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -3334,7 +3370,8 @@
       "Neediness": 5,
       "Forgiveness": 5,
       "Chattiness": 5,
-      "Meanness": 8
+      "Meanness": 8,
+      "WorkWithWillingness": 2
     },
     "majorCivApproachBiases": {
       "War": 8,
@@ -3423,7 +3460,8 @@
       "Neediness": 3,
       "Forgiveness": 5,
       "Chattiness": 6,
-      "Meanness": 3
+      "Meanness": 3,
+      "WorkWithWillingness": 8
     },
     "majorCivApproachBiases": {
       "War": 5,
@@ -3512,7 +3550,8 @@
       "Neediness": 4,
       "Forgiveness": 7,
       "Chattiness": 8,
-      "Meanness": 5
+      "Meanness": 5,
+      "WorkWithWillingness": 9
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -3601,7 +3640,8 @@
       "Neediness": 7,
       "Forgiveness": 7,
       "Chattiness": 5,
-      "Meanness": 4
+      "Meanness": 4,
+      "WorkWithWillingness": 8
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -3690,7 +3730,8 @@
       "Neediness": 5,
       "Forgiveness": 6,
       "Chattiness": 4,
-      "Meanness": 5
+      "Meanness": 5,
+      "WorkWithWillingness": 10
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -3779,7 +3820,8 @@
       "Neediness": 6,
       "Forgiveness": 4,
       "Chattiness": 6,
-      "Meanness": 7
+      "Meanness": 7,
+      "WorkWithWillingness": 5
     },
     "majorCivApproachBiases": {
       "War": 4,
@@ -3853,7 +3895,8 @@
       "Neediness": 6,
       "Forgiveness": 5,
       "Chattiness": 7,
-      "Meanness": 6
+      "Meanness": 6,
+      "WorkWithWillingness": 8
     },
     "majorCivApproachBiases": {
       "War": 4,

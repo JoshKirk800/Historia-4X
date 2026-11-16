@@ -36,7 +36,9 @@ object OpinionAi {
     fun updateOpinion(civ: Civilization, other: Civilization, rules: AiRuleset = civ.gameInfo.ruleset.ai) {
         val diplomacy = civ.getDiplomacyManager(other) ?: return
         val weight = opinionWeight(civ, other, rules, diplomacy)
-        civ.ai.diplomacy.memoryOf(other).opinion = opinionLevel(weight, rules)
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        memory.opinionWeight = weight
+        memory.opinion = opinionLevel(weight, rules)
     }
 
     /** The OPINION_THRESHOLD_* mapping of DoUpdateOnePlayerOpinion */

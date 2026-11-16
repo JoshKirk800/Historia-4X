@@ -35,6 +35,13 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     /** null = NO_MAJOR_CIV_APPROACH (not evaluated yet: reads as Neutral) */
     var approach: MajorCivApproach? = null
     var warFace: WarFace? = null
+    /** CvDiplomacyAI::GetCachedOpinionWeight: the opinion weight behind [opinion], from the last DoUpdateOnePlayerOpinion */
+    var opinionWeight = 0
+    /** CvDiplomacyAI::GetPlayerApproachValue: each approach's score after the approach curve, by [MajorCivApproach.ordinal]; empty until first chosen */
+    var approachValues = ArrayList<Int>()
+    /** CvDiplomacyAI::GetPlayerStrategicApproachValue / GetCivStrategicApproach: the scores and the choice of this turn's strategic pass */
+    var strategicApproachValues = ArrayList<Int>()
+    var strategicApproach: MajorCivApproach? = null
 
     // War
     var warGoal: WarGoal? = null
@@ -177,6 +184,8 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     fun clone(): MajorCivMemory {
         val copy = MajorCivMemory()
         copy.opinion = opinion; copy.approach = approach; copy.warFace = warFace
+        copy.opinionWeight = opinionWeight; copy.approachValues = ArrayList(approachValues)
+        copy.strategicApproachValues = ArrayList(strategicApproachValues); copy.strategicApproach = strategicApproach
         copy.warGoal = warGoal; copy.wantPeaceCounter = wantPeaceCounter; copy.wantsPeace = wantsPeace; copy.warProjection = warProjection
         copy.lastWarProjection = lastWarProjection; copy.warDamageLevel = warDamageLevel; copy.warValueLost = warValueLost
         copy.theirWarValueLostToUs = theirWarValueLostToUs; copy.theirWarDamageLevel = theirWarDamageLevel

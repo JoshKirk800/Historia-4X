@@ -7,13 +7,21 @@ import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import kotlin.random.Random
 
 /**
- *  CvDiplomacyAI::DoUpdateMajorCivApproaches and GetBestApproachTowardsMajorCiv: each turn every approach towards a major is chosen anew,
- *  worst opinion first (ties: strongest best weight first), so later choices see the earlier ones.
+ *  CvDiplomacyAI::DoUpdateMajorCivApproaches and SelectBestApproachTowardsMajorCiv of Vox Populi (Release-5.4.8, CvDiplomacyAI.cpp; D7, in
+ *  place of BNW's GetBestApproachTowardsMajorCiv and its worst-opinion-first order). Each turn two passes go over the valid majors: a
+ *  strategic one that records every player's scores, then the final one, in which an approach weighs less towards a player the more other
+ *  players rank above them for it (part 9). The scores of [approachWeights] (on our scale: VP's personality bias x 100 is ours x 1, so
+ *  they are multiplied by 100 first) go through VP's frame: prioritization, randomness (part 11), opinion as a percentage (part 13), the
+ *  approach curve that carries 70% of last turn's scores into this turn's (part 14), and the selection (part 15).
+ *  The terms of parts 2 to 8 are still BNW's where `phaseE/vp-approach-plan.md` has not ported them yet; parts 10 and 12 too (BNW's
+ *  multipliers in [approachWeights], [applyFinalRules]). Not taken in from part 1 yet: leader traits and the default victory pursuit (VP's
+ *  trait and victory classifications), quests of city-states, and the bonus when an army is in place for the attack (VP's war targets).
  */
 object ApproachAi {
 
@@ -25,136 +33,224 @@ object ApproachAi {
     private val AFRAID = MajorCivApproach.Afraid.ordinal
     private val FRIENDLY = MajorCivApproach.Friendly.ordinal
     private val NEUTRAL = MajorCivApproach.Neutral.ordinal
+    /** VP's CivApproachTypes order (NEUTRAL before FRIENDLY), which decides ties and what is worse than neutral */
+    private val VP_ORDER = listOf(MajorCivApproach.War, MajorCivApproach.Hostile, MajorCivApproach.Deceptive, MajorCivApproach.Guarded,
+        MajorCivApproach.Afraid, MajorCivApproach.Neutral, MajorCivApproach.Friendly)
+    private val BAD_APPROACHES = intArrayOf(WAR, HOSTILE, DECEPTIVE, GUARDED, AFRAID)
 
     /** A developer's view into [approachWeights]: called with the name of the step about to run and the weights so far (the live array: copy it). Null in the game. */
     @JvmField var debugSink: ((String, IntArray) -> Unit)? = null
 
-    /** The outcome of [bestApproach]: the approach, its weight, and the war face it would wear (null unless War) */
-    class BestApproach(val approach: MajorCivApproach, val weight: Int, val warFace: WarFace?)
-
-    /** CvDiplomacyAI::DoUpdateMajorCivApproaches */
+    /** CvDiplomacyAI::DoUpdateMajorCivApproaches: the strategic pass, then the final pass, over every valid major */
     fun updateApproaches(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
-        val ai = civ.ai.diplomacy
         val majors = others.filter { it.isMajorCiv }
-        // Last turn's approaches go to the scratch pad; the real ones are cleared so the order of this turn's choices is visible
-        val oldApproaches = HashMap<String, MajorCivApproach?>(majors.size)
-        for (other in majors) {
-            val memory = ai.memoryOf(other)
-            oldApproaches[other.civID] = memory.approach
-            memory.approach = null
-        }
         val random = civ.ai.random("DiplomacyAI.MajorCivApproach")
-        val order = ArrayList<Civilization>(majors.size)
-        for (opinion in MajorCivOpinion.entries) {
-            val withOpinion = majors.filter { ai.memoryOf(it).opinion == opinion }
-            if (withOpinion.size == 1) order.add(withOpinion[0])
-            else if (withOpinion.size > 1)
-                withOpinion.map { it to bestApproach(civ, it, oldApproaches[it.civID], lookAtOtherPlayers = false, rules, random).weight }
-                    .sortedByDescending { it.second }.mapTo(order) { it.first }
-        }
-        for (other in order) {
-            val best = bestApproach(civ, other, oldApproaches[other.civID], lookAtOtherPlayers = true, rules, random)
-            val memory = ai.memoryOf(other)
-            if (best.approach == MajorCivApproach.War && memory.warFace == null) memory.warFace = best.warFace
-            memory.approach = best.approach
-        }
+        for (strategic in listOf(true, false))
+            for (other in majors) selectApproach(civ, other, strategic, majors, rules, random)
     }
 
-    /** DoFirstContactInitRelationship: an approach right when we meet (the others keep theirs) */
+    /** DoFirstContactInitRelationship: an approach right when we meet (the others keep theirs), as the first update of that player */
     fun initApproach(civ: Civilization, other: Civilization, rules: AiRuleset) {
-        val memory = civ.ai.diplomacy.memoryOf(other)
-        val best = bestApproach(civ, other, memory.approach, lookAtOtherPlayers = true, rules, civ.ai.random("DiplomacyAI.FirstContact" + other.civID))
-        if (best.approach == MajorCivApproach.War && memory.warFace == null) memory.warFace = best.warFace
-        memory.approach = best.approach
+        selectApproach(civ, other, strategic = false, listOf(other), rules, civ.ai.random("DiplomacyAI.FirstContact" + other.civID))
     }
 
     /**
-     *  CvDiplomacyAI::GetBestApproachTowardsMajorCiv. [oldApproach] is last turn's approach (the scratch pad), [random] draws the random part
-     *  (APPROACH_RANDOM_PERCENT of each positive weight).
+     *  SelectBestApproachTowardsMajorCiv for [other] among [validPlayers]. The strategic pass records the scores and the choice as the
+     *  strategic ones; the final pass sets the approach (and the war face when it is war). The first update (met this turn: VP's
+     *  GetTurnsSinceMeetingTeam == 0) has no last-turn biases and no curve, and is never worse than neutral unless they provoked us.
+     *  @return the approach chosen
      */
-    fun bestApproach(civ: Civilization, other: Civilization, oldApproach: MajorCivApproach?, lookAtOtherPlayers: Boolean,
-                     rules: AiRuleset, random: Random): BestApproach {
-        val weights = approachWeights(civ, other, oldApproach, lookAtOtherPlayers, rules)
-        // Random factor: weights in hundreds, plus up to APPROACH_RANDOM_PERCENT of a positive weight
-        for (i in weights.indices) {
-            weights[i] *= 100
-            var randAmount = weights[i] * rules.define(AiDefine.APPROACH_RANDOM_PERCENT)
-            if (randAmount > 0) {
-                randAmount /= 100
-                if (randAmount > 0) weights[i] += random.nextInt(randAmount)
-            }
+    fun selectApproach(civ: Civilization, other: Civilization, strategic: Boolean, validPlayers: List<Civilization>, rules: AiRuleset,
+                       random: Random): MajorCivApproach {
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        val firstUpdate = memory.turnMet == civ.gameInfo.turns
+        val w = approachWeights(civ, other, if (firstUpdate) null else memory.approach, rules)
+        for (i in w.indices) w[i] *= 100
+        val mods = approachMods(civ)
+        if (!strategic && validPlayers.size > 1) prioritize(civ, other, validPlayers, mods, w)
+        capAtZero(w)
+        if (!strategic) randomize(w, rules, random)
+        capAtZero(w)
+        applyFinalRules(civ, other, w, rules)
+        applyOpinion(civ, other, strategic, validPlayers, mods, w, rules)
+        // Part 14, the approach curve: no jumping from value to value. A player without values yet (first update, or a game saved before
+        // the curve) starts from this turn's.
+        val curve = !strategic && !firstUpdate && memory.approachValues.size == APPROACHES.size
+        if (curve) for (i in w.indices) w[i] = curved(w[i], memory.approachValues[i], rules)
+        if (!strategic) memory.approachValues = ArrayList(w.toList())
+
+        // Part 15, the selection: the highest score in VP's order; all at zero is neutral
+        var approach = if (w.all { it <= 0 }) MajorCivApproach.Neutral else VP_ORDER.maxBy { w[it.ordinal] }
+        if (firstUpdate && !provokedUs(civ, other) && VP_ORDER.indexOf(approach) < VP_ORDER.indexOf(MajorCivApproach.Neutral))
+            approach = MajorCivApproach.Neutral
+        if (strategic) {
+            memory.strategicApproachValues = ArrayList(w.toList())
+            memory.strategicApproach = approach
+        } else {
+            if (approach == MajorCivApproach.War && memory.warFace == null) memory.warFace = warFace(civ, other, w)
+            memory.approach = approach
         }
-        applyFinalRules(civ, other, weights, rules)
-        return pickApproach(civ, other, weights)
+        return approach
     }
 
-    /** The weights of GetBestApproachTowardsMajorCiv before the random part, by [MajorCivApproach.ordinal] */
-    fun approachWeights(civ: Civilization, other: Civilization, oldApproach: MajorCivApproach?, lookAtOtherPlayers: Boolean, rules: AiRuleset): IntArray {
+    /**
+     *  Part 9's modifiers, one per approach, also used by part 13: the approach bias (VP's bias / 100, ours as it is) plus the personality
+     *  value behind the approach: boldness, denounce willingness, 11 - loyalty, 11 - work-with willingness, 11 - meanness, DoF willingness,
+     *  diplo balance.
+     */
+    fun approachMods(civ: Civilization): IntArray {
+        val ai = civ.ai
+        val mods = IntArray(APPROACHES.size)
+        mods[WAR] = ai.majorCivApproachBias(MajorCivApproach.War) + ai.diplomacyValue(DiplomacyPersonality.Boldness)
+        mods[HOSTILE] = ai.majorCivApproachBias(MajorCivApproach.Hostile) + ai.diplomacyValue(DiplomacyPersonality.DenounceWillingness)
+        mods[DECEPTIVE] = ai.majorCivApproachBias(MajorCivApproach.Deceptive) + (11 - ai.diplomacyValue(DiplomacyPersonality.Loyalty))
+        mods[GUARDED] = ai.majorCivApproachBias(MajorCivApproach.Guarded) + (11 - ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness))
+        mods[AFRAID] = ai.majorCivApproachBias(MajorCivApproach.Afraid) + (11 - ai.diplomacyValue(DiplomacyPersonality.Meanness))
+        mods[FRIENDLY] = ai.majorCivApproachBias(MajorCivApproach.Friendly) + ai.diplomacyValue(DiplomacyPersonality.DoFWillingness)
+        mods[NEUTRAL] = ai.majorCivApproachBias(MajorCivApproach.Neutral) + ai.diplomacyValue(DiplomacyPersonality.DiploBalance)
+        return mods
+    }
+
+    /**
+     *  Part 9, prioritization (final pass only): for each approach the valid players are ranked by their strategic scores, highest first;
+     *  [other] at rank r loses r x the approach's bias (x 100), less when the approach's modifier is above 10 and more when below:
+     *  so we do not adopt the same approach towards too many players.
+     */
+    private fun prioritize(civ: Civilization, other: Civilization, validPlayers: List<Civilization>, mods: IntArray, w: IntArray) {
+        val memories = civ.ai.diplomacy.memories
+        for (approach in APPROACHES) {
+            val i = approach.ordinal
+            val rank = validPlayers.sortedByDescending { memories[it.civID]?.strategicApproachValues?.getOrNull(i) ?: 0 }.indexOf(other)
+            if (rank <= 0) continue
+            var reduction = civ.ai.majorCivApproachBias(approach) * 100 * rank
+            val flavorMod = (mods[i] - 10) * 10
+            if (flavorMod > 0) reduction = reduction * 100 / (100 + flavorMod)
+            else if (flavorMod < 0) reduction = reduction * (100 + flavorMod) / 100
+            if (reduction > 0) w[i] -= reduction
+        }
+    }
+
+    /** Part 11, randomness (final pass only): each approach x a random 100 +/- APPROACH_RANDOM_PERCENT % (in VP's order of draws) */
+    private fun randomize(w: IntArray, rules: AiRuleset, random: Random) {
+        val factor = rules.define(AiDefine.APPROACH_RANDOM_PERCENT).coerceIn(0, 100)
+        if (factor == 0) return
+        for (i in intArrayOf(FRIENDLY, NEUTRAL, AFRAID, GUARDED, DECEPTIVE, HOSTILE, WAR))
+            w[i] = percent(w[i], random.nextInt(100 - factor, 100 + factor + 1))
+    }
+
+    /**
+     *  Part 13, opinion: the cached opinion weight as a +/- % on every approach, after the other modifiers. Above the competitor threshold
+     *  (measured against the average of the others we dislike), the bad approaches rise and friendly and neutral fall; below the favorable
+     *  threshold (against the average of the others we like) friendly rises, the bad approaches fall, and neutral is aimed one below
+     *  friendly after the curve as far as the opinion allows (raised as far as it can when friendly does not lead); in between, neutral
+     *  rises, the more the nearer the opinion is to 0. The thresholds are the ones of our opinion weights (BNW's until VP's opinion is
+     *  ported: `phaseE/vp-approach-plan.md`, section 2).
+     */
+    private fun applyOpinion(civ: Civilization, other: Civilization, strategic: Boolean, validPlayers: List<Civilization>, mods: IntArray,
+                             w: IntArray, rules: AiRuleset) {
+        val memories = civ.ai.diplomacy.memories
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        var opinionWeight = memory.opinionWeight
+        val competitorDefine = rules.define(AiDefine.OPINION_THRESHOLD_COMPETITOR)
+        val favorableDefine = rules.define(AiDefine.OPINION_THRESHOLD_FAVORABLE)
+        val competitor = maxOf(competitorDefine, 1)
+        val favorable = minOf(favorableDefine, -1)
+        val othersWeights = validPlayers.filter { it != other }.map { memories[it.civID]?.opinionWeight ?: 0 }
+        if (opinionWeight > competitor) {
+            val bad = othersWeights.filter { it > competitorDefine }
+            if (validPlayers.size > 1 && bad.isNotEmpty()) {
+                val average = bad.sum() / bad.size
+                val difference = (opinionWeight * 100 - average * 100) / maxOf(average, 1)
+                opinionWeight = percent(opinionWeight, range(100 + difference, mods[HOSTILE] + 40, maxOf(100, mods[FRIENDLY] * 10)))
+            }
+            for (i in BAD_APPROACHES) w[i] = percent(w[i], 100 + mods[i] + opinionWeight)
+            w[FRIENDLY] = percentDecrease(w[FRIENDLY], maxOf(100, 100 - mods[FRIENDLY] + opinionWeight))
+            w[NEUTRAL] = percentDecrease(w[NEUTRAL], maxOf(100, 100 - mods[NEUTRAL] + opinionWeight))
+        } else if (opinionWeight < favorable) {
+            opinionWeight = -opinionWeight
+            val good = othersWeights.filter { it < favorableDefine }
+            if (validPlayers.size > 1 && good.isNotEmpty()) {
+                val average = -good.sum() / good.size
+                val difference = (opinionWeight * 100 - average * 100) / maxOf(average, 1)
+                opinionWeight = percent(opinionWeight, range(100 + difference, mods[FRIENDLY] + 40, maxOf(100, mods[HOSTILE] * 10)))
+            }
+            w[FRIENDLY] = percent(w[FRIENDLY], 100 + mods[FRIENDLY] + opinionWeight)
+            for (i in BAD_APPROACHES) w[i] = percentDecrease(w[i], maxOf(100, 100 - mods[i] + opinionWeight))
+            // Neutral: as far up or down as the opinion permits, aimed at one below friendly after this turn's curve
+            val neutralUp = percent(w[NEUTRAL], 100 + mods[NEUTRAL] + opinionWeight)
+            val neutralDown = percentDecrease(w[NEUTRAL], maxOf(100, 100 - mods[NEUTRAL] + opinionWeight))
+            fun last(i: Int) = memory.approachValues.getOrNull(i) ?: 0
+            val friendlyPost = if (strategic) w[FRIENDLY] else curved(w[FRIENDLY], last(FRIENDLY), rules)
+            val highestBadPost = if (strategic) BAD_APPROACHES.maxOf { w[it] }
+                else BAD_APPROACHES.maxOf { curved(w[it], last(it), rules) }.coerceAtLeast(0)
+            if (friendlyPost > highestBadPost) {
+                var target = friendlyPost - 1
+                if (!strategic) {
+                    // the value that, curved with last turn's neutral, comes out at the target
+                    val alpha = rules.defineFloat(AiDefine.APPROACH_SHIFT_PERCENT)
+                    target = ((target - (1 - alpha) * last(NEUTRAL)) / alpha).toInt()
+                }
+                if (target > w[NEUTRAL]) w[NEUTRAL] = minOf(target, neutralUp)
+                else if (target < w[NEUTRAL]) w[NEUTRAL] = maxOf(neutralDown, target)
+            } else w[NEUTRAL] = neutralUp
+        } else {
+            var neutralMod = mods[NEUTRAL]
+            neutralMod = if (opinionWeight >= 0) neutralMod * (100 + 100 * (competitor - opinionWeight) / competitor) / 100
+            else neutralMod * (100 + 100 * (favorable - opinionWeight) / -favorable) / 100
+            w[NEUTRAL] = percent(w[NEUTRAL], 100 + neutralMod)
+        }
+    }
+
+    /** Part 14: this turn's [value] weighed APPROACH_SHIFT_PERCENT against [last] turn's, moving at least one step when the value changed */
+    private fun curved(value: Int, last: Int, rules: AiRuleset): Int {
+        val alpha = rules.defineFloat(AiDefine.APPROACH_SHIFT_PERCENT)
+        var average = (0.5f + value * alpha + last * (1 - alpha)).toInt()
+        if (average == last && value != last) average += if (value > last) 1 else -1
+        return average
+    }
+
+    /** bProvokedUs of part 3 (demands, denouncements) as far as we have it: a demand of theirs while at war, or they denounced us */
+    private fun provokedUs(civ: Civilization, other: Civilization): Boolean {
+        val memory = civ.ai.diplomacy.memories[other.civID]
+        return (memory != null && memory.demandCounter != -1 && civ.isAtWarWith(other)) || OpinionAi.isDenouncedPlayer(other, civ)
+    }
+
+    /** CvDiplomacyAI::ApplyPercentageModifier: [value] x [modifier] / 100 */
+    private fun percent(value: Int, modifier: Int): Int = (value.toLong() * modifier / 100).toInt()
+    /** CvDiplomacyAI::ApplyPercentageModifier with bDecrease: [value] x 100 / [modifier] */
+    private fun percentDecrease(value: Int, modifier: Int): Int = (value.toLong() * 100 / modifier).toInt()
+    /** VP's range(): [value] kept within [low] and [high] (the high bound wins when they cross) */
+    private fun range(value: Int, low: Int, high: Int): Int = minOf(maxOf(value, low), high)
+    private fun capAtZero(w: IntArray) { for (i in w.indices) if (w[i] < 0) w[i] = 0 }
+
+    /**
+     *  The weights of SelectBestApproachTowardsMajorCiv before part 9, by [MajorCivApproach.ordinal], on our scale (VP's / 100).
+     *  [oldApproach] is last turn's approach, null on the first update (no last-turn biases).
+     */
+    fun approachWeights(civ: Civilization, other: Civilization, oldApproach: MajorCivApproach?, rules: AiRuleset): IntArray {
         val ai = civ.ai.diplomacy
         val memory = ai.memoryOf(other)
         val w = IntArray(APPROACHES.size)
         fun stage(name: String) { debugSink?.invoke(name, w) }
+        fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
 
-        stage("Neutral default")
-        // Neutral default
-        w[NEUTRAL] += rules.define(AiDefine.APPROACH_NEUTRAL_DEFAULT)
+        stage("Personality (part 1)")
+        for (approach in APPROACHES) w[approach.ordinal] += bias(approach)
 
-        stage("Current approach biases: stay where we are")
-        // Current approach biases: stay where we are
-        val old = oldApproach ?: MajorCivApproach.Neutral
-        w[old.ordinal] += rules.define(AiDefine.APPROACH_BIAS_FOR_CURRENT)
-        if (old == MajorCivApproach.Deceptive) w[WAR] += rules.define(AiDefine.APPROACH_WAR_CURRENTLY_DECEPTIVE)
-        if (old == MajorCivApproach.Hostile) w[HOSTILE] += rules.define(AiDefine.APPROACH_HOSTILE_CURRENTLY_HOSTILE)
+        stage("Neutral default (part 1)")
+        w[NEUTRAL] += bias(MajorCivApproach.Neutral) * rules.define(AiDefine.APPROACH_NEUTRAL_DEFAULT)
+
+        stage("Last turn's approach (part 1): less likely to flip, and war is not given up easily")
+        if (oldApproach != null) {
+            w[oldApproach.ordinal] += bias(oldApproach) * rules.define(AiDefine.APPROACH_BIAS_FOR_CURRENT)
+            if (oldApproach == MajorCivApproach.War) w[WAR] += bias(MajorCivApproach.War) * rules.define(AiDefine.APPROACH_WAR_CURRENTLY_WAR)
+        }
         val warState = WarStateAi.warState(civ, other)
-        stage("Wanted war last turn: the war must be going better than a stalemate")
-        // Wanted war last turn: the war must be going better than a stalemate
-        if (warState != null && warState > WarState.Stalemate && old == MajorCivApproach.War) w[WAR] += rules.define(AiDefine.APPROACH_WAR_CURRENTLY_WAR)
-        stage("Conquest bias (Vox Populi): not at war yet, or the war going better than defensive")
-        // Conquest bias (Vox Populi, D7, in place of BNW's APPROACH_WAR_CONQUEST_GRAND_STRATEGY): going for world conquest or close to it
+        stage("Conquest bias (part 1): not at war yet, or the war going better than defensive")
+        // Going for world conquest or close to it (VP: better than troubled, which we lack: better than defensive)
         val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
         if ((warState == null || warState > WarState.Defensive) && (civ.ai.isGoingForWorldConquest() || closeToConquest))
-            w[WAR] += civ.ai.majorCivApproachBias(MajorCivApproach.War) * (if (closeToConquest) 2 else 1)
-
-        stage("Personality")
-        // Personality
-        for (approach in APPROACHES) w[approach.ordinal] += civ.ai.majorCivApproachBias(approach)
-
-        stage("Opinion")
-        // Opinion
-        when (memory.opinion) {
-            MajorCivOpinion.Unforgivable -> {
-                w[WAR] += rules.define(AiDefine.APPROACH_OPINION_UNFORGIVABLE_WAR)
-                w[HOSTILE] += rules.define(AiDefine.APPROACH_OPINION_UNFORGIVABLE_HOSTILE)
-                w[DECEPTIVE] += rules.define(AiDefine.APPROACH_OPINION_UNFORGIVABLE_DECEPTIVE)
-                w[GUARDED] += rules.define(AiDefine.APPROACH_OPINION_UNFORGIVABLE_GUARDED)
-            }
-            MajorCivOpinion.Enemy -> {
-                w[WAR] += rules.define(AiDefine.APPROACH_OPINION_ENEMY_WAR)
-                w[HOSTILE] += rules.define(AiDefine.APPROACH_OPINION_ENEMY_HOSTILE)
-                w[DECEPTIVE] += rules.define(AiDefine.APPROACH_OPINION_ENEMY_DECEPTIVE)
-                w[GUARDED] += rules.define(AiDefine.APPROACH_OPINION_ENEMY_GUARDED)
-            }
-            MajorCivOpinion.Competitor -> {
-                w[WAR] += rules.define(AiDefine.APPROACH_OPINION_COMPETITOR_WAR)
-                w[HOSTILE] += rules.define(AiDefine.APPROACH_OPINION_COMPETITOR_HOSTILE)
-                w[DECEPTIVE] += rules.define(AiDefine.APPROACH_OPINION_COMPETITOR_DECEPTIVE)
-                w[GUARDED] += rules.define(AiDefine.APPROACH_OPINION_COMPETITOR_GUARDED)
-            }
-            MajorCivOpinion.Neutral -> {
-                w[DECEPTIVE] += rules.define(AiDefine.APPROACH_OPINION_NEUTRAL_DECEPTIVE)
-                w[FRIENDLY] += rules.define(AiDefine.APPROACH_OPINION_NEUTRAL_FRIENDLY)
-            }
-            MajorCivOpinion.Favorable -> {
-                w[HOSTILE] += rules.define(AiDefine.APPROACH_OPINION_FAVORABLE_HOSTILE)
-                w[DECEPTIVE] += rules.define(AiDefine.APPROACH_OPINION_FAVORABLE_DECEPTIVE)
-                w[FRIENDLY] += rules.define(AiDefine.APPROACH_OPINION_FAVORABLE_FRIENDLY)
-            }
-            MajorCivOpinion.Friend -> {
-                w[HOSTILE] += rules.define(AiDefine.APPROACH_OPINION_FRIEND_HOSTILE)
-                w[FRIENDLY] += rules.define(AiDefine.APPROACH_OPINION_FRIEND_FRIENDLY)
-            }
-            MajorCivOpinion.Ally -> w[FRIENDLY] += rules.define(AiDefine.APPROACH_OPINION_ALLY_FRIENDLY)
-        }
+            w[WAR] += bias(MajorCivApproach.War) * (if (closeToConquest) 2 else 1)
 
         stage("Declaration of friendship")
         // Declaration of friendship
@@ -222,38 +318,6 @@ object ApproachAi {
             w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_AT_WAR_WITH_PLAYER)
             w[GUARDED] += rules.define(AiDefine.APPROACH_GUARDED_AT_WAR_WITH_PLAYER)
             w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_AT_WAR_WITH_PLAYER)
-        }
-
-        stage("Approaches already given to players we feel more strongly about (this turn)")
-        // Approaches already given to players we feel more strongly about (this turn)
-        if (lookAtOtherPlayers) {
-            for (third in civ.gameInfo.civilizations) {
-                if (third == other || third == civ || !WarStateAi.isPlayerValid(civ, third)) continue
-                val thirdMemory = ai.memories[third.civID] ?: continue
-                val thirdApproach = if (third.isMajorCiv) thirdMemory.approach else null
-                if (thirdMemory.warGoal == WarGoal.Prepare || thirdApproach == MajorCivApproach.War) {
-                    w[WAR] += rules.define(AiDefine.APPROACH_WAR_PLANNING_WAR_WITH_ANOTHER_PLAYER)
-                    w[HOSTILE] += rules.define(AiDefine.APPROACH_HOSTILE_PLANNING_WAR_WITH_ANOTHER_PLAYER)
-                    w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_PLANNING_WAR_WITH_ANOTHER_PLAYER)
-                    w[GUARDED] += rules.define(AiDefine.APPROACH_GUARDED_PLANNING_WAR_WITH_ANOTHER_PLAYER)
-                    w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_PLANNING_WAR_WITH_ANOTHER_PLAYER)
-                }
-                when (thirdApproach) {
-                    MajorCivApproach.Hostile -> {
-                        w[WAR] += rules.define(AiDefine.APPROACH_WAR_HOSTILE_WITH_ANOTHER_PLAYER)
-                        w[HOSTILE] += rules.define(AiDefine.APPROACH_HOSTILE_HOSTILE_WITH_ANOTHER_PLAYER)
-                        w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_HOSTILE_WITH_ANOTHER_PLAYER)
-                        w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_HOSTILE_WITH_ANOTHER_PLAYER)
-                    }
-                    MajorCivApproach.Afraid -> {
-                        w[WAR] += rules.define(AiDefine.APPROACH_WAR_AFRAID_WITH_ANOTHER_PLAYER)
-                        w[HOSTILE] += rules.define(AiDefine.APPROACH_HOSTILE_AFRAID_WITH_ANOTHER_PLAYER)
-                        w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_AFRAID_WITH_ANOTHER_PLAYER)
-                        w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_AFRAID_WITH_ANOTHER_PLAYER)
-                    }
-                    else -> {}
-                }
-            }
         }
 
         stage("Gold we get from trade routes with them (the original's untuned constants)")
@@ -369,24 +433,16 @@ object ApproachAi {
         }
     }
 
-    /** Sorts the approaches by weight (stable, so ties go to the original's order) and picks the war face from the runner-up */
-    private fun pickApproach(civ: Civilization, other: Civilization, w: IntArray): BestApproach {
-        var best = 0
-        for (i in 1 until w.size) if (w[i] > w[best]) best = i
-        val approach = APPROACHES[best]
-        if (approach != MajorCivApproach.War) return BestApproach(approach, w[best], null)
-        var warFace = civ.ai.diplomacy.memoryOf(other).warFace
-        if (warFace == null) {
-            var second = -1
-            for (i in w.indices) if (i != best && (second < 0 || w[i] > w[second])) second = i
-            warFace = when (APPROACHES[second]) {
-                MajorCivApproach.Hostile -> WarFace.Hostile
-                MajorCivApproach.Deceptive, MajorCivApproach.Afraid, MajorCivApproach.Friendly ->
-                    if (OpinionAi.isDenouncedPlayer(civ, other)) WarFace.Neutral else WarFace.Friendly
-                else -> WarFace.Neutral
-            }
+    /** BNW's war face for a new war approach (kept until VP's war targets are ported): from the runner-up approach */
+    private fun warFace(civ: Civilization, other: Civilization, w: IntArray): WarFace {
+        var second = -1
+        for (i in w.indices) if (i != WAR && (second < 0 || w[i] > w[second])) second = i
+        return when (APPROACHES[second]) {
+            MajorCivApproach.Hostile -> WarFace.Hostile
+            MajorCivApproach.Deceptive, MajorCivApproach.Afraid, MajorCivApproach.Friendly ->
+                if (OpinionAi.isDenouncedPlayer(civ, other)) WarFace.Neutral else WarFace.Friendly
+            else -> WarFace.Neutral
         }
-        return BestApproach(approach, w[best], warFace)
     }
 
     private fun scale(w: IntArray, index: Int, percent: Int) {

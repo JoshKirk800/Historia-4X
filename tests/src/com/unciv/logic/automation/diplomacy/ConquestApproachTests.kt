@@ -6,6 +6,7 @@ import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
+import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
@@ -41,9 +42,12 @@ class ConquestApproachTests {
         for (x in listOf(a, b, c, d)) for (y in listOf(a, b, c, d)) if (x != y && !x.knows(y)) x.diplomacyFunctions.makeCivilizationsMeet(y)
     }
 
+    /** A major with a city at [position]; its personality is fixed (flavors and diplomacy values 5): the leader's is randomized per game id */
     private fun civ(position: HexCoord): Civilization {
         val civ = game.addCiv()
         game.addCity(civ, game.getTile(position))
+        for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 5)
+        for (value in DiplomacyPersonality.entries) civ.ai.setDiplomacyValue(value, 5)
         for ((approach, bias) in MajorCivApproach.entries.zip(listOf(7, 6, 5, 4, 3, 2, 1))) civ.ai.setMajorCivApproachBias(approach, bias)
         return civ
     }

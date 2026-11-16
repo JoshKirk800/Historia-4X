@@ -26,11 +26,12 @@ object ApproachGrandStrategyAi {
 
     /**
      *  EARLY GAME STRATEGY, before the Renaissance. An early-game competitor close to us draws war and hostility (2 x bias; deceptive
-     *  when deception applies), twice that for a bold or mean (above 7) or conquering leader (going for world conquest or the warmonger
-     *  trait), and war and hostility 2 x more after a
+     *  when deception applies), twice that for a bold or mean (above 7) or conquering leader (a Domination primary victory pursuit or
+     *  the warmonger trait), and war and hostility 2 x more after a
      *  denouncement either way. Anyone else staying out of our way draws friendliness and neutrality (2 x) over deception, neutrality
-     *  2 x more for a scientist and friendliness 2 x more for the others, and by the closer proximity: close, war, hostility and
-     *  deception 1 x less; far, friendliness 1 x more and those 2 x less; distant, friendliness 2 x and those 4 x less.
+     *  2 x more for a scientist (a Science primary pursuit) and friendliness 2 x more for the others, and by the closer proximity:
+     *  close, war, hostility and deception 1 x less; far, friendliness 1 x more and those 2 x less; distant, friendliness 2 x and
+     *  those 4 x less.
      */
     fun addEarlyGameWeights(civ: Civilization, other: Civilization, deception: Boolean, w: IntArray, rules: AiRuleset) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
@@ -44,14 +45,14 @@ object ApproachGrandStrategyAi {
             }
             aggression(2, deceptive = true)
             if (civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 || civ.ai.diplomacyValue(DiplomacyPersonality.Meanness) > 7 ||
-                civ.ai.isGoingForWorldConquest() || civ.ai.hasTraitCategory(TraitCategory.Warmonger)) aggression(2, deceptive = true)
+                civ.ai.isConqueror() || civ.ai.hasTraitCategory(TraitCategory.Warmonger)) aggression(2, deceptive = true)
             if (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ)) aggression(2, deceptive = false)
             return
         }
         w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
         w[NEUTRAL] += bias(MajorCivApproach.Neutral) * 2
         w[DECEPTIVE] -= bias(MajorCivApproach.Deceptive) * 2
-        if (civ.ai.isGoingForSpaceshipVictory()) w[NEUTRAL] += bias(MajorCivApproach.Neutral) * 2
+        if (civ.ai.isScientist()) w[NEUTRAL] += bias(MajorCivApproach.Neutral) * 2
         else w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
         val (friendly, lower) = when (maxOf(DiplomacyTurn.proximity(civ, other), DiplomacyTurn.proximity(other, civ))) {
             DiplomacyTurn.PROXIMITY_CLOSE -> 0 to 1

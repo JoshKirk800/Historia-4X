@@ -13,7 +13,8 @@ import com.unciv.models.ruleset.ai.TraitCategory
  *  Vox Populi's reckless expanders and wonder spammers (CvDiplomacyAI::DoUpdateRecklessExpanders, DoUpdateWonderSpammers;
  *  Release-5.4.8; D7), kept each turn in [MajorCivMemory.recklessExpander] and [MajorCivMemory.wonderSpammer], and the two terms of
  *  part 7 of SelectBestApproachTowardsMajorCiv that read them. On our scale: VP's personality bias is ours x 100.
- *  VP's conqueror and cultural victory pursuits are going for world conquest and for a culture victory.
+ *  The wonder spammer update reads the current victory pursuit (going for world conquest, a culture victory), the approach terms the
+ *  leader's victory pursuits (primary or secondary).
  */
 object ExpanderAi {
     private val WAR = MajorCivApproach.War.ordinal
@@ -102,8 +103,9 @@ object ExpanderAi {
         civ.gameInfo.ruleset.ai.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get(column) ?: default
 
     /**
-     *  Part 7, reckless expanders and wonder spammers: war, hostility and deception 2 x bias, 2 x more for a conqueror (pursuit or the
-     *  warmonger trait; deception only when it applies) or, against a wonder spammer, a cultural leader too (pursuit or the tourism
+     *  Part 7, reckless expanders and wonder spammers: war, hostility and deception 2 x bias, 2 x more for a conqueror (primary or
+     *  secondary victory pursuit, or the warmonger trait; deception only when it applies) or, against a wonder spammer, a cultural leader
+     *  too (primary or secondary pursuit, or the tourism
      *  trait); war 3 x more against an easy target with a preferred attack target, or with our unique unit in the field; scaled by
      *  boldness (reckless expander) or wonder competitiveness (wonder spammer) x the handicap's LandDisputePercent or
      *  WonderBlockPercent / 500.
@@ -111,8 +113,8 @@ object ExpanderAi {
     fun addExpanderWeights(civ: Civilization, other: Civilization, deception: Boolean, w: IntArray, rules: AiRuleset) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
         val memory = civ.ai.diplomacy.memories[other.civID] ?: return
-        val conqueror = civ.ai.isGoingForWorldConquest() || civ.ai.hasTraitCategory(TraitCategory.Warmonger)
-        val cultural = civ.ai.isGoingForCultureVictory() || civ.ai.hasTraitCategory(TraitCategory.Tourism)
+        val conqueror = civ.ai.isConqueror() || civ.ai.isSecondaryConqueror() || civ.ai.hasTraitCategory(TraitCategory.Warmonger)
+        val cultural = civ.ai.isCultural() || civ.ai.isSecondaryCultural() || civ.ai.hasTraitCategory(TraitCategory.Tourism)
         val uniqueUnitActive = ApproachAdditionalAi.hasUniqueUnitTech(civ, rules) && ApproachAdditionalAi.hasUniqueUnitActive(civ, rules)
         val easyAttack = WarStateAi.isEasyTarget(civ, other) && civ.ai.military.havePreferredAttackTarget(other)
         fun add(stronger: Boolean, personality: Int, difficulty: Int) {

@@ -396,6 +396,17 @@ class CivAi : IsPartOfGameInfoSerialization {
     /** CvDiplomacyAI::IsGoingForSpaceshipVictory: the current victory pursuit is Science */
     @Readonly fun isGoingForSpaceshipVictory() = currentVictoryPursuit == VictoryPursuit.Science
 
+    /** CvDiplomacyAI::IsConqueror, IsDiplomat, IsCultural, IsScientist: the leader's primary victory pursuit is Domination ... Science */
+    @Readonly fun isConqueror() = primaryVictoryPursuit == VictoryPursuit.Domination
+    @Readonly fun isDiplomat() = primaryVictoryPursuit == VictoryPursuit.Diplomacy
+    @Readonly fun isCultural() = primaryVictoryPursuit == VictoryPursuit.Culture
+    @Readonly fun isScientist() = primaryVictoryPursuit == VictoryPursuit.Science
+    /** CvDiplomacyAI::IsSecondaryConqueror ... IsSecondaryScientist: the leader's secondary victory pursuit */
+    @Readonly fun isSecondaryConqueror() = secondaryVictoryPursuit == VictoryPursuit.Domination
+    @Readonly fun isSecondaryDiplomat() = secondaryVictoryPursuit == VictoryPursuit.Diplomacy
+    @Readonly fun isSecondaryCultural() = secondaryVictoryPursuit == VictoryPursuit.Culture
+    @Readonly fun isSecondaryScientist() = secondaryVictoryPursuit == VictoryPursuit.Science
+
     /** Sets the grand strategy and the current victory pursuit a serious AI takes from it, none without one (scenario setup and tests) */
     @VisibleForTesting
     fun setGrandStrategyAndPursuit(grandStrategy: String?) {

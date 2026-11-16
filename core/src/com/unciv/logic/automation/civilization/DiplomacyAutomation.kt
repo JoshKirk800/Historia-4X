@@ -269,8 +269,9 @@ object DiplomacyAutomation {
      *  friendship, a pact, a denouncement, a war) that we neither hate nor approach worse than deceptively nor distrust, by
      *  neighbourhood, our opinion of it, its strength and our DoF or pact with it: added when it denounced or fights them, else taken
      *  away; +2 per city-state we do not mean to conquer or bully that asks us to denounce them (unless close to a peaceful victory),
-     *  +3 more each going for a diplomatic victory or with the diplomat trait; +3 when a friend asks ([bias]). VP's loop also takes in
-     *  ourselves; as none: vassals, victory dispute and block levels, sanctions, diplomat pursuits.
+     *  +3 more going for a diplomatic victory or with the diplomat trait, else +2 more with a diplomatic victory pursuit (primary or
+     *  secondary); +3 when a friend asks ([bias]). VP's loop also takes in ourselves; as none: vassals, victory dispute and block levels,
+     *  sanctions.
      */
     fun denounceWeight(civ: Civilization, other: Civilization, bias: Boolean): Int {
         val ai = civ.ai.diplomacy
@@ -342,6 +343,7 @@ object DiplomacyAutomation {
                     .any { it.questName == QuestName.DenounceCiv.value && it.data1 == other.civName }) {
                 weight += 2
                 if (civ.ai.isGoingForDiploVictory() || civ.ai.hasTraitCategory(TraitCategory.Diplomat)) weight += 3
+                else if (civ.ai.isDiplomat() || civ.ai.isSecondaryDiplomat()) weight += 2
             }
         }
         if (bias) weight += 3

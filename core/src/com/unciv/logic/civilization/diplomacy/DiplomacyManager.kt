@@ -793,6 +793,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
                 memory.doFCounter = -666
                 theirMemory.doFCounter = -666
                 theirMemory.friendDenouncedUs = true
+                theirMemory.friendDenouncedUsTurn = civInfo.gameInfo.turns
                 com.unciv.logic.automation.diplomacy.DiplomacyEvents.onDoFBetrayed(civInfo, otherCiv)
             }
             if (memory.warFace == WarFace.Friendly) memory.warFace = WarFace.Neutral

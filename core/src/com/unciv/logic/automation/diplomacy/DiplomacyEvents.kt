@@ -102,13 +102,13 @@ object DiplomacyEvents {
                 }
             }
             if (me == victim) {
-                val rules = me.gameInfo.ruleset.ai
                 if (declarer.isMajorCiv) memory.numWarsDeclaredOnUs++
                 if (wasFriends) {
                     memory.friendDeclaredWarOnUs = true
-                    memory.declaredWarOnFriendValue += rules.define(AiDefine.OPINION_WEIGHT_WAR_FRIEND_EACH) * DiplomacyTurn.opinionDurationPercent(me)
+                    memory.friendDeclaredWarOnUsTurn = me.gameInfo.turns
                     if (declarer.isMajorCiv) onDoFBetrayed(declarer, me)
                 }
+                if (memory.resurrectedUs) memory.resurrectorAttackedUs = true
                 if (declarer.isMajorCiv) {
                     memory.approach = MajorCivApproach.War
                     memory.warFace = WarFace.Neutral
@@ -352,7 +352,10 @@ object DiplomacyEvents {
                 memory.numProtectedMinorsBullied = 0
                 memory.turnsSinceSidedWithProtectedMinor = -1
                 memory.friendDenouncedUs = false
+                memory.friendDenouncedUsTurn = -1
                 memory.friendDeclaredWarOnUs = false
+                memory.friendDeclaredWarOnUsTurn = -1
+                memory.resurrectorAttackedUs = false
                 memory.numTimesNuked = 0
                 receiver.getDiplomacyManager(liberator)?.let {
                     it.negativeArchaeologyPoints = 0

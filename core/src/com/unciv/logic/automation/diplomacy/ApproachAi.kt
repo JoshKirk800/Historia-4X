@@ -448,13 +448,13 @@ object ApproachAi {
                 w[HOSTILE] += bias(MajorCivApproach.Hostile) * penalty / 2
                 w[GUARDED] += bias(MajorCivApproach.Guarded) * penalty / 2
             }
-        } else if (OpinionAi.isAngryAboutProtectedMinorBullied(memory, rules)) {
+        } else if (OpinionAi.isAngryAboutProtectedMinorBullied(civ, memory, rules)) {
             val pact = OpinionAi.isDoFAccepted(civ, other) || diplomacy?.diplomaticStatus == DiplomaticStatus.DefensivePact ||
                 diplomacy?.hasFlag(DiplomacyFlags.ResearchAgreement) == true
             if (pact) w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * memory.numProtectedMinorsBullied / 2
             else w[HOSTILE] += bias(MajorCivApproach.Hostile) * memory.numProtectedMinorsBullied / 2
         }
-        if (OpinionAi.isAngryAboutSidedWithProtectedMinor(memory, rules) && !OpinionAi.isDoFAccepted(civ, other)
+        if (OpinionAi.isAngryAboutSidedWithProtectedMinor(memory) && !OpinionAi.isDoFAccepted(civ, other)
             && diplomacy?.diplomaticStatus != DiplomaticStatus.DefensivePact && diplomacy?.hasFlag(DiplomacyFlags.ResearchAgreement) != true
             // VP also counts leaders whose traits bully city-states (its trait classification, not ported)
             && (civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 || civ.ai.diplomacyValue(DiplomacyPersonality.Meanness) > 7)) {

@@ -145,8 +145,14 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var denouncedCounter = -1
     /** The denouncement we track the expiry of (Unciv keeps the denouncement itself as [com.unciv.logic.civilization.diplomacy.DiplomacyFlags.Denunciation]) */
     var denouncementActive = false
+    /** CvDiplomacyAI::IsFriendDenouncedUs / GetFriendDenouncedUsTurn (Vox Populi): forgiven after FRIEND_DENOUNCED_US_TURNS_UNTIL_FORGIVEN */
     var friendDenouncedUs = false
+    var friendDenouncedUsTurn = -1
+    /** CvDiplomacyAI::IsFriendDeclaredWarOnUs / its turn (Vox Populi): forgiven after FRIEND_DECLARED_WAR_ON_US_TURNS_UNTIL_FORGIVEN */
     var friendDeclaredWarOnUs = false
+    var friendDeclaredWarOnUsTurn = -1
+    /** CvDiplomacyAI::IsResurrectorAttackedUs (Vox Populi): the civilization that resurrected us declared war on us */
+    var resurrectorAttackedUs = false
     /** CvDiplomacyAI::GetDoFType (Vox Populi): our friendship's history with them, kept by [DiplomacyEvents.onDoFSigned] and
      *  [DiplomacyEvents.onDoFBetrayed] */
     var doFLevel = DoFLevel.New
@@ -160,8 +166,6 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var recklessExpander = false
     /** CvDiplomacyAI::IsWonderSpammer (Vox Populi): set each turn by [ExpanderAi.updateWonderSpammers] */
     var wonderSpammer = false
-    /** CvDiplomacyAI::m_paiDeclaredWarOnFriendValue (decays) */
-    var declaredWarOnFriendValue = 0
 
     // Coop wars with them as partner, by target civID
     var coopWars = HashMap<String, CoopWarEntry>()
@@ -280,9 +284,10 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.turnsSinceSidedWithProtectedMinor = turnsSinceSidedWithProtectedMinor
         copy.doFCounter = doFCounter; copy.denouncedCounter = denouncedCounter; copy.denouncementActive = denouncementActive
         copy.friendDenouncedUs = friendDenouncedUs; copy.friendDeclaredWarOnUs = friendDeclaredWarOnUs
+        copy.friendDenouncedUsTurn = friendDenouncedUsTurn; copy.friendDeclaredWarOnUsTurn = friendDeclaredWarOnUsTurn
+        copy.resurrectorAttackedUs = resurrectorAttackedUs
         copy.doFLevel = doFLevel; copy.doFBrokenTurn = doFBrokenTurn; copy.liberatedCitiesTurn = liberatedCitiesTurn
         copy.demandAcceptedTurn = demandAcceptedTurn; copy.recklessExpander = recklessExpander; copy.wonderSpammer = wonderSpammer
-        copy.declaredWarOnFriendValue = declaredWarOnFriendValue
         for ((target, entry) in coopWars) copy.coopWars[target] = entry.clone()
         copy.numDemandsMade = numDemandsMade; copy.demandMadeTurn = demandMadeTurn; copy.promiseTurns.putAll(promiseTurns)
         copy.madeMilitaryPromise = madeMilitaryPromise; copy.brokenMilitaryPromise = brokenMilitaryPromise

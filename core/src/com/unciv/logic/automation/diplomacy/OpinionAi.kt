@@ -14,6 +14,7 @@ import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
@@ -157,11 +158,11 @@ object OpinionAi {
         promise(DiplomaticModifiers.BetrayedPromiseToNotSendingSpiesToUs, DiplomaticModifiers.RefusedToNotSendingSpiesToUs, PromiseAi.PromiseKind.Spy)
         term(DiplomaticModifiers.BrokenCoopWarPromise, PromiseAi.promiseScore(civ, memory, PromiseAi.PromiseKind.CoopWar))
 
-        // Protected minors
-        term(DiplomaticModifiers.DestroyedProtectedMinor, protectedMinorKilledScore(memory, rules))
-        term(DiplomaticModifiers.AttackedProtectedMinor, protectedMinorAttackedScore(memory, rules))
-        term(DiplomaticModifiers.BulliedProtectedMinor, protectedMinorBulliedScore(memory, rules))
-        term(DiplomaticModifiers.SidedWithProtectedMinor, if (isAngryAboutSidedWithProtectedMinor(memory, rules)) rules.define(AiDefine.OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR) else 0)
+        // Protected minors (Vox Populi's timed terms)
+        term(DiplomaticModifiers.DestroyedProtectedMinor, protectedMinorKilledScore(civ, memory, rules))
+        term(DiplomaticModifiers.AttackedProtectedMinor, protectedMinorAttackedScore(civ, memory, rules))
+        term(DiplomaticModifiers.BulliedProtectedMinor, protectedMinorBulliedScore(civ, memory, rules))
+        term(DiplomaticModifiers.SidedWithProtectedMinor, sidedWithProtectedMinorScore(civ, other, rules))
 
         // Friendship, pacts, open borders, research agreements, city-states protected together (Vox Populi)
         term(DiplomaticModifiers.DeclarationOfFriendship, dofAcceptedScore(civ, other, rules))
@@ -281,7 +282,7 @@ object OpinionAi {
             DisputeLevel.None -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_NONE)
         }
         if (civ.ai.isDiplomat()) {
-            val troublemaker = isMinorCivTroublemaker(memory, rules, ignoreBullying = true)
+            val troublemaker = isMinorCivTroublemaker(civ, memory, rules, ignoreBullying = true)
             if (weight > 0) weight += rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_DIPLOMAT)
             else if (!troublemaker) weight += (rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_NONE_DIPLOMAT) -
                 civ.ai.diplomacyValue(DiplomacyPersonality.Neediness)) * era(civ) / 2
@@ -452,6 +453,18 @@ object OpinionAi {
             decayed(m.numDemandsMade, m.demandMadeTurn, AiDefine.MADE_DEMAND_TURNS_UNTIL_FORGIVEN, forgiveness, true) { c, t ->
                 m.numDemandsMade = c; m.demandMadeTurn = t }
             PromiseAi.testPromiseExpiry(civ, m)
+            testBackstabbingPenalties(civ, m, rules)
+            // checkAndUpdateNonStackingOpinionModifier for the protected city-states (bullying stays, IsAngryAboutProtectedMinorBullied times it)
+            val minorFriendly = civ.ai.minorCivApproachBias(MinorCivApproach.Friendly)
+            if (m.turnsSinceSidedWithProtectedMinor >= OpinionTimers.adjustDuration(civ,
+                    rules.define(AiDefine.OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR_NUM_TURNS_UNTIL_FORGIVEN), forgiveness, invert = true))
+                m.turnsSinceSidedWithProtectedMinor = -1
+            if (isAngryAboutProtectedMinorAttacked(m, rules) && m.turnsSinceAttackedProtectedMinor >= OpinionTimers.adjustDuration(civ,
+                    rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN), minorFriendly))
+                m.turnsSinceAttackedProtectedMinor = -1
+            if (isAngryAboutProtectedMinorKilled(m, rules) && m.turnsSinceKilledProtectedMinor >= OpinionTimers.adjustDuration(civ,
+                    rules.define(AiDefine.OPINION_WEIGHT_KILLED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN), minorFriendly))
+                m.turnsSinceKilledProtectedMinor = -1
             m.civilianKillerValue = maxOf(0, m.civilianKillerValue - rules.define(AiDefine.CIVILIAN_KILLER_VALUE_PER_TURN_DECAY))
         }
     }
@@ -756,55 +769,84 @@ object OpinionAi {
     private fun hasBrokenMilitaryPromiseWithAnybody(other: Civilization): Boolean =
         other.gameInfo.civilizations.any { it != other && it.isMajorCiv && it.ai.diplomacy.memories[other.civID]?.brokenMilitaryPromise == true }
 
-    /** GetAngryAboutProtectedMinorKilledScore */
-    fun protectedMinorKilledScore(memory: MajorCivMemory, rules: AiRuleset): Int {
+    /** The turn of a protected city-state deed [turnsSince] turns ago, -1 for none (VP keeps the turn, we count the turns since) */
+    private fun deedTurn(civ: Civilization, turnsSince: Int) = if (turnsSince < 0) -1 else turn(civ) - turnsSince
+
+    /**
+     *  GetAngryAboutProtectedMinorKilledScore: OPINION_WEIGHT_KILLED_PROTECTED_MINOR, plus _KILLED_MANY_ for more than one, fading over
+     *  its NUM_TURNS_UNTIL_FORGIVEN adjusted by our friendly city-state approach bias
+     */
+    fun protectedMinorKilledScore(civ: Civilization, memory: MajorCivMemory, rules: AiRuleset): Int {
         if (!isAngryAboutProtectedMinorKilled(memory, rules)) return 0
         var weight = rules.define(AiDefine.OPINION_WEIGHT_KILLED_PROTECTED_MINOR)
         if (memory.numProtectedMinorsKilled > 1) weight += rules.define(AiDefine.OPINION_WEIGHT_KILLED_MANY_PROTECTED_MINORS)
-        return weight
+        val duration = OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_KILLED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN),
+            civ.ai.minorCivApproachBias(MinorCivApproach.Friendly))
+        return OpinionTimers.adjust(weight, duration, deedTurn(civ, memory.turnsSinceKilledProtectedMinor), turn(civ), OpinionTimers.Type.Standard)
     }
 
-    /** GetAngryAboutProtectedMinorAttackedScore */
-    fun protectedMinorAttackedScore(memory: MajorCivMemory, rules: AiRuleset): Int {
+    /**
+     *  GetAngryAboutProtectedMinorAttackedScore: OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_RECENTLY, plus _ATTACKED_MANY_ for more than
+     *  one, fading over its NUM_TURNS_UNTIL_FORGIVEN adjusted by our friendly city-state approach bias
+     */
+    fun protectedMinorAttackedScore(civ: Civilization, memory: MajorCivMemory, rules: AiRuleset): Int {
         if (!isAngryAboutProtectedMinorAttacked(memory, rules)) return 0
-        var weight = if (memory.turnsSinceAttackedProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_RECENTLY_NUM_TURNS))
-            rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_RECENTLY)
-        else rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_WHILE_AGO)
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_RECENTLY)
         if (memory.numProtectedMinorsAttacked > 1) weight += rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_MANY_PROTECTED_MINORS)
-        return weight
+        val duration = OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN),
+            civ.ai.minorCivApproachBias(MinorCivApproach.Friendly))
+        return OpinionTimers.adjust(weight, duration, deedTurn(civ, memory.turnsSinceAttackedProtectedMinor), turn(civ), OpinionTimers.Type.Standard)
     }
 
-    /** GetAngryAboutProtectedMinorBulliedScore */
-    fun protectedMinorBulliedScore(memory: MajorCivMemory, rules: AiRuleset): Int {
-        if (memory.numProtectedMinorsBullied <= 0 || memory.turnsSinceBulliedProtectedMinor < 0 ||
-            memory.turnsSinceBulliedProtectedMinor >= rules.define(AiDefine.OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN)) return 0
-        var weight = if (memory.turnsSinceBulliedProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_RECENTLY_NUM_TURNS))
-            rules.define(AiDefine.OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_RECENTLY)
-        else rules.define(AiDefine.OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_WHILE_AGO)
+    /**
+     *  GetAngryAboutProtectedMinorBulliedScore: OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_RECENTLY, plus _BULLIED_MANY_ for more than one,
+     *  fading over its NUM_TURNS_UNTIL_FORGIVEN adjusted as for a personality of 1 (VP passes `true` as the personality)
+     */
+    fun protectedMinorBulliedScore(civ: Civilization, memory: MajorCivMemory, rules: AiRuleset): Int {
+        if (!isAngryAboutProtectedMinorBullied(civ, memory, rules)) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_RECENTLY)
         if (memory.numProtectedMinorsBullied > 1) weight += rules.define(AiDefine.OPINION_WEIGHT_BULLIED_MANY_PROTECTED_MINORS)
-        return weight
+        val duration = OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN), 1)
+        return OpinionTimers.adjust(weight, duration, deedTurn(civ, memory.turnsSinceBulliedProtectedMinor), turn(civ), OpinionTimers.Type.Standard)
     }
 
-    /** IsAngryAboutProtectedMinorKilled */
+    /**
+     *  GetAngryAboutSidedWithProtectedMinorScore: OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR, plus _AGGRESSIVE_MOD without a DoF when our
+     *  boldness or meanness is above 7 (VP's bullying traits: none), fading over its NUM_TURNS_UNTIL_FORGIVEN adjusted by inverted
+     *  forgiveness
+     */
+    fun sidedWithProtectedMinorScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        if (!isAngryAboutSidedWithProtectedMinor(memory)) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR)
+        if (!isDoFAccepted(civ, other) && (civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 ||
+                civ.ai.diplomacyValue(DiplomacyPersonality.Meanness) > 7))
+            weight += rules.define(AiDefine.OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR_AGGRESSIVE_MOD)
+        val duration = OpinionTimers.adjustDuration(civ, rules.define(AiDefine.OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR_NUM_TURNS_UNTIL_FORGIVEN),
+            forgiveness(civ), invert = true)
+        return OpinionTimers.adjust(weight, duration, deedTurn(civ, memory.turnsSinceSidedWithProtectedMinor), turn(civ), OpinionTimers.Type.Standard)
+    }
+
+    /** IsAngryAboutProtectedMinorKilled: a protected city-state of ours they killed fewer than its NUM_TURNS_UNTIL_FORGIVEN turns ago */
     fun isAngryAboutProtectedMinorKilled(memory: MajorCivMemory, rules: AiRuleset): Boolean =
         memory.numProtectedMinorsKilled > 0 && memory.turnsSinceKilledProtectedMinor > -1 &&
             memory.turnsSinceKilledProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_KILLED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN)
 
-    /** IsAngryAboutProtectedMinorAttacked: anger over a killed city-state takes precedence */
+    /** IsAngryAboutProtectedMinorAttacked: one they attacked and that is not forgotten ([testOpinionModifiers]); a killed one comes first */
     fun isAngryAboutProtectedMinorAttacked(memory: MajorCivMemory, rules: AiRuleset): Boolean =
-        !isAngryAboutProtectedMinorKilled(memory, rules) && memory.numProtectedMinorsAttacked > 0 && memory.turnsSinceAttackedProtectedMinor > -1 &&
-            memory.turnsSinceAttackedProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN)
+        !isAngryAboutProtectedMinorKilled(memory, rules) && memory.numProtectedMinorsAttacked > 0 && memory.turnsSinceAttackedProtectedMinor > -1
 
-    fun isAngryAboutSidedWithProtectedMinor(memory: MajorCivMemory, rules: AiRuleset): Boolean =
-        memory.turnsSinceSidedWithProtectedMinor > -1 &&
-            memory.turnsSinceSidedWithProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR_NUM_TURNS_UNTIL_FORGIVEN)
+    /** IsAngryAboutSidedWithProtectedMinor: they sided with their protected city-state against us, not forgotten yet */
+    fun isAngryAboutSidedWithProtectedMinor(memory: MajorCivMemory): Boolean = memory.turnsSinceSidedWithProtectedMinor > -1
 
-    /** IsAngryAboutProtectedMinorBullied (Vox Populi): anger over attacked or killed city-states trumps it (VP also scales the turns by
-     *  forgiveness, AdjustModifierDuration, which we do not have) */
-    fun isAngryAboutProtectedMinorBullied(memory: MajorCivMemory, rules: AiRuleset): Boolean =
+    /**
+     *  IsAngryAboutProtectedMinorBullied (Vox Populi): anger over attacked or killed city-states trumps it; a bullying fewer than its
+     *  NUM_TURNS_UNTIL_FORGIVEN, adjusted by inverted forgiveness, turns ago
+     */
+    fun isAngryAboutProtectedMinorBullied(civ: Civilization, memory: MajorCivMemory, rules: AiRuleset): Boolean =
         !isAngryAboutProtectedMinorKilled(memory, rules) && !isAngryAboutProtectedMinorAttacked(memory, rules) &&
-            memory.turnsSinceBulliedProtectedMinor > -1 &&
-            memory.turnsSinceBulliedProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN)
+            memory.turnsSinceBulliedProtectedMinor > -1 && memory.turnsSinceBulliedProtectedMinor < OpinionTimers.adjustDuration(civ,
+                rules.define(AiDefine.OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN), forgiveness(civ), invert = true)
 
     /** CvDiplomacyAI::IsDoFAccepted: Unciv keeps the friendship as [DiplomacyFlags.DeclarationOfFriendship] */
     fun isDoFAccepted(civ: Civilization, other: Civilization): Boolean =
@@ -818,10 +860,10 @@ object OpinionAi {
      *  IsMinorCivTroublemaker: a city-state dispute above weak, a protected city-state of ours they killed or attacked, unless
      *  [ignoreBullying] one they bullied or a bullying promise they broke or ignored. Coups and the city-state attack promise: none.
      */
-    fun isMinorCivTroublemaker(memory: MajorCivMemory, rules: AiRuleset, ignoreBullying: Boolean = false): Boolean {
+    fun isMinorCivTroublemaker(civ: Civilization, memory: MajorCivMemory, rules: AiRuleset, ignoreBullying: Boolean = false): Boolean {
         if (memory.minorCivDispute > DisputeLevel.Weak) return true
         if (isAngryAboutProtectedMinorKilled(memory, rules) || isAngryAboutProtectedMinorAttacked(memory, rules)) return true
-        return !ignoreBullying && (isAngryAboutProtectedMinorBullied(memory, rules) || memory.brokenBullyCityStatePromise ||
+        return !ignoreBullying && (isAngryAboutProtectedMinorBullied(civ, memory, rules) || memory.brokenBullyCityStatePromise ||
             memory.ignoredBullyCityStatePromise)
     }
 
@@ -981,7 +1023,7 @@ object OpinionAi {
         var same = civ.gameInfo.civilizations.count {
             it.isCityState && it.cities.isNotEmpty() && CityStateAi.isProtectedBy(it, other) && CityStateAi.isProtectedBy(it, civ)
         }
-        if ((civ.ai.isDiplomat() || civ.ai.isSecondaryDiplomat()) && !isMinorCivTroublemaker(civ.ai.diplomacy.memoryOf(other), rules))
+        if ((civ.ai.isDiplomat() || civ.ai.isSecondaryDiplomat()) && !isMinorCivTroublemaker(civ, civ.ai.diplomacy.memoryOf(other), rules))
             same = same * rules.define(AiDefine.OPINION_WEIGHT_PTP_SAME_MINOR_DIPLOMAT_MULTIPLIER) / 100
         if (same <= 0) return 0
         return minOf(rules.define(AiDefine.OPINION_WEIGHT_PTP_SAME_MINOR_MIN), same * rules.define(AiDefine.OPINION_WEIGHT_PTP_SAME_MINOR_EACH))
@@ -1003,37 +1045,85 @@ object OpinionAi {
     fun weDeclaredWarOnFriendCount(civ: Civilization): Int =
         civ.gameInfo.civilizations.count { it != civ && it.isMajorCiv && it.ai.diplomacy.memories[civ.civID]?.friendDeclaredWarOnUs == true }
 
-    /** The traitor block of GetMajorCivOpinionWeight: the largest of five terms */
+    /**
+     *  The traitor block of GetMajorCivOpinionWeight: the largest of their former friends' denouncements, their denouncing and
+     *  attacking their friends, our friendship betrayed by a denouncement or a war, their attack on those they resurrected, and their
+     *  attack on us after resurrecting us. (Vassal terms: none.)
+     */
     fun traitorScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
         val memory = civ.ai.diplomacy.memoryOf(other)
-        var traitor = friendDenouncementScore(civ, other, rules)
-        // GetWeDenouncedFriendScore
-        traitor = maxOf(traitor, weDenouncedFriendCount(other) * rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_FRIEND_EACH))
-        // GetFriendDenouncedUsScore
-        if (memory.friendDenouncedUs) traitor = maxOf(traitor, rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_ME_FRIENDS))
-        // GetWeDeclaredWarOnFriendScore: the decaying values every player keeps for them
-        var declaredWarOnFriendSum = 0
-        for (third in civ.gameInfo.civilizations) if (third.isMajorCiv) declaredWarOnFriendSum += third.ai.diplomacy.memories[other.civID]?.declaredWarOnFriendValue ?: 0
-        traitor = maxOf(traitor, declaredWarOnFriendSum /
-            (rules.define(AiDefine.DECLARED_WAR_ON_FRIEND_PER_OPINION_WEIGHT) * DiplomacyTurn.opinionDurationPercent(civ)))
-        // GetFriendDeclaredWarOnUsScore
-        if (memory.friendDeclaredWarOnUs) traitor = maxOf(traitor, rules.define(AiDefine.OPINION_WEIGHT_WAR_ME_FRIENDS))
-        return traitor
+        return maxOf(
+            maxOf(friendDenouncementScore(civ, other, rules),
+                betrayalOfOthersScore(civ, other, rules, AiDefine.OPINION_WEIGHT_DENOUNCED_FRIEND_EACH) { it.friendDenouncedUs },
+                if (memory.friendDenouncedUs) rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_ME_FRIENDS) else 0),
+            maxOf(betrayalOfOthersScore(civ, other, rules, AiDefine.OPINION_WEIGHT_WAR_FRIEND_EACH) { it.friendDeclaredWarOnUs },
+                if (memory.friendDeclaredWarOnUs) rules.define(AiDefine.OPINION_WEIGHT_WAR_ME_FRIENDS) else 0),
+            maxOf(betrayalOfOthersScore(civ, other, rules, AiDefine.OPINION_WEIGHT_ATTACKED_RESURRECTED_PLAYER) { it.resurrectorAttackedUs },
+                if (memory.resurrectorAttackedUs) rules.define(AiDefine.OPINION_WEIGHT_RESURRECTOR_ATTACKED_US) else 0))
     }
 
-    /** GetFriendDenouncementScore: their (trustworthy) former friends who denounced them, weighted by whom we like more */
-    fun friendDenouncementScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+    private fun isFriendOrAlly(civ: Civilization, other: Civilization) = isDoFAccepted(civ, other) || hasDefensivePact(civ, other)
+
+    /** The majors other than us and them we have met */
+    private fun metThirds(civ: Civilization, other: Civilization) =
+        civ.gameInfo.civilizations.filter { it.isMajorCiv && it != civ && it != other && civ.knows(it) }
+
+    /**
+     *  GetPlayerDenouncedFriendScore / GetPlayerAttackedFriendScore / GetPlayerAttackedResurrectedCivScore: when they are
+     *  untrustworthy, [weight] for each player we met whose memory of them holds [betrayed] (x OPINION_WEIGHT_BETRAYED_OUR_FRIEND_MULTIPLIER %
+     *  for our friends or allies), unless we ignore backstabbing between us and that player
+     */
+    private fun betrayalOfOthersScore(civ: Civilization, other: Civilization, rules: AiRuleset, weight: AiDefine,
+                                      betrayed: (MajorCivMemory) -> Boolean): Int {
+        if (!isUntrustworthyFriend(other)) return 0
         var score = 0
-        val ourOpinionOfThem = civ.ai.diplomacy.opinionOf(other)
-        for ((denouncerId, theirMemory) in other.ai.diplomacy.memories) {
-            if (!theirMemory.friendDenouncedUs || denouncerId == civ.civID) continue
-            val denouncer = civ.gameInfo.getCivilizationOrNull(denouncerId) ?: continue
-            if (isUntrustworthyFriend(denouncer)) continue
-            val ourOpinionOfDenouncer = civ.ai.diplomacy.opinionOf(denouncer)
-            if (ourOpinionOfDenouncer > ourOpinionOfThem) score += rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_BY_FRIEND_EACH)
-            else if (ourOpinionOfDenouncer < ourOpinionOfThem) score += rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_BY_FRIEND_DONT_LIKE)
+        for (third in metThirds(civ, other)) {
+            val theirMemory = third.ai.diplomacy.memories[other.civID] ?: continue
+            if (!betrayed(theirMemory) || WarSanityAi.ignoresBackstabbing(civ, third, checkCurrent = true)) continue
+            score += if (isFriendOrAlly(civ, third)) rules.define(weight) * rules.define(AiDefine.OPINION_WEIGHT_BETRAYED_OUR_FRIEND_MULTIPLIER) / 100
+                else rules.define(weight)
         }
         return score
+    }
+
+    /**
+     *  GetFriendDenouncementScore: for each player we met that denounced them while friends, unless we ignore backstabbing between us,
+     *  fight, or denounced either way: OPINION_WEIGHT_DENOUNCED_BY_FRIEND_EACH when we like that player better (a lower opinion
+     *  weight; x OPINION_WEIGHT_BETRAYED_OUR_FRIEND_MULTIPLIER % for a friend or ally of ours), else _DONT_LIKE; scaled by work-against
+     *  willingness
+     */
+    fun friendDenouncementScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        var score = 0
+        val ai = civ.ai.diplomacy
+        val theirMemories = other.ai.diplomacy.memories
+        for (third in metThirds(civ, other)) {
+            if (theirMemories[third.civID]?.friendDenouncedUs != true) continue
+            if (WarSanityAi.ignoresBackstabbing(civ, third, checkCurrent = true) || civ.isAtWarWith(third) ||
+                isDenouncedPlayer(civ, third) || isDenouncedPlayer(third, civ)) continue
+            score += if (ai.memoryOf(third).opinionWeight < ai.memoryOf(other).opinionWeight) {
+                val each = rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_BY_FRIEND_EACH)
+                if (isFriendOrAlly(civ, third)) each * rules.define(AiDefine.OPINION_WEIGHT_BETRAYED_OUR_FRIEND_MULTIPLIER) / 100 else each
+            } else rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_BY_FRIEND_DONT_LIKE)
+        }
+        return adjustConditional(score, civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness))
+    }
+
+    /**
+     *  TestBackstabbingPenalties: a denouncement by a friend is forgiven after FRIEND_DENOUNCED_US_TURNS_UNTIL_FORGIVEN, a war declared
+     *  by a friend after FRIEND_DECLARED_WAR_ON_US_TURNS_UNTIL_FORGIVEN (x the game speed's OpinionDurationPercent, at least 1)
+     */
+    private fun testBackstabbingPenalties(civ: Civilization, memory: MajorCivMemory, rules: AiRuleset) {
+        val turn = turn(civ)
+        val percent = DiplomacyTurn.opinionDurationPercent(civ)
+        fun expired(stamp: Int, base: AiDefine) = stamp >= 0 && turn - stamp >= maxOf(1, rules.define(base) * percent / 100)
+        if (memory.friendDenouncedUs && expired(memory.friendDenouncedUsTurn, AiDefine.FRIEND_DENOUNCED_US_TURNS_UNTIL_FORGIVEN)) {
+            memory.friendDenouncedUs = false
+            memory.friendDenouncedUsTurn = -1
+        }
+        if (memory.friendDeclaredWarOnUs && expired(memory.friendDeclaredWarOnUsTurn, AiDefine.FRIEND_DECLARED_WAR_ON_US_TURNS_UNTIL_FORGIVEN)) {
+            memory.friendDeclaredWarOnUs = false
+            memory.friendDeclaredWarOnUsTurn = -1
+        }
     }
 
     /** GetRecentTradeScore: OPINION_WEIGHT_TRADE_MAX x the recent trade value's share of its maximum (VP's strategic trade partners: none) */

@@ -108,7 +108,6 @@ object DiplomacyTurn {
                 val preparing = memory.coopWars.values.any { it.state == CoopWarState.Soon || it.state == CoopWarState.Accepted }
                 if (!preparing) ai.changeRecentAssistValue(other, assistDecay, decay = true)
             } else if (memory.recentAssistValue > 0) ai.changeRecentAssistValue(other, -assistDecay, decay = true)
-            memory.declaredWarOnFriendValue = max(0, memory.declaredWarOnFriendValue - rules.define(AiDefine.DECLARED_WAR_ON_FRIEND_PER_TURN_DECAY))
 
             if (memory.turnsSinceAttackedProtectedMinor >= 0) memory.turnsSinceAttackedProtectedMinor++
             if (memory.turnsSinceKilledProtectedMinor >= 0) memory.turnsSinceKilledProtectedMinor++
@@ -117,7 +116,8 @@ object DiplomacyTurn {
             if (memory.doFCounter > -1) memory.doFCounter++
             if (memory.denouncedCounter > -1) memory.denouncedCounter++
 
-            // The denouncement ran out (Unciv keeps it as a flag lasting RelationshipDuration turns)
+            // The denouncement ran out (Unciv keeps it as a flag lasting RelationshipDuration turns). The friend's backstab memory
+            // stays: Vox Populi forgives it by its own timer (OpinionAi.testOpinionModifiers), not with the denouncement as BNW
             val diplomacy = civ.getDiplomacyManager(other) ?: continue
             if (memory.denouncementActive && !diplomacy.hasFlag(DiplomacyFlags.Denunciation)) {
                 memory.denouncementActive = false
@@ -125,7 +125,6 @@ object DiplomacyTurn {
                 memory.doFCounter = -1
                 val theirMemory = other.ai.diplomacy.memoryOf(civ)
                 theirMemory.doFCounter = -1
-                theirMemory.friendDenouncedUs = false
                 for (entry in memory.coopWars.values) if (entry.counter < -1) entry.counter = -1
                 for (entry in theirMemory.coopWars.values) entry.counter = -1
             }

@@ -396,6 +396,23 @@ class OperationTests {
         assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
     }
 
+    /** Departure from CvArmyAI::GetCenterOfMass: a general left behind does not hold the army's center back */
+    @Test
+    fun `an army's center of mass is where its fighting units are, wherever its general stands`() {
+        civ.getDiplomacyManager(enemy)!!.declareWar()
+        fillAttackReserves()
+        val general = unit("Great General")
+        val operation = attack()
+        val army = operation.firstArmy!!
+        val soldiers = AiOperationLogic.armyUnits(civ, army).filter { it.second !== general }
+        teleport(soldiers, HexCoord(6, 0))
+        general.removeFromTile()
+        general.putInTile(game.getTile(HexCoord(-11, 0)))
+        // all soldiers within 2 of (6,0); counting a general 17 tiles behind would put the center at least 3 tiles back
+        val center = AiOperationLogic.centerOfMass(civ, army)!!
+        assertTrue("${center.position}", center.aerialDistanceTo(game.getTile(HexCoord(6, 0))) <= 2)
+    }
+
     @Test
     fun `an army unit with no path to its muster point stays where it is`() {
         civ.getDiplomacyManager(enemy)!!.declareWar()

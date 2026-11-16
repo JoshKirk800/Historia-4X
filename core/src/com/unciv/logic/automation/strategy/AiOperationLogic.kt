@@ -582,9 +582,15 @@ object AiOperationLogic {
         else -> 4
     }
 
-    /** CvArmyAI::GetCenterOfMass: the average position of the army's units (nudged to land or sea - always sea for [sea] - if it falls elsewhere) */
+    /**
+     *  CvArmyAI::GetCenterOfMass: the average position of the army's units (nudged to land or sea - always sea for [sea] - if it falls
+     *  elsewhere). Departure, recorded (D7), as in [furthestUnitDistance]: generals and admirals are left out (an army of them alone uses
+     *  them). The original counts a general placed by its own scoring; one left far behind pulled the center back each turn, and an army of
+     *  two infantry and a general 40 tiles behind them marched in place for 365 turns, blocking every other sneak attack.
+     */
     fun centerOfMass(civ: Civilization, army: AiArmy, sea: Boolean = false): Tile? {
-        val units = armyUnits(civ, army).map { it.second }
+        val all = armyUnits(civ, army).map { it.second }
+        val units = all.filter { !Deployment.isGeneralOrAdmiral(it) }.ifEmpty { all }
         if (units.isEmpty()) return null
         val map = civ.gameInfo.tileMap
         val reference = units[0].getTile().position

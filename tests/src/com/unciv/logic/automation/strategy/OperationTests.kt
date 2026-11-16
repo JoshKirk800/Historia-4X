@@ -284,13 +284,13 @@ class OperationTests {
         base.obsoleteTech = "Pottery"
         civ.tech.addTechnology("Pottery")
         val obsolete = unit(base.name)
-        assertEquals(obsolete, civ.ai.military.findBestUnitToScrap(civ, isLand = true)?.first)
-        // CvMilitaryAI::FindBestUnitToScrap: "Is it in an army?" - skipped; the game forcing a disband (the deficit) does not look
+        assertEquals(obsolete, civ.ai.military.findUnitToScrap(civ, isLand = true)?.first)
+        // CvMilitaryAI::FindUnitToScrap: canUseForAIOperation - a unit in an army is skipped; the game forcing a disband (the deficit) does not look
         val operation = closeDefense()
         ops.nextUnitForOperationSlot(city)
         ops.addUnit(operation.firstArmy!!, obsolete, 0)
-        assertNull(civ.ai.military.findBestUnitToScrap(civ, isLand = true))
-        assertEquals(obsolete, civ.ai.military.findBestUnitToScrap(civ, isLand = true, deficitForced = true)?.first)
+        assertNull(civ.ai.military.findUnitToScrap(civ, isLand = true))
+        assertEquals(obsolete, civ.ai.military.findBestUnitToScrap(civ, isLand = true)?.first)
     }
 
     @Test

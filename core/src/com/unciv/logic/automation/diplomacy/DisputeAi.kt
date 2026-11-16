@@ -1,56 +1,82 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.WarStateAi
+import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
- *  The disputes and postures of CvDiplomacyAI: land (DoUpdateLandDisputeLevels with the expansion and plot buying postures),
- *  wonders (DoUpdateWonderDisputeLevels), city-states (DoUpdateMinorCivDisputeLevels) and military posture (DoUpdateMilitaryAggressivePostures).
- *  The victory dispute (DoUpdateVictoryDisputeLevels) is not ported: in the original nothing but an end-of-friendship text reads it.
+ *  The disputes and postures of CvDiplomacyAI: land (Vox Populi's DoUpdateLandDisputeLevels, by contested plots), the expansion and plot
+ *  buying postures, wonders (DoUpdateWonderDisputeLevels), city-states (DoUpdateMinorCivDisputeLevels) and military posture
+ *  (DoUpdateMilitaryAggressivePostures). The victory dispute (DoUpdateVictoryDisputeLevels) is not ported: in the original nothing but an
+ *  end-of-friendship text reads it.
  */
 object DisputeAi {
 
-    /** CvDiplomacyAI::DoUpdateLandDisputeLevels: (expansion posture + plot buying posture + proximity) × our expansion flavor */
+    /**
+     *  Vox Populi's CvDiplomacyAI::DoUpdateLandDisputeLevels (an AI's; a human's levels stay as they are): towards a player closer than
+     *  far, the contested plot score of our cities ([contestedPlotScore]) x (100 + multiplier) / 100, the multiplier LAND_DISPUTE_CRAMPED_MULTIPLIER
+     *  when we are cramped, +50 when bold (boldness above 7, the warmonger or expansionist trait, competing for victory by world conquest,
+     *  or an expansion flavor with the grand strategy above 7), +100 in the Ancient era, +50 to the Classical, +25 to the Medieval
+     *  (our era); then LAND_DISPUTE_FIERCE / STRONG / WEAK_THRESHOLD. VP's settle-spot thief (the player who settled near the best city
+     *  site VP's GetBestSettlePlot had found, raising the level) needs VP's settle plot search, which is not ported: none.
+     */
     fun updateLandDisputes(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
-        // GetPersonalityAndGrandStrategy(FLAVOR_EXPANSION)
-        val expansionFlavor = civ.ai.personalityAndGrandStrategy(Flavor.Expansion)
+        if (civ.isHuman()) return
+        val ai = civ.ai
+        val era = civ.getEraNumber()
+        val bold = ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 || ai.hasTraitCategory(TraitCategory.Warmonger) ||
+            ai.hasTraitCategory(TraitCategory.Expansionist) || (VictoryProgressAi.isCompetingForVictory(civ) && ai.isGoingForWorldConquest()) ||
+            ai.personalityAndGrandStrategy(Flavor.Expansion) > 7
+        var multiplier = if (ai.isCramped) rules.define(AiDefine.LAND_DISPUTE_CRAMPED_MULTIPLIER) else 0
+        if (bold) multiplier += 50
+        multiplier += when {
+            era <= rules.define(AiDefine.ANCIENT_ERA) -> 100
+            era <= rules.define(AiDefine.CLASSICAL_ERA) -> 50
+            era <= rules.define(AiDefine.MEDIEVAL_ERA) -> 25
+            else -> 0
+        }
         for (other in others) {
-            val memory = civ.ai.diplomacy.memoryOf(other)
+            val memory = ai.diplomacy.memoryOf(other)
             memory.lastTurnLandDispute = memory.landDispute
-            var weight = when (memory.expansionPosture) {
-                AggressivePosture.None -> rules.define(AiDefine.LAND_DISPUTE_EXP_AGGRESSIVE_POSTURE_NONE)
-                AggressivePosture.Low -> rules.define(AiDefine.LAND_DISPUTE_EXP_AGGRESSIVE_POSTURE_LOW)
-                AggressivePosture.Medium -> rules.define(AiDefine.LAND_DISPUTE_EXP_AGGRESSIVE_POSTURE_MEDIUM)
-                AggressivePosture.High -> rules.define(AiDefine.LAND_DISPUTE_EXP_AGGRESSIVE_POSTURE_HIGH)
-                AggressivePosture.Incredible -> rules.define(AiDefine.LAND_DISPUTE_EXP_AGGRESSIVE_POSTURE_INCREDIBLE)
+            if (DiplomacyTurn.proximity(civ, other) < DiplomacyTurn.PROXIMITY_CLOSE) {
+                memory.landDispute = DisputeLevel.None
+                continue
             }
-            weight += when (memory.plotBuyingPosture) {
-                AggressivePosture.None -> rules.define(AiDefine.LAND_DISPUTE_PLOT_BUY_AGGRESSIVE_POSTURE_NONE)
-                AggressivePosture.Low -> rules.define(AiDefine.LAND_DISPUTE_PLOT_BUY_AGGRESSIVE_POSTURE_LOW)
-                AggressivePosture.Medium -> rules.define(AiDefine.LAND_DISPUTE_PLOT_BUY_AGGRESSIVE_POSTURE_MEDIUM)
-                AggressivePosture.High -> rules.define(AiDefine.LAND_DISPUTE_PLOT_BUY_AGGRESSIVE_POSTURE_HIGH)
-                AggressivePosture.Incredible -> rules.define(AiDefine.LAND_DISPUTE_PLOT_BUY_AGGRESSIVE_POSTURE_INCREDIBLE)
-            }
-            weight += when (DiplomacyTurn.proximity(civ, other)) {
-                DiplomacyTurn.PROXIMITY_DISTANT -> rules.define(AiDefine.LAND_DISPUTE_DISTANT)
-                DiplomacyTurn.PROXIMITY_FAR -> rules.define(AiDefine.LAND_DISPUTE_FAR)
-                DiplomacyTurn.PROXIMITY_CLOSE -> rules.define(AiDefine.LAND_DISPUTE_CLOSE)
-                DiplomacyTurn.PROXIMITY_NEIGHBORS -> rules.define(AiDefine.LAND_DISPUTE_NEIGHBORS)
-                else -> 0
-            }
-            if (civ.ai.isCramped) weight += rules.define(AiDefine.LAND_DISPUTE_CRAMPED_MULTIPLIER)
-            weight *= expansionFlavor
+            val score = civ.cities.sumOf { contestedPlotScore(it, other) } * (100 + multiplier) / 100
             memory.landDispute = when {
-                weight >= rules.define(AiDefine.LAND_DISPUTE_FIERCE_THRESHOLD) -> DisputeLevel.Fierce
-                weight >= rules.define(AiDefine.LAND_DISPUTE_STRONG_THRESHOLD) -> DisputeLevel.Strong
-                weight >= rules.define(AiDefine.LAND_DISPUTE_WEAK_THRESHOLD) -> DisputeLevel.Weak
+                score >= rules.define(AiDefine.LAND_DISPUTE_FIERCE_THRESHOLD) -> DisputeLevel.Fierce
+                score >= rules.define(AiDefine.LAND_DISPUTE_STRONG_THRESHOLD) -> DisputeLevel.Strong
+                score >= rules.define(AiDefine.LAND_DISPUTE_WEAK_THRESHOLD) -> DisputeLevel.Weak
                 else -> DisputeLevel.None
             }
         }
+    }
+
+    /**
+     *  Vox Populi's CvCity::GetContestedPlotScore: the tiles within the city's work range (at most 5) that [other] owns and that yield
+     *  something (food, production, gold, science, culture or faith; CvPlot::hasYield), 3 each in the first ring, 2 in the second, 1 beyond
+     */
+    fun contestedPlotScore(city: City, other: Civilization): Int {
+        val range = city.getWorkRange().coerceIn(1, 5)
+        val center = city.getCenterTile()
+        var score = 0
+        for (tile in center.getTilesInDistance(range)) {
+            if (tile.getOwner() != other) continue
+            val stats = tile.stats.getTileStats(tile.getCity(), other)
+            if (stats.food <= 0f && stats.production <= 0f && stats.gold <= 0f && stats.science <= 0f && stats.culture <= 0f && stats.faith <= 0f)
+                continue
+            score += when (center.aerialDistanceTo(tile)) {
+                0, 1 -> 3
+                2 -> 2
+                else -> 1
+            }
+        }
+        return score
     }
 
     /** CvDiplomacyAI::GetTotalLandDisputeLevel */

@@ -2,6 +2,7 @@ package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.civilization.CivFlags
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.Policy.PolicyBranchType
@@ -10,8 +11,6 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
-import com.unciv.models.ruleset.unique.GameContext
-import com.unciv.models.ruleset.unique.UniqueType
 import kotlin.random.Random
 
 /**
@@ -399,58 +398,42 @@ object PolicyAutomation {
         }
     }
 
-    /** The happiness a building-happiness unique of a policy gives to the building named [buildingName] (CvPolicyEntry::GetBuildingClassHappiness) */
-    private inline fun forEachBuildingHappiness(policy: Policy, ruleset: Ruleset, action: (buildingName: String, happiness: Int) -> Unit) {
-        for (unique in policy.getMatchingUniques(UniqueType.StatsFromObject, GameContext.IgnoreConditionals)) {
-            val happiness = unique.stats.happiness.toInt()
-            if (happiness == 0) continue
-            val buildingName = unique.params[1]
-            if (buildingName in ruleset.buildings) action(buildingName, happiness)
-        }
-    }
-
-    /** CvPolicyAI::GetBranchBuildingHappiness: what the policies of [branch] would add in happiness to the buildings (this civilization's version) in our cities */
-    fun branchBuildingHappiness(civ: Civilization, branch: PolicyBranch): Int {
-        val ruleset = civ.gameInfo.ruleset
-        var total = 0
-        for (policy in branch.policies) forEachBuildingHappiness(policy, ruleset) { buildingName, happiness ->
-            val building = civ.getEquivalentBuilding(buildingName).name
-            total += happiness * civ.cities.count { it.cityConstructions.isBuilt(building) }
-        }
-        return total
-    }
-
-    /** CvPolicyAI::GetNumHappinessPolicies: the policies of [branch] that give happiness to a building, not counting buildings only for conquered cities */
-    fun numHappinessPolicies(civ: Civilization, branch: PolicyBranch): Int {
-        val ruleset = civ.gameInfo.ruleset
-        return branch.policies.count { policy ->
-            var counts = false
-            forEachBuildingHappiness(policy, ruleset) { buildingName, _ ->
-                if (!civ.getEquivalentBuilding(buildingName).hasUnique(UniqueType.RemovesAnnexUnhappiness, GameContext.IgnoreConditionals)) counts = true
-            }
-            counts
-        }
-    }
-
     /**
-     *  CvPolicyAI::DoConsiderIdeologySwitch: with excess happiness at most SUPER_UNHAPPY_THRESHOLD and public opinion unhappiness of 10 or more,
-     *  switches to the ideology the people prefer if the opinion unhappiness plus the building happiness of that ideology's tenets minus that of
-     *  the current one ([branchBuildingHappiness], totals) is 10 or more, unless a clear victory preference rules that ideology out
-     *  (the raw grand strategy priorities). Returns whether it switched.
+     *  CvPolicyAI::DoConsiderIdeologySwitch (Vox Populi, BNW happiness): towards the ideology the people prefer, when public opinion
+     *  makes us unhappy. Super unhappy (excess happiness at most SUPER_UNHAPPY_THRESHOLD) and the switch would end it (excess + the
+     *  opinion unhappiness - the one the preferred ideology would bring above the threshold): switch, unless we switched within 30
+     *  turns. Otherwise very unhappy (at most VERY_UNHAPPY_THRESHOLD) and the switch would end that: only with a city revolt more than
+     *  2 + the anarchy turns away, unless a clear victory preference rules that ideology out (the raw grand strategy priorities) or we
+     *  switched within 30 turns. Masters and team leaders: none. Returns whether it switched.
      */
     fun considerIdeologySwitch(civ: Civilization): Boolean {
         val current = civ.getIdeology() ?: return false
+        if (civ.isHuman()) return false
         val opinion = civ.culture.publicOpinion
         val rules = civ.gameInfo.ruleset.ai
-        if (civ.stats.happiness > rules.define(AiDefine.SUPER_UNHAPPY_THRESHOLD) || opinion.unhappiness < 10) return false
         val preferred = civ.gameInfo.ruleset.policyBranches[opinion.preferredIdeology ?: return false] ?: return false
-        val improvement = opinion.unhappiness + branchBuildingHappiness(civ, preferred) - branchBuildingHappiness(civ, current)
-        if (improvement < 10) return false
-        val ideologies = ideologiesOf(civ.gameInfo.ruleset)
-        if (ideologies != null) {
-            val p = VictoryPriorities(civ)
-            if (preferred == excludedIdeology(p.conquest, p.diplomacy, p.science, p.culture, rules.define(AiDefine.IDEOLOGY_PERCENT_CLEAR_VICTORY_PREF), ideologies))
-                return false
+        if (opinion.unhappiness == 0 || preferred == current) return false
+        val happiness = civ.stats.happiness
+        val superThreshold = rules.define(AiDefine.SUPER_UNHAPPY_THRESHOLD)
+        val veryThreshold = rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)
+        val afterSwitch = happiness + opinion.unhappiness - opinion.hypotheticalUnhappiness(preferred)
+        val superUnhappy = happiness <= superThreshold && afterSwitch > superThreshold
+        val veryUnhappy = if (happiness <= superThreshold) happiness <= veryThreshold
+            else happiness <= veryThreshold && afterSwitch > veryThreshold
+        val recentlySwitched = civ.gameInfo.turns - opinion.turnIdeologySwitch <= 30
+        if (superUnhappy) {
+            if (recentlySwitched) return false
+        } else {
+            if (!veryUnhappy) return false
+            val anarchyTurns = civ.gameInfo.ruleset.modOptions.constants.ideologyAnarchyTurns
+            if ((civ.flagsCountdown[CivFlags.CityRevoltCountdown.name] ?: 0) <= 2 + anarchyTurns) return false
+            val ideologies = ideologiesOf(civ.gameInfo.ruleset)
+            if (ideologies != null) {
+                val p = VictoryPriorities(civ)
+                if (preferred == excludedIdeology(p.conquest, p.diplomacy, p.science, p.culture, rules.define(AiDefine.IDEOLOGY_PERCENT_CLEAR_VICTORY_PREF), ideologies))
+                    return false
+            }
+            if (recentlySwitched) return false
         }
         civ.policies.switchIdeology(preferred)
         return true

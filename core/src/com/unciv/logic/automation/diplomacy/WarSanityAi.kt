@@ -16,7 +16,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
  *  diplomatically, since a war may break a friendship, a pact or a promise.
  *
  *  Inputs with no counterpart, counted as none: strategic trade partners, troop move requests, the coop war agreement score, the wish
- *  to end a defensive pact, our cities' exposure and their preferred attack targets (CvMilitaryAI; our cities count as not exposed),
+ *  to end a defensive pact,
  *  warmonger and expansionist traits, city-state gold bonuses (none in BNW). VP's flags by what we keep: untrustworthy is
  *  [OpinionAi.isUntrustworthyFriend], the backstabber flag having declared war on a friend, "ever backstabbed by" a DoF they broke
  *  with us ([MajorCivMemory.doFBrokenTurn]); a liberator is one who resurrected us (liberated capitals and holy cities are not
@@ -134,12 +134,14 @@ object WarSanityAi {
      *  who minds backstabbing and is our friend or ally (or, short of endgame aggression, not an easy target, or liked by a
      *  non-backstabber). With a DoF or defensive pact: loyalty above 6 refuses (unless a backstabber); a [direct], unprovoked war needs
      *  a hostile approach and an opinion below friend (a loyal leader's, below neutral, or favourable at loyalty 4); they must not be
-     *  too strong for us militarily or economically ([direct]: powerful for an aggressive leader with an easy target, strong for
-     *  others with one; average and poor without), nor (indirect) too strong a neighbour; and a good reason is needed (a backstabber,
+     *  too strong for us militarily or economically ([direct]: powerful for an aggressive leader, strong for others, with at least two
+     *  of: our cities not exposed to them, a preferred attack target among theirs (CvMilitaryAI), an easy target; average and poor
+     *  without), nor (indirect) too strong a neighbour; and a good reason is needed (a backstabber,
      *  endgame aggression, untrustworthy, close to world conquest while they hold their capital, a backstabber themselves, our
      *  biggest competitor, a severe warmonger; indirect also going for conquest while they hold their capital, a major competitor).
      *  With a DoF: [direct], no valid major minding backstabbing may be our friend or ally, liked as a friend by a non-backstabber,
-     *  or a strong neighbour (below average when neighbours, below powerful when close) that is not an easy target - this loop
+     *  or a strong neighbour (below average when neighbours, below powerful when close), or one our cities are exposed to that is not an
+     *  easy target - this loop
      *  counts [other] too, as VP's does, so a current friend is attacked directly only when one of us minds no more; indirect, a
      *  loyalty above 8 refuses (unless a backstabber or endgame aggressive), and an impulse needs an opinion below friend.
      */
@@ -189,9 +191,12 @@ object WarSanityAi {
             val military = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
             if (direct) {
                 val economic = memory.economicStrength ?: StrengthLevel.Average
-                // At least two of: our cities not exposed (always, no input), their cities vulnerable (never, no input), an easy target
+                // At least two of: our cities not exposed to them, their cities vulnerable (a preferred attack target), an easy target
+                val ourCitiesOk = !civ.ai.military.isExposedToEnemy(civ, null, other)
+                val theirCitiesVulnerable = civ.ai.military.havePreferredAttackTarget(other)
+                val atLeastTwo = (ourCitiesOk && theirCitiesVulnerable) || (ourCitiesOk && easyTarget) || (theirCitiesVulnerable && easyTarget)
                 val limit = when {
-                    easyTarget -> if (aggressive) StrengthLevel.Powerful else StrengthLevel.Strong
+                    atLeastTwo -> if (aggressive) StrengthLevel.Powerful else StrengthLevel.Strong
                     aggressive -> StrengthLevel.Average
                     else -> StrengthLevel.Poor
                 }
@@ -219,8 +224,8 @@ object WarSanityAi {
                     val strength = WarStateAi.militaryStrengthComparedToUs(civ, third) ?: StrengthLevel.Average
                     val strengthOk = (proximity == DiplomacyTurn.PROXIMITY_NEIGHBORS && strength < StrengthLevel.Average) ||
                         (proximity == DiplomacyTurn.PROXIMITY_CLOSE && strength < StrengthLevel.Powerful) || proximity < DiplomacyTurn.PROXIMITY_CLOSE
-                    // Or not exposed to them, always (no input): only the strength counts
-                    if (!strengthOk) return false
+                    // and an easy target or our cities not exposed to them
+                    if (!strengthOk || !(WarStateAi.isEasyTarget(civ, third) || !civ.ai.military.isExposedToEnemy(civ, null, third))) return false
                 } else {
                     if (!backstabber && !endgameAggressive && loyalty > 8) return false
                     if (impulse && opinion >= MajorCivOpinion.Friend) return false

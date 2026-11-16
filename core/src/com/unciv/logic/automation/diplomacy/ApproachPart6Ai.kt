@@ -75,13 +75,12 @@ object ApproachPart6Ai {
      *  (2 x and 1 x bias) when they are our neighbour, and again when the enemy is. WAR STATE: unless we take no new wars, a war going
      *  better than troubled against an easy target, a player in terrible shape for war, or a phony war is ignored; any other war
      *  lowers war and hostility (5 x bias), more when it goes badly: a stalemate draws neutrality (2 x bias, war and hostility 1 x
-     *  less), a defensive war friendliness (2 x), nearly defeated 5 x, both times their attack multiplier (2 when we are their easy
-     *  target).
+     *  less), a defensive war friendliness (2 x), nearly defeated 5 x, both times their attack multiplier ([ApproachAi.attackMultipliers]).
      */
     fun addAtWarWeights(civ: Civilization, other: Civilization, w: IntArray) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
         val noNewWars = WarStateAi.isNoNewWars(civ)
-        val theirAttackMultiplier = if (WarStateAi.isEasyTarget(other, civ)) 2 else 1
+        val theirAttackMultiplier = ApproachAi.attackMultipliers(civ, other).second
         val theyAreNeighbours = DiplomacyTurn.proximity(other, civ) == DiplomacyTurn.PROXIMITY_NEIGHBORS
         for (enemy in civ.gameInfo.civilizations) {
             if (enemy == other || enemy == civ || !enemy.isMajorCiv || !WarStateAi.isPlayerValid(civ, enemy) || !civ.isAtWarWith(enemy)) continue

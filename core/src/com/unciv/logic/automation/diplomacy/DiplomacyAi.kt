@@ -42,6 +42,8 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     /** CvDiplomacyAI::GetPlayerStrategicApproachValue / GetCivStrategicApproach: the scores and the choice of this turn's strategic pass */
     var strategicApproachValues = ArrayList<Int>()
     var strategicApproach: MajorCivApproach? = null
+    /** CvDiplomacyAI::IsMajorCompetitor: set each turn by [CompetitorAi.updateMajorCompetitors] */
+    var majorCompetitor = false
 
     // War
     var warGoal: WarGoal? = null
@@ -190,6 +192,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.opinion = opinion; copy.approach = approach; copy.warFace = warFace
         copy.opinionWeight = opinionWeight; copy.approachValues = ArrayList(approachValues)
         copy.strategicApproachValues = ArrayList(strategicApproachValues); copy.strategicApproach = strategicApproach
+        copy.majorCompetitor = majorCompetitor
         copy.warGoal = warGoal; copy.wantPeaceCounter = wantPeaceCounter; copy.wantsPeace = wantsPeace; copy.warProjection = warProjection
         copy.lastWarProjection = lastWarProjection; copy.warDamageLevel = warDamageLevel; copy.warValueLost = warValueLost
         copy.theirWarValueLostToUs = theirWarValueLostToUs; copy.theirWarDamageLevel = theirWarDamageLevel

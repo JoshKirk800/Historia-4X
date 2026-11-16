@@ -130,15 +130,13 @@ class DiplomacyAiTests {
     }
 
     @Test
-    fun `nuked once costs the full nuke weight and liberated cities step 30 50 60`() {
+    fun `being nuked costs the full nuke weight and each liberated city 30`() {
         b.ai.diplomacy.memoryOf(a).numTimesNuked = 1
-        assertEquals(-50f, modifier(b, a, DiplomaticModifiers.UsedNuclearWeapons), 0.001f)
+        assertEquals(-100f, modifier(b, a, DiplomaticModifiers.UsedNuclearWeapons), 0.001f)
         val memory = b.ai.diplomacy.memoryOf(a)
         memory.numCitiesLiberated = 1
         assertEquals(30f, modifier(b, a, DiplomaticModifiers.LiberatedCity), 0.001f)
         memory.numCitiesLiberated = 2
-        assertEquals(50f, modifier(b, a, DiplomaticModifiers.LiberatedCity), 0.001f)
-        memory.numCitiesLiberated = 5
         assertEquals(60f, modifier(b, a, DiplomaticModifiers.LiberatedCity), 0.001f)
     }
 

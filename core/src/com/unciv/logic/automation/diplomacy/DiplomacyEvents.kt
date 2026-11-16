@@ -104,6 +104,7 @@ object DiplomacyEvents {
                 if (wasFriends) {
                     memory.friendDeclaredWarOnUs = true
                     memory.declaredWarOnFriendValue += rules.define(AiDefine.OPINION_WEIGHT_WAR_FRIEND_EACH) * DiplomacyTurn.opinionDurationPercent(me)
+                    if (declarer.isMajorCiv) onDoFBetrayed(declarer, me)
                 }
                 if (declarer.isMajorCiv) {
                     memory.approach = MajorCivApproach.War
@@ -127,6 +128,30 @@ object DiplomacyEvents {
             memory.protectedMinorAttackedUnseen = true
             memory.numProtectedMinorsAttacked++
         }
+    }
+
+    /** CvDiplomacyAI::SetDoFAccepted (Vox Populi): a DoF between majors lifts both sides' DoF level one step from the higher of the
+     *  two (a betrayed or new friendship to friends, friends to allies, allies to battle brothers) */
+    fun onDoFSigned(a: Civilization, b: Civilization) {
+        if (!a.isMajorCiv || !b.isMajorCiv) return
+        val ours = a.ai.diplomacy.memoryOf(b)
+        val theirs = b.ai.diplomacy.memoryOf(a)
+        val next = when (maxOf(ours.doFLevel, theirs.doFLevel)) {
+            DoFLevel.Untrustworthy, DoFLevel.New -> DoFLevel.Friends
+            DoFLevel.Friends -> DoFLevel.Allies
+            DoFLevel.Allies, DoFLevel.BattleBrothers -> DoFLevel.BattleBrothers
+        }
+        ours.doFLevel = next
+        theirs.doFLevel = next
+    }
+
+    /** Vox Populi's ending of a friendship by war (DoSomeoneDeclaredWarOnMe) or denouncement (DoDenouncePlayer): both sides' DoF
+     *  level becomes untrustworthy, and the [victim] notes when the [betrayer] broke it (SetDoFBroken) */
+    fun onDoFBetrayed(betrayer: Civilization, victim: Civilization) {
+        betrayer.ai.diplomacy.memoryOf(victim).doFLevel = DoFLevel.Untrustworthy
+        val memory = victim.ai.diplomacy.memoryOf(betrayer)
+        memory.doFLevel = DoFLevel.Untrustworthy
+        memory.doFBrokenTurn = victim.gameInfo.turns
     }
 
     /** CvTeam::makePeace: both sides run DoWeMadePeaceWithSomeone and remember the turn of the treaty */

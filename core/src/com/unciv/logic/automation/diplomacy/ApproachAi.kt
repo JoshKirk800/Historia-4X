@@ -1,6 +1,5 @@
 package com.unciv.logic.automation.diplomacy
 
-import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.automation.strategy.TargetValue
 import com.unciv.logic.automation.strategy.WarState
@@ -24,9 +23,10 @@ import kotlin.random.Random
  *  they are multiplied by 100 first) go through VP's frame: prioritization, randomness (part 11), opinion as a percentage (part 13), the
  *  approach curve that carries 70% of last turn's scores into this turn's (part 14), and the selection (part 15).
  *  The terms of parts 2 to 8 are still BNW's where `phaseE/vp-approach-plan.md` has not ported them yet; parts 10 and 12 too (BNW's
- *  multipliers in [approachWeights], [applyFinalRules]). Not taken in from part 1 yet: the default victory pursuit (VP's victory
- *  classification), quests of city-states, and the bonus when an army is in place for the attack (VP's war targets). The leader traits
- *  are VP's trait categories ([com.unciv.logic.automation.strategy.CivAi.hasTraitCategory]).
+ *  multipliers in [approachWeights], [applyFinalRules]). Not taken in from part 1 yet: quests of city-states, and the bonus when an
+ *  army is in place for the attack (VP's war targets). The leader traits are VP's trait categories
+ *  ([com.unciv.logic.automation.strategy.CivAi.hasTraitCategory]), the victory pursuits VP's
+ *  ([com.unciv.logic.automation.diplomacy.VictoryPursuitAi]).
  */
 object ApproachAi {
 
@@ -280,6 +280,9 @@ object ApproachAi {
         if (civ.ai.hasTraitCategory(TraitCategory.Diplomat) || civ.ai.hasTraitCategory(TraitCategory.Tourism))
             w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
         if (civ.ai.hasTraitCategory(TraitCategory.Nerd)) w[NEUTRAL] += bias(MajorCivApproach.Neutral) * 2
+        stage("Default victory focus (part 1): friendlier for a diplomat or cultural leader, more neutral for a scientist")
+        if (civ.ai.isDiplomat() || civ.ai.isCultural()) w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
+        else if (civ.ai.isScientist()) w[NEUTRAL] += bias(MajorCivApproach.Neutral) * 2
 
         stage("Last turn's approach (part 1): less likely to flip, and war is not given up easily")
         if (oldApproach != null) {
@@ -313,8 +316,9 @@ object ApproachAi {
         }
         stage("Research agreement (part 2)")
         if (diplomacy?.hasFlag(DiplomacyFlags.ResearchAgreement) == true) {
-            // VP: x 5 for a scientist (its victory pursuit, not ported) or one going for a spaceship victory
-            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * (if (civ.ai.grandStrategy == GrandStrategyAi.SPACESHIP) 5 else 3)
+            // x 5 for a scientist or one going for a spaceship victory
+            val science = civ.ai.isScientist() || civ.ai.isGoingForSpaceshipVictory()
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * (if (science) 5 else 3)
             zeroBadApproaches(w)
         }
         stage("Exchange desires: a friendship we want (part 2)")
@@ -421,7 +425,7 @@ object ApproachAi {
             if (easy) w[WAR] += bias(MajorCivApproach.War) * memory.numTimesCultureBombed / 2
         }
         stage("Our protected city-states (part 3)")
-        val diploVictory = civ.ai.grandStrategy == GrandStrategyAi.UNITED_NATIONS
+        val diploVictory = civ.ai.isGoingForDiploVictory()
         if (OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)) {
             w[FRIENDLY] = 0
             w[DECEPTIVE] = 0
@@ -930,7 +934,7 @@ object ApproachAi {
      *  Part 7 of Vox Populi's SelectBestApproachTowardsMajorCiv, the VOX POPULI CHANGES: the difficulty bonus and the war bonus.
      *  Difficulty: towards a player we view worse than neutral, AggressionIncrease of the game's difficulty less 2 per opinion step above
      *  unforgivable adds bias x that / 2 to war, hostile (and deceptive, when deception applies), and x that more to war and hostile with
-     *  an opportunity attack. War bonus: going for world conquest (VP's conqueror pursuit: not ported) or with the warmonger or
+     *  an opportunity attack. War bonus: a conqueror (a Domination primary victory pursuit) or with the warmonger or
      *  expansionist trait, more with our unique unit in the field (and more again going for or close to world conquest), Honor opened and
      *  finished, Exploration opened and finished (when we can cross the ocean from the Medieval era, have 2 coastal cities and they 1: the
      *  non-VP-balance rule, our Exploration being BNW's), Autocracy, each more with an opportunity attack; scaled by boldness (war),
@@ -975,8 +979,9 @@ object ApproachAi {
             deceptive += bias(MajorCivApproach.Deceptive) * factor * attack
         }
         val conquest = civ.ai.isGoingForWorldConquest()
+        val conqueror = civ.ai.isConqueror()
         val warmonger = civ.ai.hasTraitCategory(TraitCategory.Warmonger)
-        if (conquest || warmonger || civ.ai.hasTraitCategory(TraitCategory.Expansionist)) {
+        if (conqueror || warmonger || civ.ai.hasTraitCategory(TraitCategory.Expansionist)) {
             add(2, 1)
             // Unique unit active? Slay them all!
             if (ApproachAdditionalAi.hasUniqueUnitPeriod(civ, rules) && ApproachAdditionalAi.hasUniqueUnitTech(civ, rules) &&
@@ -1193,11 +1198,12 @@ object ApproachAi {
      *  world conquest, they provoked us, they took a key city of ours, their warmonger threat is severe, they are an early-game
      *  competitor or our biggest competitor, [victoryConcern], or the game is conquest-only. Not holding back: we go for world conquest
      *  from the Medieval era, they took a key city, [victoryConcern], a severe warmonger threat, either of us close to world conquest, a
-     *  major competitor, or a conquest-only game; and when they are close or neighbours, also: we go for world conquest or have the
-     *  warmonger trait, they provoked us, our opinion of them is Enemy or worse, an early-game competitor, an easy target we see as a
-     *  competitor or worse, or a reckless expander. Bold is boldness above 7, the warmonger trait, or competing for victory by conquest.
-     *  Left out (no counterpart): the league competitor, wonder spammers, our own backstabber flag. "Provoked" is a
-     *  demand of theirs while we are at war (VP also counts a demand we accepted or a second demand, which we do not track).
+     *  major competitor, or a conquest-only game; and when they are close or neighbours, also: a conqueror (a Domination primary
+     *  victory pursuit) or the warmonger trait, they provoked us, our opinion of them is Enemy or worse, an early-game competitor, an
+     *  easy target we see as a competitor or worse, a reckless expander or a wonder spammer. Bold is boldness above 7, the warmonger
+     *  trait, or competing for victory by conquest. Left out (no counterpart): the league competitor, our own backstabber flag.
+     *  "Provoked" is a demand of theirs while we are at war (VP also counts a demand we accepted or a second demand, which we do not
+     *  track).
      */
     fun wantsOpportunityAttack(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
         if (CoopWarAi.isLockedIntoCoopWar(civ, other, rules)) return true
@@ -1234,10 +1240,10 @@ object ApproachAi {
         val medievalOrLater = civ.getEra().eraNumber >= rules.define(AiDefine.MEDIEVAL_ERA)
         if ((civ.ai.isGoingForWorldConquest() && medievalOrLater) || tookKeyCity || concern || severeThreat || closeToConquest
             || theyAreClose || CompetitorAi.isMajorCompetitor(civ, other) || aggressiveMode) return true
-        return proximity >= DiplomacyTurn.PROXIMITY_CLOSE && (civ.ai.isGoingForWorldConquest() || warmonger || provokedUs
+        return proximity >= DiplomacyTurn.PROXIMITY_CLOSE && (civ.ai.isConqueror() || warmonger || provokedUs
             || (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Enemy || earlyGameCompetitor
             || (easy && (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Competitor)
-            || WarStateAi.isPlayerRecklessExpander(civ, other))
+            || WarStateAi.isPlayerRecklessExpander(civ, other) || memory?.wonderSpammer == true)
     }
 
     /** CvPlayerTrade::GetAllTradeValueFromPlayerTimes100(YIELD_GOLD) / 100: gold we earn from routes between us and them */

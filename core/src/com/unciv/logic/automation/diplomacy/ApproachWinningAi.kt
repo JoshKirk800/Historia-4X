@@ -28,8 +28,9 @@ object ApproachWinningAi {
      *  THEY'RE CLOSE TO WINNING: one close to world conquest draws war, hostility and guard (5 x bias). A conqueror of other majors'
      *  capitals close to us, by the game's era (the rounded average of the living majors'): war and guard 3 x per capital in the
      *  Ancient era, 2 x up to the Classical, 1 x later; as much war and hostility again against an easy target, and 5 x (Ancient), 3 x
-     *  (Classical), 3 x (later, also when we go for world conquest) more when we are close to world conquest or have the warmonger
-     *  trait. Endgame aggression against them: war and hostility 5 x for each of their close science, diplomatic and culture victories
+     *  (Classical), 3 x (later, also for a conqueror or when we go for world conquest) more when we are close to world conquest or
+     *  have the warmonger trait. Endgame aggression against them: war and hostility 5 x for each of their close science, diplomatic
+     *  and culture victories
      *  and once more when we are close to any victory; war 5 x more against an easy target.
      */
     fun addCloseToWinningWeights(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
@@ -52,7 +53,7 @@ object ApproachWinningAi {
             val (times, bonus, bonusApplies) = when {
                 gameEra <= rules.define(AiDefine.ANCIENT_ERA) -> Triple(3, 5, warBonus)
                 gameEra <= rules.define(AiDefine.CLASSICAL_ERA) -> Triple(2, 3, warBonus)
-                else -> Triple(1, 3, warBonus || civ.ai.isGoingForWorldConquest())
+                else -> Triple(1, 3, warBonus || civ.ai.isConqueror() || civ.ai.isGoingForWorldConquest())
             }
             w[WAR] += bias(MajorCivApproach.War) * times * danger
             w[GUARDED] += bias(MajorCivApproach.Guarded) * times * danger

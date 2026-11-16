@@ -17,7 +17,7 @@ import com.unciv.models.ruleset.ai.TraitCategory
  *  diplomatically, since a war may break a friendship, a pact or a promise.
  *
  *  Inputs with no counterpart, counted as none: strategic trade partners, troop move requests, the coop war agreement score, the wish
- *  to end a defensive pact, city-state gold bonuses (none in BNW); VP's conqueror pursuit is going for world conquest. VP's flags by
+ *  to end a defensive pact, city-state gold bonuses (none in BNW). VP's flags by
  *  what we keep: untrustworthy is
  *  [OpinionAi.isUntrustworthyFriend], the backstabber flag having declared war on a friend, "ever backstabbed by" a DoF they broke
  *  with us ([MajorCivMemory.doFBrokenTurn]); a liberator is one who resurrected us (liberated capitals and holy cities are not
@@ -187,7 +187,7 @@ object WarSanityAi {
                     if (loyalty == 4 && opinion == MajorCivOpinion.Favorable) return false
                 }
             }
-            val aggressive = civ.ai.isGoingForWorldConquest() || civ.ai.hasTraitCategory(TraitCategory.Warmonger) ||
+            val aggressive = civ.ai.isConqueror() || civ.ai.hasTraitCategory(TraitCategory.Warmonger) ||
                 civ.ai.hasTraitCategory(TraitCategory.Expansionist)
             val easyTarget = WarStateAi.isEasyTarget(civ, other)
             val military = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average

@@ -156,9 +156,10 @@ object CompetitorAi {
      *  CvDiplomacyAI::IsEarlyGameCompetitor: up to the Medieval era (era 2), when our opinion of them is Enemy or worse, they dispute
      *  land more than weakly, beat us to a wonder, made a demand ([MajorCivMemory.demandCounter]: VP counts demands), converted our cities,
      *  either of us denounced the other, they robbed us, ignored or broke a promise about bullying city-states, attacked or killed a
-     *  city-state we protect, or are untrustworthy; or when they are a juicy target: an easy target ([WarStateAi.isEasyTarget]) or one
-     *  with a preferred attack target ([com.unciv.logic.automation.strategy.MilitaryAi.havePreferredAttackTarget]) that expands
-     *  recklessly, and is our neighbour or (when we go for world conquest) close. VP's wonder spammers have no input.
+     *  city-state we protect, or are untrustworthy; or when they are a juicy target (an easy target, [WarStateAi.isEasyTarget], or one
+     *  with a preferred attack target, [com.unciv.logic.automation.strategy.MilitaryAi.havePreferredAttackTarget]) that is our
+     *  neighbour and expands recklessly or spams wonders, or is close and expands recklessly or spams wonders for a conqueror (primary
+     *  or secondary victory pursuit), spams wonders for a cultural leader (primary or secondary).
      */
     fun isEarlyGameCompetitor(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
         if (civ.getEra().eraNumber > 2) return false
@@ -173,10 +174,18 @@ object CompetitorAi {
             || memory.ignoredBullyCityStatePromise || memory.brokenBullyCityStatePromise
             || OpinionAi.isAngryAboutProtectedMinorAttacked(memory, rules) || OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)
             || OpinionAi.isUntrustworthyFriend(other)) return true
-        if (!(WarStateAi.isEasyTarget(civ, other) || civ.ai.military.havePreferredAttackTarget(other))
-            || !WarStateAi.isPlayerRecklessExpander(civ, other)) return false
-        val proximity = DiplomacyTurn.proximity(civ, other)
-        return proximity == DiplomacyTurn.PROXIMITY_NEIGHBORS || (proximity == DiplomacyTurn.PROXIMITY_CLOSE && civ.ai.isGoingForWorldConquest())
+        if (!(WarStateAi.isEasyTarget(civ, other) || civ.ai.military.havePreferredAttackTarget(other))) return false
+        val reckless = WarStateAi.isPlayerRecklessExpander(civ, other)
+        val spammer = memory.wonderSpammer
+        return when (DiplomacyTurn.proximity(civ, other)) {
+            DiplomacyTurn.PROXIMITY_NEIGHBORS -> reckless || spammer
+            DiplomacyTurn.PROXIMITY_CLOSE -> when {
+                civ.ai.isConqueror() || civ.ai.isSecondaryConqueror() -> reckless || spammer
+                civ.ai.isCultural() || civ.ai.isSecondaryCultural() -> spammer
+                else -> false
+            }
+            else -> false
+        }
     }
 
     /** CvPlayer::GetFractionOriginalCapitalsUnderControl (UpdateMilitaryStats): the original capitals of majors [civ] holds, its own

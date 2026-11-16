@@ -496,7 +496,13 @@ object DiplomacyAutomation {
         val tradeLogic = TradeLogic(other, civ)
         tradeLogic.currentTrade.ourOffers.add(tribute)
         tradeLogic.acceptTrade()
+        onDemandAccepted(civ, other)
         return true
+    }
+
+    /** CvDiplomacyAI::SetNumConsecutiveDemandsTheyAccepted (Vox Populi): [payer] gave in to the tribute [demander] asked; the turn is kept */
+    fun onDemandAccepted(demander: Civilization, payer: Civilization) {
+        if (demander.isMajorCiv) demander.ai.diplomacy.memoryOf(payer).demandAcceptedTurn = demander.gameInfo.turns
     }
 
     /**
@@ -504,6 +510,7 @@ object DiplomacyAutomation {
      *  of one in two [civ] declares war and requests a basic attack on them, willing to build 3 of its units.
      */
     fun onHumanRefusedDemand(civ: Civilization, human: Civilization) {
+        civ.ai.diplomacy.memoryOf(human).demandAcceptedTurn = -1
         timeThis("AI.DemandRefusal") {
             if (civ.ai.random("DiplomacyAI.DemandRefusal").nextInt(100) >= 50) return@timeThis
             WarAi.declareWar(civ, human)

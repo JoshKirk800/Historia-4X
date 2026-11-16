@@ -37,7 +37,7 @@ object ApproachAi {
     private val FRIENDLY = MajorCivApproach.Friendly.ordinal
     private val NEUTRAL = MajorCivApproach.Neutral.ordinal
     /** VP's CivApproachTypes order (NEUTRAL before FRIENDLY), which decides ties and what is worse than neutral */
-    private val VP_ORDER = listOf(MajorCivApproach.War, MajorCivApproach.Hostile, MajorCivApproach.Deceptive, MajorCivApproach.Guarded,
+    internal val VP_ORDER = listOf(MajorCivApproach.War, MajorCivApproach.Hostile, MajorCivApproach.Deceptive, MajorCivApproach.Guarded,
         MajorCivApproach.Afraid, MajorCivApproach.Neutral, MajorCivApproach.Friendly)
     private val BAD_APPROACHES = intArrayOf(WAR, HOSTILE, DECEPTIVE, GUARDED, AFRAID)
 
@@ -53,6 +53,7 @@ object ApproachAi {
         CompetitorAi.updateMajorCompetitors(civ, others, rules)
         CompetitorAi.updateBiggestCompetitor(civ, others, rules)
         for (other in majors) selectApproach(civ, other, strategic = false, majors, rules, random)
+        WarTargetAi.updateWarTargets(civ, majors, rules)  // Vox Populi's DoUpdateWarTargets, at the end of the final pass
     }
 
     /** DoFirstContactInitRelationship: an approach right when we meet (the others keep theirs), as the first update of that player */
@@ -675,8 +676,8 @@ object ApproachAi {
         }
     }
 
-    /** BNW's war face for a new war approach (kept until VP's war targets are ported): from the runner-up approach */
-    private fun warFace(civ: Civilization, other: Civilization, w: IntArray): WarFace {
+    /** BNW's war face for a new war approach (VP's cached surface approach is not ported): from the runner-up approach */
+    internal fun warFace(civ: Civilization, other: Civilization, w: IntArray): WarFace {
         var second = -1
         for (i in w.indices) if (i != WAR && (second < 0 || w[i] > w[second])) second = i
         return when (APPROACHES[second]) {

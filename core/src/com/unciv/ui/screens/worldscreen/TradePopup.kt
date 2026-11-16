@@ -3,6 +3,7 @@ package com.unciv.ui.screens.worldscreen
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.unciv.UncivGame
+import com.unciv.logic.automation.civilization.DiplomacyAutomation
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.trade.TradeLogic
@@ -88,6 +89,7 @@ class TradePopup(worldScreen: WorldScreen) : Popup(worldScreen) {
             val tradeLogic = TradeLogic(viewingCiv, requestingCiv)
             tradeLogic.currentTrade.set(trade)
             tradeLogic.acceptTrade()
+            if (tradeRequest.isDemand) DiplomacyAutomation.onDemandAccepted(requestingCiv, viewingCiv)
             close()
             TradeThanksPopup(leaderIntroTable, worldScreen)
             requestingCiv.addNotification("[${viewingCiv.civName}] has accepted your trade request", NotificationCategory.Trade, viewingCiv.civName, NotificationIcon.Trade)

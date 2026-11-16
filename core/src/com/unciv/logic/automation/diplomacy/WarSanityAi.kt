@@ -240,7 +240,7 @@ object WarSanityAi {
         OpinionAi.isDoFAccepted(civ, other) || civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
 
     /** CvDiplomacyAI::IsBackstabber, as VP's TestBackstabberFlag keeps it: we declared war on a friend */
-    private fun isBackstabber(civ: Civilization): Boolean = OpinionAi.weDeclaredWarOnFriendCount(civ) > 0
+    fun isBackstabber(civ: Civilization): Boolean = OpinionAi.weDeclaredWarOnFriendCount(civ) > 0
 
     /** We broke a DoF with [other] within DOF_BROKEN_BACKSTAB_TIMER turns (IsDoFBroken and GetTurnsSinceDoFBroken on their side) */
     private fun isBackstabTimer(civ: Civilization, other: Civilization): Boolean {
@@ -263,7 +263,7 @@ object WarSanityAi {
      *  CvDiplomacyAI::IsLiberator: not one who took our capital or holy city, captured more of our cities than they liberated, is at
      *  war with us or untrustworthy; one who resurrected us, or (unless [onlyMajorCities]) liberated more of our cities than captured.
      */
-    private fun isLiberator(civ: Civilization, other: Civilization, onlyMajorCities: Boolean): Boolean {
+    fun isLiberator(civ: Civilization, other: Civilization, onlyMajorCities: Boolean): Boolean {
         val memory = civ.ai.diplomacy.memoryOf(other)
         if (OpinionAi.isCapitalCapturedBy(civ, other) || CompetitorAi.isHolyCityCapturedBy(civ, other)) return false
         if (memory.numCitiesCapturedBy > memory.numCitiesLiberated) return false
@@ -273,12 +273,12 @@ object WarSanityAi {
     }
 
     /** CvDiplomacyAI::IsCityRecentlyLiberatedBy: a liberator who liberated a city of ours within 20 turns */
-    private fun isCityRecentlyLiberatedBy(civ: Civilization, other: Civilization): Boolean {
+    fun isCityRecentlyLiberatedBy(civ: Civilization, other: Civilization): Boolean {
         val turn = civ.ai.diplomacy.memoryOf(other).liberatedCitiesTurn
         if (turn < 0 || !isLiberator(civ, other, onlyMajorCities = false)) return false
         return civ.gameInfo.turns - turn < 20
     }
 
     /** CvPlayer::getCitiesLost: the cities others captured from us */
-    private fun citiesLost(civ: Civilization): Int = civ.ai.diplomacy.memories.values.sumOf { it.numCitiesCapturedBy }
+    fun citiesLost(civ: Civilization): Int = civ.ai.diplomacy.memories.values.sumOf { it.numCitiesCapturedBy }
 }

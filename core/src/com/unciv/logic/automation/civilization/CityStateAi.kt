@@ -559,35 +559,42 @@ object CityStateAi {
     /** The turn's wishes of DoContactMinorCivs; the random rolls use [Random] from [CivAi.random] */
     class ContactWishes(val buyout: Boolean, val goldGift: Boolean, val bullyUnit: Boolean, val bullyGold: Boolean)
 
-    /** The first part of DoContactMinorCivs: whether we want to buy out, gift, take a worker or gold from a city-state this turn */
+    /**
+     *  The first part of Vox Populi's DoContactMinorCivs: whether we want to buy out (whenever we are able), gift, take a worker or gold
+     *  from a city-state this turn. Gift: a diplomacy flavor of MC_ALWAYS_GIFT_DIPLO_THRESHOLD or more, a diplomatic or culture victory,
+     *  saving for a gift, a gold quest or a gold rate above 100, else a roll of 0..9 below the diplomacy flavor. Worker, with a
+     *  city-state we are at war or hostile towards: few workers and improvements (workers per city below 0.25, improved tiles below
+     *  half), else a roll below the tile improvement flavor. Gold: a gold flavor of 6 or more, world conquest, saving for a unit or
+     *  building, losing money or a negative gold rate, else a roll below the gold flavor. (VP's trait and policy overrides for bullying
+     *  are VP-only: none.)
+     */
     fun contactWishes(civ: Civilization): ContactWishes {
         val ai = civ.ai
         val diplomacy = ai.personalityAndGrandStrategy(Flavor.Diplomacy)
         val gold = ai.personalityAndGrandStrategy(Flavor.Gold)
         val tileImprovement = ai.personalityAndGrandStrategy(Flavor.TileImprovement)
-        val expansion = ai.personalityAndGrandStrategy(Flavor.Expansion)
         val gpt = DealAi.goldRate(civ)
         val savings = ai.purchaseSavings
 
-        var buyout = false
-        if (civ.hasUnique(UniqueType.CityStateCanBeBoughtForGold)) {
-            buyout = ai.isEconomicStrategyActive(FOUND_CITY) || ai.isEconomicStrategyActive(EXPAND_LIKE_CRAZY)
-                || ai.isEconomicStrategyActive(EXPAND_TO_OTHER_CONTINENTS) || WarStateAi.stateAllWars(civ) == StateAllWars.Losing
-                || ai.isGoingForWorldConquest() || gpt > 100
-            if (!buyout) buyout = ai.random("DiplomacyAI.Buyout").nextInt(100) < expansion * 5
-        }
+        val buyout = civ.hasUnique(UniqueType.CityStateCanBeBoughtForGold)
 
         var goldGift = diplomacy >= civ.define(AiDefine.MC_ALWAYS_GIFT_DIPLO_THRESHOLD) || ai.isGoingForDiploVictory()
             || ai.isGoingForCultureVictory() || savings.isSavingForThisPurchase(PurchaseType.MinorCivGift)
             || hasActiveGoldQuest(civ) || gpt > 100
-        if (!goldGift) goldGift = ai.random("DiplomacyAI.GoldGift").nextInt(100) < diplomacy * civ.define(AiDefine.MC_SOMETIMES_GIFT_RAND_MULTIPLIER)
+        if (!goldGift) goldGift = ai.random("DiplomacyAI.GoldGift").nextInt(10) < diplomacy
 
-        var bullyUnit = EconomicAiRatios.workersToCitiesRatio(civ) < 0.25 && EconomicAiRatios.improvedToImprovablePlotsRatio(civ) < 0.50
-        if (!bullyUnit) bullyUnit = ai.random("DiplomacyAI.BullyUnit").nextInt(100) < tileImprovement * 3
+        var bullyUnit = false
+        val warOrHostile = civ.gameInfo.civilizations.any { minor ->
+            minor.isCityState && ai.minorCivApproaches[minor.civID].let { it == MinorCivApproach.Conquest || it == MinorCivApproach.Bully }
+        }
+        if (warOrHostile) {
+            bullyUnit = EconomicAiRatios.workersToCitiesRatio(civ) < 0.25 && EconomicAiRatios.improvedToImprovablePlotsRatio(civ) < 0.50
+            if (!bullyUnit) bullyUnit = ai.random("DiplomacyAI.BullyUnit").nextInt(10) < tileImprovement
+        }
 
         var bullyGold = gold >= 6 || ai.isGoingForWorldConquest() || savings.isSavingForThisPurchase(PurchaseType.Unit)
             || savings.isSavingForThisPurchase(PurchaseType.Building) || ai.isEconomicStrategyActive(LOSING_MONEY) || gpt < 0
-        if (!bullyGold) bullyGold = ai.random("DiplomacyAI.BullyGold").nextInt(100) < gold * 4
+        if (!bullyGold) bullyGold = ai.random("DiplomacyAI.BullyGold").nextInt(10) < gold
         return ContactWishes(buyout, goldGift, bullyUnit, bullyGold)
     }
 
@@ -596,12 +603,13 @@ object CityStateAi {
         civ.gameInfo.getAliveCityStates().any { civ.knows(it) && hasQuest(it, civ, QuestName.GiveGold) }
 
     /**
-     *  CvDiplomacyAI::DoContactMinorCivs: for every valid city-state we are not at war with, the protection update, then the desire to
-     *  buy it out (Austria), to give it gold, to take a worker, to take gold; then the buyout (one a turn, else saving), the gifts
-     *  (several a turn, never below half of the turn's starting treasury, else saving), one worker, and every gold tribute.
-     *  The route wish (SetWantToRouteConnectToMinor) is set for a neighbouring city-state with an active route quest for us that we are
-     *  friendly towards, cleared otherwise, and kept for a city-state we are at war with; [BuilderTaskingAi] reads it.
-     *  Unciv has no intrusion state (SetMajorIntruding).
+     *  Vox Populi's CvDiplomacyAI::DoContactMinorCivs: for every valid city-state we are not at war with, the protection update, then the
+     *  desire to buy it out (Austria), to give it gold, to take a worker, to take gold; then the buyout (one a turn, else saving), the
+     *  gifts (several a turn, never below half of the turn's starting treasury, else saving), one worker, and every gold tribute.
+     *  The route wish (SetWantToRouteConnectToMinor) is set for a neighbouring city-state we are friendly towards, with an average gold
+     *  rate above min(20 x era, 50), that is our ally or gave us a route quest; cleared otherwise, and kept for a city-state we are at
+     *  war with; [BuilderTaskingAi] reads it. Unciv has no intrusion state (SetMajorIntruding); VP's bully annexing (Rome), diplomatic
+     *  marriage (its Austria; ours is BNW's buyout) and tile improvement gifts to an ally are not here.
      */
     fun contactMinorCivs(civ: Civilization) = timeThis("AI.ContactMinorCivs") {
         val wishes = contactWishes(civ)
@@ -616,8 +624,10 @@ object CityStateAi {
             if (civ.isAtWarWith(minor)) continue
             val approach = civ.ai.minorCivApproaches[minor.civID] ?: MinorCivApproach.Ignore
             updateMinorCivProtection(civ, minor, approach)
-            if (approach == MinorCivApproach.Friendly
-                && hasQuest(minor, civ, QuestName.Route) && DiplomacyTurn.proximity(civ, minor) == DiplomacyTurn.PROXIMITY_NEIGHBORS)
+            val era = maxOf(1, civ.getEraNumber())
+            if (approach == MinorCivApproach.Friendly && WarStateAi.avgGoldRate(civ) > minOf(20 * era, 50)
+                && DiplomacyTurn.proximity(civ, minor) == DiplomacyTurn.PROXIMITY_NEIGHBORS
+                && (isAllies(minor, civ) || hasQuest(minor, civ, QuestName.Route)))
                 wantsRoute.add(minor.civID)
             var buyingOut = false
             if (wishes.buyout) {
@@ -706,13 +716,15 @@ object CityStateAi {
     }
 
     /**
-     *  The gift desirability of DoContactMinorCivs for [minor], null when we are not friendly toward it. Fills
-     *  [gift]'s quick boost and rival. Counts only above MC_GIFT_WEIGHT_THRESHOLD.
+     *  The gift desirability of Vox Populi's DoContactMinorCivs for [minor], null when we are not friendly toward it: a base of
+     *  MC_GIFT_WEIGHT_PROTECTIVE over the threshold, then BNW's terms. Fills [gift]'s quick boost and rival. Counts only above
+     *  MC_GIFT_WEIGHT_THRESHOLD.
      */
     fun goldGiftValue(civ: Civilization, minor: Civilization, approach: MinorCivApproach, gift: GoldGift): Int? {
         if (approach != MinorCivApproach.Friendly) return null
         val ai = civ.ai
         var value = civ.define(AiDefine.MC_GIFT_WEIGHT_THRESHOLD)
+        value += civ.define(AiDefine.MC_GIFT_WEIGHT_PROTECTIVE) // some base value
         value += min(max(0, DealAi.goldRate(civ) - 50), 100)
         val trait = minor.cityStateType.name
         if (ai.isGoingForDiploVictory()) value += civ.define(AiDefine.MC_GIFT_WEIGHT_DIPLO_VICTORY)
@@ -781,34 +793,37 @@ object CityStateAi {
     fun canMajorBullyGold(minor: Civilization, major: Civilization): Boolean =
         !minor.isAtWarWith(major) && minor.cityStateFunctions.getTributeWillingness(major) >= 0
 
-    /** The worker tribute desirability of DoContactMinorCivs; null unless Bully approach and possible. Counts above 100 */
+    /**
+     *  The worker tribute desirability of Vox Populi's DoContactMinorCivs; null unless hostile and possible. 100, by proximity +25,
+     *  +15, -15, -25, +25 when we bullied it before, -20 with a protector or an ally else +20; 0 when we are its friend or ally. Counts
+     *  above 100.
+     */
     fun bullyUnitValue(civ: Civilization, minor: Civilization, approach: MinorCivApproach): Int? {
         if (approach != MinorCivApproach.Bully || !canMajorBullyUnit(minor, civ)) return null
         var value = 100
         value += when (DiplomacyTurn.proximity(civ, minor)) {
-            DiplomacyTurn.PROXIMITY_NEIGHBORS -> 50
-            DiplomacyTurn.PROXIMITY_CLOSE -> 30
-            DiplomacyTurn.PROXIMITY_FAR -> -30
-            DiplomacyTurn.PROXIMITY_DISTANT -> -50
+            DiplomacyTurn.PROXIMITY_NEIGHBORS -> 25
+            DiplomacyTurn.PROXIMITY_CLOSE -> 15
+            DiplomacyTurn.PROXIMITY_FAR -> -15
+            DiplomacyTurn.PROXIMITY_DISTANT -> -25
             else -> 0
         }
-        value += if (minor.cityStateFunctions.getProtectorCivs().isNotEmpty()) -20 else 20
+        if (minor.civID in civ.ai.deals.bulliedMinors) value += 25
+        value += if (minor.cityStateFunctions.getProtectorCivs().isNotEmpty() || minor.allyCiv != null) -20 else 20
         if (isAllies(minor, civ) || isFriends(minor, civ)) value = 0
         return value
     }
 
-    /** The gold tribute desirability of DoContactMinorCivs; null unless Bully approach and possible. Counts above 100 */
+    /**
+     *  The gold tribute desirability of Vox Populi's DoContactMinorCivs; null unless hostile and possible. 100 + the tribute's gold x our
+     *  gold flavor / 10, +25 when we bullied it before, -20 with a protector else +20; 0 when we are its friend or ally. Counts above 100.
+     */
     fun bullyGoldValue(civ: Civilization, minor: Civilization, approach: MinorCivApproach): Int? {
         if (approach != MinorCivApproach.Bully || !canMajorBullyGold(minor, civ)) return null
         var value = 100
-        value += when (DiplomacyTurn.proximity(civ, minor)) {
-            DiplomacyTurn.PROXIMITY_NEIGHBORS -> 40
-            DiplomacyTurn.PROXIMITY_CLOSE -> 20
-            else -> 0
-        }
-        if (minor.civID in civ.ai.deals.bulliedMinors) value += 20
-        if (!MinorCivHelpers.isRecentlyBulliedByMajor(minor, civ) && MinorCivHelpers.isRecentlyBulliedByAnyMajor(minor)) value += -10
-        value += if (minor.cityStateFunctions.getProtectorCivs().isNotEmpty()) -10 else 10
+        value += minor.cityStateFunctions.goldGainedByTribute() * civ.ai.personalityAndGrandStrategy(Flavor.Gold) / 10
+        if (minor.civID in civ.ai.deals.bulliedMinors) value += 25
+        value += if (minor.cityStateFunctions.getProtectorCivs().isNotEmpty()) -20 else 20
         if (isAllies(minor, civ) || isFriends(minor, civ)) value = 0
         return value
     }
@@ -883,8 +898,6 @@ object CityStateAi {
     private const val MARITIME = "Maritime"
     private const val MERCANTILE = "Mercantile"
     private const val RELIGIOUS = "Religious"
-    private const val FOUND_CITY = "ECONOMICAISTRATEGY_FOUND_CITY"
-    private const val EXPAND_LIKE_CRAZY = "ECONOMICAISTRATEGY_EXPAND_LIKE_CRAZY"
     private const val EXPAND_TO_OTHER_CONTINENTS = "ECONOMICAISTRATEGY_EXPAND_TO_OTHER_CONTINENTS"
     private const val NEED_HAPPINESS = "ECONOMICAISTRATEGY_NEED_HAPPINESS"
     private const val NEED_HAPPINESS_CRITICAL = "ECONOMICAISTRATEGY_NEED_HAPPINESS_CRITICAL"

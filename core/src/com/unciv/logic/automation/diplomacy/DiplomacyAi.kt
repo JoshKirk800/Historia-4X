@@ -263,6 +263,8 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     var lastTotalLandDisputeLevel = 0
     /** CvPlayer::m_iTurnsSinceSettledLastCity: turns since this civilization founded a city, -1 = never (counted by [DiplomacyTurn.doTurn]) */
     var turnsSinceSettledLastCity = -1
+    /** CvDiplomacyAI::GetBiggestCompetitor, civID; null = none. Set each turn by [CompetitorAi.updateBiggestCompetitor] */
+    var biggestCompetitor: String? = null
 
     @Transient lateinit var civ: Civilization
 
@@ -273,6 +275,7 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         copy.demandReady = demandReady
         copy.turnsSinceSettledLastCity = turnsSinceSettledLastCity
         copy.lastTotalLandDisputeLevel = lastTotalLandDisputeLevel
+        copy.biggestCompetitor = biggestCompetitor
         return copy
     }
 

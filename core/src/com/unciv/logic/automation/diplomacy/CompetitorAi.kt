@@ -7,6 +7,7 @@ import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.InfluenceTrend
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
+import com.unciv.models.ruleset.ai.MajorCivApproach
 import yairm210.purity.annotations.Readonly
 
 /**
@@ -41,6 +42,68 @@ object CompetitorAi {
     /** CvDiplomacyAI::IsMajorCompetitor: as of the last [updateMajorCompetitors] */
     @Readonly
     fun isMajorCompetitor(civ: Civilization, other: Civilization): Boolean = civ.ai.diplomacy.memories[other.civID]?.majorCompetitor == true
+
+    /** CvDiplomacyAI::GetBiggestCompetitor: as of the last [updateBiggestCompetitor] */
+    @Readonly
+    fun biggestCompetitor(civ: Civilization): String? = civ.ai.diplomacy.biggestCompetitor
+
+    /**
+     *  CvDiplomacyAI::DoRelationshipPairing, step 2 (after [updateMajorCompetitors], before the final approach pass), for AI players: our
+     *  biggest competitor. Among the majors that did not resurrect us and are a major or early-game competitor or whose strategic
+     *  approach is not friendly, by priority: the latest that holds our capital; else the first close to world conquest; else, endgame
+     *  aggressive towards them with a strategic approach worse than neutral, the closest, then the one we like least; else the first that
+     *  holds the holy city of our religion. Failing all, the highest strategic war value among those not friendly, then hostile,
+     *  deceptive, guarded and afraid (a value above 0). VP's priorities for a capital or holy city taken earlier, the victory dispute tie
+     *  and the vassal terms have no input here: we know only who holds them now, keep no victory disputes and have no vassals.
+     */
+    fun updateBiggestCompetitor(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
+        val diplomacy = civ.ai.diplomacy
+        diplomacy.biggestCompetitor = null
+        if (civ.isHuman()) return
+        val majors = others.filter { it.isMajorCiv }
+        fun memory(other: Civilization) = diplomacy.memoryOf(other)
+        val potential = majors.filter {
+            !memory(it).resurrectedUs && (memory(it).majorCompetitor || isEarlyGameCompetitor(civ, it, rules)
+                || memory(it).strategicApproach != MajorCivApproach.Friendly)
+        }
+        var best: Civilization? = null
+        var bestPriority = 0
+        for (other in potential) {
+            val priority = when {
+                OpinionAi.isCapitalCapturedBy(civ, other) -> 1
+                VictoryProgressAi.isCloseToWorldConquest(other, rules) -> 2
+                VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules) && memory(other).strategicApproach in WORSE_THAN_NEUTRAL -> 3
+                isHolyCityCapturedBy(civ, other) -> 4
+                else -> continue
+            }
+            if (priority == 1 || bestPriority == 0 || priority < bestPriority) {
+                best = other
+                bestPriority = priority
+            } else if (priority == 3 && bestPriority == 3) {
+                val proximity = DiplomacyTurn.proximity(civ, other)
+                val bestProximity = DiplomacyTurn.proximity(civ, best!!)
+                if (proximity > bestProximity || (proximity == bestProximity && memory(other).opinionWeight > memory(best).opinionWeight))
+                    best = other
+            }
+        }
+        if (best == null) {
+            for (approach in WORSE_THAN_NEUTRAL) {
+                var highest = 0
+                for (other in majors) {
+                    val value = memory(other).strategicApproachValues.getOrNull(approach.ordinal) ?: 0
+                    if (value <= highest || memory(other).strategicApproach == MajorCivApproach.Friendly || memory(other).resurrectedUs) continue
+                    highest = value
+                    best = other
+                }
+                if (best != null) break
+            }
+        }
+        diplomacy.biggestCompetitor = best?.civID
+    }
+
+    /** VP's approaches below CIV_APPROACH_NEUTRAL, in its order */
+    private val WORSE_THAN_NEUTRAL = listOf(MajorCivApproach.War, MajorCivApproach.Hostile, MajorCivApproach.Deceptive,
+        MajorCivApproach.Guarded, MajorCivApproach.Afraid)
 
     private fun isMajorCompetitorNow(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
         val game = civ.gameInfo

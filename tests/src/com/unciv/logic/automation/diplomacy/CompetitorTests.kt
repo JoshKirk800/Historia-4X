@@ -4,8 +4,10 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.AiRuleset
+import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -72,5 +74,36 @@ class CompetitorTests {
         assertTrue(CompetitorAi.isEarlyGameCompetitor(a, b, rules))
         a.tech.addTechnology("Printing Press") // Renaissance era (3)
         assertFalse(CompetitorAi.isEarlyGameCompetitor(a, b, rules))
+    }
+
+    private fun biggest(): String? {
+        CompetitorAi.updateMajorCompetitors(a, listOf(b, c, d), rules)
+        CompetitorAi.updateBiggestCompetitor(a, listOf(b, c, d), rules)
+        return CompetitorAi.biggestCompetitor(a)
+    }
+
+    /** Strategic approach values by MajorCivApproach ordinal: [war] for war, nothing else */
+    private fun strategic(other: Civilization, approach: MajorCivApproach, war: Int) {
+        val memory = a.ai.diplomacy.memoryOf(other)
+        memory.strategicApproach = approach
+        memory.strategicApproachValues = ArrayList(MajorCivApproach.entries.map { if (it == MajorCivApproach.War) war else 0 })
+    }
+
+    @Test
+    fun `without a reason, the biggest competitor is the highest strategic war value that is not friendly`() {
+        strategic(b, MajorCivApproach.Neutral, 300)
+        strategic(c, MajorCivApproach.Friendly, 900)
+        strategic(d, MajorCivApproach.Neutral, 100)
+        assertEquals(b.civID, biggest())
+    }
+
+    @Test
+    fun `the holder of our capital is the biggest competitor whatever the approach values`() {
+        strategic(b, MajorCivApproach.Neutral, 900)
+        strategic(c, MajorCivApproach.Neutral, 100)
+        strategic(d, MajorCivApproach.Neutral, 100)
+        game.addCity(a, game.getTile(HexCoord(3, 3)))
+        a.cities.first { it.isOriginalCapital }.moveToCiv(c)
+        assertEquals(c.civID, biggest())
     }
 }

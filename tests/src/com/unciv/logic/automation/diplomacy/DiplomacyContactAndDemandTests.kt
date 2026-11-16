@@ -241,7 +241,7 @@ class DiplomacyContactAndDemandTests {
     }
 
     @Test
-    fun `an AI gives in to a demand at once and remembers nothing of it`() {
+    fun `an AI gives in to a demand at once and counts it against the demander`() {
         b.addGold(1000 - b.gold)
         a.getDiplomacyManager(b)!!.signDeclarationOfFriendship()
         val ours = a.gold
@@ -249,9 +249,28 @@ class DiplomacyContactAndDemandTests {
         DiplomacyAutomation.contactMajorCivs(a)
         assertEquals(800, b.gold)
         assertEquals(ours + 200, a.gold)
-        // CvDiplomacyAI::DoDemandMade belongs to the demands made of an AI by a human, not to the AI demanding
-        assertEquals(-1, b.ai.diplomacy.memoryOf(a).demandCounter)
+        // CvDiplomacyAI::DoSendStatementToPlayer: the AI target's DoDemandMade counts the demand and stamps the turn
+        assertEquals(1, b.ai.diplomacy.memoryOf(a).numDemandsMade)
+        assertEquals(game.gameInfo.turns, b.ai.diplomacy.memoryOf(a).demandMadeTurn)
+        assertTrue("the demander was given in to", WarTargetAi.isRecentDemandAccepted(a, b))
         assertEquals(b.civID, a.ai.diplomacy.demandTarget)
+    }
+
+    @Test
+    fun `demands made of us weigh less when we gave nothing and halve in count once their duration passes`() {
+        val memory = b.ai.diplomacy.memoryOf(a)
+        b.ai.setDiplomacyValue(DiplomacyPersonality.Forgiveness, 5)
+        memory.numDemandsMade = 2
+        memory.demandMadeTurn = game.gameInfo.turns
+        // (20 + 10) halved by OPINION_WEIGHT_MADE_DEMAND_YOU_NO_TAKE_DIVISOR 200: nothing of ours was taken recently
+        assertEquals(15, OpinionAi.demandMadeScore(b, a, rules))
+
+        val duration = 50 * DiplomacyTurn.opinionDurationPercent(b) / 100
+        game.gameInfo.turns += duration
+        OpinionAi.testOpinionModifiers(b, listOf(a), rules)
+        assertEquals(1, memory.numDemandsMade)
+        assertEquals(game.gameInfo.turns, memory.demandMadeTurn)
+        assertEquals("one demand left, $duration turns later", 10, OpinionAi.demandMadeScore(b, a, rules))
     }
 
     @Test

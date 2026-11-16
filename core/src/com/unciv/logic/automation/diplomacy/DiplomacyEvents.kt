@@ -113,7 +113,8 @@ object DiplomacyEvents {
                     memory.approach = MajorCivApproach.War
                     memory.warFace = WarFace.Neutral
                 }
-                if (memory.madeMilitaryPromise) memory.brokenMilitaryPromise = true
+                if (memory.madeMilitaryPromise && !memory.brokenMilitaryPromise)
+                    PromiseAi.markBroken(memory, PromiseAi.PromiseKind.Military, me.gameInfo.turns)
                 // Clear what made us like them
                 memory.numCiviliansReturned = 0
                 memory.recentTradeValue = 0
@@ -173,7 +174,7 @@ object DiplomacyEvents {
         val friendMemory = friendAi.memoryOf(ender)
         for (entry in friendMemory.coopWars.values) if (entry.state != null && entry.state!! >= CoopWarState.Soon) {
             if (entry.state == CoopWarState.Soon) {
-                friendMemory.brokenCoopWarPromise = true
+                PromiseAi.markBroken(friendMemory, PromiseAi.PromiseKind.CoopWar, friend.gameInfo.turns)
                 friendAi.changeRecentAssistValue(ender, 300)
             }
             entry.state = null
@@ -327,18 +328,17 @@ object DiplomacyEvents {
                 memory.wonderDispute = DisputeLevel.None
                 memory.minorCivDispute = DisputeLevel.None
                 memory.warmongerThreat = AiThreat.None
-                memory.noSettleRequestEverAsked = false
-                memory.stopSpyingRequestEverAsked = false
-                memory.demandCounter = -1
+                memory.numDemandsMade = 0
+                memory.demandMadeTurn = -1
                 memory.numTimesCultureBombed = 0
                 memory.negativeReligiousConversionPoints = 0
                 memory.numTimesRobbed = 0
                 memory.brokenMilitaryPromise = false
                 memory.ignoredMilitaryPromise = false
-                memory.brokenBorderPromiseValue = 0
-                memory.ignoredBorderPromiseValue = 0
-                memory.brokenExpansionPromiseValue = 0
-                memory.ignoredExpansionPromiseValue = 0
+                memory.brokenBorderPromise = false
+                memory.ignoredBorderPromise = false
+                memory.brokenExpansionPromise = false
+                memory.ignoredExpansionPromise = false
                 memory.brokenNoConvertPromise = false
                 memory.ignoredNoConvertPromise = false
                 memory.brokenNoDiggingPromise = false
@@ -346,6 +346,7 @@ object DiplomacyEvents {
                 memory.brokenSpyPromise = false
                 memory.ignoredSpyPromise = false
                 memory.brokenCoopWarPromise = false
+                memory.promiseTurns.clear()
                 memory.numProtectedMinorsKilled = 0
                 memory.numProtectedMinorsAttacked = 0
                 memory.numProtectedMinorsBullied = 0

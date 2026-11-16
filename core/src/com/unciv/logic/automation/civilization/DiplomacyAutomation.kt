@@ -539,9 +539,17 @@ object DiplomacyAutomation {
         return true
     }
 
-    /** CvDiplomacyAI::SetNumConsecutiveDemandsTheyAccepted (Vox Populi): [payer] gave in to the tribute [demander] asked; the turn is kept */
+    /**
+     *  CvDiplomacyAI::DoDemandMade (accepted) and SetNumConsecutiveDemandsTheyAccepted (Vox Populi): [payer] gave in to the tribute
+     *  [demander] asked: the payer counts one more demand of theirs (ChangeNumDemandsMade, stamping the turn), the demander keeps the turn
+     */
     fun onDemandAccepted(demander: Civilization, payer: Civilization) {
         if (demander.isMajorCiv) demander.ai.diplomacy.memoryOf(payer).demandAcceptedTurn = demander.gameInfo.turns
+        if (payer.isMajorCiv && !payer.isHuman()) {
+            val memory = payer.ai.diplomacy.memoryOf(demander)
+            memory.numDemandsMade++
+            memory.demandMadeTurn = payer.gameInfo.turns
+        }
     }
 
     /**

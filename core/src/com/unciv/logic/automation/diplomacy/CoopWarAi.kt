@@ -196,7 +196,7 @@ object CoopWarAi {
             HumanAnswer.Soon -> entry.state = CoopWarState.Soon
             HumanAnswer.Refuse -> if (now) {
                 entry.state = null
-                civ.ai.diplomacy.memoryOf(human).brokenCoopWarPromise = true
+                PromiseAi.markBroken(civ.ai.diplomacy.memoryOf(human), PromiseAi.PromiseKind.CoopWar, civ.gameInfo.turns)
             }
             HumanAnswer.Agree -> {
                 entry.state = CoopWarState.Accepted

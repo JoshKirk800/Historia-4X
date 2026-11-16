@@ -64,7 +64,7 @@ class PromiseAcceptanceTests {
         assertTrue(PromiseAi.isDontSettleAcceptable(a, b))
         a.ai.setDiplomacyValue(DiplomacyPersonality.Boldness, 2)
         assertFalse(PromiseAi.isDontSettleAcceptable(a, b))
-        a.ai.diplomacy.memoryOf(b).brokenExpansionPromiseValue = 100
+        a.ai.diplomacy.memoryOf(b).brokenExpansionPromise = true
         a.ai.setDiplomacyValue(DiplomacyPersonality.Boldness, 1)
         assertFalse("a broken expansion promise", PromiseAi.isDontSettleAcceptable(a, b))
     }

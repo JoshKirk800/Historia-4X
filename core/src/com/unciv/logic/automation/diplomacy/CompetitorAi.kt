@@ -154,7 +154,7 @@ object CompetitorAi {
 
     /**
      *  CvDiplomacyAI::IsEarlyGameCompetitor: up to the Medieval era (era 2), when our opinion of them is Enemy or worse, they dispute
-     *  land more than weakly, beat us to a wonder, made a demand ([MajorCivMemory.demandCounter]: VP counts demands), converted our cities,
+     *  land more than weakly, beat us to a wonder, made a demand ([MajorCivMemory.numDemandsMade]), converted our cities,
      *  either of us denounced the other, they robbed us, ignored or broke a promise about bullying city-states, attacked or killed a
      *  city-state we protect, or are untrustworthy; or when they are a juicy target (an easy target, [WarStateAi.isEasyTarget], or one
      *  with a preferred attack target, [com.unciv.logic.automation.strategy.MilitaryAi.havePreferredAttackTarget]) that is our
@@ -167,7 +167,7 @@ object CompetitorAi {
         if (memory.opinion <= MajorCivOpinion.Enemy
             || memory.landDispute > DisputeLevel.Weak
             || memory.numWondersBeatenTo > 0
-            || memory.demandCounter != -1
+            || memory.numDemandsMade > 0
             || memory.negativeReligiousConversionPoints > 0
             || OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ)
             || memory.numTimesRobbed > 0

@@ -46,9 +46,9 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var majorCompetitor = false
 
     // War
+    /** A war being prepared or a demand being backed ([DiplomacyTurn]); null otherwise */
     var warGoal: WarGoal? = null
-    var wantPeaceCounter = 0
-    /** CvDiplomacyAI::IsWantsPeaceWithPlayer as of the last war goal update */
+    /** CvDiplomacyAI::IsWantsPeaceWithPlayer as of the last peace update ([PeaceAi]) */
     var wantsPeace = false
     var warProjection: WarProjection? = null
     var lastWarProjection: WarProjection? = null
@@ -197,7 +197,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.opinionWeight = opinionWeight; copy.approachValues = ArrayList(approachValues)
         copy.strategicApproachValues = ArrayList(strategicApproachValues); copy.strategicApproach = strategicApproach
         copy.majorCompetitor = majorCompetitor
-        copy.warGoal = warGoal; copy.wantPeaceCounter = wantPeaceCounter; copy.wantsPeace = wantsPeace; copy.warProjection = warProjection
+        copy.warGoal = warGoal; copy.wantsPeace = wantsPeace; copy.warProjection = warProjection
         copy.lastWarProjection = lastWarProjection; copy.warDamageLevel = warDamageLevel; copy.warValueLost = warValueLost
         copy.theirWarValueLostToUs = theirWarValueLostToUs; copy.theirWarDamageLevel = theirWarDamageLevel
         copy.economicStrength = economicStrength; copy.militaryThreat = militaryThreat; copy.warmongerThreat = warmongerThreat

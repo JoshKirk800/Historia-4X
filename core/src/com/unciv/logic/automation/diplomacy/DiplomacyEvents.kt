@@ -48,8 +48,6 @@ object DiplomacyEvents {
     fun onWarDeclared(declarer: Civilization, victim: Civilization, isDefensivePact: Boolean) {
         val gameInfo = declarer.gameInfo
         val rules = gameInfo.ruleset.ai
-        // DoSomeoneDeclaredWarOnMe: "shocked and disappointed" until the next update
-        if (victim.isMajorCiv && declarer.isMajorCiv) victim.ai.diplomacy.memoryOf(declarer).warGoal = WarGoal.Peace
         // CvTeam::DoDeclareWar (Vox Populi): the declarer is the aggressor, unless a defensive pact called it in; either side that
         // wanted the war is one too
         if (declarer.isMajorCiv) declarer.ai.diplomacy.memoryOf(victim).aggressor = !isDefensivePact || wantedWar(declarer, victim)

@@ -38,8 +38,7 @@ object DiplomacyTurn {
         updateWarmongerThreats(civ, others, rules)
         updateMilitaryThreats(civ, others, rules)
         updateWarProjections(civ, others, rules)
-        updateWarGoals(civ, others, rules)
-        updatePeaceTreatyWillingness(civ, others, rules)
+        updateWarGoals(civ, others)
         DisputeAi.updateLandDisputes(civ, others, rules)
         DisputeAi.updateWonderDisputes(civ, others, rules)
         DisputeAi.updateMinorCivDisputes(civ, others, rules)
@@ -51,6 +50,8 @@ object DiplomacyTurn {
         OpinionAi.updateOpinions(civ, others, rules)
         ApproachAi.updateApproaches(civ, others, rules)
         com.unciv.logic.automation.civilization.CityStateAi.updateMinorCivApproaches(civ)
+        // Vox Populi's peace willingness, after the approaches as in its DoTurn
+        PeaceAi.update(civ, others, rules)
         civ.ai.diplomacy.lastTotalLandDisputeLevel = DisputeAi.totalLandDisputeLevel(civ, others, rules)
     }
 
@@ -383,127 +384,16 @@ object DiplomacyTurn {
         return score
     }
 
-    /** CvDiplomacyAI::DoUpdateWarGoals, with the want-peace counter */
-    private fun updateWarGoals(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
-        val worldConquest = civ.ai.isGoingForWorldConquest()
+    /**
+     *  What is left of CvDiplomacyAI::DoUpdateWarGoals: a war being prepared or a demand being backed stays the goal until war comes.
+     *  At war there is no goal: VP decides peace apart from the approach ([PeaceAi]).
+     */
+    private fun updateWarGoals(civ: Civilization, others: List<Civilization>) {
         val ai = civ.ai.diplomacy
-        val threshold = rules.define(AiDefine.REQUEST_PEACE_TURN_THRESHOLD)
         for (other in others) {
             val memory = ai.memoryOf(other)
-            var goal: WarGoal? = null
-            if (civ.isAtWarWith(other)) {
-                val isMinor = other.isCityState
-                val higherUpsWantWar = if (isMinor) civ.ai.minorCivApproaches[other.civID] == MinorCivApproach.Conquest
-                    else ai.approachTowards(other) == MajorCivApproach.War
-                if (higherUpsWantWar) {
-                    goal = if (isMinor) {
-                        if (worldConquest) WarGoal.Conquest else WarGoal.Damage
-                    } else {
-                        var majorGoal = WarGoal.Damage
-                        if (CoopWarAi.isLockedIntoCoopWar(civ, other, rules)) majorGoal = WarGoal.Conquest
-                        val projection = memory.warProjection
-                        if (projection != null && projection >= WarProjection.Unknown &&
-                            (memory.opinion == MajorCivOpinion.Unforgivable || worldConquest)) majorGoal = WarGoal.Conquest
-                        majorGoal
-                    }
-                } else {
-                    // About to cause mayhem: hold off peace a bit (not against minors)
-                    goal = if (!isMinor && WarStateAi.warState(civ, other) == WarState.NearlyWon && WarStateAi.stateAllWars(civ) != StateAllWars.Losing)
-                        WarGoal.Damage else WarGoal.Peace
-                }
-            } else if (memory.warGoal == WarGoal.Prepare) goal = WarGoal.Prepare
-            else if (memory.warGoal == WarGoal.Demand) goal = WarGoal.Demand
-
-            if (goal == WarGoal.Peace) memory.wantPeaceCounter++ else memory.wantPeaceCounter = 0
-            memory.warGoal = goal
-            // CvDiplomacyAI::IsWantsPeaceWithPlayer (canChangeWarPeace: Unciv has no forced wars or peace)
-            memory.wantsPeace = memory.wantPeaceCounter >= threshold
+            memory.warGoal = memory.warGoal.takeIf { !civ.isAtWarWith(other) && (it == WarGoal.Prepare || it == WarGoal.Demand) }
         }
-    }
-
-    /** CvDiplomacyAI::IsWillingToMakePeaceWithHuman: at war at least 5 turns and neither side locked into the war */
-    private fun isWillingToMakePeaceWithHuman(civ: Civilization, human: Civilization): Boolean {
-        if (civ.ai.diplomacy.memoryOf(human).turnsLockedIntoWar > 1) return false
-        if (human.ai.diplomacy.memoryOf(civ).turnsLockedIntoWar > 1) return false
-        return WarStateAi.turnsAtWar(civ, human) >= 5
-    }
-
-    private fun updatePeaceTreatyWillingness(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
-        for (other in others) {
-            if (!other.isMajorCiv) continue
-            val memory = civ.ai.diplomacy.memoryOf(other)
-            memory.treatyWillingToOffer = PeaceTreatyType.None
-            memory.treatyWillingToAccept = PeaceTreatyType.None
-            if (!civ.isAtWarWith(other)) continue
-            if (other.isHuman() && !isWillingToMakePeaceWithHuman(civ, other)) continue
-            // Out for conquest: no peace
-            if (memory.warGoal == WarGoal.Conquest) continue
-            val projection = memory.warProjection
-
-            // What we are willing to give up
-            var offer = when (projection) {
-                WarProjection.Destruction -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_PROJECTION_DESTRUCTION)
-                WarProjection.Defeat -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_PROJECTION_DEFEAT)
-                WarProjection.Stalemate -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_PROJECTION_STALEMATE)
-                WarProjection.Unknown -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_PROJECTION_UNKNOWN)
-                WarProjection.Good -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_PROJECTION_GOOD)
-                WarProjection.VeryGood -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_PROJECTION_VERY_GOOD)
-                null -> 0
-            }
-            offer += peaceWarDamageWeight(memory.warDamageLevel, rules)
-            offer -= peaceWarDamageWeight(other.ai.diplomacy.memoryOf(civ).warDamageLevel, rules)
-            memory.treatyWillingToOffer = when {
-                offer >= rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_THRESHOLD_UN_SURRENDER) -> PeaceTreatyType.UnconditionalSurrender
-                offer >= rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_THRESHOLD_CAPITULATION) -> PeaceTreatyType.Capitulation
-                offer >= rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_THRESHOLD_CESSION) -> PeaceTreatyType.Cession
-                offer >= rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_THRESHOLD_SURRENDER) -> PeaceTreatyType.Surrender
-                offer >= rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_THRESHOLD_SUBMISSION) -> PeaceTreatyType.Submission
-                offer >= rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_THRESHOLD_BACKDOWN) -> PeaceTreatyType.Backdown
-                offer >= rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_THRESHOLD_SETTLEMENT) -> PeaceTreatyType.Settlement
-                offer >= rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_THRESHOLD_ARMISTICE) -> PeaceTreatyType.Armistice
-                else -> PeaceTreatyType.WhitePeace
-            }
-            // (CvTeam::IsHasBrokenPeaceTreaty caps this at white peace; Unciv has no way to break a peace treaty)
-
-            // What we want from them
-            var accept = when (projection) {
-                WarProjection.Destruction -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_PROJECTION_DESTRUCTION)
-                WarProjection.Defeat -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_PROJECTION_DEFEAT)
-                WarProjection.Stalemate -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_PROJECTION_STALEMATE)
-                WarProjection.Unknown -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_PROJECTION_UNKNOWN)
-                WarProjection.Good -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_PROJECTION_GOOD)
-                WarProjection.VeryGood -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_PROJECTION_VERY_GOOD)
-                null -> 0
-            }
-            accept += when (WarStateAi.targetValue(civ, other)) {
-                TargetValue.Impossible -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_TARGET_IMPOSSIBLE)
-                TargetValue.Bad -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_TARGET_BAD)
-                TargetValue.Average -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_TARGET_AVERAGE)
-                TargetValue.Favorable -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_TARGET_FAVORABLE)
-                TargetValue.Soft -> rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_TARGET_SOFT)
-                null -> 0
-            }
-            memory.treatyWillingToAccept = when {
-                WarStateAi.stateAllWars(civ) == StateAllWars.Losing -> PeaceTreatyType.WhitePeace
-                accept >= rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_THRESHOLD_UN_SURRENDER) -> PeaceTreatyType.UnconditionalSurrender
-                accept >= rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_THRESHOLD_CAPITULATION) -> PeaceTreatyType.Capitulation
-                accept >= rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_THRESHOLD_CESSION) -> PeaceTreatyType.Cession
-                accept >= rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_THRESHOLD_SURRENDER) -> PeaceTreatyType.Surrender
-                accept >= rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_THRESHOLD_SUBMISSION) -> PeaceTreatyType.Submission
-                accept >= rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_THRESHOLD_BACKDOWN) -> PeaceTreatyType.Backdown
-                accept >= rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_THRESHOLD_SETTLEMENT) -> PeaceTreatyType.Settlement
-                accept >= rules.define(AiDefine.PEACE_WILLINGNESS_ACCEPT_THRESHOLD_ARMISTICE) -> PeaceTreatyType.Armistice
-                else -> PeaceTreatyType.WhitePeace
-            }
-        }
-    }
-
-    private fun peaceWarDamageWeight(level: WarDamageLevel, rules: AiRuleset): Int = when (level) {
-        WarDamageLevel.None -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_WAR_DAMAGE_NONE)
-        WarDamageLevel.Minor -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_WAR_DAMAGE_MINOR)
-        WarDamageLevel.Major -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_WAR_DAMAGE_MAJOR)
-        WarDamageLevel.Serious -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_WAR_DAMAGE_SERIOUS)
-        WarDamageLevel.Crippled -> rules.define(AiDefine.PEACE_WILLINGNESS_OFFER_WAR_DAMAGE_CRIPPLED)
     }
     //endregion
 }

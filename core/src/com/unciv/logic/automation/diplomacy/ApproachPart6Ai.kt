@@ -31,7 +31,7 @@ object ApproachPart6Ai {
      */
     fun addBankruptcyWeights(civ: Civilization, other: Civilization, w: IntArray) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
-        if (civ.gold <= 0 && civ.stats.statsForNextTurn.gold <= 0) {
+        if (civ.gold <= 0 && WarStateAi.avgGoldRate(civ) <= 0) {
             val lost = WarSanityAi.goldPerTurnLostFromWar(civ, other)
             if (lost < 0) {
                 val gain = -lost

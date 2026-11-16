@@ -53,6 +53,10 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
     var noNewWars = false
     /** CvDiplomacyAI::IsEasyTarget (Vox Populi), by civID: see [WarStateAi.updateEasyTargets] */
     var easyTargets = HashSet<String>()
+    /** CvTreasury::m_GoldChangeForTurnTimes100 (Vox Populi): our gold income of the last HISTORY_NUM_TURNS_TO_AVERAGE turns, oldest first */
+    var goldIncomeHistory = ArrayList<Int>()
+    /** CvPlayer::m_iCachedGoldRate (Vox Populi's getAvgGoldRate): see [WarStateAi.updateAverageGoldRate] */
+    var avgGoldRate = 0
 
     fun clone() = WarStateMemory().also {
         it.turnsAtWar.putAll(turnsAtWar)
@@ -63,6 +67,8 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
         it.terribleShapeForWar = terribleShapeForWar
         it.noNewWars = noNewWars
         it.easyTargets.addAll(easyTargets)
+        it.goldIncomeHistory.addAll(goldIncomeHistory)
+        it.avgGoldRate = avgGoldRate
     }
 }
 
@@ -101,6 +107,22 @@ object WarStateAi {
     /** CvDiplomacyAI::GetPlayerNumTurnsAtWar */
     fun turnsAtWar(civ: Civilization, other: Civilization): Int = civ.ai.warStates.turnsAtWar[other.civID] ?: 0
 
+    /** CvPlayer::getAvgGoldRate (Vox Populi): as of the last [updateAverageGoldRate] */
+    fun avgGoldRate(civ: Civilization): Int = civ.ai.warStates.avgGoldRate
+
+    /**
+     *  CvPlayer::cacheAvgGoldRate and CvTreasury::DoGold's history (Vox Populi): the gold rate is this turn's income plus the average income
+     *  of the last HISTORY_NUM_TURNS_TO_AVERAGE turns (VP's formula, which counts a steady income about twice); then this turn's income
+     *  joins the history. A single turn's swing of the income no longer decides whether we are broke.
+     */
+    fun updateAverageGoldRate(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
+        val income = civ.stats.statsForNextTurn.gold.toInt()
+        val history = memory.goldIncomeHistory
+        memory.avgGoldRate = income + if (history.isEmpty()) 0 else history.sum() / history.size
+        history.add(income)
+        while (history.size > rules.define(AiDefine.HISTORY_NUM_TURNS_TO_AVERAGE)) history.removeAt(0)
+    }
+
     /** CvMilitaryAI::GetNumberCivsAtWarWith: the valid majors we have a war state with */
     fun numberCivsAtWarWith(civ: Civilization): Int =
         civ.gameInfo.civilizations.count { it.isMajorCiv && it != civ && isPlayerValid(civ, it) && warState(civ, it) != null }
@@ -129,6 +151,7 @@ object WarStateAi {
             else memory.targetValues.remove(other.civID)
         }
         updateWarStates(civ, memory, rules)
+        updateAverageGoldRate(civ, memory, rules)
         updateBadShapeForWar(civ, memory, rules)
         updateEasyTargets(civ, memory, rules)
     }
@@ -273,7 +296,7 @@ object WarStateAi {
 
     private fun isTerribleShapeNow(civ: Civilization, memory: WarStateMemory, rules: AiRuleset): Boolean {
         if (memory.stateAllWars == StateAllWars.Losing) return true
-        if (civ.gold <= 0 && civ.stats.statsForNextTurn.gold <= 0) return true
+        if (civ.gold <= 0 && memory.avgGoldRate <= 0) return true
         if (VictoryProgressAi.hasLostCapital(civ)) return true
         if (civ.getHappiness() <= rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) return true
         return civ.gameInfo.civilizations.any { other ->

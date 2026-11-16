@@ -129,7 +129,9 @@ enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = tr
     DeclaredFriendshipWithOurEnemies("You have declared friendship with our enemies!"),
     BetrayedDeclarationOfFriendship("Your so-called 'friendship' is worth nothing."),
     Denunciation("You have publicly denounced us!"),
+    /** No longer written: Vox Populi folds our own denouncement into [Denunciation]; kept so old saves drop it */
     WeDenouncedThem("We have publicly denounced you"),
+    DenouncedByOurFriends("Our friends have denounced you"),
     DenouncedOurAllies("You have denounced our allies"),
     AskedUsNotToSettle("You asked us not to settle near you"),
     AskedUsToStopSpying("You asked us to stop spying on you"),
@@ -767,7 +769,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
     /**
      * CvDiplomacyAI::DoDenouncePlayer: the denouncement lasts GameSpeeds.RelationshipDuration turns; both embassies close; a friendship ends
      * and the former friend remembers the betrayal; a friendly war face drops; coop wars against third parties with them are off.
-     * The opinions follow from these (see [DiplomaticModifiers.Denunciation] and [DiplomaticModifiers.WeDenouncedThem]).
+     * The opinions follow from these (see [DiplomaticModifiers.Denunciation]).
      */
     fun denounce() {
         setFlag(DiplomacyFlags.Denunciation, DiplomacyTurn.relationshipDuration(civInfo))

@@ -478,37 +478,67 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         memoryOf(other).lastContactTurn = civ.gameInfo.turns
     }
 
+    /** The game speed's OpinionDurationPercent, which VP's value changes and caps scale by */
+    private fun opinionDuration() = DiplomacyTurn.opinionDurationPercent(civ)
+
+    /** GetMaxRecentTradeValue: DEAL_VALUE_PER_OPINION_WEIGHT x -OPINION_WEIGHT_TRADE_MAX x the game speed's OpinionDurationPercent / 100 */
+    fun maxRecentTradeValue(): Int {
+        val rules = civ.gameInfo.ruleset.ai
+        return maxOf(0, rules.define(AiDefine.DEAL_VALUE_PER_OPINION_WEIGHT) * -rules.define(AiDefine.OPINION_WEIGHT_TRADE_MAX) * opinionDuration() / 100)
+    }
+
+    /** GetMaxCommonFoeValue: COMMON_FOE_VALUE_PER_OPINION_WEIGHT x -OPINION_WEIGHT_COMMON_FOE_MAX x OpinionDurationPercent / 100 */
+    fun maxCommonFoeValue(): Int {
+        val rules = civ.gameInfo.ruleset.ai
+        return maxOf(0, rules.define(AiDefine.COMMON_FOE_VALUE_PER_OPINION_WEIGHT) * -rules.define(AiDefine.OPINION_WEIGHT_COMMON_FOE_MAX) * opinionDuration() / 100)
+    }
+
     /**
-     *  CvDiplomacyAI::ChangeRecentTradeValue: what a deal with [from] was worth to us (CvDealAI::DoAcceptedDeal: in full if generous, else half),
-     *  kept between 0 and the most the opinion can use (DEAL_VALUE_PER_OPINION_WEIGHT × -OPINION_WEIGHT_TRADE_MAX)
+     *  GetMaxRecentAssistValue / GetMaxRecentFailedAssistValue: ASSIST_VALUE_PER_OPINION_WEIGHT x the size of OPINION_WEIGHT_ASSIST_MAX
+     *  (help) or OPINION_WEIGHT_FAILED_ASSIST_MAX (refusals) x OpinionDurationPercent / 100
+     */
+    fun maxRecentAssistValue(failed: Boolean): Int {
+        val rules = civ.gameInfo.ruleset.ai
+        val weight = rules.define(if (failed) AiDefine.OPINION_WEIGHT_FAILED_ASSIST_MAX else AiDefine.OPINION_WEIGHT_ASSIST_MAX)
+        return rules.define(AiDefine.ASSIST_VALUE_PER_OPINION_WEIGHT) * kotlin.math.abs(weight) * opinionDuration() / 100
+    }
+
+    /**
+     *  CvDiplomacyAI::ChangeRecentTradeValue: what a deal with [from] was worth to us (CvDealAI::DoAcceptedDeal: in full if generous, else
+     *  half); a gain scaled by the game speed's OpinionDurationPercent, kept between 0 and [maxRecentTradeValue]
      */
     fun changeRecentTradeValue(from: Civilization, value: Int) {
-        val rules = civ.gameInfo.ruleset.ai
         val memory = memoryOf(from)
-        memory.recentTradeValue = (memory.recentTradeValue + value)
-            .coerceIn(0, rules.define(AiDefine.DEAL_VALUE_PER_OPINION_WEIGHT) * -rules.define(AiDefine.OPINION_WEIGHT_TRADE_MAX))
+        val change = if (value > 0) value * opinionDuration() / 100 else value
+        memory.recentTradeValue = (memory.recentTradeValue + change).coerceIn(0, maxRecentTradeValue())
     }
 
-    /**
-     *  CvDiplomacyAI::ChangeCommonFoeValue: damage [from] did to a foe of ours, kept between 0 and the most the opinion can use
-     *  (COMMON_FOE_VALUE_PER_OPINION_WEIGHT × -OPINION_WEIGHT_COMMON_FOE_MAX)
-     */
+    /** CvDiplomacyAI::ChangeCommonFoeValue: damage [from] did to a foe of ours, a gain scaled as [changeRecentTradeValue], kept within 0..[maxCommonFoeValue] */
     fun changeCommonFoeValue(from: Civilization, value: Int) {
-        val rules = civ.gameInfo.ruleset.ai
         val memory = memoryOf(from)
-        memory.commonFoeValue = (memory.commonFoeValue + value)
-            .coerceIn(0, rules.define(AiDefine.COMMON_FOE_VALUE_PER_OPINION_WEIGHT) * -rules.define(AiDefine.OPINION_WEIGHT_COMMON_FOE_MAX))
+        val change = if (value > 0) value * opinionDuration() / 100 else value
+        memory.commonFoeValue = (memory.commonFoeValue + change).coerceIn(0, maxCommonFoeValue())
     }
 
     /**
-     *  CvDiplomacyAI::ChangeRecentAssistValue: negative = [from] helped us, positive = they refused, kept within
-     *  ±(DEAL_VALUE_PER_OPINION_WEIGHT × OPINION_WEIGHT_ASSIST_MAX)
+     *  CvDiplomacyAI::ChangeRecentAssistValue (our sign: negative = [from] helped us, positive = they refused; VP's is the other way):
+     *  nothing for a human's shadow AI, and a refusal does not count at war with them; scaled by the game speed's OpinionDurationPercent
+     *  (the turn's decay, [decay], is not); kept within -[maxRecentAssistValue] of help .. +that of refusals; a decay never crosses 0
      */
-    fun changeRecentAssistValue(from: Civilization, value: Int) {
-        val rules = civ.gameInfo.ruleset.ai
+    fun changeRecentAssistValue(from: Civilization, value: Int, decay: Boolean = false) {
+        if (civ.isHuman()) return
         val memory = memoryOf(from)
-        val max = rules.define(AiDefine.DEAL_VALUE_PER_OPINION_WEIGHT) * rules.define(AiDefine.OPINION_WEIGHT_ASSIST_MAX)
-        memory.recentAssistValue = (memory.recentAssistValue + value).coerceIn(-max, max)
+        val current = memory.recentAssistValue
+        if (decay) {
+            if ((current > 0 && current + value < 0) || (current < 0 && current + value > 0)) {
+                memory.recentAssistValue = 0
+                return
+            }
+            memory.recentAssistValue = (current + value).coerceIn(-maxRecentAssistValue(false), maxRecentAssistValue(true))
+            return
+        }
+        if (value > 0 && civ.isAtWarWith(from)) return
+        memory.recentAssistValue = (current + value * opinionDuration() / 100).coerceIn(-maxRecentAssistValue(false), maxRecentAssistValue(true))
     }
 
     /** Sets the approach towards [other] directly (scenario setup and tests) */

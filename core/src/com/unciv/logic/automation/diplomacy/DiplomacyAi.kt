@@ -74,6 +74,8 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var musteringForAttack = false
     /** CvDiplomacyAI::IsAggressor (Vox Populi): we started this war or wanted it ([DiplomacyEvents.onWarDeclared]), until peace */
     var aggressor = false
+    /** CvDiplomacyAI::GetWarProgressScore (Vox Populi): how our war with them goes, kept by [WarProgressAi] */
+    var warProgress = 0
 
     // Disputes and postures
     var landDispute = DisputeLevel.None
@@ -202,6 +204,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.warmongerAmount = warmongerAmount; copy.treatyWillingToOffer = treatyWillingToOffer
         copy.treatyWillingToAccept = treatyWillingToAccept; copy.numWarsFought = numWarsFought; copy.turnMadePeace = turnMadePeace
         copy.turnsLockedIntoWar = turnsLockedIntoWar; copy.musteringForAttack = musteringForAttack; copy.aggressor = aggressor
+        copy.warProgress = warProgress
         copy.landDispute = landDispute; copy.lastTurnLandDispute = lastTurnLandDispute; copy.wonderDispute = wonderDispute
         copy.minorCivDispute = minorCivDispute; copy.numWondersBeatenTo = numWondersBeatenTo; copy.expansionPosture = expansionPosture
         copy.plotBuyingPosture = plotBuyingPosture; copy.militaryPosture = militaryPosture

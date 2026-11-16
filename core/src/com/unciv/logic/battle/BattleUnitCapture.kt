@@ -110,6 +110,9 @@ object BattleUnitCapture {
 
         // need to save this because if the unit is captured its owner will be overwritten
         val defenderCiv = defender.getCivInfo()
+        // CvUnit::kill (Vox Populi): a lost civilian counts in both sides' war progress
+        com.unciv.logic.automation.diplomacy.WarProgressAi.onCivilianLost(defenderCiv, attacker.getCivInfo(),
+            defender.unit.hasUnique(UniqueType.FoundCity, GameContext.IgnoreConditionals))
 
         val capturedUnit = defender.unit
         // Stop current action

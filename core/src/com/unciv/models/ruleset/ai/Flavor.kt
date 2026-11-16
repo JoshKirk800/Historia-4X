@@ -102,3 +102,10 @@ enum class MajorCivApproach { War, Hostile, Deceptive, Guarded, Afraid, Friendly
 
 /** The original's MinorCivApproachTypes in XML order (MINOR_CIV_APPROACH_IGNORE ...), used for the leaders' approach biases */
 enum class MinorCivApproach { Ignore, Friendly, Protective, Conquest, Bully }
+
+/**
+ *  Vox Populi's leader trait categories (CvPlayerTraits::IsWarmonger ... IsReligious, set by SetIsWarmonger ... SetIsReligious from the
+ *  leader's traits), used by its diplomacy, grand strategy and production AI. The static part is in [com.unciv.models.ruleset.nation.Personality.traitCategories]
+ *  (tools/gen_ai_data.py evaluates VP's rules on the ruleset's trait rows); the dynamic parts are [com.unciv.logic.automation.strategy.CivAi.hasTraitCategory]'s.
+ */
+enum class TraitCategory { Warmonger, Nerd, Tourism, Diplomat, Smaller, Expansionist, Religious }

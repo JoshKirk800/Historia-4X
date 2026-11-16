@@ -13,6 +13,7 @@ import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 import kotlin.random.Random
 
 /**
@@ -23,8 +24,9 @@ import kotlin.random.Random
  *  they are multiplied by 100 first) go through VP's frame: prioritization, randomness (part 11), opinion as a percentage (part 13), the
  *  approach curve that carries 70% of last turn's scores into this turn's (part 14), and the selection (part 15).
  *  The terms of parts 2 to 8 are still BNW's where `phaseE/vp-approach-plan.md` has not ported them yet; parts 10 and 12 too (BNW's
- *  multipliers in [approachWeights], [applyFinalRules]). Not taken in from part 1 yet: leader traits and the default victory pursuit (VP's
- *  trait and victory classifications), quests of city-states, and the bonus when an army is in place for the attack (VP's war targets).
+ *  multipliers in [approachWeights], [applyFinalRules]). Not taken in from part 1 yet: the default victory pursuit (VP's victory
+ *  classification), quests of city-states, and the bonus when an army is in place for the attack (VP's war targets). The leader traits
+ *  are VP's trait categories ([com.unciv.logic.automation.strategy.CivAi.hasTraitCategory]).
  */
 object ApproachAi {
 
@@ -273,6 +275,11 @@ object ApproachAi {
 
         stage("Neutral default (part 1)")
         w[NEUTRAL] += bias(MajorCivApproach.Neutral) * rules.define(AiDefine.APPROACH_NEUTRAL_DEFAULT)
+
+        stage("Leader traits (part 1): conquerors get their war bonuses later, the others a bonus here")
+        if (civ.ai.hasTraitCategory(TraitCategory.Diplomat) || civ.ai.hasTraitCategory(TraitCategory.Tourism))
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
+        if (civ.ai.hasTraitCategory(TraitCategory.Nerd)) w[NEUTRAL] += bias(MajorCivApproach.Neutral) * 2
 
         stage("Last turn's approach (part 1): less likely to flip, and war is not given up easily")
         if (oldApproach != null) {
@@ -923,13 +930,14 @@ object ApproachAi {
      *  Part 7 of Vox Populi's SelectBestApproachTowardsMajorCiv, the VOX POPULI CHANGES: the difficulty bonus and the war bonus.
      *  Difficulty: towards a player we view worse than neutral, AggressionIncrease of the game's difficulty less 2 per opinion step above
      *  unforgivable adds bias x that / 2 to war, hostile (and deceptive, when deception applies), and x that more to war and hostile with
-     *  an opportunity attack. War bonus: going for world conquest (VP: a conqueror pursuit or traits, not ported), more with our unique
-     *  unit in the field (and more again going for or close to world conquest), Honor opened and
+     *  an opportunity attack. War bonus: going for world conquest (VP's conqueror pursuit: not ported) or with the warmonger or
+     *  expansionist trait, more with our unique unit in the field (and more again going for or close to world conquest), Honor opened and
      *  finished, Exploration opened and finished (when we can cross the ocean from the Medieval era, have 2 coastal cities and they 1: the
      *  non-VP-balance rule, our Exploration being BNW's), Autocracy, each more with an opportunity attack; scaled by boldness (war),
      *  meanness (hostile), denounce willingness (deceptive, only when deception applies) x the difficulty's victory dispute or block
-     *  percent / 500; twice for one going for or close to world conquest; deceptive left out when close to it or against an easy target
-     *  with a preferred attack target (bNoHiding). The bonuses scale by our attack multiplier ([attackMultipliers]).
+     *  percent / 500; twice for one going for or close to world conquest or with the warmonger trait; deceptive left out when close to
+     *  it or against an easy target with a preferred attack target (bNoHiding). The bonuses scale by our attack multiplier
+     *  ([attackMultipliers]).
      *  Left out until their inputs exist: temporary attack bonuses, victory dispute levels.
      */
     private fun addWarBonuses(civ: Civilization, other: Civilization, closeToConquest: Boolean, w: IntArray, rules: AiRuleset) {
@@ -966,15 +974,16 @@ object ApproachAi {
             hostile += bias(MajorCivApproach.Hostile) * factor * attack
             deceptive += bias(MajorCivApproach.Deceptive) * factor * attack
         }
-        val conqueror = civ.ai.isGoingForWorldConquest()
-        if (conqueror) {
+        val conquest = civ.ai.isGoingForWorldConquest()
+        val warmonger = civ.ai.hasTraitCategory(TraitCategory.Warmonger)
+        if (conquest || warmonger || civ.ai.hasTraitCategory(TraitCategory.Expansionist)) {
             add(2, 1)
             // Unique unit active? Slay them all!
             if (ApproachAdditionalAi.hasUniqueUnitPeriod(civ, rules) && ApproachAdditionalAi.hasUniqueUnitTech(civ, rules) &&
                 ApproachAdditionalAi.hasUniqueUnitActive(civ, rules)) {
                 add(2, 1)
-                // VP: and going for or close to world conquest, which our conqueror (going for it) always is
-                add(4, 2)
+                // AND we're going for world conquest?
+                if (conquest || closeToConquest) add(4, 2)
             }
         }
         val policies = civ.policies
@@ -992,7 +1001,7 @@ object ApproachAi {
         hostile = hostile * civ.ai.diplomacyValue(DiplomacyPersonality.Meanness) * difficulty / 500
         deceptive = if (deception) deceptive * civ.ai.diplomacyValue(DiplomacyPersonality.DenounceWillingness) * difficulty / 500 else 0
         if (war <= 0 && hostile <= 0 && deceptive <= 0) return
-        val times = if (conqueror || closeToConquest) 2 else 1
+        val times = if (warmonger || conquest || closeToConquest) 2 else 1
         w[WAR] += war * times
         w[HOSTILE] += hostile * times
         val noHiding = closeToConquest || (easy && civ.ai.military.havePreferredAttackTarget(other))
@@ -1184,10 +1193,10 @@ object ApproachAi {
      *  world conquest, they provoked us, they took a key city of ours, their warmonger threat is severe, they are an early-game
      *  competitor or our biggest competitor, [victoryConcern], or the game is conquest-only. Not holding back: we go for world conquest
      *  from the Medieval era, they took a key city, [victoryConcern], a severe warmonger threat, either of us close to world conquest, a
-     *  major competitor, or a conquest-only game; and when they are close or neighbours, also: we go for world conquest, they provoked
-     *  us, our opinion of them is Enemy or worse, an early-game competitor, an easy target we see as a competitor or worse, or a reckless
-     *  expander.
-     *  Left out (no counterpart): the league competitor, wonder spammers, our own backstabber flag, the conqueror traits. "Provoked" is a
+     *  major competitor, or a conquest-only game; and when they are close or neighbours, also: we go for world conquest or have the
+     *  warmonger trait, they provoked us, our opinion of them is Enemy or worse, an early-game competitor, an easy target we see as a
+     *  competitor or worse, or a reckless expander. Bold is boldness above 7, the warmonger trait, or competing for victory by conquest.
+     *  Left out (no counterpart): the league competitor, wonder spammers, our own backstabber flag. "Provoked" is a
      *  demand of theirs while we are at war (VP also counts a demand we accepted or a second demand, which we do not track).
      */
     fun wantsOpportunityAttack(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
@@ -1207,7 +1216,8 @@ object ApproachAi {
         val earlyGameCompetitor = CompetitorAi.isEarlyGameCompetitor(civ, other, rules)
         val easy = WarStateAi.isEasyTarget(civ, other)
         val goodTarget = civ.ai.military.havePreferredAttackTarget(other)
-        val bold = civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 ||
+        val warmonger = civ.ai.hasTraitCategory(TraitCategory.Warmonger)
+        val bold = civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 || warmonger ||
             (VictoryProgressAi.isCompetingForVictory(civ) && civ.ai.isGoingForWorldConquest())
         // Friends or allies now: held back, unless bold against an easy target with a preferred attack target
         val friendOrAlly = (OpinionAi.isDoFAccepted(civ, other) || civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact)
@@ -1224,7 +1234,7 @@ object ApproachAi {
         val medievalOrLater = civ.getEra().eraNumber >= rules.define(AiDefine.MEDIEVAL_ERA)
         if ((civ.ai.isGoingForWorldConquest() && medievalOrLater) || tookKeyCity || concern || severeThreat || closeToConquest
             || theyAreClose || CompetitorAi.isMajorCompetitor(civ, other) || aggressiveMode) return true
-        return proximity >= DiplomacyTurn.PROXIMITY_CLOSE && (civ.ai.isGoingForWorldConquest() || provokedUs
+        return proximity >= DiplomacyTurn.PROXIMITY_CLOSE && (civ.ai.isGoingForWorldConquest() || warmonger || provokedUs
             || (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Enemy || earlyGameCompetitor
             || (easy && (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Competitor)
             || WarStateAi.isPlayerRecklessExpander(civ, other))

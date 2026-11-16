@@ -18,6 +18,8 @@ import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
+import com.unciv.models.ruleset.ai.TraitCategory
+import com.unciv.models.ruleset.unique.UniqueType
 import kotlin.math.pow
 
 /** CvDiplomacyAI WarStateTypes, worst to best (the original's order matters: comparisons use it) */
@@ -196,14 +198,21 @@ object WarStateAi {
      *  [MilitaryAi.isExposedToEnemy]) against aggravators (a coop war against them, they are unhappy and we are not, we took more of their
      *  cities, our rating beats theirs, we are more aggressive, we want to conquer them, a preferred attack target among their cities -
      *  [MilitaryAi.havePreferredAttackTarget]) choose between their raw and adjusted target value and strength (one form each here) and
-     *  settle it by VP's table. Nuclear Gandhi and the leader traits have no input: a conqueror is one going for world conquest, a
-     *  scientist one going for a spaceship.
+     *  settle it by VP's table. Personality: more aggressive with the warmonger or expansionist trait ([CivAi.hasTraitCategory]), less
+     *  with the nerd trait (not for Assyria, CvPlayerTraits::IsTechFromCityConquer) or the smaller trait, neither with both. Nuclear Gandhi
+     *  and VP's victory pursuits have no input: a conqueror is one going for world conquest, a scientist one going for a spaceship.
      */
     fun updateEasyTargets(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
-        val conqueror = civ.ai.isGoingForWorldConquest()
-        val scientist = civ.ai.isGoingForSpaceshipVictory()
-        val moreAggressive = conqueror && !scientist
-        val lessAggressive = scientist && !conqueror
+        val ai = civ.ai
+        val assyriaException = civ.hasUnique(UniqueType.TechnologyFromConqueringCity)
+        var moreAggressive = ai.isGoingForWorldConquest() || ai.hasTraitCategory(TraitCategory.Warmonger) ||
+            ai.hasTraitCategory(TraitCategory.Expansionist)
+        var lessAggressive = (ai.isGoingForSpaceshipVictory() && !assyriaException) ||
+            (ai.hasTraitCategory(TraitCategory.Nerd) && !assyriaException) || ai.hasTraitCategory(TraitCategory.Smaller)
+        if (moreAggressive && lessAggressive) {
+            moreAggressive = false
+            lessAggressive = false
+        }
         val terrible = memory.terribleShapeForWar
         val valid = civ.gameInfo.civilizations.filter { isPlayerValid(civ, it) }
         // The tests below (the early-game competitor) read last turn's easy targets while the new ones are found

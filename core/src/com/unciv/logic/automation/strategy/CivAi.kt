@@ -19,6 +19,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MilitaryStrategyDef
 import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.ai.StrategyDef
+import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.utils.hashOf
 import org.jetbrains.annotations.VisibleForTesting
 import yairm210.purity.annotations.Cache
@@ -275,6 +276,25 @@ class CivAi : IsPartOfGameInfoSerialization {
     fun minorCivApproachBias(approach: MinorCivApproach): Int {
         ensureInitialized()
         return minorCivApproachBiases[approach.name] ?: rules.define(AiDefine.DEFAULT_FLAVOR_VALUE)
+    }
+
+    /**
+     *  CvPlayerTraits::IsWarmonger ... IsReligious: a major civilization's leader trait categories from its personality
+     *  ([com.unciv.models.ruleset.nation.Personality.traitCategories]); Religious also with a state religion (BNW has no state religion
+     *  apart from the one we founded: that one), Smaller also with fewer than 4 cities once the turn is over twice the game's
+     *  estimated length (VP's getGameTurn() / 2 > getEstimateEndTurn()). VP evaluates the dynamic parts when it (re)initializes the
+     *  traits (game start, religion and pantheon founding, ...); here at each query.
+     */
+    fun hasTraitCategory(category: TraitCategory): Boolean {
+        if (civ.isMajorCiv) {
+            val personality = civ.nation.personality?.let { civ.gameInfo.ruleset.personalities[it] }
+            if ((personality?.traitCategories?.get(category.name) ?: 0) > 0) return true
+        }
+        return when (category) {
+            TraitCategory.Religious -> civ.religionManager.religion?.isMajorReligion() == true
+            TraitCategory.Smaller -> civ.gameInfo.turns / 2 > civ.gameInfo.speed.numTotalTurns() && civ.cities.size < 4
+            else -> false
+        }
     }
 
     /** Sets a diplomacy personality value directly (scenario setup and tests) */

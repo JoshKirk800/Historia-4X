@@ -45,6 +45,7 @@ import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MinorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.models.ruleset.QuestName
 import com.unciv.models.ruleset.tile.ResourceType
 
@@ -267,9 +268,9 @@ object DiplomacyAutomation {
      *  them) or -15 (by us), a defensive pact -10, a liberator -10, cities they liberated -5; each other major tied to them (a
      *  friendship, a pact, a denouncement, a war) that we neither hate nor approach worse than deceptively nor distrust, by
      *  neighbourhood, our opinion of it, its strength and our DoF or pact with it: added when it denounced or fights them, else taken
-     *  away; +2 per city-state we do not mean to conquer or bully that asks us to denounce them (unless close to a peaceful victory);
-     *  +3 going for a diplomatic victory, +3 when a friend asks ([bias]). VP's loop also takes in ourselves; as none: vassals,
-     *  victory dispute and block levels, sanctions, diplomat pursuits and traits.
+     *  away; +2 per city-state we do not mean to conquer or bully that asks us to denounce them (unless close to a peaceful victory),
+     *  +3 more each going for a diplomatic victory or with the diplomat trait; +3 when a friend asks ([bias]). VP's loop also takes in
+     *  ourselves; as none: vassals, victory dispute and block levels, sanctions, diplomat pursuits.
      */
     fun denounceWeight(civ: Civilization, other: Civilization, bias: Boolean): Int {
         val ai = civ.ai.diplomacy
@@ -338,9 +339,11 @@ object DiplomacyAutomation {
             val approach = civ.ai.minorCivApproaches[cityState.civID]
             if (approach == MinorCivApproach.Conquest || approach == MinorCivApproach.Bully) continue
             if (cityState.questManager.getAssignedQuestsFor(civ)
-                    .any { it.questName == QuestName.DenounceCiv.value && it.data1 == other.civName }) weight += 2
+                    .any { it.questName == QuestName.DenounceCiv.value && it.data1 == other.civName }) {
+                weight += 2
+                if (civ.ai.isGoingForDiploVictory() || civ.ai.hasTraitCategory(TraitCategory.Diplomat)) weight += 3
+            }
         }
-        if (civ.ai.isGoingForDiploVictory()) weight += 3
         if (bias) weight += 3
         return weight
     }

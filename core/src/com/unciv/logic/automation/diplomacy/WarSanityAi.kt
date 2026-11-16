@@ -10,14 +10,15 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
  *  Vox Populi's war sanity (CvDiplomacyAI, Release-5.4.8): whether declaring war on a player is sane for us - financially and
  *  diplomatically, since a war may break a friendship, a pact or a promise.
  *
  *  Inputs with no counterpart, counted as none: strategic trade partners, troop move requests, the coop war agreement score, the wish
- *  to end a defensive pact,
- *  warmonger and expansionist traits, city-state gold bonuses (none in BNW). VP's flags by what we keep: untrustworthy is
+ *  to end a defensive pact, city-state gold bonuses (none in BNW); VP's conqueror pursuit is going for world conquest. VP's flags by
+ *  what we keep: untrustworthy is
  *  [OpinionAi.isUntrustworthyFriend], the backstabber flag having declared war on a friend, "ever backstabbed by" a DoF they broke
  *  with us ([MajorCivMemory.doFBrokenTurn]); a liberator is one who resurrected us (liberated capitals and holy cities are not
  *  told apart). The average gold rate is this turn's.
@@ -186,7 +187,8 @@ object WarSanityAi {
                     if (loyalty == 4 && opinion == MajorCivOpinion.Favorable) return false
                 }
             }
-            val aggressive = civ.ai.isGoingForWorldConquest()
+            val aggressive = civ.ai.isGoingForWorldConquest() || civ.ai.hasTraitCategory(TraitCategory.Warmonger) ||
+                civ.ai.hasTraitCategory(TraitCategory.Expansionist)
             val easyTarget = WarStateAi.isEasyTarget(civ, other)
             val military = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
             if (direct) {

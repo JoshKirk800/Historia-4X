@@ -9,11 +9,12 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
  *  Part 6 of Vox Populi's SelectBestApproachTowardsMajorCiv (Release-5.4.8; D7): EARLY GAME STRATEGY and the domination half of
  *  GRAND STRATEGY WEIGHT. On our scale: VP's personality bias is ours x 100, VP's flat values / 100.
- *  As none (no input): the coop war agreement score, conqueror traits, strategic trade partners.
+ *  As none (no input): the coop war agreement score, strategic trade partners.
  */
 object ApproachGrandStrategyAi {
     private val WAR = MajorCivApproach.War.ordinal
@@ -25,7 +26,8 @@ object ApproachGrandStrategyAi {
 
     /**
      *  EARLY GAME STRATEGY, before the Renaissance. An early-game competitor close to us draws war and hostility (2 x bias; deceptive
-     *  when deception applies), twice that for a bold or mean (above 7) or conquering leader, and war and hostility 2 x more after a
+     *  when deception applies), twice that for a bold or mean (above 7) or conquering leader (going for world conquest or the warmonger
+     *  trait), and war and hostility 2 x more after a
      *  denouncement either way. Anyone else staying out of our way draws friendliness and neutrality (2 x) over deception, neutrality
      *  2 x more for a scientist and friendliness 2 x more for the others, and by the closer proximity: close, war, hostility and
      *  deception 1 x less; far, friendliness 1 x more and those 2 x less; distant, friendliness 2 x and those 4 x less.
@@ -42,7 +44,7 @@ object ApproachGrandStrategyAi {
             }
             aggression(2, deceptive = true)
             if (civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 || civ.ai.diplomacyValue(DiplomacyPersonality.Meanness) > 7 ||
-                civ.ai.isGoingForWorldConquest()) aggression(2, deceptive = true)
+                civ.ai.isGoingForWorldConquest() || civ.ai.hasTraitCategory(TraitCategory.Warmonger)) aggression(2, deceptive = true)
             if (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ)) aggression(2, deceptive = false)
             return
         }

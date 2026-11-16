@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.WarAlliesAi
+import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.trade.Trade
@@ -89,5 +90,20 @@ class WarSanityTests {
         a.getDiplomacyManager(c)!!.declareWar()
         assertEquals("already fighting us: no new war", emptyList<Civilization>(),
             WarAlliesAi.warAllies(a, b, includeMinors = false, reverse = true, defensive = true, newWarsOnly = true))
+    }
+
+    @Test
+    fun `the gold rate is this turn's income plus the average of the last ten, which it then joins`() {
+        val rules = game.ruleset.ai
+        val memory = a.ai.warStates
+        val income = a.stats.statsForNextTurn.gold.toInt()
+        memory.goldIncomeHistory = arrayListOf(100, -50, 10)
+        WarStateAi.updateAverageGoldRate(a, memory, rules)
+        assertEquals(income + 20, WarStateAi.avgGoldRate(a))
+        assertEquals(listOf(100, -50, 10, income), memory.goldIncomeHistory)
+        memory.goldIncomeHistory = ArrayList(List(10) { 7 })
+        WarStateAi.updateAverageGoldRate(a, memory, rules)
+        assertEquals("ten turns kept", 10, memory.goldIncomeHistory.size)
+        assertEquals(income, memory.goldIncomeHistory.last())
     }
 }

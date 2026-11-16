@@ -51,13 +51,14 @@ object WarSanityAi {
 
     /**
      *  CvDiplomacyAI::IsWarWouldBankruptUs: a war we are not in that would cost us gold, while we are broke already, would take our
-     *  income below [minimumIncome] (when above 0), or would leave us bankrupt within 30 turns.
+     *  income below [minimumIncome] (when above 0), or would leave us bankrupt within 30 turns. The income is VP's average gold rate
+     *  ([WarStateAi.avgGoldRate]), not one turn's.
      */
     fun isWarWouldBankruptUs(civ: Civilization, other: Civilization, minimumIncome: Int = 0): Boolean {
         if (civ.isAtWarWith(other)) return false
         val lost = goldPerTurnLostFromWar(civ, other)
         if (lost <= 0) return false
-        val income = civ.stats.statsForNextTurn.gold.toInt()
+        val income = WarStateAi.avgGoldRate(civ)
         if (civ.gold <= 0 && income <= 0) return true
         if (minimumIncome > 0 && income - lost < minimumIncome) return true
         return turnsToBankruptcy(civ, income - lost) <= 30

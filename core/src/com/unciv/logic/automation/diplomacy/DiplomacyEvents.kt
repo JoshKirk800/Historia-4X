@@ -1,10 +1,12 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MinorCivApproach
@@ -146,13 +148,61 @@ object DiplomacyEvents {
         theirs.doFLevel = next
     }
 
-    /** Vox Populi's ending of a friendship by war (DoSomeoneDeclaredWarOnMe) or denouncement (DoDenouncePlayer): both sides' DoF
-     *  level becomes untrustworthy, and the [victim] notes when the [betrayer] broke it (SetDoFBroken) */
+    /** Vox Populi's ending of a friendship by war (DoSomeoneDeclaredWarOnMe), denouncement (DoDenouncePlayer) or statement
+     *  ([onDoFEnded]): both sides' DoF level becomes untrustworthy, the [victim] notes when the [betrayer] broke it (SetDoFBroken), and the
+     *  [betrayer] has ended a friendship this turn */
     fun onDoFBetrayed(betrayer: Civilization, victim: Civilization) {
         betrayer.ai.diplomacy.memoryOf(victim).doFLevel = DoFLevel.Untrustworthy
+        betrayer.ai.diplomacy.endedFriendshipTurn = betrayer.gameInfo.turns
         val memory = victim.ai.diplomacy.memoryOf(betrayer)
         memory.doFLevel = DoFLevel.Untrustworthy
         memory.doFBrokenTurn = victim.gameInfo.turns
+    }
+
+    /**
+     *  DIPLO_STATEMENT_END_WORK_WITH_US (Vox Populi): [ender] ends its friendship with [friend] without denouncing them. The coop wars
+     *  between them are off (CancelCoopWarsWithPlayer with a penalty: one being prepared - our Soon - is a broken promise worth VP's
+     *  -300 assist), the friend resents it (another -300), and each other AI that [ender] may deal with and that does not hate it judges:
+     *  ending it with a backstabber +75, with one it fights +50 (+25 more when that war goes badly: defensive or worse, VP's troubled),
+     *  with one who denounced it +50, with its own friend, pact partner or ally -75 (-150 if it hates the ender). Our recent assist value
+     *  has the opposite sign of VP's. VP's coop war agreement score has no input.
+     */
+    fun onDoFEnded(ender: Civilization, friend: Civilization) {
+        if (!ender.isMajorCiv || !friend.isMajorCiv) return
+        val friendAi = friend.ai.diplomacy
+        val friendMemory = friendAi.memoryOf(ender)
+        for (entry in friendMemory.coopWars.values) if (entry.state != null && entry.state!! >= CoopWarState.Soon) {
+            if (entry.state == CoopWarState.Soon) {
+                friendMemory.brokenCoopWarPromise = true
+                friendAi.changeRecentAssistValue(ender, 300)
+            }
+            entry.state = null
+            entry.counter = -666
+        }
+        for (entry in ender.ai.diplomacy.memoryOf(friend).coopWars.values) if (entry.state != null && entry.state!! >= CoopWarState.Soon) {
+            entry.state = null
+            entry.counter = -666
+        }
+        friendAi.changeRecentAssistValue(ender, 300)
+        for (third in ender.gameInfo.civilizations) {
+            if (third == ender || third == friend || !third.isMajorCiv || third.isHuman() || !WarStateAi.isPlayerValid(ender, third)) continue
+            val theirAi = third.ai.diplomacy
+            val tiedToFriend = OpinionAi.isDoFAccepted(third, friend) || theirAi.opinionOf(friend) == MajorCivOpinion.Ally ||
+                third.getDiplomacyManager(friend)?.diplomaticStatus == DiplomaticStatus.DefensivePact
+            val hatesUs = third.isAtWarWith(ender) || OpinionAi.isDenouncedPlayer(ender, third) || OpinionAi.isDenouncedPlayer(third, ender) ||
+                OpinionAi.isUntrustworthyFriend(ender) || theirAi.opinionOf(ender) == MajorCivOpinion.Unforgivable
+            if (!hatesUs) {
+                if (OpinionAi.isUntrustworthyFriend(friend)) theirAi.changeRecentAssistValue(ender, -75)
+                else if (third.isAtWarWith(friend)) {
+                    theirAi.changeRecentAssistValue(ender, -50)
+                    val warState = WarStateAi.warState(third, friend)
+                    if (warState != null && warState <= WarState.Defensive) theirAi.changeRecentAssistValue(ender, -25)
+                }
+                else if (OpinionAi.isDenouncedPlayer(friend, third)) theirAi.changeRecentAssistValue(ender, -50)
+                else if (tiedToFriend) theirAi.changeRecentAssistValue(ender, 75)
+            } else if (tiedToFriend) theirAi.changeRecentAssistValue(ender, 150)
+        }
+        onDoFBetrayed(ender, friend)
     }
 
     /** CvTeam::makePeace: both sides run DoWeMadePeaceWithSomeone and remember the turn of the treaty */

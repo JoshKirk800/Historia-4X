@@ -708,6 +708,31 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         }
     }
 
+    /**
+     *  Vox Populi's DIPLO_STATEMENT_END_WORK_WITH_US: the friendship ends without a denouncement, and with it any defensive pact between
+     *  the two. What the AIs remember of it is [DiplomacyEvents.onDoFEnded].
+     */
+    fun endDeclarationOfFriendship() {
+        removeFlag(DiplomacyFlags.DeclarationOfFriendship)
+        otherCivDiplomacy().removeFlag(DiplomacyFlags.DeclarationOfFriendship)
+        if (diplomaticStatus == DiplomaticStatus.DefensivePact) {
+            diplomaticStatus = DiplomaticStatus.Peace
+            otherCivDiplomacy().diplomaticStatus = DiplomaticStatus.Peace
+            removeFlag(DiplomacyFlags.DefensivePact)
+            otherCivDiplomacy().removeFlag(DiplomacyFlags.DefensivePact)
+        }
+        if (civInfo.isMajorCiv) civInfo.ai.diplomacy.memoryOf(otherCiv).doFCounter = -666
+        if (otherCiv.isMajorCiv) otherCiv.ai.diplomacy.memoryOf(civInfo).doFCounter = -666
+        DiplomacyEvents.onDoFEnded(civInfo, otherCiv)
+
+        otherCiv.addNotification("[${civInfo.civName}] has ended our Declaration of Friendship!",
+            NotificationCategory.Diplomacy, NotificationIcon.Diplomacy, civInfo.civName)
+        for (thirdCiv in getCommonKnownCivsWithSpectators()) {
+            thirdCiv.addNotification("[${civInfo.civName}] has ended its Declaration of Friendship with [${otherCiv.civName}]!",
+                NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy, otherCiv.civName)
+        }
+    }
+
     fun signDefensivePact(duration: Int) {
         setFlag(DiplomacyFlags.DefensivePact, duration)
         otherCivDiplomacy().setFlag(DiplomacyFlags.DefensivePact, duration)

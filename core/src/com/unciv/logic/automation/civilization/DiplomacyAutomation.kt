@@ -14,6 +14,7 @@ import com.unciv.logic.automation.diplomacy.DisputeLevel
 import com.unciv.logic.automation.diplomacy.IntrigueAi
 import com.unciv.logic.automation.diplomacy.DiploStatement
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
+import com.unciv.logic.automation.diplomacy.FriendshipPlanningAi
 import com.unciv.logic.automation.diplomacy.MajorCivMemory
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.OpinionAi
@@ -114,9 +115,10 @@ object DiplomacyAutomation {
         if (doCoopWarStatement(civ, other, rules)) return
         if (doMakeDemand(civ, other, rules)) return
         if (InformationalStatementAi.contact(civ, other)) return
-        if (doDoFStatement(civ, other)) return
-        if (doDenounceFriendStatement(civ, other)) return
+        // VP's order: end a friendship (or denounce the friend), denounce, then offer one
+        if (doEndDoFStatement(civ, other)) return
         if (doDenounceStatement(civ, other)) return
+        if (doDoFStatement(civ, other)) return
         doRequestFriendDenounceStatement(civ, other)
     }
 
@@ -181,111 +183,51 @@ object DiplomacyAutomation {
 
     //region Friendship and denouncements
 
-    /** CvDiplomacyAI::IsTooEarlyForDoF: known for less than DOF_TURN_BUFFER turns */
-    fun isTooEarlyForDoF(civ: Civilization, other: Civilization): Boolean {
-        val met = civ.ai.diplomacy.memoryOf(other).turnMet
-        return met >= 0 && civ.gameInfo.turns - met < civ.gameInfo.ruleset.ai.define(AiDefine.DOF_TURN_BUFFER)
-    }
-
-    /** CvDiplomacyAI::IsDoFMessageTooSoon: [other] has asked us to work with them within the last DOF_TURN_BUFFER turns */
-    fun isDoFMessageTooSoon(civ: Civilization, other: Civilization): Boolean {
-        val counter = civ.ai.diplomacy.memoryOf(other).doFCounter
-        return counter >= 0 && counter < civ.gameInfo.ruleset.ai.define(AiDefine.DOF_TURN_BUFFER)
-    }
-
     /**
-     *  CvDiplomacyAI::DoFromUIDiploEvent (HUMAN_DISCUSSION_WORK_WITH_US): whether [civ] signs the Declaration of Friendship [human] asked for.
-     *  Too early to know them: no, and both counters restart. Asked within the last DOF_TURN_BUFFER turns: no, the counters stay.
-     *  Otherwise both counters restart and the answer is [isDoFAcceptable].
+     *  CvDiplomacyAI::DoFromUIDiploEvent (HUMAN_DISCUSSION_WORK_WITH_US): whether [civ] signs the Declaration of Friendship [human] asked
+     *  for. Too early to know them: no; otherwise [FriendshipPlanningAi.isDoFAcceptable].
      */
     fun answerDoFRequest(civ: Civilization, human: Civilization): Boolean {
         if (!civ.diplomacyFunctions.canSignDeclarationOfFriendshipWith(human)) return false
-        if (isDoFMessageTooSoon(civ, human) && !isTooEarlyForDoF(civ, human)) return false
-        civ.ai.diplomacy.memoryOf(human).doFCounter = 0
-        human.ai.diplomacy.memoryOf(civ).doFCounter = 0
-        return isDoFAcceptable(civ, human)
+        if (FriendshipPlanningAi.isTooEarlyForDoF(civ, human)) return false
+        return FriendshipPlanningAi.isDoFAcceptable(civ, human)
     }
 
-    /** The weight of CvDiplomacyAI::IsDoFAcceptable before its random 0..4: DoFWillingness, approach, opinion */
-    fun doFWeight(civ: Civilization, other: Civilization): Int {
-        val ai = civ.ai.diplomacy
-        val approach = ai.approachTowards(other)
-        val opinion = ai.opinionOf(other)
-        var weight = civ.ai.diplomacyValue(DiplomacyPersonality.DoFWillingness)
-        weight += when (approach) {
-            MajorCivApproach.Deceptive -> 3
-            MajorCivApproach.Guarded -> -1
-            MajorCivApproach.Friendly -> 3
-            else -> 0
-        }
-        weight += when (opinion) {
-            MajorCivOpinion.Competitor -> -3
-            MajorCivOpinion.Favorable -> 2
-            MajorCivOpinion.Friend -> 5
-            MajorCivOpinion.Ally -> 10
-            else -> 0
-        }
-        return weight
-    }
-
-    /** CvDiplomacyAI::IsDoFAcceptable */
-    fun isDoFAcceptable(civ: Civilization, other: Civilization): Boolean {
-        if (civ.isAtWarWith(other)) return false
-        if (isTooEarlyForDoF(civ, other)) return false
-        val ai = civ.ai.diplomacy
-        val approach = ai.approachTowards(other)
-        if (approach == MajorCivApproach.War || approach == MajorCivApproach.Hostile) return false
-        if (approach == MajorCivApproach.Afraid) return true
-        val opinion = ai.opinionOf(other)
-        if (opinion == MajorCivOpinion.Unforgivable || opinion == MajorCivOpinion.Enemy) return false
-        if (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ)) return false
-        val weight = doFWeight(civ, other) + civ.ai.random("DiplomacyAI.IsDoFAcceptable" + other.civID).nextInt(5)
-        return weight >= civ.gameInfo.ruleset.ai.define(AiDefine.DOF_THRESHOLD)
-    }
-
-    /** CvDiplomacyAI::DoDoFStatement, resolved at once with an AI (DoSendStatementToPlayer WORK_WITH_US) */
+    /**
+     *  CvDiplomacyAI::DoDoFStatement: we want a friendship with them ([FriendshipPlanningAi.updateFriendships]), have not ended one this
+     *  turn, and last asked 30 or more turns ago. A human gets the offer; an AI answers at once by its IsDoFAcceptable.
+     */
     private fun doDoFStatement(civ: Civilization, other: Civilization): Boolean {
         if (OpinionAi.isDoFAccepted(civ, other)) return false
-        if (!civ.diplomacyFunctions.canSignDeclarationOfFriendshipWith(other)) return false
-        if (!isDoFAcceptable(civ, other)) return false
+        if (FriendshipPlanningAi.hasEndedFriendshipThisTurn(civ)) return false
         val memory = civ.ai.diplomacy.memoryOf(other)
-        if (turnsSinceStatement(civ, memory, DiploStatement.WorkWithUs) < 60 || turnsSinceStatement(civ, memory, DiploStatement.WorkWithUsRandFailed) < 10) return false
+        if (!memory.wantsDoF) return false
+        if (!civ.diplomacyFunctions.canSignDeclarationOfFriendshipWith(other)) return false
+        if (turnsSinceStatement(civ, memory, DiploStatement.WorkWithUs) < 30) return false
         sendStatement(civ, other, DiploStatement.WorkWithUs)
         if (other.isHuman()) {
             if (other.popupAlerts.none { it.type == AlertType.DeclarationOfFriendship && it.value == civ.civID })
                 other.popupAlerts.add(PopupAlert(AlertType.DeclarationOfFriendship, civ.civID))
             return true
         }
-        memory.doFCounter = 0
-        other.ai.diplomacy.memoryOf(civ).doFCounter = 0
-        if (isDoFAcceptable(other, civ)) civ.getDiplomacyManager(other)!!.signDeclarationOfFriendship()
+        if (FriendshipPlanningAi.isDoFAcceptable(other, civ)) civ.getDiplomacyManager(other)!!.signDeclarationOfFriendship()
         return true
     }
 
-    /** CvDiplomacyAI::IsDenounceFriendAcceptable: when to backstab a friend */
-    fun isDenounceFriendAcceptable(civ: Civilization, other: Civilization): Boolean {
-        val ai = civ.ai.diplomacy
-        if (ai.approachTowards(other) == MajorCivApproach.Hostile || ai.approachTowards(other, hideTrueFeelings = true) == MajorCivApproach.Hostile) return true
-        val opinion = ai.opinionOf(other)
-        if (opinion <= MajorCivOpinion.Enemy) return true
-        if (opinion >= MajorCivOpinion.Favorable) return false
-        var chance = 0
-        // Friends for over 30 turns and competitors: a chance to break off, by Loyalty
-        if (ai.memoryOf(other).doFCounter > 30 && opinion == MajorCivOpinion.Competitor)
-            chance = (10 - civ.ai.diplomacyValue(DiplomacyPersonality.Loyalty)) / 2
-        // Going for conquest and they are weak and close
-        if (civ.ai.isGoingForWorldConquest()) {
-            val strength = WarStateAi.militaryStrengthComparedToUs(civ, other)
-            if (strength != null && strength <= StrengthLevel.Poor && DiplomacyTurn.proximity(civ, other) >= DiplomacyTurn.PROXIMITY_CLOSE) chance += 5
-        }
-        return civ.ai.random("DiplomacyAI.IsDenounceFriendAcceptable" + other.civID).nextInt(100) < chance
-    }
-
-    private fun doDenounceFriendStatement(civ: Civilization, other: Civilization): Boolean {
+    /**
+     *  CvDiplomacyAI::DoEndDoFStatement: we want to end our friendship with them; we denounce them when
+     *  [FriendshipPlanningAi.isDenounceFriendAcceptable], else we just end it
+     */
+    private fun doEndDoFStatement(civ: Civilization, other: Civilization): Boolean {
         if (!OpinionAi.isDoFAccepted(civ, other)) return false
-        if (!isDenounceFriendAcceptable(civ, other)) return false
-        sendStatement(civ, other, DiploStatement.DenounceFriend)
-        civ.getDiplomacyManager(other)!!.denounce()
+        if (!civ.ai.diplomacy.memoryOf(other).wantsToEndDoF) return false
+        if (FriendshipPlanningAi.isDenounceFriendAcceptable(civ, other)) {
+            sendStatement(civ, other, DiploStatement.DenounceFriend)
+            civ.getDiplomacyManager(other)!!.denounce()
+        } else {
+            sendStatement(civ, other, DiploStatement.EndWorkWithUs)
+            civ.getDiplomacyManager(other)!!.endDeclarationOfFriendship()
+        }
         return true
     }
 
@@ -652,8 +594,12 @@ object DiplomacyAutomation {
     private fun isResearchAgreementTradingAllowed(civ: Civilization, other: Civilization): Boolean =
         civ.diplomacyFunctions.canSignResearchAgreement() && civ.diplomacyFunctions.meetsEmbassyRequirementFor(other)
 
-    /** CvDiplomacyAI::DoUpdatePlanningExchanges: we want a research agreement with everyone we may sign one with, unless hostile */
+    /**
+     *  CvDiplomacyAI::DoUpdatePlanningExchanges: the friendships we want and want to end ([FriendshipPlanningAi.updateFriendships]),
+     *  then (BNW's part, still) a research agreement with everyone we may sign one with, unless hostile
+     */
     private fun updatePlanningExchanges(civ: Civilization) {
+        FriendshipPlanningAi.updateFriendships(civ)
         val ai = civ.ai.diplomacy
         for (other in DiplomacyTurn.validPlayers(civ)) {
             if (!other.isMajorCiv) continue

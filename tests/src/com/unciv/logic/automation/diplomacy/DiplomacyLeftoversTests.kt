@@ -180,8 +180,8 @@ class DiplomacyLeftoversTests {
 
     @Test
     fun `a statement takes the turn's slot so the friendship statement waits a turn`() {
-        // Both accept a Declaration of Friendship once it is not too early
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Afraid)
+        // a wants a Declaration of Friendship (Vox Populi's planning) and b, afraid, accepts it once it is not too early
+        memory(a, b).wantsDoF = true
         b.ai.diplomacy.setApproach(a, MajorCivApproach.Afraid)
         memory(a, b).brokenExpansionPromiseValue = 100
         DiplomacyAutomation.contactMajorCivs(a)

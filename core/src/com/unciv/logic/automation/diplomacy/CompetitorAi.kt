@@ -156,12 +156,14 @@ object CompetitorAi {
      *  CvDiplomacyAI::IsEarlyGameCompetitor: up to the Medieval era (era 2), when our opinion of them is Enemy or worse, they dispute
      *  land more than weakly, beat us to a wonder, made a demand ([MajorCivMemory.demandCounter]: VP counts demands), converted our cities,
      *  either of us denounced the other, they robbed us, ignored or broke a promise about bullying city-states, attacked or killed a
-     *  city-state we protect, or are untrustworthy.
+     *  city-state we protect, or are untrustworthy; or when they are a juicy target: an easy target ([WarStateAi.isEasyTarget]; VP's
+     *  preferred attack target has no input) that expands recklessly, and is our neighbour or (when we go for world conquest) close.
+     *  VP's wonder spammers have no input.
      */
     fun isEarlyGameCompetitor(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
         if (civ.getEra().eraNumber > 2) return false
         val memory = civ.ai.diplomacy.memories[other.civID] ?: return false
-        return memory.opinion <= MajorCivOpinion.Enemy
+        if (memory.opinion <= MajorCivOpinion.Enemy
             || memory.landDispute > DisputeLevel.Weak
             || memory.numWondersBeatenTo > 0
             || memory.demandCounter != -1
@@ -170,7 +172,10 @@ object CompetitorAi {
             || memory.numTimesRobbed > 0
             || memory.ignoredBullyCityStatePromise || memory.brokenBullyCityStatePromise
             || OpinionAi.isAngryAboutProtectedMinorAttacked(memory, rules) || OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)
-            || OpinionAi.isUntrustworthyFriend(other)
+            || OpinionAi.isUntrustworthyFriend(other)) return true
+        if (!WarStateAi.isEasyTarget(civ, other) || !WarStateAi.isPlayerRecklessExpander(civ, other)) return false
+        val proximity = DiplomacyTurn.proximity(civ, other)
+        return proximity == DiplomacyTurn.PROXIMITY_NEIGHBORS || (proximity == DiplomacyTurn.PROXIMITY_CLOSE && civ.ai.isGoingForWorldConquest())
     }
 
     /** CvPlayer::GetFractionOriginalCapitalsUnderControl (UpdateMilitaryStats): the original capitals of majors [civ] holds, its own

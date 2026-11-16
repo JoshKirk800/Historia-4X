@@ -2,7 +2,13 @@ package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.diplomacy.AggressivePosture
+import com.unciv.logic.automation.diplomacy.AiThreat
+import com.unciv.logic.automation.diplomacy.CompetitorAi
+import com.unciv.logic.automation.diplomacy.CoopWarAi
+import com.unciv.logic.automation.diplomacy.CoopWarState
+import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
+import com.unciv.logic.automation.diplomacy.WarDamageAi
 import com.unciv.logic.automation.diplomacy.WarIntentAi
 import com.unciv.logic.battle.CityCombatant
 import com.unciv.logic.city.City
@@ -45,6 +51,8 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
     var terribleShapeForWar = false
     /** CvPlayer::IsNoNewWars (Vox Populi): see [WarStateAi.updateBadShapeForWar] */
     var noNewWars = false
+    /** CvDiplomacyAI::IsEasyTarget (Vox Populi), by civID: see [WarStateAi.updateEasyTargets] */
+    var easyTargets = HashSet<String>()
 
     fun clone() = WarStateMemory().also {
         it.turnsAtWar.putAll(turnsAtWar)
@@ -54,6 +62,7 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
         it.militaryStrengths.putAll(militaryStrengths)
         it.terribleShapeForWar = terribleShapeForWar
         it.noNewWars = noNewWars
+        it.easyTargets.addAll(easyTargets)
     }
 }
 
@@ -121,6 +130,118 @@ object WarStateAi {
         }
         updateWarStates(civ, memory, rules)
         updateBadShapeForWar(civ, memory, rules)
+        updateEasyTargets(civ, memory, rules)
+    }
+
+    /** CvDiplomacyAI::IsEasyTarget (Vox Populi): as of the last [updateEasyTargets] */
+    fun isEasyTarget(civ: Civilization, other: Civilization): Boolean = other.civID in civ.ai.warStates.easyTargets
+
+    /**
+     *  CvDiplomacyAI::DoUpdateEasyTargets (Vox Populi, Release-5.4.8; D7), after the bad-shape test, for every valid player. As VP's code
+     *  does, only a player we are at war with can be an easy target (without a war its war state is none, which counts as below
+     *  stalemate). Nearly won: easy. Below stalemate, or we are in terrible shape, they are far, or 30 turns at war without taking a
+     *  city of theirs for 30 turns: not easy. A city-state: easy when a favourable target or better. Not easy either when another war of
+     *  ours (unless this one is phony) goes defensive or worse, or (for a major target) calm or worse against a foe still taking new
+     *  wars. Easy when they are in terrible shape. Otherwise deterrents (we are unhappy, they took more of our cities than we of theirs,
+     *  their combat rating beats ours, we are less aggressive, we do not want to conquer them) against aggravators (a coop war against
+     *  them, they are unhappy and we are not, we took more of their cities, our rating beats theirs, we are more aggressive, we want to
+     *  conquer them) choose between their raw and adjusted target value and strength (one form each here) and settle it by VP's table.
+     *  VP's preferred attack target and exposure (CvMilitaryAI), Nuclear Gandhi and the leader traits have no input: a conqueror is one
+     *  going for world conquest, a scientist one going for a spaceship.
+     */
+    fun updateEasyTargets(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
+        val conqueror = civ.ai.isGoingForWorldConquest()
+        val scientist = civ.ai.isGoingForSpaceshipVictory()
+        val moreAggressive = conqueror && !scientist
+        val lessAggressive = scientist && !conqueror
+        val terrible = memory.terribleShapeForWar
+        val valid = civ.gameInfo.civilizations.filter { isPlayerValid(civ, it) }
+        // The tests below (the early-game competitor) read last turn's easy targets while the new ones are found
+        memory.easyTargets = valid.filter { isEasyTargetNow(civ, it, memory, valid, terrible, moreAggressive, lessAggressive, rules) }
+            .mapTo(HashSet()) { it.civID }
+    }
+
+    private fun isEasyTargetNow(civ: Civilization, other: Civilization, memory: WarStateMemory, valid: List<Civilization>, terrible: Boolean,
+                                moreAggressive: Boolean, lessAggressive: Boolean, rules: AiRuleset): Boolean {
+        val state = memory.warStates[other.civID]
+        if (state == WarState.NearlyWon) return true
+        if (state == null || state < WarState.Stalemate) return false
+        if (terrible) return false
+        if (proximityRank(civ.getProximity(other)) <= proximityRank(Proximity.Far)) return false
+        val ourMemory = civ.ai.diplomacy.memoryOf(other)
+        val sinceCapture = if (ourMemory.lastCityCaptureTurn < 0) Int.MAX_VALUE else civ.gameInfo.turns - ourMemory.lastCityCaptureTurn
+        if ((memory.turnsAtWar[other.civID] ?: 0) >= 30 && sinceCapture >= 30) return false
+        val target = memory.targetValues[other.civID] ?: TargetValue.Average
+        if (other.isCityState) return target >= TargetValue.Favorable
+        if (!WarIntentAi.isPhonyWar(civ, other)) for (third in valid) {
+            if (third == other || !civ.isAtWarWith(third)) continue
+            val thirdState = memory.warStates[third.civID] ?: continue
+            if (thirdState <= WarState.Defensive) return false
+            if (!isNoNewWars(third) && thirdState <= WarState.Calm) return false
+        }
+        if (isInTerribleShapeForWar(other)) return true
+        val unhappy = civ.getHappiness() < 0
+        val theirMemory = other.ai.diplomacy.memoryOf(civ)
+        val coop = CoopWarAi.globalState(civ, other)
+        val ourRating = WarDamageAi.militaryRating(civ)
+        val theirRating = WarDamageAi.militaryRating(other)
+        val start = WarDamageAi.startingMilitaryRating(civ)
+        val skillBoost = ourRating > start && ourRating > theirRating
+        val skillPenalty = !skillBoost && theirRating > start && theirRating > ourRating
+        val wantsConquest = civ.ai.isGoingForWorldConquest() || VictoryProgressAi.isCloseToWorldConquest(civ, rules) ||
+            state == WarState.Offensive || isPlayerRecklessExpander(civ, other) ||
+            VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules) || CompetitorAi.biggestCompetitor(civ) == other.civID ||
+            ourMemory.opinion == MajorCivOpinion.Unforgivable || civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe ||
+            CoopWarAi.isLockedIntoCoopWar(civ, other, rules) || CompetitorAi.isEarlyGameCompetitor(civ, other, rules)
+        val deterrents = listOf(unhappy, skillPenalty, ourMemory.numCitiesCapturedBy > theirMemory.numCitiesCapturedBy,
+            lessAggressive, !wantsConquest).count { it }
+        val aggravators = listOf(coop == CoopWarState.Soon || coop == CoopWarState.Accepted, !unhappy && other.getHappiness() < 0,
+            theirMemory.numCitiesCapturedBy > ourMemory.numCitiesCapturedBy, skillBoost, moreAggressive, wantsConquest).count { it }
+        val noNewWars = memory.noNewWars && !civ.isAtWarWith(other)
+        val military = memory.militaryStrengths[other.civID] ?: StrengthLevel.Average
+        val economic = ourMemory.economicStrength ?: StrengthLevel.Average
+        if (target <= TargetValue.Bad || military == StrengthLevel.Immense || economic == StrengthLevel.Immense) return false
+        if (target >= TargetValue.Soft || military == StrengthLevel.Pathetic || economic == StrengthLevel.Pathetic) return true
+        if ((aggravators < 3 && deterrents >= aggravators + 2) || (aggravators >= 3 && deterrents >= aggravators + 3)) return false
+        if (aggravators > deterrents) {
+            if (military <= StrengthLevel.Poor && economic <= StrengthLevel.Strong) return true
+            if (military <= StrengthLevel.Weak && economic <= StrengthLevel.Powerful) return true
+            if (economic <= StrengthLevel.Poor && military <= StrengthLevel.Strong) return true
+            if (economic <= StrengthLevel.Weak && military <= StrengthLevel.Powerful) return true
+            if (military <= StrengthLevel.Poor && target >= TargetValue.Favorable) return true
+            if (military <= StrengthLevel.Weak && target >= TargetValue.Average) return true
+            if (economic <= StrengthLevel.Poor && target >= TargetValue.Favorable) return true
+            if (economic <= StrengthLevel.Weak && target >= TargetValue.Average) return true
+        }
+        return easyByPersonality(military, economic, target, aggravators, deterrents, noNewWars, moreAggressive, lessAggressive)
+    }
+
+    /** The last cases of DoUpdateEasyTargets, by how aggressive we are: an even balance of reasons with a favourable and poor target;
+     *  a more aggressive player's wider margins; then a weak army or a weak economy with the other not too strong */
+    private fun easyByPersonality(military: StrengthLevel, economic: StrengthLevel, target: TargetValue, aggravators: Int,
+                                  deterrents: Int, noNewWars: Boolean, moreAggressive: Boolean, lessAggressive: Boolean): Boolean {
+        if (!lessAggressive && !noNewWars && aggravators == deterrents && aggravators > 1 && target >= TargetValue.Favorable &&
+            military <= StrengthLevel.Poor && economic <= StrengthLevel.Poor) return true
+        if (moreAggressive && target >= TargetValue.Average && aggravators + 1 >= deterrents && !noNewWars) {
+            if (military <= StrengthLevel.Poor) {
+                if (aggravators + 1 > deterrents && economic <= StrengthLevel.Strong) return true
+                if (economic <= StrengthLevel.Average || target >= TargetValue.Favorable) return true
+            }
+            if (economic <= StrengthLevel.Poor && military <= StrengthLevel.Average) return true
+        }
+        if (military <= StrengthLevel.Weak) {
+            if (lessAggressive && economic <= StrengthLevel.Poor) return true
+            if (!lessAggressive && economic <= StrengthLevel.Average) return true
+            if (moreAggressive && economic <= StrengthLevel.Strong) return true
+            if (target >= TargetValue.Favorable) return true
+        }
+        if (economic <= StrengthLevel.Weak) {
+            if (lessAggressive && military <= StrengthLevel.Poor) return true
+            if (!lessAggressive && military <= StrengthLevel.Average) return true
+            if (moreAggressive && military <= StrengthLevel.Strong) return true
+            if (target >= TargetValue.Favorable) return true
+        }
+        return false
     }
 
     /**
@@ -129,7 +250,7 @@ object WarStateAi {
      *  capital, very unhappy (BNW's rule: excess happiness at or below VERY_UNHAPPY_THRESHOLD), or doing badly (defensive or worse: VP's
      *  troubled, which we lack) against a powerful major that is close; no new wars either while doing badly against another major,
      *  or at a stalemate with a neighbour or a close player whose military posture is aggressive, unless that war is phony
-     *  ([WarIntentAi.isPhonyWar]). VP also leaves out easy targets from the stalemates (not ported yet: `phaseE/vp-approach-plan.md`, C5).
+     *  ([WarIntentAi.isPhonyWar]) or they are an easy target ([isEasyTarget], last turn's as in VP).
      */
     fun updateBadShapeForWar(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
         val terrible = isTerribleShapeNow(civ, memory, rules)
@@ -140,7 +261,7 @@ object WarStateAi {
             val theirProximity = proximityRank(other.getProximity(civ))
             when {
                 state <= WarState.Defensive -> true
-                state != WarState.Stalemate || WarIntentAi.isPhonyWar(civ, other) -> false
+                state != WarState.Stalemate || isEasyTarget(civ, other) || WarIntentAi.isPhonyWar(civ, other) -> false
                 theirProximity == proximityRank(Proximity.Neighbors) -> true
                 else -> theirProximity == proximityRank(Proximity.Close) &&
                     civ.ai.diplomacy.memoryOf(other).militaryPosture > AggressivePosture.None

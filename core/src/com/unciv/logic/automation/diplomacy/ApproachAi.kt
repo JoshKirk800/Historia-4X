@@ -1,10 +1,13 @@
 package com.unciv.logic.automation.diplomacy
 
+import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.automation.strategy.StateAllWars
 import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
@@ -71,16 +74,25 @@ object ApproachAi {
         capAtZero(w)
         if (!strategic) randomize(w, rules, random)
         capAtZero(w)
-        applyFinalRules(civ, other, w, rules)
-        applyOpinion(civ, other, strategic, validPlayers, mods, w, rules)
+        applyHumanDifficulty(civ, other, w, rules)
+        // Part 12: zero-out conditions; an approach zeroed here also counts as zero last turn (VP's vScratchValueOverrides)
+        val lastTurn = memory.approachValues.takeIf { it.size == APPROACHES.size }?.toIntArray()
+        val overrides = IntArray(APPROACHES.size) { -1 }
+        val noFriendlyObvious = zeroOut(civ, other, strategic, w, overrides, rules)
+        val last = IntArray(APPROACHES.size) { if (overrides[it] >= 0) overrides[it] else lastTurn?.get(it) ?: 0 }
+        applyOpinion(civ, other, strategic, validPlayers, mods, w, last, rules)
         // Part 14, the approach curve: no jumping from value to value. A player without values yet (first update, or a game saved before
         // the curve) starts from this turn's.
-        val curve = !strategic && !firstUpdate && memory.approachValues.size == APPROACHES.size
-        if (curve) for (i in w.indices) w[i] = curved(w[i], memory.approachValues[i], rules)
+        val curve = !strategic && !firstUpdate && lastTurn != null
+        if (curve) for (i in w.indices) w[i] = curved(w[i], last[i], rules)
         if (!strategic) memory.approachValues = ArrayList(w.toList())
 
         // Part 15, the selection: the highest score in VP's order; all at zero is neutral
         var approach = if (w.all { it <= 0 }) MajorCivApproach.Neutral else VP_ORDER.maxBy { w[it.ordinal] }
+        // No friendly (or deceptive) towards those we obviously cannot be friends with (VP's bNoFriendly beyond the obvious cases needs easy
+        // and good attack targets: branch C)
+        if (noFriendlyObvious && (approach == MajorCivApproach.Friendly || approach == MajorCivApproach.Deceptive))
+            approach = if (memory.opinion <= MajorCivOpinion.Enemy) MajorCivApproach.Guarded else MajorCivApproach.Neutral
         if (firstUpdate && !provokedUs(civ, other) && VP_ORDER.indexOf(approach) < VP_ORDER.indexOf(MajorCivApproach.Neutral))
             approach = MajorCivApproach.Neutral
         if (strategic) {
@@ -147,7 +159,7 @@ object ApproachAi {
      *  ported: `phaseE/vp-approach-plan.md`, section 2).
      */
     private fun applyOpinion(civ: Civilization, other: Civilization, strategic: Boolean, validPlayers: List<Civilization>, mods: IntArray,
-                             w: IntArray, rules: AiRuleset) {
+                             w: IntArray, lastTurn: IntArray, rules: AiRuleset) {
         val memories = civ.ai.diplomacy.memories
         val memory = civ.ai.diplomacy.memoryOf(other)
         var opinionWeight = memory.opinionWeight
@@ -179,7 +191,7 @@ object ApproachAi {
             // Neutral: as far up or down as the opinion permits, aimed at one below friendly after this turn's curve
             val neutralUp = percent(w[NEUTRAL], 100 + mods[NEUTRAL] + opinionWeight)
             val neutralDown = percentDecrease(w[NEUTRAL], maxOf(100, 100 - mods[NEUTRAL] + opinionWeight))
-            fun last(i: Int) = memory.approachValues.getOrNull(i) ?: 0
+            fun last(i: Int) = lastTurn[i]
             val friendlyPost = if (strategic) w[FRIENDLY] else curved(w[FRIENDLY], last(FRIENDLY), rules)
             val highestBadPost = if (strategic) BAD_APPROACHES.maxOf { w[it] }
                 else BAD_APPROACHES.maxOf { curved(w[it], last(it), rules) }.coerceAtLeast(0)
@@ -209,10 +221,24 @@ object ApproachAi {
         return average
     }
 
-    /** bProvokedUs of part 3 (demands, denouncements) as far as we have it: a demand of theirs while at war, or they denounced us */
+    /**
+     *  bProvokedUs of part 3 (Vox Populi) as far as we have it: a demand of theirs while at war (VP also: a demand we accepted, a second
+     *  demand), they denounced us, they are untrustworthy, they took our capital or holy city, they culture-bombed us, they killed a city-state
+     *  we protect or attacked one (VP: without a promise not to; we keep no record of such a promise being made), or they hold more cities
+     *  of ours than we of theirs while either is close.
+     */
     private fun provokedUs(civ: Civilization, other: Civilization): Boolean {
         val memory = civ.ai.diplomacy.memories[other.civID]
-        return (memory != null && memory.demandCounter != -1 && civ.isAtWarWith(other)) || OpinionAi.isDenouncedPlayer(other, civ)
+        val rules = civ.gameInfo.ruleset.ai
+        if (memory != null) {
+            if (memory.demandCounter != -1 && civ.isAtWarWith(other)) return true
+            if (memory.numTimesCultureBombed > 0 || OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)) return true
+            if (OpinionAi.isAngryAboutProtectedMinorAttacked(memory, rules)) return true
+        }
+        if (OpinionAi.isDenouncedPlayer(other, civ) || OpinionAi.isUntrustworthyFriend(other)) return true
+        if (OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other) return true
+        val close = maxOf(DiplomacyTurn.proximity(civ, other), DiplomacyTurn.proximity(other, civ)) >= DiplomacyTurn.PROXIMITY_CLOSE
+        return close && ourCitiesOwnedBy(civ, other) > ourCitiesOwnedBy(other, civ)
     }
 
     /** CvDiplomacyAI::ApplyPercentageModifier: [value] x [modifier] / 100 */
@@ -252,48 +278,143 @@ object ApproachAi {
         if ((warState == null || warState > WarState.Defensive) && (civ.ai.isGoingForWorldConquest() || closeToConquest))
             w[WAR] += bias(MajorCivApproach.War) * (if (closeToConquest) 2 else 1)
 
-        stage("Declaration of friendship")
-        // Declaration of friendship
+        // Part 2, friendship (Vox Populi). Exchange desires, the coop war agreement score, liberation of the capital or holy city and returned
+        // cities need inputs we do not have yet (`phaseE/vp-approach-plan.md`, branch B2).
+        val diplomacy = civ.getDiplomacyManager(other)
+        val loyalty = civ.ai.diplomacyValue(DiplomacyPersonality.Loyalty)
+        stage("Declaration of friendship (part 2)")
         if (OpinionAi.isDoFAccepted(civ, other)) {
-            w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_WORKING_WITH_PLAYER)
-            w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_WORKING_WITH_PLAYER)
-            w[HOSTILE] += rules.define(AiDefine.APPROACH_HOSTILE_WORKING_WITH_PLAYER)
-            w[GUARDED] += rules.define(AiDefine.APPROACH_GUARDED_WORKING_WITH_PLAYER)
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * maxOf(loyalty, 5)
+            zeroBadApproaches(w)
         }
-
-        stage("Denouncements: we denounced them, a friend who denounced us, they denounced us")
-        // Denouncements: we denounced them, a friend who denounced us, they denounced us
-        val denouncements = (if (OpinionAi.isDenouncedPlayer(civ, other)) 1 else 0) + (if (memory.friendDenouncedUs) 1 else 0) +
-            (if (OpinionAi.isDenouncedPlayer(other, civ)) 1 else 0)
-        if (denouncements > 0) {
-            w[WAR] += denouncements * rules.define(AiDefine.APPROACH_WAR_DENOUNCED)
-            w[HOSTILE] += denouncements * rules.define(AiDefine.APPROACH_HOSTILE_DENOUNCED)
-            w[GUARDED] += denouncements * rules.define(AiDefine.APPROACH_GUARDED_DENOUNCED)
-            w[FRIENDLY] += denouncements * rules.define(AiDefine.APPROACH_FRIENDLY_DENOUNCED)
-            w[DECEPTIVE] += denouncements * rules.define(AiDefine.APPROACH_DECEPTIVE_DENOUNCED)
+        stage("Defensive pact (part 2)")
+        if (diplomacy?.diplomaticStatus == DiplomaticStatus.DefensivePact) {
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * maxOf(loyalty, 5)
+            zeroBadApproaches(w)
         }
-
-        stage("Mistreated our protected minors")
-        // Mistreated our protected minors
-        val killedAnger = OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)
-        if (killedAnger || OpinionAi.isAngryAboutProtectedMinorAttacked(memory, rules)) {
-            if (killedAnger || memory.turnsSinceAttackedProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_RECENTLY_NUM_TURNS)) {
-                w[WAR] += rules.define(AiDefine.APPROACH_ATTACKED_PROTECTED_MINOR_WAR)
-                w[HOSTILE] += rules.define(AiDefine.APPROACH_ATTACKED_PROTECTED_MINOR_HOSTILE)
-                w[GUARDED] += rules.define(AiDefine.APPROACH_ATTACKED_PROTECTED_MINOR_GUARDED)
-            } else {
-                w[WAR] += rules.define(AiDefine.APPROACH_ATTACKED_PROTECTED_MINOR_PAST_WAR)
-                w[HOSTILE] += rules.define(AiDefine.APPROACH_ATTACKED_PROTECTED_MINOR_PAST_HOSTILE)
-                w[GUARDED] += rules.define(AiDefine.APPROACH_ATTACKED_PROTECTED_MINOR_PAST_GUARDED)
+        stage("Research agreement (part 2)")
+        if (diplomacy?.hasFlag(DiplomacyFlags.ResearchAgreement) == true) {
+            // VP: x 5 for a scientist (its victory pursuit, not ported) or one going for a spaceship victory
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * (if (civ.ai.grandStrategy == GrandStrategyAi.SPACESHIP) 5 else 3)
+            zeroBadApproaches(w)
+        }
+        stage("Coop war with them against another (part 2)")
+        var coopWar = false
+        for (third in civ.gameInfo.civilizations) {
+            if (third == civ || third == other || !third.isMajorCiv || !WarStateAi.isPlayerValid(civ, third)) continue
+            // GetCoopWarState >= COOP_WAR_STATE_PREPARING: BNW's states, agreed for soon or now
+            if ((memory.coopWars[third.civID]?.state ?: continue) < CoopWarState.Soon) continue
+            coopWar = true
+            val strengthMod = (WarStateAi.militaryStrengthComparedToUs(civ, third)?.ordinal ?: StrengthLevel.Average.ordinal) - 2
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * (if (strengthMod > 0) strengthMod else 1)
+        }
+        if (coopWar) zeroBadApproaches(w)
+        stage("Liberated cities (part 2)")
+        val capturedKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other
+        val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
+        if (!capturedKeyCity && !untrustworthy && !civ.isAtWarWith(other)) {
+            // VP: liberated less the cities of ours they own or captured (we do not count captures: ours they own)
+            val liberationMod = memory.numCitiesLiberated - ourCitiesOwnedBy(civ, other)
+            if (liberationMod > 0) {
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * liberationMod * 2
+                zeroBadApproaches(w)
+                w[NEUTRAL] = 0
             }
         }
-
-        stage("They made a demand of us")
-        // They made a demand of us
-        if (memory.demandCounter != -1) {
-            w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_DEMAND)
-            w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_DEMAND)
+        stage("Resurrection (part 2)")
+        val resurrectedThem = other.ai.diplomacy.memories[civ.civID]?.resurrectedUs == true
+        if (memory.resurrectedUs || resurrectedThem) {
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) *
+                (if (memory.resurrectedUs && resurrectedThem) maxOf(20, 10 + loyalty * 2) else maxOf(10, loyalty + 5))
+            for (i in BAD_APPROACHES) w[i] = -APPROACHES[i].let { bias(it) } * 2
+            w[NEUTRAL] = -bias(MajorCivApproach.Neutral) * 2
         }
+
+        // Part 3, provocations (Vox Populi). Without VP's easy targets (branch C) their extra war weight is left out; sanctions, the
+        // traitor's personal betrayal and demand counts wait for their inputs (branch B2).
+        stage("Demands (part 3)")
+        if (memory.demandCounter != -1) { // BNW keeps no count: one demand
+            w[HOSTILE] += bias(MajorCivApproach.Hostile)
+            w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) / 2
+            if ((WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average) < StrengthLevel.Average) w[WAR] += bias(MajorCivApproach.War)
+            else w[GUARDED] += bias(MajorCivApproach.Guarded)
+        }
+        stage("Denouncements (part 3)")
+        if (OpinionAi.isDenouncedPlayer(civ, other)) {
+            w[WAR] += bias(MajorCivApproach.War) * 2
+            w[HOSTILE] += bias(MajorCivApproach.Hostile) * 2
+            w[FRIENDLY] = 0
+            w[DECEPTIVE] = 0
+        }
+        if (OpinionAi.isDenouncedPlayer(other, civ)) {
+            w[WAR] += bias(MajorCivApproach.War) * 2
+            w[GUARDED] += bias(MajorCivApproach.Guarded) * 2
+            w[FRIENDLY] = 0
+            w[DECEPTIVE] = 0
+        }
+        stage("Traitor (part 3)")
+        if (untrustworthy) {
+            w[WAR] += bias(MajorCivApproach.War) * 2
+            w[HOSTILE] += bias(MajorCivApproach.Hostile) * 2
+            w[GUARDED] += bias(MajorCivApproach.Guarded) * 2
+            w[FRIENDLY] = 0
+            w[DECEPTIVE] = 0
+        }
+        stage("Vengeance: our capital, our holy city, our territory (part 3)")
+        if (OpinionAi.isCapitalCapturedBy(civ, other)) {
+            for (i in intArrayOf(WAR, HOSTILE, GUARDED)) w[i] += bias(APPROACHES[i]) * 10
+            w[FRIENDLY] = 0
+            w[DECEPTIVE] = 0
+        }
+        if (holyCityOf(civ)?.civ == other) {
+            val religionFlavor = civ.ai.personality(Flavor.Religion).coerceIn(1, 10) // GetPersonalityFlavorForDiplomacy
+            for (i in intArrayOf(WAR, HOSTILE, GUARDED)) w[i] += bias(APPROACHES[i]) * religionFlavor
+            w[FRIENDLY] = 0
+            w[DECEPTIVE] = 0
+        }
+        if (memory.numTimesCultureBombed > 0) {
+            w[WAR] += bias(MajorCivApproach.War) * memory.numTimesCultureBombed / 2
+            w[HOSTILE] += bias(MajorCivApproach.Hostile) * memory.numTimesCultureBombed / 2
+            w[GUARDED] += bias(MajorCivApproach.Guarded) * memory.numTimesCultureBombed / 4
+            w[DECEPTIVE] = 0
+        }
+        stage("Our protected city-states (part 3)")
+        val diploVictory = civ.ai.grandStrategy == GrandStrategyAi.UNITED_NATIONS
+        if (OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)) {
+            w[FRIENDLY] = 0
+            w[DECEPTIVE] = 0
+            val penalty = if (diploVictory) maxOf(memory.numProtectedMinorsKilled * 2, memory.numProtectedMinorsAttacked)
+                else maxOf(memory.numProtectedMinorsKilled, memory.numProtectedMinorsAttacked / 2)
+            w[WAR] += bias(MajorCivApproach.War) * penalty
+            w[HOSTILE] += bias(MajorCivApproach.Hostile) * penalty
+        } else if (OpinionAi.isAngryAboutProtectedMinorAttacked(memory, rules)) {
+            val penalty = memory.numProtectedMinorsKilled + memory.numProtectedMinorsAttacked
+            if (diploVictory) {
+                w[WAR] += bias(MajorCivApproach.War) * penalty
+                w[HOSTILE] += bias(MajorCivApproach.Hostile) * penalty
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * penalty / 2
+                w[FRIENDLY] = 0
+                w[DECEPTIVE] = 0
+            } else {
+                w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * penalty
+                w[HOSTILE] += bias(MajorCivApproach.Hostile) * penalty / 2
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * penalty / 2
+            }
+        } else if (OpinionAi.isAngryAboutProtectedMinorBullied(memory, rules)) {
+            val pact = OpinionAi.isDoFAccepted(civ, other) || diplomacy?.diplomaticStatus == DiplomaticStatus.DefensivePact ||
+                diplomacy?.hasFlag(DiplomacyFlags.ResearchAgreement) == true
+            if (pact) w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * memory.numProtectedMinorsBullied / 2
+            else w[HOSTILE] += bias(MajorCivApproach.Hostile) * memory.numProtectedMinorsBullied / 2
+        }
+        if (OpinionAi.isAngryAboutSidedWithProtectedMinor(memory, rules) && !OpinionAi.isDoFAccepted(civ, other)
+            && diplomacy?.diplomaticStatus != DiplomaticStatus.DefensivePact && diplomacy?.hasFlag(DiplomacyFlags.ResearchAgreement) != true
+            // VP also counts leaders whose traits bully city-states (its trait classification, not ported)
+            && (civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 || civ.ai.diplomacyValue(DiplomacyPersonality.Meanness) > 7)) {
+            w[WAR] += bias(MajorCivApproach.War)
+            w[HOSTILE] += bias(MajorCivApproach.Hostile)
+        }
+        stage("Captured cities (part 3)")
+        addCapturedCitiesWeights(civ, other, w)
 
         stage("promises")
         addPromiseWeights(civ, other, memory, w, rules)
@@ -400,11 +521,6 @@ object ApproachAi {
         scale(w, WAR, proximityPercent)
         scale(w, DECEPTIVE, proximityPercent)
 
-        stage("Made peace recently")
-        // Made peace recently
-        if (memory.turnMadePeace > -1 && civ.gameInfo.turns - memory.turnMadePeace < rules.define(AiDefine.TURNS_SINCE_PEACE_WEIGHT_DAMPENER))
-            scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_HAS_MADE_PEACE_BEFORE_PERCENT))
-
         stage("Duel: no friendly or deceptive; war decisively (Vox Populi)")
         // Duel: no friendly or deceptive
         if (civ.gameInfo.civilizations.count { it.isMajorCiv && it.isAlive() } == 2) {
@@ -423,13 +539,87 @@ object ApproachAi {
         return w
     }
 
-    /** The checks after the random part: can't declare war, teammates (none in Unciv), human difficulty */
-    private fun applyFinalRules(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
-        if (!civ.isAtWarWith(other) && civ.getDiplomacyManager(other)?.canDeclareWar() != true) w[WAR] = 0
-        if (other.isHuman()) {
-            val warMod = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get("AIDeclareWarProb") ?: 100
-            scale(w, WAR, warMod)
-            scale(w, DECEPTIVE, warMod)
+    /** BNW's war probability against humans by difficulty (AIDeclareWarProb; VP's difficulty terms are part 7, not yet ported) */
+    private fun applyHumanDifficulty(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
+        if (!other.isHuman()) return
+        val warMod = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get("AIDeclareWarProb") ?: 100
+        scale(w, WAR, warMod)
+        scale(w, DECEPTIVE, warMod)
+    }
+
+    /**
+     *  Part 12, zero-out conditions (Vox Populi), each also setting the approach's last-turn value to 0 in [overrides]:
+     *  a recent peace treaty (after a war, within TURNS_SINCE_PEACE_WEIGHT_DAMPENER turns) zeroes war and hostile in the final pass; a war
+     *  we cannot declare does too (not in the strategic pass when only the treaty stops it); afraid goes when they cannot declare war on
+     *  us; hostile (and war, if they resurrected us) towards a liberator. Not yet: no possible attack target, war bankruptcy, liberated
+     *  capitals and recent liberations (inputs of branch B2).
+     *  @return VP's bNoFriendlyObvious as far as we have it: we or they denounced, or they are untrustworthy (strategic pass: friendly 0)
+     */
+    private fun zeroOut(civ: Civilization, other: Civilization, strategic: Boolean, w: IntArray, overrides: IntArray, rules: AiRuleset): Boolean {
+        fun zero(i: Int) { w[i] = 0; overrides[i] = 0 }
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        val atWar = civ.isAtWarWith(other)
+        val recentPeace = memory.numWarsFought > 0 && memory.turnMadePeace > -1 &&
+            civ.gameInfo.turns - memory.turnMadePeace < rules.define(AiDefine.TURNS_SINCE_PEACE_WEIGHT_DAMPENER)
+        if (recentPeace && !strategic) { zero(WAR); zero(HOSTILE) }
+        if (!atWar && civ.getDiplomacyManager(other)?.canDeclareWar() != true && (!strategic || !recentPeace)) { zero(WAR); zero(HOSTILE) }
+        if (!atWar && other.getDiplomacyManager(civ)?.canDeclareWar() != true) zero(AFRAID)
+        val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
+        val capturedKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other
+        // IsLiberator(ePlayer, false, true) as far as we have it: they resurrected us, and took no key city of ours
+        if (memory.resurrectedUs && !capturedKeyCity && !atWar && !untrustworthy) { zero(HOSTILE); zero(WAR) }
+        val noFriendlyObvious = OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ) || untrustworthy
+        if (strategic && noFriendlyObvious) w[FRIENDLY] = 0
+        return noFriendlyObvious
+    }
+
+    /** All approaches but friendly and neutral to 0 (the friendship sections of part 2) */
+    private fun zeroBadApproaches(w: IntArray) { for (i in BAD_APPROACHES) w[i] = 0 }
+
+    /** The holy city of [civ]'s religion, wherever it is (null without a religion) */
+    private fun holyCityOf(civ: Civilization) =
+        civ.religionManager.religion?.name?.let { religion -> civ.gameInfo.getCities().firstOrNull { it.isHolyCityOf(religion) } }
+
+    /** CvPlayer::GetNumOurCitiesOwnedBy: cities founded by [civ] that [owner] holds */
+    private fun ourCitiesOwnedBy(civ: Civilization, owner: Civilization) = owner.cities.count { it.foundingCivObject == civ }
+
+    /**
+     *  Part 3, CAPTURED CITIES (Vox Populi), when either of us is at least close to the other: twice the difference between the cities of
+     *  theirs we hold and the cities of ours they hold. We took more: finish the job if they are no stronger than average (war, hostile),
+     *  else they will want revenge (guarded, deceptive x 2). They took more: revenge on the weaker (war, hostile, no friendly), else
+     *  caution (less war and hostile, more guarded and deceptive). VP's easy-target terms wait for branch C.
+     */
+    private fun addCapturedCitiesWeights(civ: Civilization, other: Civilization, w: IntArray) {
+        fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
+        val ourProximity = DiplomacyTurn.proximity(civ, other)
+        val theirProximity = DiplomacyTurn.proximity(other, civ)
+        if (maxOf(ourProximity, theirProximity) < DiplomacyTurn.PROXIMITY_CLOSE) return
+        var difference = (ourCitiesOwnedBy(other, civ) - ourCitiesOwnedBy(civ, other)) * 2
+        val strength = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
+        if (difference > 0) {
+            if (strength <= StrengthLevel.Average) {
+                if (ourProximity >= DiplomacyTurn.PROXIMITY_CLOSE) {
+                    w[WAR] += bias(MajorCivApproach.War) * difference
+                    w[HOSTILE] += bias(MajorCivApproach.Hostile) * difference
+                }
+            } else if (theirProximity >= DiplomacyTurn.PROXIMITY_CLOSE) {
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * difference
+                w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * difference * 2
+            }
+        } else if (difference < 0) {
+            difference = -difference
+            if (strength < StrengthLevel.Average) {
+                if (ourProximity >= DiplomacyTurn.PROXIMITY_CLOSE) {
+                    w[WAR] += bias(MajorCivApproach.War) * difference
+                    w[HOSTILE] += bias(MajorCivApproach.Hostile) * difference
+                    w[FRIENDLY] = 0
+                }
+            } else if (theirProximity >= DiplomacyTurn.PROXIMITY_CLOSE) {
+                w[WAR] -= bias(MajorCivApproach.War) * difference
+                w[HOSTILE] -= bias(MajorCivApproach.Hostile) * difference
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * difference
+                w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * difference
+            }
         }
     }
 

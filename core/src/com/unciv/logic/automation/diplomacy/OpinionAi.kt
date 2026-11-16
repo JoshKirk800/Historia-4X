@@ -285,9 +285,16 @@ object OpinionAi {
         !isAngryAboutProtectedMinorKilled(memory, rules) && memory.numProtectedMinorsAttacked > 0 && memory.turnsSinceAttackedProtectedMinor > -1 &&
             memory.turnsSinceAttackedProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_ATTACKED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN)
 
-    private fun isAngryAboutSidedWithProtectedMinor(memory: MajorCivMemory, rules: AiRuleset): Boolean =
+    fun isAngryAboutSidedWithProtectedMinor(memory: MajorCivMemory, rules: AiRuleset): Boolean =
         memory.turnsSinceSidedWithProtectedMinor > -1 &&
             memory.turnsSinceSidedWithProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR_NUM_TURNS_UNTIL_FORGIVEN)
+
+    /** IsAngryAboutProtectedMinorBullied (Vox Populi): anger over attacked or killed city-states trumps it (VP also scales the turns by
+     *  forgiveness, AdjustModifierDuration, which we do not have) */
+    fun isAngryAboutProtectedMinorBullied(memory: MajorCivMemory, rules: AiRuleset): Boolean =
+        !isAngryAboutProtectedMinorKilled(memory, rules) && !isAngryAboutProtectedMinorAttacked(memory, rules) &&
+            memory.turnsSinceBulliedProtectedMinor > -1 &&
+            memory.turnsSinceBulliedProtectedMinor < rules.define(AiDefine.OPINION_WEIGHT_BULLIED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN)
 
     /** CvDiplomacyAI::IsDoFAccepted: Unciv keeps the friendship as [DiplomacyFlags.DeclarationOfFriendship] */
     fun isDoFAccepted(civ: Civilization, other: Civilization): Boolean =

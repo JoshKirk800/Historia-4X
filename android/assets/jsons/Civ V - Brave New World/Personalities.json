@@ -119,6 +119,10 @@
       "Protective": 6,
       "Conquest": 4,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Diplomat": 1,
+      "Smaller": 1
     }
   },
   {
@@ -215,6 +219,9 @@
       "Protective": 8,
       "Conquest": 4,
       "Bully": 3
+    },
+    "traitCategories": {
+      "Diplomat": 1
     }
   },
   {
@@ -306,6 +313,10 @@
       "Protective": 3,
       "Conquest": 7,
       "Bully": 5
+    },
+    "traitCategories": {
+      "Warmonger": 1,
+      "Nerd": 1
     }
   },
   {
@@ -402,6 +413,9 @@
       "Protective": 4,
       "Conquest": 8,
       "Bully": 7
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -498,6 +512,9 @@
       "Protective": 3,
       "Conquest": 7,
       "Bully": 8
+    },
+    "traitCategories": {
+
     }
   },
   {
@@ -594,6 +611,9 @@
       "Protective": 6,
       "Conquest": 6,
       "Bully": 5
+    },
+    "traitCategories": {
+
     }
   },
   {
@@ -690,6 +710,9 @@
       "Protective": 7,
       "Conquest": 4,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -786,6 +809,9 @@
       "Protective": 4,
       "Conquest": 6,
       "Bully": 7
+    },
+    "traitCategories": {
+      "Religious": 1
     }
   },
   {
@@ -877,6 +903,9 @@
       "Protective": 7,
       "Conquest": 5,
       "Bully": 6
+    },
+    "traitCategories": {
+      "Tourism": 1
     }
   },
   {
@@ -968,6 +997,9 @@
       "Protective": 6,
       "Conquest": 7,
       "Bully": 5
+    },
+    "traitCategories": {
+
     }
   },
   {
@@ -1059,6 +1091,9 @@
       "Protective": 4,
       "Conquest": 5,
       "Bully": 7
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -1150,6 +1185,9 @@
       "Protective": 7,
       "Conquest": 4,
       "Bully": 6
+    },
+    "traitCategories": {
+
     }
   },
   {
@@ -1241,6 +1279,9 @@
       "Protective": 7,
       "Conquest": 6,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -1332,6 +1373,10 @@
       "Protective": 5,
       "Conquest": 3,
       "Bully": 3
+    },
+    "traitCategories": {
+      "Diplomat": 1,
+      "Smaller": 1
     }
   },
   {
@@ -1423,6 +1468,9 @@
       "Protective": 6,
       "Conquest": 3,
       "Bully": 6
+    },
+    "traitCategories": {
+      "Expansionist": 1
     }
   },
   {
@@ -1514,6 +1562,9 @@
       "Protective": 7,
       "Conquest": 3,
       "Bully": 4
+    },
+    "traitCategories": {
+
     }
   },
   {
@@ -1605,6 +1656,9 @@
       "Protective": 3,
       "Conquest": 8,
       "Bully": 6
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -1696,6 +1750,9 @@
       "Protective": 7,
       "Conquest": 4,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Tourism": 1
     }
   },
   {
@@ -1787,6 +1844,9 @@
       "Protective": 6,
       "Conquest": 4,
       "Bully": 5
+    },
+    "traitCategories": {
+
     }
   },
   {
@@ -1878,6 +1938,9 @@
       "Protective": 4,
       "Conquest": 6,
       "Bully": 7
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -1969,6 +2032,10 @@
       "Protective": 7,
       "Conquest": 4,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Diplomat": 1,
+      "Religious": 1
     }
   },
   {
@@ -2060,6 +2127,9 @@
       "Protective": 6,
       "Conquest": 3,
       "Bully": 5
+    },
+    "traitCategories": {
+      "Expansionist": 1
     }
   },
   {
@@ -2151,6 +2221,9 @@
       "Protective": 3,
       "Conquest": 5,
       "Bully": 8
+    },
+    "traitCategories": {
+      "Expansionist": 1
     }
   },
   {
@@ -2242,6 +2315,9 @@
       "Protective": 5,
       "Conquest": 4,
       "Bully": 6
+    },
+    "traitCategories": {
+      "Expansionist": 1
     }
   },
   {
@@ -2333,6 +2409,9 @@
       "Protective": 8,
       "Conquest": 3,
       "Bully": 3
+    },
+    "traitCategories": {
+      "Diplomat": 1
     }
   },
   {
@@ -2424,6 +2503,9 @@
       "Protective": 3,
       "Conquest": 8,
       "Bully": 8
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -2515,6 +2597,10 @@
       "Protective": 7,
       "Conquest": 7,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Tourism": 1,
+      "Smaller": 1
     }
   },
   {
@@ -2606,6 +2692,10 @@
       "Protective": 4,
       "Conquest": 6,
       "Bully": 7
+    },
+    "traitCategories": {
+      "Nerd": 1,
+      "Smaller": 1
     }
   },
   {
@@ -2697,6 +2787,9 @@
       "Protective": 7,
       "Conquest": 7,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -2788,6 +2881,9 @@
       "Protective": 5,
       "Conquest": 5,
       "Bully": 6
+    },
+    "traitCategories": {
+      "Nerd": 1
     }
   },
   {
@@ -2879,6 +2975,9 @@
       "Protective": 6,
       "Conquest": 3,
       "Bully": 5
+    },
+    "traitCategories": {
+      "Expansionist": 1
     }
   },
   {
@@ -2970,6 +3069,9 @@
       "Protective": 6,
       "Conquest": 3,
       "Bully": 3
+    },
+    "traitCategories": {
+      "Tourism": 1
     }
   },
   {
@@ -3061,6 +3163,10 @@
       "Protective": 7,
       "Conquest": 3,
       "Bully": 3
+    },
+    "traitCategories": {
+      "Warmonger": 1,
+      "Expansionist": 1
     }
   },
   {
@@ -3152,6 +3258,10 @@
       "Protective": 7,
       "Conquest": 5,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Tourism": 1,
+      "Smaller": 1
     }
   },
   {
@@ -3243,6 +3353,9 @@
       "Protective": 7,
       "Conquest": 3,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Diplomat": 1
     }
   },
   {
@@ -3334,6 +3447,10 @@
       "Protective": 4,
       "Conquest": 3,
       "Bully": 7
+    },
+    "traitCategories": {
+      "Nerd": 1,
+      "Smaller": 1
     }
   },
   {
@@ -3425,6 +3542,9 @@
       "Protective": 3,
       "Conquest": 6,
       "Bully": 8
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -3516,6 +3636,9 @@
       "Protective": 7,
       "Conquest": 6,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -3607,6 +3730,9 @@
       "Protective": 6,
       "Conquest": 5,
       "Bully": 5
+    },
+    "traitCategories": {
+      "Religious": 1
     }
   },
   {
@@ -3698,6 +3824,10 @@
       "Protective": 5,
       "Conquest": 4,
       "Bully": 6
+    },
+    "traitCategories": {
+      "Warmonger": 1,
+      "Expansionist": 1
     }
   },
   {
@@ -3789,6 +3919,9 @@
       "Protective": 7,
       "Conquest": 4,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Diplomat": 1
     }
   },
   {
@@ -3880,6 +4013,9 @@
       "Protective": 7,
       "Conquest": 5,
       "Bully": 4
+    },
+    "traitCategories": {
+      "Warmonger": 1
     }
   },
   {
@@ -3956,6 +4092,9 @@
       "Protective": 7,
       "Conquest": 4,
       "Bully": 4
+    },
+    "traitCategories": {
+
     }
   }
 ]

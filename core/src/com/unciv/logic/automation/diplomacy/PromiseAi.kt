@@ -11,6 +11,7 @@ import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 import kotlin.math.max
 
 /**
@@ -365,7 +366,7 @@ object PromiseAi {
     /**
      *  CvDiplomacyAI::IsStopDiggingAcceptable (Vox Populi): [promiseGate] from hostile, refused when they dug up our artifacts (our
      *  archaeology points against them) without a standing promise, or broke or ignored one; else no when going for or close to a culture
-     *  victory, yes with a culture flavor below 7 (VP's tourism trait has no input)
+     *  victory, or with a culture flavor above 4 and the tourism trait; yes with a culture flavor below 7
      */
     fun isStopDiggingAcceptable(civ: Civilization, demander: Civilization): Boolean {
         val memory = civ.ai.diplomacy.memoryOf(demander)
@@ -376,7 +377,9 @@ object PromiseAi {
         val rules = civ.gameInfo.ruleset.ai
         if (civ.ai.isGoingForCultureVictory() ||
             VictoryProgressAi.cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD)) return false
-        return civ.ai.personality(Flavor.Culture).coerceIn(1, 10) < 7
+        val culture = civ.ai.personality(Flavor.Culture).coerceIn(1, 10)
+        if (culture > 4 && civ.ai.hasTraitCategory(TraitCategory.Tourism)) return false
+        return culture < 7
     }
     //endregion
 }

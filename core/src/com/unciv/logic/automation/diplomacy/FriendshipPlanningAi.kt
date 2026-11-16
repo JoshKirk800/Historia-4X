@@ -12,6 +12,7 @@ import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
  *  Vox Populi's friendship planning (Release-5.4.8; D7): the Declaration of Friendship half of CvDiplomacyAI::DoUpdatePlanningExchanges
@@ -21,7 +22,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
  *
  *  As none (no input yet): vassals, the league's prime competitor and ally, sanctions, victory dispute and block levels, plots and coups
  *  against us, the coop war agreement score, liberated or returned capitals and holy cities, strategic trade partners, DoF-to-votes
- *  policies, victory pursuits (conqueror, diplomat, scientist, cultural) and leader traits, teams. VP's defensive pact half follows
+ *  policies, victory pursuits (conqueror, diplomat, scientist, cultural), teams. VP's defensive pact half follows
  *  ([PactPlanningAi.updatePacts]).
  */
 object FriendshipPlanningAi {
@@ -245,11 +246,14 @@ object FriendshipPlanningAi {
         if (ai.warmongerThreat(other) >= AiThreat.Severe) chance -= personality(DiplomacyPersonality.WarmongerHate)
 
         val competing = VictoryProgressAi.isCompetingForVictory(civ)
-        val bold = personality(DiplomacyPersonality.Boldness) > 7 || (competing && civ.ai.isGoingForWorldConquest())
-        val diplomatic = competing && civ.ai.isGoingForDiploVictory()
-        val scientific = competing && civ.ai.isGoingForSpaceshipVictory()
-        val religious = civ.ai.personality(Flavor.Religion).coerceIn(1, 10) > 6
-        val cultural = civ.ai.personality(Flavor.Culture).coerceIn(1, 10) > 6 || (competing && civ.ai.isGoingForCultureVictory())
+        val civAi = civ.ai
+        val bold = personality(DiplomacyPersonality.Boldness) > 7 || (competing && civAi.isGoingForWorldConquest()) ||
+            civAi.hasTraitCategory(TraitCategory.Warmonger)
+        val diplomatic = (competing && civAi.isGoingForDiploVictory()) || civAi.hasTraitCategory(TraitCategory.Diplomat)
+        val scientific = (competing && civAi.isGoingForSpaceshipVictory()) || civAi.hasTraitCategory(TraitCategory.Nerd)
+        val religious = civAi.personality(Flavor.Religion).coerceIn(1, 10) > 6 || civAi.hasTraitCategory(TraitCategory.Religious)
+        val cultural = civAi.personality(Flavor.Culture).coerceIn(1, 10) > 6 || (competing && civAi.isGoingForCultureVictory()) ||
+            civAi.hasTraitCategory(TraitCategory.Tourism)
         fun penalty(state: PromiseState, broken: Int, ignored: Int) {
             chance -= when (state) {
                 PromiseState.Broken -> broken

@@ -9,6 +9,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.ai.PlayerStrategyDef
 import com.unciv.models.ruleset.ai.StrategyDef
+import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.models.stats.Stat
 
 /** Checks of AI.json ([Ruleset.ai]) and of the AI fields of Personalities.json */
@@ -61,6 +62,9 @@ internal class AiRulesetValidator(private val ruleset: Ruleset) {
             for (name in personality.minorCivApproachBiases.keys)
                 if (MinorCivApproach.entries.none { it.name == name })
                     lines.add("Personality ${personality.name} has unknown minor civ approach '$name'", sourceObject = personality)
+            for (name in personality.traitCategories.keys)
+                if (TraitCategory.entries.none { it.name == name })
+                    lines.add("Personality ${personality.name} has unknown trait category '$name'", sourceObject = personality)
         }
     }
 

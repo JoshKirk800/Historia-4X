@@ -9,11 +9,12 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
  *  Part 6 of Vox Populi's SelectBestApproachTowardsMajorCiv (Release-5.4.8; D7): THEY'RE CLOSE TO WINNING and the dogpile (is this
  *  player already in a war with someone who isn't us?). On our scale: VP's personality bias is ours x 100.
- *  As none (no input): conqueror traits and an active unique unit, the league's prime competitor, the victory dispute and block levels
+ *  As none (no input): an active unique unit, the league's prime competitor, the victory dispute and block levels
  *  (not ported: BNW reads them nowhere else).
  */
 object ApproachWinningAi {
@@ -27,9 +28,9 @@ object ApproachWinningAi {
      *  THEY'RE CLOSE TO WINNING: one close to world conquest draws war, hostility and guard (5 x bias). A conqueror of other majors'
      *  capitals close to us, by the game's era (the rounded average of the living majors'): war and guard 3 x per capital in the
      *  Ancient era, 2 x up to the Classical, 1 x later; as much war and hostility again against an easy target, and 5 x (Ancient), 3 x
-     *  (Classical), 3 x (later, also when we go for world conquest) more when we are close to world conquest. Endgame aggression
-     *  against them: war and hostility 5 x for each of their close science, diplomatic and culture victories and once more when we are
-     *  close to any victory; war 5 x more against an easy target.
+     *  (Classical), 3 x (later, also when we go for world conquest) more when we are close to world conquest or have the warmonger
+     *  trait. Endgame aggression against them: war and hostility 5 x for each of their close science, diplomatic and culture victories
+     *  and once more when we are close to any victory; war 5 x more against an easy target.
      */
     fun addCloseToWinningWeights(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
@@ -47,10 +48,11 @@ object ApproachWinningAi {
         val closest = maxOf(DiplomacyTurn.proximity(civ, other), DiplomacyTurn.proximity(other, civ))
         if (danger > 0 && closest >= DiplomacyTurn.PROXIMITY_CLOSE) {
             val gameEra = gameEra(civ)
+            val warBonus = closeToConquest || civ.ai.hasTraitCategory(TraitCategory.Warmonger)
             val (times, bonus, bonusApplies) = when {
-                gameEra <= rules.define(AiDefine.ANCIENT_ERA) -> Triple(3, 5, closeToConquest)
-                gameEra <= rules.define(AiDefine.CLASSICAL_ERA) -> Triple(2, 3, closeToConquest)
-                else -> Triple(1, 3, closeToConquest || civ.ai.isGoingForWorldConquest())
+                gameEra <= rules.define(AiDefine.ANCIENT_ERA) -> Triple(3, 5, warBonus)
+                gameEra <= rules.define(AiDefine.CLASSICAL_ERA) -> Triple(2, 3, warBonus)
+                else -> Triple(1, 3, warBonus || civ.ai.isGoingForWorldConquest())
             }
             w[WAR] += bias(MajorCivApproach.War) * times * danger
             w[GUARDED] += bias(MajorCivApproach.Guarded) * times * danger

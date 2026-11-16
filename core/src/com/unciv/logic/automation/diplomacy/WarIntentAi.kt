@@ -8,12 +8,12 @@ import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
  *  What Vox Populi's AI means to do in a war it is in (CvDiplomacyAI, Release-5.4.8; D7): whether it wants to conquer the enemy
- *  ([wantsToConquer]) and whether the war is a phony one ([isPhonyWar]). VP's warmonger trait has no input here: none. Our war states
- *  lack VP's TROUBLED, between defensive and stalemate: defensive or worse
- *  stands for it.
+ *  ([wantsToConquer]) and whether the war is a phony one ([isPhonyWar]). Our war states lack VP's TROUBLED, between defensive and
+ *  stalemate: defensive or worse stands for it.
  */
 object WarIntentAi {
 
@@ -43,7 +43,8 @@ object WarIntentAi {
         if (WarStateAi.isInTerribleShapeForWar(civ)) return false
         val target = WarStateAi.targetValue(civ, other) ?: TargetValue.Average
         val goodTarget = civ.ai.military.havePreferredAttackTarget(other)
-        val aggressive = VictoryProgressAi.isCompetingForVictory(civ) && civ.ai.isGoingForWorldConquest()
+        val aggressive = civ.ai.hasTraitCategory(TraitCategory.Warmonger) ||
+            (VictoryProgressAi.isCompetingForVictory(civ) && civ.ai.isGoingForWorldConquest())
         if (WarStateAi.isEasyTarget(civ, other) && goodTarget) return true
         val badTarget = target == TargetValue.Impossible || (target == TargetValue.Bad && !goodTarget)
         if (civ.ai.diplomacy.memoryOf(other).aggressor) {

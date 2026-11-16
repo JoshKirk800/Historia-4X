@@ -119,6 +119,27 @@ class OperationalMovesTests {
         assertEquals(OperationAbortReason.NO_ROOM_DEPLOY, operation.abortReason)
     }
 
+    /** Departure: an army moving to its target with no melee unit left cannot take it, and its ranged units never advance it */
+    @Test
+    fun `a moving army whose melee units are gone aborts, one with a melee unit moves on`() {
+        val operation = gatheringAttack()
+        val army = operation.firstArmy!!
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+        assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
+        // The warriors leave their slots (as a slot empties without the half-strength rule of CvAIOperation::UnitWasRemoved applying,
+        // e.g. three ranged units and a general of seven slots): one first, then both
+        val warriorSlots = army.slots.withIndex().filter { (_, slot) -> civ.units.getCivUnits().any { it.id == slot.unitId && it.name == "Warrior" } }
+        army.slots[warriorSlots[0].index].unitId = -1
+        game.gameInfo.turns++ // an operation moves once a turn
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+        assertEquals("a warrior is left", OperationState.MOVING_TO_TARGET, operation.state)
+        army.slots[warriorSlots[1].index].unitId = -1
+        game.gameInfo.turns++
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+        assertEquals(OperationState.ABORTED, operation.state)
+        assertEquals(OperationAbortReason.HALF_STRENGTH, operation.abortReason)
+    }
+
     // endregion
     // region Recruiting
 

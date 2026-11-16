@@ -50,7 +50,7 @@ object WarTargetAi {
         var score = atWar.sumOf {
             if (civ.isAtWarWith(it) && WarIntentAi.isPhonyWar(civ, it)) (if (era <= 1) 10 else 5) else cost(it)
         }
-        val limit = if (era <= 1) 10 else 10 + 5 * majorsConquered(civ)
+        val limit = if (era <= 1) 10 else 10 + 5 * VictoryProgressAi.capitalsConquered(civ)
         if (score >= limit) {
             for (other in majors) if (other !in atWar) setApproach(civ, other, highestValueApproach(civ, other))
             return
@@ -139,12 +139,6 @@ object WarTargetAi {
     /** GetPlayerWithHighestApproachValue(WAR), taken in turn: the valid majors with a war score above 0, highest first (ties in order) */
     private fun byWarValue(civ: Civilization, majors: List<Civilization>): List<Civilization> =
         majors.filter { warValue(civ, it) > 0 }.sortedByDescending { warValue(civ, it) }
-
-    /** CvDiplomacyAI::GetPlayerNumMajorsConquered: the majors whose original capital we hold */
-    private fun majorsConquered(civ: Civilization): Int = civ.cities.count { city ->
-        val founder = city.foundingCivObject
-        city.isOriginalCapital && founder != null && founder != civ && founder.isMajorCiv
-    }
 
     /** CvDiplomacyAI::IsRecentDemandAccepted: [other] paid a tribute we demanded within a deal's duration */
     fun isRecentDemandAccepted(civ: Civilization, other: Civilization): Boolean {

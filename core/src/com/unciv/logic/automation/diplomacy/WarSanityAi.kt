@@ -61,13 +61,7 @@ object WarSanityAi {
         val income = WarStateAi.avgGoldRate(civ)
         if (civ.gold <= 0 && income <= 0) return true
         if (minimumIncome > 0 && income - lost < minimumIncome) return true
-        return turnsToBankruptcy(civ, income - lost) <= 30
-    }
-
-    /** CvPlayer::getTurnsToBankruptcy: never for a city-state or with a positive [goldRate], else the treasury over the deficit */
-    private fun turnsToBankruptcy(civ: Civilization, goldRate: Int): Int {
-        if (!civ.isMajorCiv || goldRate > 0) return Int.MAX_VALUE
-        return civ.gold / maxOf(1, -goldRate)
+        return WarStateAi.turnsToBankruptcy(civ, lost) <= 30
     }
 
     /**

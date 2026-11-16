@@ -111,6 +111,17 @@ object WarStateAi {
     fun avgGoldRate(civ: Civilization): Int = civ.ai.warStates.avgGoldRate
 
     /**
+     *  CvPlayer::getTurnsToBankruptcy (Vox Populi): never for a city-state or while the average gold rate ([avgGoldRate]) less
+     *  [assumedExtraExpense] stays positive, else the treasury over that deficit
+     */
+    fun turnsToBankruptcy(civ: Civilization, assumedExtraExpense: Int): Int {
+        if (!civ.isMajorCiv) return Int.MAX_VALUE
+        val goldRate = avgGoldRate(civ) - assumedExtraExpense
+        if (goldRate > 0) return Int.MAX_VALUE
+        return civ.gold / maxOf(1, -goldRate)
+    }
+
+    /**
      *  CvPlayer::cacheAvgGoldRate and CvTreasury::DoGold's history (Vox Populi): the gold rate is this turn's income plus the average income
      *  of the last HISTORY_NUM_TURNS_TO_AVERAGE turns (VP's formula, which counts a steady income about twice); then this turn's income
      *  joins the history. A single turn's swing of the income no longer decides whether we are broke.

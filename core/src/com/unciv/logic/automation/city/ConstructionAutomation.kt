@@ -2,13 +2,13 @@ package com.unciv.logic.automation.city
 
 import com.unciv.UncivGame
 import com.unciv.logic.automation.AiDecisionLog
-import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.strategy.AiOperations
 import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.ProductionAi
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
+import com.unciv.logic.automation.strategy.UnitProductionAi
 import com.unciv.logic.automation.strategy.WonderProductionAi
 import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.automation.unit.SettlerAutomation
@@ -148,8 +148,8 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
      *    the gold to buy the missing votes; in puppets 0 for wonders, land military training and resource-consuming buildings, doubled without
      *    maintenance; only weights above 0;
      *  - not in puppets: units ([ProductionAi.unitWeight]; settlers 0 under ECONOMICAISTRATEGY_ENOUGH_EXPANSION or without a good settle area;
-     *    ships other than sea workers 0 when the owner has more than 1 unit per 5 tiles of the city's largest adjacent water body), only
-     *    weights above 0; projects ([ProductionAi.projectWeight], whatever their weight);
+     *    none that Vox Populi's CheckUnitBuildSanity refuses, [UnitProductionAi.isRefused]), only weights above 0; projects
+     *    ([ProductionAi.projectWeight], whatever their weight);
      *  - processes, not in puppets unless the owner may not annex (Venice), not for city-states, when the city's modified base production
      *    ×100 is at least 8 (the original compares the hundredths with 8), 1 turn each.
      *  Turns left are those of CvCity::getProductionTurnsLeft ([ProductionAi.turnsLeft]): the production the city would make while building that
@@ -187,7 +187,7 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
             var goodSettleAreas = -1
             for (unit in ruleset.units.values) {
                 var weight = ProductionAi.unitWeight(city, unit)
-                if (weight <= 0 || !isAllowed(unit) || !unit.isBuildable(cityConstructions)) continue
+                if (weight <= 0 || !isAllowed(unit) || !unit.isBuildable(cityConstructions) || UnitProductionAi.isRefused(city, unit, forOperation = false)) continue
                 val unitAi = UnitAiTypes.defaultOf(unit, rules)
                 if (unitAi == UnitAiType.SETTLE) {
                     if (enoughSettlers) weight = 0
@@ -197,7 +197,6 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
                         if (goodSettleAreas == 0) weight = 0
                     }
                 }
-                if (unit.isWaterUnit && unitAi != UnitAiType.WORKER_SEA && tooManyUnitsOnWaterBody()) weight = 0
                 weight = withAiChoiceWeight(unit, weight)
                 if (weight > 0) candidates.add(Buildable(unit, weight, ProductionAi.turnsLeft(city, unit)))
             }
@@ -217,13 +216,14 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
      *  The first block of CvCityStrategyAI::ChooseProduction: the unit CvCity::GetUnitForOperation names for the next open slot of an operation
      *  on this landmass, weighted AI_CITYSTRATEGY_OPERATION_UNIT_BASE_WEIGHT + AI_CITYSTRATEGY_OPERATION_UNIT_FLAVOR_MULTIPLIER × (OFFENSE of
      *  personality and grand strategy + the times such a build was skipped over), x5 in an operation unit provider city, plus the weight
-     *  the unit has on its own; a settler is no candidate under ENOUGH_EXPANSION or without a good settle area. Offering it counts as one
-     *  more skip (BumpNumberOfTimesOpsBuildSkippedOver); choosing it resets the count.
+     *  the unit has on its own; a settler is no candidate under ENOUGH_EXPANSION or without a good settle area, nor a unit Vox Populi's
+     *  CheckUnitBuildSanity refuses for an operation ([UnitProductionAi.isRefused]). Offering it counts as one more skip
+     *  (BumpNumberOfTimesOpsBuildSkippedOver); choosing it resets the count.
      */
     private fun addOperationUnit(candidates: MutableList<Buildable>) {
         val offer = civInfo.ai.operations.nextUnitForOperationSlot(city) ?: return
         val unit = offer.unit
-        if (!isAllowed(unit)) return
+        if (!isAllowed(unit) || UnitProductionAi.isRefused(city, unit, forOperation = true)) return
         val rules = civInfo.gameInfo.ruleset.ai
         val military = civInfo.ai.military
         var weight = rules.define(AiDefine.AI_CITYSTRATEGY_OPERATION_UNIT_BASE_WEIGHT)
@@ -243,11 +243,12 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
     /**
      *  The second block of CvCityStrategyAI::ChooseProduction: the unit CvMilitaryAI::GetUnitForArmy names while an attack army is being
      *  built, weighted AI_CITYSTRATEGY_ARMY_UNIT_BASE_WEIGHT + AI_CITYSTRATEGY_OPERATION_UNIT_FLAVOR_MULTIPLIER × OFFENSE (personality and
-     *  grand strategy) × max(1, difficulty index - 5) plus the weight the unit has on its own.
+     *  grand strategy) × max(1, difficulty index - 5) plus the weight the unit has on its own; none that Vox Populi's CheckUnitBuildSanity
+     *  refuses for an operation ([UnitProductionAi.isRefused]).
      */
     private fun addArmyUnit(candidates: MutableList<Buildable>) {
         val unit = MilitaryOperations.unitForArmy(city) ?: return
-        if (!isAllowed(unit)) return
+        if (!isAllowed(unit) || UnitProductionAi.isRefused(city, unit, forOperation = true)) return
         val rules = civInfo.gameInfo.ruleset.ai
         val difficultyIndex = civInfo.gameInfo.ruleset.difficulties.keys.indexOf(civInfo.gameInfo.difficulty).coerceAtLeast(0)
         var weight = rules.define(AiDefine.AI_CITYSTRATEGY_ARMY_UNIT_BASE_WEIGHT)
@@ -269,29 +270,6 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
         val units = civInfo.gameInfo.ruleset.units.values
         return building.getMatchingUniques(UniqueType.UnitStartingExperience, GameContext.IgnoreConditionals)
             .any { unique -> unique.params[1].toInt() > 0 && units.any { it.isLandUnit && it.isMilitary && it.matchesFilter(unique.params[0]) } }
-    }
-
-    private var waterBodyCheck: Boolean? = null
-
-    /**
-     *  The ship sanity check of ChooseProduction: on the largest water body next to the city (CvCity::waterArea), the owner's units × 5 exceed
-     *  its tiles; true also without adjacent water. Computed once per choice.
-     */
-    private fun tooManyUnitsOnWaterBody(): Boolean {
-        waterBodyCheck?.let { return it }
-        val bodies = WaterBodies.of(civInfo)
-        var biggest = -1
-        for (neighbor in city.getCenterTile().neighbors) {
-            if (!neighbor.isWater) continue
-            val body = bodies.bodyOf(neighbor)
-            if (biggest < 0 || bodies.size(body) > bodies.size(biggest)) biggest = body
-        }
-        val result = if (biggest < 0) true else {
-            val mine = civInfo.units.getCivUnits().count { it.getTile().isWater && bodies.bodyOf(it.getTile()) == biggest }
-            mine * 5 > bodies.size(biggest)
-        }
-        waterBodyCheck = result
-        return result
     }
 
     /**

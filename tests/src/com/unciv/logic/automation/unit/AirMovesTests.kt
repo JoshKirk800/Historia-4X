@@ -217,4 +217,72 @@ class AirMovesTests {
         assertTrue("it keeps its movement to intercept", fighter.hasMovement())
     }
     // endregion
+
+    // region Nukes (Vox Populi: ShouldRebase, ExecuteAircraftMoves, ScoreAirBase, IsGoodUnitMix)
+
+    /** Only the western enemy city is left; our new city at -6 has it within an Atomic Bomb's range of 10, home (14 from it) does not */
+    private fun nukeSetup(): City {
+        enemyEast.destroyCity(overrideSafeties = true)
+        val west = game.addCity(civ, tile(-6))
+        game.gameInfo.turns = 10 // the cities were not just taken
+        return west
+    }
+
+    @Test
+    fun `at war a nuke rebases to a base with an enemy city in range`() {
+        val west = nukeSetup()
+        val nuke = game.addUnit("Atomic Bomb", civ, home.getCenterTile())
+        assertEquals(1, AirMoves.nukeBaseScore(civ, home.getCenterTile(), 10, enemy.cities))
+        assertEquals(21, AirMoves.nukeBaseScore(civ, west.getCenterTile(), 10, enemy.cities))
+        assertTrue(AirMoves.plotNukeMove(nuke))
+        assertEquals(west.getCenterTile(), nuke.getTile())
+    }
+
+    /** Our operations run at the start of the turn, before movement comes back: a nuke that stays keeps its movement for the nuke attack */
+    @Test
+    fun `a nuke already in the best base keeps its movement`() {
+        val west = nukeSetup()
+        val nuke = game.addUnit("Atomic Bomb", civ, west.getCenterTile())
+        assertFalse(AirMoves.plotNukeMove(nuke))
+        assertEquals(west.getCenterTile(), nuke.getTile())
+        assertTrue(nuke.hasMovement())
+    }
+
+    @Test
+    fun `at peace a nuke in a safe base stays`() {
+        nukeSetup()
+        civ.getDiplomacyManager(enemy)!!.makePeace()
+        val nuke = game.addUnit("Atomic Bomb", civ, home.getCenterTile())
+        AirMoves.plotNukeMove(nuke)
+        assertEquals(home.getCenterTile(), nuke.getTile())
+    }
+
+    @Test
+    fun `a nuke does not rebase to a base just taken or one with three offensive aircraft more than fighters`() {
+        val west = nukeSetup()
+        val nuke = game.addUnit("Atomic Bomb", civ, home.getCenterTile())
+        west.turnAcquired = game.gameInfo.turns - 1
+        assertEquals(-1, AirMoves.nukeBaseScore(civ, west.getCenterTile(), 10, enemy.cities))
+        AirMoves.plotNukeMove(nuke)
+        assertEquals("just taken", home.getCenterTile(), nuke.getTile())
+
+        west.turnAcquired = 0
+        repeat(3) { game.addUnit("Bomber", civ, west.getCenterTile()) }
+        assertFalse(AirMoves.isGoodUnitMix(west.getCenterTile(), nuke))
+        game.addUnit("Fighter", civ, west.getCenterTile())
+        assertTrue("a fighter evens it out", AirMoves.isGoodUnitMix(west.getCenterTile(), nuke))
+    }
+
+    @Test
+    fun `a nuke out of reach of the best base goes to the base in reach nearest to it`() {
+        val west = nukeSetup()
+        val far = game.addCity(civ, tile(20)) // 26 from the base at -6, beyond a rebase range of 20
+        val nuke = game.addUnit("Atomic Bomb", civ, far.getCenterTile())
+        AirMoves.plotNukeMove(nuke)
+        assertEquals("home is 6 from the best base, the forward city 12", home.getCenterTile(), nuke.getTile())
+        nuke.currentMovement = 1f
+        AirMoves.plotNukeMove(nuke)
+        assertEquals(west.getCenterTile(), nuke.getTile())
+    }
+    // endregion
 }

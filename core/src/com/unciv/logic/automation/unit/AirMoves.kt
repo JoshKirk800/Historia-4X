@@ -3,6 +3,8 @@ package com.unciv.logic.automation.unit
 import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.unit.tactical.TacticalContext
 import com.unciv.logic.automation.unit.tactical.TacticalDominance
+import com.unciv.logic.automation.strategy.UnitAiType
+import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.battle.AirInterception
 import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.civilization.Civilization
@@ -166,6 +168,87 @@ object AirMoves {
         unit.currentMovement = 0f
         return true
     }
+
+    /**
+     *  Vox Populi's rebasing of a nuclear weapon at war (Release-5.4.8; D7, in place of BNW's [plotAircraftMove], which only leaves a base in
+     *  danger, so a nuke in a safe city never comes within range of an enemy city and the nuke operation finds none to launch). In VP,
+     *  CvTacticalAI::ShouldRebase is always true for a nuke at war (its city targets never pass the combat unit test), and
+     *  CvHomelandAI::ExecuteAircraftMoves takes it to the base with the best [nukeBaseScore] where it fits (HomelandAIHelpers::IsGoodUnitMix,
+     *  [isGoodUnitMix]): directly if in range, else the first hop towards it. It stays when its own base scores as high, and then keeps its
+     *  movement: our operations run at the start of the turn (CivAi.doTurn), before the units get their movement back, and the nuke attack
+     *  needs a nuke that can still move.
+     *  Departures: only enemy cities count as targets (VP's comment "for nukes we want only cities"; its code adds 8 per enemy unit too),
+     *  the range is the nuke's own (VP assumes 7 for any aircraft), the first hop is the base in reach nearest to the chosen one (VP asks its
+     *  air rebase path finder), and a city's border score is not added. At peace the nuke moves as before.
+     *  @return whether the nuke was commanded (it rebased and its turn is over)
+     */
+    fun plotNukeMove(unit: MapUnit): Boolean {
+        val civ = unit.civ
+        if (!civ.isAtWar() || !unit.baseUnit.isAirUnit()) return plotAircraftMove(unit)
+        if (!unit.hasMovement()) return false
+        val here = unit.getTile()
+        val range = unit.getRange()
+        val enemyCities = civ.gameInfo.civilizations.filter { it != civ && civ.isAtWarWith(it) }
+            .flatMap { it.cities }.filter { it.getCenterTile().isExplored(civ) }
+        val bases = civ.cities.map { it.getCenterTile() } +
+            civ.units.getCivUnits().filter { it != unit && it.baseUnit.isWaterUnit && it.canTransport(unit) }.map { it.getTile() }
+        val scores = bases.distinct().associateWith { nukeBaseScore(civ, it, range, enemyCities) }
+        val hereScore = scores[here] ?: nukeBaseScore(civ, here, range, enemyCities)
+        var destination: Tile? = null
+        for ((base, score) in scores.entries.sortedByDescending { it.value }) {
+            if (score < 0) continue
+            if (hereScore >= score) break // apparently we're already in the best possible base
+            if (!isGoodUnitMix(base, unit)) continue
+            if (canRebaseAt(unit, base)) { destination = base; break }
+            // the first hop: a usable base in reach that is nearer to it than we are
+            val hop = scores.entries.filter { (tile, value) -> value >= 0 && tile != here && canRebaseAt(unit, tile) && isGoodUnitMix(tile, unit) }
+                .map { it.key }.filter { it.aerialDistanceTo(base) < here.aerialDistanceTo(base) }
+                .minByOrNull { it.aerialDistanceTo(base) }
+            if (hop != null) { destination = hop; break }
+        }
+        if (destination == null) return false
+        unit.movement.moveToTile(destination)
+        AiDecisionLog.log(civ) { "Air: ${unit.name} rebases to ${destination.position} for combat (score ${scores[destination]})" }
+        unit.currentMovement = 0f
+        return true
+    }
+
+    /**
+     *  HomelandAIHelpers::ScoreAirBase for a nuke: -1 for a base that may be lost (a city in danger, taken less than 3 turns ago, or being
+     *  razed below 3 population; a damaged carrier), else 1 plus 20 for each enemy city within [range] that is not in danger itself.
+     */
+    fun nukeBaseScore(civ: Civilization, base: Tile, range: Int, enemyCities: List<com.unciv.logic.city.City>): Int {
+        val city = base.getCity()?.takeIf { base.isCityCenter() && it.civ == civ }
+        if (city != null) {
+            if (cityInDanger(city)) return -1
+            if (civ.gameInfo.turns - city.turnAcquired < RECENTLY_ACQUIRED_TURNS) return -1
+            if (city.isBeingRazed && city.population.population < RAZED_MIN_POPULATION) return -1
+        } else {
+            val carrier = base.getUnits().firstOrNull { it.civ == civ && it.baseUnit.isWaterUnit } ?: return -1
+            if (carrierDamaged(carrier)) return -1
+        }
+        return 1 + enemyCities.count { base.aerialDistanceTo(it.getCenterTile()) <= range && !cityInDanger(it) } * ENEMY_CITY_SCORE
+    }
+
+    /** HomelandAIHelpers::IsGoodUnitMix for an offensive aircraft: fewer offensive aircraft on [base] than its defensive ones plus 3 */
+    fun isGoodUnitMix(base: Tile, unit: MapUnit): Boolean {
+        var offensive = 0
+        var defensive = 0
+        for (other in base.airUnits) {
+            if (other == unit) continue
+            when (UnitAiTypes.current(other)) {
+                UnitAiType.DEFENSE_AIR -> defensive++
+                UnitAiType.ATTACK_AIR, UnitAiType.ICBM, UnitAiType.MISSILE_AIR -> offensive++
+                else -> Unit
+            }
+        }
+        return offensive < defensive + MIX_MARGIN
+    }
+
+    private const val RECENTLY_ACQUIRED_TURNS = 3
+    private const val RAZED_MIN_POPULATION = 3
+    private const val ENEMY_CITY_SCORE = 20
+    private const val MIX_MARGIN = 3
 
     //region Tactical moves
 

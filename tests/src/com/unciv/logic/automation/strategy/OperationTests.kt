@@ -379,6 +379,23 @@ class OperationTests {
         assertTrue(unitIds.all { ops.deployFromOperationTurn(it) == game.gameInfo.turns })
     }
 
+    /** Departure from CvArmyAI::GetFurthestUnitDistance: a general that keeps to the army's center by its own scoring does not hold the army back */
+    @Test
+    fun `an army gathers at its muster point whatever the distance of its general`() {
+        civ.getDiplomacyManager(enemy)!!.declareWar()
+        fillAttackReserves()
+        val general = unit("Great General")
+        val operation = attack()
+        val army = operation.firstArmy!!
+        assertTrue("the general fills the support slot", AiOperationLogic.armyUnits(civ, army).any { it.second === general })
+        val soldiers = AiOperationLogic.armyUnits(civ, army).filter { it.second !== general }
+        teleport(soldiers, city.getCenterTile().position)
+        general.removeFromTile()
+        general.putInTile(game.getTile(HexCoord(-4, 0)))
+        assertTrue(AiOperationLogic.checkOnTarget(civ, operation))
+        assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
+    }
+
     @Test
     fun `an army unit with no path to its muster point stays where it is`() {
         civ.getDiplomacyManager(enemy)!!.declareWar()

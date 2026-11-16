@@ -14,6 +14,7 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.logic.automation.unit.tactical.CityThreat
+import com.unciv.logic.automation.unit.tactical.Deployment
 import com.unciv.logic.automation.unit.tactical.TacticalTargetType
 import com.unciv.view.GameView
 import kotlin.math.max
@@ -605,9 +606,14 @@ object AiOperationLogic {
         return center.neighbors.firstOrNull { it.isWater == wantWater } ?: units[0].getTile()
     }
 
-    /** CvArmyAI::GetFurthestUnitDistance */
+    /**
+     *  CvArmyAI::GetFurthestUnitDistance, without the army's generals and admirals. Departure, recorded (D7): CvTacticalAI::MoveGreatGeneral
+     *  places them by ScoreGreatGeneralPlot, which is the same for every tile within 3 of the army's center and prefers a friendly city, so a
+     *  general can settle in a city 3 from the center and 4 from the muster point; the original counts it here and the gathering never ends
+     *  (a Domination game: every sneak attack of the leader stuck at its muster). They follow the army by their own scoring.
+     */
     fun furthestUnitDistance(civ: Civilization, army: AiArmy, tile: Tile): Int =
-        armyUnits(civ, army).maxOfOrNull { it.second.getTile().aerialDistanceTo(tile) } ?: 0
+        armyUnits(civ, army).filter { !Deployment.isGeneralOrAdmiral(it.second) }.maxOfOrNull { it.second.getTile().aerialDistanceTo(tile) } ?: 0
 
     /** CvAIOperation::ArmyInPosition and the overrides of the subclasses; true if the state changed */
     fun armyInPosition(civ: Civilization, operation: AiOperation, army: AiArmy): Boolean {

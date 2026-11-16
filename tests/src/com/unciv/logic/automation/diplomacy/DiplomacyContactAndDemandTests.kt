@@ -66,13 +66,14 @@ class DiplomacyContactAndDemandTests {
 
     @Test
     fun `the common foe value stops at 50 opinion weights of 50`() {
-        // c fights b, so c likes whoever hurts b: a conquest worth 5000 is more than the opinion can use
+        // c fights b, so c likes whoever hurts b: damage worth 20000, a quarter of it with no estimate of b's strength (VP's lowest
+        // scaling), is more than the opinion can use
         c.getDiplomacyManager(b)!!.declareWar()
-        DiplomacyEvents.changeWarValueLost(b, a, 5000)
+        WarDamageAi.applyWarDamage(a, b, 20000)
         assertEquals(2500, c.ai.diplomacy.memoryOf(a).commonFoeValue)
         assertEquals(-50, OpinionAi.commonFoeScore(c.ai.diplomacy.memoryOf(a).commonFoeValue, rules))
         // Stays at the cap; a negative change comes off it
-        DiplomacyEvents.changeWarValueLost(b, a, 100)
+        WarDamageAi.applyWarDamage(a, b, 400)
         assertEquals(2500, c.ai.diplomacy.memoryOf(a).commonFoeValue)
         c.ai.diplomacy.changeCommonFoeValue(a, -3000)
         assertEquals(0, c.ai.diplomacy.memoryOf(a).commonFoeValue)

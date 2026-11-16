@@ -59,7 +59,7 @@ class DiplomacyAiTests {
     private fun meet(x: Civilization, y: Civilization) = x.diplomacyFunctions.makeCivilizationsMeet(y)
 
     private fun weights(civ: Civilization, other: Civilization, old: MajorCivApproach?) =
-        ApproachAi.approachWeights(civ, other, old, lookAtOtherPlayers = false, rules)
+        ApproachAi.approachWeights(civ, other, old, rules)
 
     private fun modifier(civ: Civilization, other: Civilization, modifier: DiplomaticModifiers): Float {
         OpinionAi.updateOpinion(civ, other, rules)
@@ -249,17 +249,18 @@ class DiplomacyAiTests {
 
     //region Approaches
 
+    /** SelectBestApproachTowardsMajorCiv part 1 (Vox Populi), LAST TURN APPROACH BIASES: the old approach + its bias x 2; war x 2 + x 4 */
     @Test
-    fun `the current approach is sticky and hostility sticks harder`() {
+    fun `the current approach is sticky and war sticks harder`() {
+        a.ai.setMajorCivApproachBias(MajorCivApproach.Hostile, 3)
+        a.ai.setMajorCivApproachBias(MajorCivApproach.War, 4)
         val fromNeutral = weights(a, b, MajorCivApproach.Neutral)
         val fromHostile = weights(a, b, MajorCivApproach.Hostile)
-        // APPROACH_BIAS_FOR_CURRENT 5 moves from Neutral to Hostile, plus APPROACH_HOSTILE_CURRENTLY_HOSTILE 5
-        assertEquals(10, fromHostile[MajorCivApproach.Hostile.ordinal] - fromNeutral[MajorCivApproach.Hostile.ordinal])
-        assertEquals(-5, fromHostile[MajorCivApproach.Neutral.ordinal] - fromNeutral[MajorCivApproach.Neutral.ordinal])
-        // Deceptive also leans to war: +5 deceptive, +2 war
-        val fromDeceptive = weights(a, b, MajorCivApproach.Deceptive)
-        assertEquals(2, fromDeceptive[MajorCivApproach.War.ordinal] - fromNeutral[MajorCivApproach.War.ordinal])
-        assertEquals(5, fromDeceptive[MajorCivApproach.Deceptive.ordinal] - fromNeutral[MajorCivApproach.Deceptive.ordinal])
+        assertEquals(6, fromHostile[MajorCivApproach.Hostile.ordinal] - fromNeutral[MajorCivApproach.Hostile.ordinal])
+        val fromWar = weights(a, b, MajorCivApproach.War)
+        assertEquals(24, fromWar[MajorCivApproach.War.ordinal] - fromNeutral[MajorCivApproach.War.ordinal])
+        val firstUpdate = weights(a, b, null)
+        assertEquals("no last-turn bias on the first update", fromNeutral[MajorCivApproach.War.ordinal], firstUpdate[MajorCivApproach.War.ordinal])
     }
 
     @Test
@@ -276,14 +277,8 @@ class DiplomacyAiTests {
     }
 
     @Test
-    fun `opinion friendship and denouncements move the approach weights`() {
+    fun `friendship and denouncements move the approach weights`() {
         val base = weights(a, b, null)
-        a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Unforgivable)
-        val unforgivable = weights(a, b, null)
-        assertEquals(10, unforgivable[MajorCivApproach.War.ordinal] - base[MajorCivApproach.War.ordinal])
-        assertEquals(4, unforgivable[MajorCivApproach.Guarded.ordinal] - base[MajorCivApproach.Guarded.ordinal])
-        a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Neutral)
-
         a.getDiplomacyManager(b)!!.signDeclarationOfFriendship()
         val friends = weights(a, b, null)
         assertEquals(15, friends[MajorCivApproach.Friendly.ordinal] - base[MajorCivApproach.Friendly.ordinal])

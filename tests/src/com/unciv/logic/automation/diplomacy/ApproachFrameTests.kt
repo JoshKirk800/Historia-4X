@@ -1,0 +1,141 @@
+package com.unciv.logic.automation.diplomacy
+
+import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.map.HexCoord
+import com.unciv.models.metadata.BaseRuleset
+import com.unciv.models.ruleset.ai.AiRuleset
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
+import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.TestGame
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import kotlin.random.Random
+
+/**
+ *  The frame of Vox Populi's CvDiplomacyAI::SelectBestApproachTowardsMajorCiv (Release-5.4.8) around the approach weights: the two passes
+ *  of DoUpdateMajorCivApproaches, prioritization (part 9), opinion as a percentage (part 13), the approach curve (part 14) and the
+ *  selection (part 15). The random part (part 11) is set to 0 so that the numbers are exact.
+ */
+@RunWith(GdxTestRunner::class)
+class ApproachFrameTests {
+    private lateinit var game: TestGame
+    private lateinit var rules: AiRuleset
+    private lateinit var a: Civilization
+    private lateinit var b: Civilization
+    private lateinit var c: Civilization
+    private val war = MajorCivApproach.War.ordinal
+    private val friendly = MajorCivApproach.Friendly.ordinal
+    private val neutral = MajorCivApproach.Neutral.ordinal
+
+    @Before
+    fun setUp() {
+        game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        game.makeHexagonalMap(12)
+        rules = game.ruleset.ai
+        rules.defines["APPROACH_RANDOM_PERCENT"] = 0f
+        a = civ(HexCoord(0, 0))
+        b = civ(HexCoord(8, 0))
+        c = civ(HexCoord(-8, 0))
+        for ((x, y) in listOf(a to b, a to c, b to c)) x.diplomacyFunctions.makeCivilizationsMeet(y)
+        game.gameInfo.turns = 10 // met on an earlier turn: not the first update
+        for (other in listOf(b, c)) a.ai.diplomacy.memoryOf(other).turnMet = 1
+    }
+
+    /** A major with one city, a flat personality (every value 5) and approach biases of 5 */
+    private fun civ(at: HexCoord): Civilization {
+        val civ = game.addCiv()
+        for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 5)
+        for (value in DiplomacyPersonality.entries) civ.ai.setDiplomacyValue(value, 5)
+        for (approach in MajorCivApproach.entries) civ.ai.setMajorCivApproachBias(approach, 5)
+        game.addCity(civ, game.getTile(at))
+        return civ
+    }
+
+    private fun select(other: Civilization, strategic: Boolean, valid: List<Civilization> = listOf(other)) =
+        ApproachAi.selectApproach(a, other, strategic, valid, rules, Random(0))
+
+    private fun memory(other: Civilization) = a.ai.diplomacy.memoryOf(other)
+
+    /** Part 14: round(0.3 x this turn + 0.7 x last turn), at least one step towards this turn */
+    private fun curved(value: Int, last: Int): Int {
+        var average = (0.5f + value * 0.3f + last * 0.7f).toInt()
+        if (average == last && value != last) average += if (value > last) 1 else -1
+        return average
+    }
+
+    @Test
+    fun `the strategic pass records the scores, the final pass moves 30 percent of the way from last turn's`() {
+        val last = listOf(0, 0, 0, 3000, 0, 9000, 1000)
+        memory(b).approachValues = ArrayList(last)
+        select(b, strategic = true)
+        val strategic = memory(b).strategicApproachValues.toList()
+        assertEquals("the strategic pass leaves the curve alone", last, memory(b).approachValues.toList())
+        select(b, strategic = false)
+        val expected = strategic.indices.map { curved(strategic[it], last[it]) }
+        assertEquals(expected, memory(b).approachValues.toList())
+    }
+
+    @Test
+    fun `an approach weighs less towards a player who ranks below another for it, less so for a bold leader`() {
+        // b ranks above c for war in the strategic pass, so c, second, loses the war bias (5 x 100) x rank 1, scaled by the war modifier
+        memory(b).strategicApproachValues = arrayListOf(9000, 0, 0, 0, 0, 0, 0)
+        memory(c).strategicApproachValues = arrayListOf(100, 0, 0, 0, 0, 0, 0)
+        select(c, strategic = false)
+        val alone = memory(c).approachValues[war]
+        memory(c).approachValues.clear() // no curve: compare the raw scores
+        select(c, strategic = false, valid = listOf(b, c))
+        // war modifier = bias 5 + boldness 5 = 10: no scaling, the whole 500
+        assertEquals(500, alone - memory(c).approachValues[war])
+
+        a.ai.setDiplomacyValue(DiplomacyPersonality.Boldness, 9) // modifier 14: (14 - 10) x 10 = +40%, the reduction / 1.4
+        memory(c).approachValues.clear()
+        select(c, strategic = false)
+        val boldAlone = memory(c).approachValues[war]
+        memory(c).approachValues.clear()
+        select(c, strategic = false, valid = listOf(b, c))
+        assertEquals(500 * 100 / 140, boldAlone - memory(c).approachValues[war])
+    }
+
+    @Test
+    fun `a disliked player raises war by the opinion weight percent and lowers friendly`() {
+        memory(b).approachValues.clear()
+        select(b, strategic = false)
+        val neutralOpinion = memory(b).approachValues.toList()
+        memory(b).opinionWeight = 60 // above the competitor threshold
+        memory(b).approachValues.clear()
+        select(b, strategic = false)
+        val disliked = memory(b).approachValues.toList()
+        // war modifier 10: x (100 + 10 + 60)%; friendly: / (100 - 10 + 60)%
+        assertEquals(neutralOpinion[war] * 170 / 100, disliked[war])
+        assertEquals(neutralOpinion[friendly] * 100 / 150, disliked[friendly])
+    }
+
+    @Test
+    fun `a liked player is approached as friend, neutral one below it, as far as the opinion permits`() {
+        // Opinion -60: friendly x (100 + 10 + 60)%, neutral lowered at most to / (100 - 10 + 60)%: it stays above friendly
+        memory(b).opinionWeight = -60
+        assertEquals(MajorCivApproach.Neutral, select(b, strategic = true))
+        val mild = memory(b).strategicApproachValues
+        assertTrue(mild[neutral] > mild[friendly])
+        // Opinion -300: friendly leads the bad approaches, and neutral is aimed one below it
+        memory(b).opinionWeight = -300
+        assertEquals(MajorCivApproach.Friendly, select(b, strategic = true))
+        val strong = memory(b).strategicApproachValues
+        assertEquals(strong[friendly] - 1, strong[neutral])
+    }
+
+    @Test
+    fun `on the first update the approach is never worse than neutral unless they provoked us`() {
+        memory(b).turnMet = game.gameInfo.turns
+        memory(b).opinionWeight = 200 // they would be at war with us
+        assertEquals(MajorCivApproach.Neutral, select(b, strategic = false))
+        b.getDiplomacyManager(a)!!.denounce() // provoked: the choice stands
+        memory(b).turnMet = game.gameInfo.turns
+        assertTrue(select(b, strategic = false) != MajorCivApproach.Neutral)
+    }
+}

@@ -436,6 +436,18 @@ class OperationTests {
         assertTrue(AiOperationLogic.shouldAbort(civ, operation))
     }
 
+    /** Vox Populi's failsafe in CvAIOperation::ShouldAbort: an operation older than 42 turns aborts */
+    @Test
+    fun `an operation still running 42 turns after it started times out`() {
+        fillAttackReserves()
+        val operation = attack()
+        game.gameInfo.turns += AiOperationLogic.TIMEOUT_TURNS
+        assertFalse("42 turns is not yet too long", AiOperationLogic.shouldAbort(civ, operation))
+        game.gameInfo.turns++
+        assertTrue(AiOperationLogic.shouldAbort(civ, operation))
+        assertEquals(OperationAbortReason.TIMED_OUT, operation.abortReason)
+    }
+
     @Test
     fun `an operation gathering at a target that was captured aborts`() {
         civ.getDiplomacyManager(enemy)!!.declareWar()

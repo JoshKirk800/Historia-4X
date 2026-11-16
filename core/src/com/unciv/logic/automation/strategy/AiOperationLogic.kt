@@ -801,13 +801,19 @@ object AiOperationLogic {
      *  CvAIOperation::ShouldAbort with the subclasses' tests. True when the operation is to be removed (the sweep kills it): it ended, or
      *  its purpose is gone (target city taken, camp cleared or rescue over, camp stronger than our units). Units of a successful
      *  operation are marked deployed (CvUnit::SetDeployFromOperationTurn).
+     *  Vox Populi's failsafe (CvAIOperation::ShouldAbort, Release-5.4.8; D7): an operation started more than [TIMEOUT_TURNS] turns ago
+     *  aborts, TIMED_OUT. BNW has none, and an operation that can no longer finish (an army stuck on the way, one recruiting units that
+     *  never come) blocks new ones of its kind for the rest of the game.
      */
     fun shouldAbort(civ: Civilization, operation: AiOperation): Boolean {
         val operations = civ.ai.operations
         if (operation.state == OperationState.SUCCESSFUL_FINISH)
             for (army in operation.armies) for ((_, unit) in armyUnits(civ, army)) operations.deployFromOperationTurns[unit.id] = civ.gameInfo.turns
         if (operation.state == OperationState.ABORTED || operation.state == OperationState.SUCCESSFUL_FINISH) return true
-
+        if (civ.gameInfo.turns - operation.createdTurn > TIMEOUT_TURNS) {
+            abort(operation, OperationAbortReason.TIMED_OUT)
+            return true
+        }
         val type = operation.type
         when {
             type.isCityAttack -> {
@@ -965,4 +971,7 @@ object AiOperationLogic {
 
     /** Turns a FOUND_CITY settler waits for an escort before it goes alone (CvAIOperationFoundCity::ShouldAbort) */
     private const val ESCORT_WAIT_TURNS = 15
+
+    /** Turns after which any operation aborts (Vox Populi's CvAIOperation::ShouldAbort: `iTurns > 42`) */
+    const val TIMEOUT_TURNS = 42
 }

@@ -2,6 +2,7 @@ package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.automation.strategy.StrengthLevel
+import com.unciv.logic.automation.strategy.TargetValue
 import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.Civilization
@@ -75,6 +76,7 @@ object ApproachAi {
         val mods = approachMods(civ)
         if (!strategic && validPlayers.size > 1) prioritize(civ, other, validPlayers, mods, w)
         capAtZero(w)
+        applyMultipliers(civ, other, w, rules)
         if (!strategic) randomize(w, rules, random)
         capAtZero(w)
         applyHumanDifficulty(civ, other, w, rules)
@@ -460,59 +462,6 @@ object ApproachAi {
         stage("Grand strategy: domination (part 6)")
         ApproachGrandStrategyAi.addDominationWeights(civ, other, deception, w, rules)
 
-        stage("War projection")
-        // War projection
-        when (memory.warProjection) {
-            WarProjection.Destruction -> {
-                scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_PROJECTION_DESTRUCTION_PERCENT))
-                scale(w, DECEPTIVE, rules.define(AiDefine.APPROACH_WAR_PROJECTION_DESTRUCTION_PERCENT))
-                scale(w, GUARDED, rules.define(AiDefine.APPROACH_GUARDED_PROJECTION_DESTRUCTION_PERCENT))
-            }
-            WarProjection.Defeat -> {
-                scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_PROJECTION_DEFEAT_PERCENT))
-                scale(w, DECEPTIVE, rules.define(AiDefine.APPROACH_WAR_PROJECTION_DEFEAT_PERCENT))
-                scale(w, GUARDED, rules.define(AiDefine.APPROACH_GUARDED_PROJECTION_DEFEAT_PERCENT))
-            }
-            WarProjection.Stalemate -> {
-                scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_PROJECTION_STALEMATE_PERCENT))
-                scale(w, GUARDED, rules.define(AiDefine.APPROACH_GUARDED_PROJECTION_STALEMATE_PERCENT))
-            }
-            WarProjection.Unknown -> {
-                scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_PROJECTION_UNKNOWN_PERCENT))
-                scale(w, GUARDED, rules.define(AiDefine.APPROACH_GUARDED_PROJECTION_UNKNOWN_PERCENT))
-            }
-            WarProjection.Good -> {
-                scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_PROJECTION_GOOD_PERCENT))
-                scale(w, DECEPTIVE, rules.define(AiDefine.APPROACH_WAR_PROJECTION_GOOD_PERCENT))
-                scale(w, GUARDED, rules.define(AiDefine.APPROACH_GUARDED_PROJECTION_GOOD_PERCENT))
-            }
-            WarProjection.VeryGood -> {
-                scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_PROJECTION_VERY_GOOD_PERCENT))
-                scale(w, DECEPTIVE, rules.define(AiDefine.APPROACH_WAR_PROJECTION_VERY_GOOD_PERCENT))
-                scale(w, GUARDED, rules.define(AiDefine.APPROACH_GUARDED_PROJECTION_VERY_GOOD_PERCENT))
-            }
-            null -> {}
-        }
-
-        stage("Reckless expander")
-        // Reckless expander
-        if (WarStateAi.isPlayerRecklessExpander(civ, other)) {
-            scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_RECKLESS_EXPANDER))
-            scale(w, DECEPTIVE, rules.define(AiDefine.APPROACH_WAR_RECKLESS_EXPANDER))
-        }
-
-        stage("Distance")
-        // Distance
-        val proximityPercent = when (DiplomacyTurn.proximity(civ, other)) {
-            DiplomacyTurn.PROXIMITY_NEIGHBORS -> rules.define(AiDefine.APPROACH_WAR_PROXIMITY_NEIGHBORS)
-            DiplomacyTurn.PROXIMITY_CLOSE -> rules.define(AiDefine.APPROACH_WAR_PROXIMITY_CLOSE)
-            DiplomacyTurn.PROXIMITY_FAR -> rules.define(AiDefine.APPROACH_WAR_PROXIMITY_FAR)
-            DiplomacyTurn.PROXIMITY_DISTANT -> rules.define(AiDefine.APPROACH_WAR_PROXIMITY_DISTANT)
-            else -> 100
-        }
-        scale(w, WAR, proximityPercent)
-        scale(w, DECEPTIVE, proximityPercent)
-
         stage("Duel: no friendly or deceptive; war decisively (Vox Populi)")
         // Duel: no friendly or deceptive
         if (civ.gameInfo.civilizations.count { it.isMajorCiv && it.isAlive() } == 2) {
@@ -544,6 +493,56 @@ object ApproachAi {
         val warMod = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get("AIDeclareWarProb") ?: 100
         scale(w, WAR, warMod)
         scale(w, DECEPTIVE, warMod)
+    }
+
+    /**
+     *  Part 10, MULTIPLIERS (Vox Populi), after part 9 and its cap at zero, on VP's scale. War and hostility by our target value of
+     *  them (MAJOR_WAR_MULTIPLIER_TARGET_*: impossible 25% to soft 150%; none, nothing). By the closer of the two proximities: afraid,
+     *  friendly, deceptive and guarded by APPROACH_MULTIPLIER_PROXIMITY_* (neighbours 150% to distant 50%), war and hostility too when
+     *  neighbours or close, or able to cross the ocean; unable to, war and hostility are 0 towards one we are not close to. With
+     *  Domination off, war and hostility halve (towards an AI, unless only war can end the game); in the AI's aggressive mode war,
+     *  hostility and (when it applies) deception double towards an AI. VP's conquest variants, for an opportunity attack on a good
+     *  attack target (CvMilitaryAI), have no input; nor the vassal and sanction multipliers.
+     */
+    private fun applyMultipliers(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
+        fun warAndHostile(modifier: Int) {
+            w[WAR] = percent(w[WAR], modifier)
+            w[HOSTILE] = percent(w[HOSTILE], modifier)
+        }
+        when (WarStateAi.targetValue(civ, other)) {
+            TargetValue.Impossible -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_IMPOSSIBLE)
+            TargetValue.Bad -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_BAD)
+            TargetValue.Average -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_AVERAGE)
+            TargetValue.Favorable -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_FAVORABLE)
+            TargetValue.Soft -> rules.define(AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_SOFT)
+            null -> null
+        }?.let { warAndHostile(it) }
+        val ours = DiplomacyTurn.proximity(civ, other)
+        val closest = maxOf(ours, DiplomacyTurn.proximity(other, civ))
+        val canCrossOcean = civ.tech.embarkedUnitsCanEnterOcean || civ.tech.allUnitsCanEnterOcean
+        val proximityModifier = rules.define(when (closest) {
+            DiplomacyTurn.PROXIMITY_NEIGHBORS -> AiDefine.APPROACH_MULTIPLIER_PROXIMITY_NEIGHBORS
+            DiplomacyTurn.PROXIMITY_CLOSE -> AiDefine.APPROACH_MULTIPLIER_PROXIMITY_CLOSE
+            DiplomacyTurn.PROXIMITY_FAR -> AiDefine.APPROACH_MULTIPLIER_PROXIMITY_FAR
+            else -> AiDefine.APPROACH_MULTIPLIER_PROXIMITY_DISTANT
+        })
+        for (i in intArrayOf(AFRAID, FRIENDLY, DECEPTIVE, GUARDED)) w[i] = percent(w[i], proximityModifier)
+        if (canCrossOcean || closest >= DiplomacyTurn.PROXIMITY_CLOSE) warAndHostile(proximityModifier)
+        if (!canCrossOcean && ours < DiplomacyTurn.PROXIMITY_CLOSE) {
+            w[WAR] = 0
+            w[HOSTILE] = 0
+        }
+        val aggressiveMode = VictoryProgressAi.isAiAggressiveMode(civ)
+        val dominationOff = civ.victoryManager.getAvailableVictories().none { it.name == "Domination" }
+        if (dominationOff && (other.isHuman() || !aggressiveMode)) {
+            w[WAR] /= 2
+            w[HOSTILE] /= 2
+        }
+        if (!other.isHuman() && aggressiveMode) {
+            w[WAR] *= 2
+            w[HOSTILE] *= 2
+            if (appliesDeception(civ, other, rules)) w[DECEPTIVE] *= 2
+        }
     }
 
     /**

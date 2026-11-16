@@ -876,6 +876,17 @@ enum class AiDefine(val default: Float) {
     // Vox Populi (D7: the Historia 4X AI takes VP's rules; the default is the VP database's value, BNW has no such define)
     // CvDiplomacyAI::IsCloseToWorldConquest: domination progress (VictoryProgressAi) at or above this is close to world conquest
     CLOSE_TO_DOMINATION_VICTORY_THRESHOLD(50f),
+    // SelectBestApproachTowardsMajorCiv part 10 (ApproachAi.applyMultipliers): war and hostility in % by our target value of them
+    MAJOR_WAR_MULTIPLIER_TARGET_IMPOSSIBLE(25f),
+    MAJOR_WAR_MULTIPLIER_TARGET_BAD(50f),
+    MAJOR_WAR_MULTIPLIER_TARGET_AVERAGE(100f),
+    MAJOR_WAR_MULTIPLIER_TARGET_FAVORABLE(125f),
+    MAJOR_WAR_MULTIPLIER_TARGET_SOFT(150f),
+    // Part 10: afraid, friendly, deceptive, guarded (and war and hostility, when they apply) in % by the closer proximity
+    APPROACH_MULTIPLIER_PROXIMITY_NEIGHBORS(150f),
+    APPROACH_MULTIPLIER_PROXIMITY_CLOSE(125f),
+    APPROACH_MULTIPLIER_PROXIMITY_FAR(75f),
+    APPROACH_MULTIPLIER_PROXIMITY_DISTANT(50f),
     // The index of the Ancient era (VP's GD_INT_GET(ANCIENT_ERA)): conquerors of capitals then draw the most war (ApproachWinningAi)
     ANCIENT_ERA(0f),
     // The index of the Classical era (VP's GD_INT_GET(CLASSICAL_ERA)): after it the biggest competitor weighs more (ApproachAi part 4)

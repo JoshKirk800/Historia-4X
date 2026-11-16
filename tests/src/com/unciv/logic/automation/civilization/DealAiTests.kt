@@ -46,6 +46,8 @@ class DealAiTests {
         a.diplomacyFunctions.makeCivilizationsMeet(b)
         a.diplomacyFunctions.makeCivilizationsMeet(c)
         b.diplomacyFunctions.makeCivilizationsMeet(c)
+        // Meeting chooses a first approach; these tests start from a neutral one
+        for (x in listOf(a, b, c)) for (y in listOf(a, b, c)) if (x != y) x.ai.diplomacy.setApproach(y, MajorCivApproach.Neutral)
     }
 
     private fun neutralCiv(at: HexCoord): Civilization {
@@ -285,6 +287,7 @@ class DealAiTests {
         val human = game.addCiv(isPlayer = true)
         game.addCity(human, game.getTile(HexCoord(0, 8)))
         a.diplomacyFunctions.makeCivilizationsMeet(human)
+        a.ai.diplomacy.setApproach(human, MajorCivApproach.Neutral)
         val trade = Trade()
         // They give an embassy (35) for open borders we give (Neutral: 75): 40 apart
         trade.theirOffers.add(TradeOffer(Constants.acceptEmbassy, TradeOfferType.Embassy, speed = game.gameInfo.speed))

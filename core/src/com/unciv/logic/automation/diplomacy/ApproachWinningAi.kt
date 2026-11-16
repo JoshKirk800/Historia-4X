@@ -13,8 +13,8 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
 /**
  *  Part 6 of Vox Populi's SelectBestApproachTowardsMajorCiv (Release-5.4.8; D7): THEY'RE CLOSE TO WINNING and the dogpile (is this
  *  player already in a war with someone who isn't us?). On our scale: VP's personality bias is ours x 100.
- *  As none (no input): conqueror traits and an active unique unit, the most valuable friend and ally, the league's prime competitor,
- *  the victory dispute and block levels (not ported: BNW reads them nowhere else).
+ *  As none (no input): conqueror traits and an active unique unit, the league's prime competitor, the victory dispute and block levels
+ *  (not ported: BNW reads them nowhere else).
  */
 object ApproachWinningAi {
     private val WAR = MajorCivApproach.War.ordinal
@@ -113,7 +113,8 @@ object ApproachWinningAi {
                 (WarStateAi.warState(other, attacker) ?: WarState.Calm) >= WarState.Offensive -> lessFearAndGuard(3)
                 attackerClose && (WarStateAi.warState(attacker, other) ?: WarState.Calm) >= WarState.Offensive -> lessFearAndGuard(2)
                 !strategic && !endgameAggressive && attackerDamage >= 40 && attackerDamage > theirDamage -> {
-                    val befriended = (isFriendOrAlly(civ, attacker) || WarSanityAi.isLiberator(civ, attacker, onlyMajorCities = false)) &&
+                    val keyPartner = ai.mostValuableFriend == attacker.civID || ai.mostValuableAlly == attacker.civID
+                    val befriended = (isFriendOrAlly(civ, attacker) || keyPartner || WarSanityAi.isLiberator(civ, attacker, onlyMajorCities = false)) &&
                         !OpinionAi.isUntrustworthyFriend(attacker) &&
                         ApproachAi.VP_ORDER.indexOf(ai.approachTowards(attacker)) > ApproachAi.VP_ORDER.indexOf(MajorCivApproach.Guarded)
                     if (befriended) {

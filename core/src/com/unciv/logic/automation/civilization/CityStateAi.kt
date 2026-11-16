@@ -535,13 +535,15 @@ object CityStateAi {
     //region Contacts
 
     /**
-     *  CvDiplomacyAI::DoUpdateMinorCivProtection: an AI pledges to protect a city-state it is friendly towards when it can (BNW's
-     *  protective approach; Vox Populi's approach has none, friendly takes its place), and withdraws from the others
+     *  Vox Populi's CvDiplomacyAI::DoUpdateMinorCivProtection: an AI pledges to protect a city-state it is friendly towards or allied
+     *  with when it can, and otherwise withdraws a pledge when it can. VP keeps a pledge while the protection boosts influence
+     *  (BALANCE_INFLUENCE_BOOST_PROTECTION_MINOR) unless the city-state has no capital or a damaged one; BNW's rules have no such
+     *  boost (0), so the pledge is withdrawn as soon as we may.
      */
     fun updateMinorCivProtection(civ: Civilization, minor: Civilization, approach: MinorCivApproach) {
         if (civ.isHuman()) return
         val functions = minor.cityStateFunctions
-        if (approach == MinorCivApproach.Friendly) {
+        if (approach == MinorCivApproach.Friendly || isAllies(minor, civ)) {
             if (functions.otherCivCanPledgeProtection(civ)) functions.addProtectorCiv(civ)
         } else if (isProtectedBy(minor, civ) && functions.otherCivCanWithdrawProtection(civ)) {
             functions.removeProtectorCiv(civ)

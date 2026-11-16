@@ -3,9 +3,7 @@ package com.unciv.logic.automation.strategy
 import com.unciv.logic.automation.diplomacy.AiThreat
 import com.unciv.logic.automation.diplomacy.WarAi
 import com.unciv.logic.city.City
-import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.civilization.Civilization
-import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MultiUnitFormationDef
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
@@ -15,18 +13,15 @@ import com.unciv.logic.automation.diplomacy.VictoryProgressAi
  *  The operation side of CvMilitaryAI: UpdateOperations (kill and launch rules), the Request* functions, IsAttackReady,
  *  MilitaryAIHelpers::NumberOfFillableSlots / FirstSlotCityCanFill, GetUnitForArmy, GetLandReservesAvailable and MakeEmergencyPurchases.
  *
- *  The launches at war are Vox Populi's ([doCityAttacks]: city attacks at its attack targets and pillage raids); the rest of
- *  UpdateOperations is still BNW's: barbarian camps (eradicate strategy), the opportunity naval operations. Not launched, because BNW
- *  has them commented out: city close defense and rapid response (their launch is commented out in UpdateOperations, and their move type
- *  is never set, so the tactical AI would not move them); they exist as operations ([AiOperationLogic.addOperation]) with their kill
- *  rules. The naval and nuke operations are [NavalOperationLogic]'s.
+ *  UpdateOperations is Vox Populi's ([updateOperations]: its stops, and at war [doCityAttacks]' city attacks at its attack targets and
+ *  pillage raids). Not launched yet: Vox Populi's defense operations (rapid response, city defense, naval superiority at a threatened
+ *  city), which exist as operations ([AiOperationLogic.addOperation]) but whose move type is never set, so the tactical AI would not
+ *  move them. The naval and nuke operations are [NavalOperationLogic]'s.
  *  MakeEmergencyPurchases itself only buys the last unit of operations; the defensive emergency purchases of the original are the tactical
  *  AI's (CvTacticalAI::PlotEmergencyPurchases).
  */
 object MilitaryOperations {
-    const val ERADICATE_BARBARIANS = "MILITARYAISTRATEGY_ERADICATE_BARBARIANS"
     const val AT_WAR = "MILITARYAISTRATEGY_AT_WAR"
-    const val EMPIRE_DEFENSE_CRITICAL = "MILITARYAISTRATEGY_EMPIRE_DEFENSE_CRITICAL"
 
     //region Slot counting (MilitaryAIHelpers)
 
@@ -286,35 +281,6 @@ object MilitaryOperations {
      */
     fun useNukeFlavorForDiplomacy(civ: Civilization): Int = civ.ai.personality(Flavor.UseNuke).coerceIn(1, 10)
 
-    /**
-     *  The end of UpdateOperations: naval operations with no enemy in mind, their total (superiority plus bombardment) held to FLAVOR_NAVAL / 2
-     *  (twice that on a naval map). Naval superiority when a squadron's required slots are filled by ships at hand and a quick colonization
-     *  is under way or we are at war; naval bombardment when the barbarians are to be eradicated and none runs.
-     */
-    fun launchOpportunityNavalOperations(civ: Civilization) {
-        val operations = civ.ai.operations
-        var maxOperations = civ.ai.personality(Flavor.Naval) / 2
-        if (SettleAreas.aiMapHint(civ.gameInfo) and 1 != 0) maxOperations *= 2
-        val superiority = operations.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY)
-        val bombardment = operations.numOperationsOfType(AiOperationType.NAVAL_BOMBARDMENT)
-        if (superiority + bombardment > maxOperations) return
-        val squadron = operations.formationDef("MUFORMATION_NAVAL_SQUADRON")
-        if (squadron != null) {
-            val fillable = numberOfFillableSlots(civ, squadron, true)
-            // Not willing to build units to get this off the ground
-            if (fillable.filled >= fillable.required &&
-                (operations.firstOfType(AiOperationType.QUICK_COLONIZE) != null || civ.ai.isMilitaryStrategyActive(AT_WAR))) {
-                AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
-                return
-            }
-        }
-        val bombard = operations.formationDef("MUFORMATION_NAVAL_BOMBARDMENT") ?: return
-        val fillable = numberOfFillableSlots(civ, bombard, true)
-        // If fighting off barbarians, start naval bombardment, but only if don't have one
-        if (fillable.filled >= fillable.required && bombardment == 0 && civ.ai.isMilitaryStrategyActive(ERADICATE_BARBARIANS))
-            AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_BOMBARDMENT)
-    }
-
     private fun operationAgainst(civ: Civilization, vararg types: AiOperationType, enemy: Civilization): AiOperation? =
         types.firstNotNullOfOrNull { civ.ai.operations.firstOfType(it, enemy) }
 
@@ -325,10 +291,6 @@ object MilitaryOperations {
     /** CvMilitaryAI::GetShowOfForceOperation */
     fun showOfForceOperation(civ: Civilization, enemy: Civilization) = operationAgainst(civ, AiOperationType.SMALL_CITY_ATTACK, enemy = enemy)
 
-    /** CvMilitaryAI::GetBasicAttackOperation */
-    fun basicAttackOperation(civ: Civilization, enemy: Civilization) =
-        operationAgainst(civ, AiOperationType.BASIC_CITY_ATTACK, AiOperationType.NAVAL_ATTACK, enemy = enemy)
-
     /** CvMilitaryAI::GetCityStateAttackOperation */
     fun cityStateAttackOperation(civ: Civilization, enemy: Civilization) =
         operationAgainst(civ, AiOperationType.CITY_STATE_ATTACK, AiOperationType.CITY_STATE_NAVAL_ATTACK, enemy = enemy)
@@ -336,92 +298,54 @@ object MilitaryOperations {
 
     //region UpdateOperations
 
-    private fun validMajors(civ: Civilization) =
-        civ.gameInfo.civilizations.filter { it.isMajorCiv && it !== civ && civ.ai.diplomacy.isPlayerValid(it) }
+    /** CvTeam::isForcePeace: a peace treaty still running */
+    private fun forcedPeace(civ: Civilization, other: Civilization) = (civ.getDiplomacyManager(other)?.turnsToPeaceTreaty() ?: 0) > 0
 
-    /** The original's team-level "forced peace" and "can't attack": peace we cannot declare war out of */
+    /** The original's "can't declare war": peace we cannot declare war out of */
     private fun cannotAttack(civ: Civilization, other: Civilization) =
         !civ.isAtWarWith(other) && civ.getDiplomacyManager(other)?.canDeclareWar() != true
 
-    /** The players at war with us that Vox Populi's UpdateOperations loops over (CvMilitaryAI::IsPlayerValid: the barbarians too) */
-    private fun enemiesAtWar(civ: Civilization) = civ.gameInfo.civilizations.filter {
-        (it.isBarbarian || WarStateAi.isPlayerValid(civ, it)) && it != civ && civ.isAtWarWith(it)
+    /**
+     *  Vox Populi's CvMilitaryAI::UpdateOperations (CvMilitaryAI.cpp 2401), for majors only, per player (CvMilitaryAI::IsPlayerValid: the
+     *  barbarians too): a peace treaty ends all our operations against them; at peace without the right to declare war, the offensive
+     *  ones (AI_ABORT_TARGET_NOT_VALID); at war, with cities of ours (GetThreatenedCities lists them all), [checkDefenses]' stops, then
+     *  nukes ([shouldLaunchNuke]) and the attacks ([doCityAttacks]). BNW's barbarian camp operations, opportunity naval operations
+     *  (superiority and bombardment) and its kill rules are gone: Vox Populi has none of them.
+     *  Not yet: the defense operations CheckLandDefenses and CheckSeaDefenses start (rapid response, city defense, naval superiority),
+     *  and the carrier group (no such operation).
+     */
+    fun updateOperations(civ: Civilization) {
+        if (!civ.isMajorCiv) return
+        val operations = civ.ai.operations
+        for (other in civ.gameInfo.civilizations) {
+            if (other == civ || !(other.isBarbarian || WarStateAi.isPlayerValid(civ, other))) continue
+            // If we've made peace, abort all operations
+            if (forcedPeace(civ, other)) for (offensive in listOf(true, false)) for (naval in listOf(false, true))
+                operations.stopAll(offensive, naval, other, OperationAbortReason.WAR_STATE_CHANGE)
+            // If we cannot declare war on this player, abort all offensive operations related to him
+            if (cannotAttack(civ, other)) for (naval in listOf(false, true))
+                operations.stopAll(offensive = true, naval = naval, enemy = other, reason = OperationAbortReason.TARGET_NOT_VALID)
+            if (!civ.isAtWarWith(other)) continue
+            if (civ.cities.isNotEmpty()) checkDefenses(civ, other)
+            // finally offense
+            if (shouldLaunchNuke(civ, other)) requestNukeAttack(civ, other)
+            doCityAttacks(civ, other)
+        }
     }
 
     /**
-     *  CvMilitaryAI::UpdateOperations: kills the operations that no longer make sense, then launches the new ones.
-     *  Kills: barbarian camp operations when not eradicating barbarians, at war or not willing to take the risk; with no war all attacks, raids
-     *  and defensive operations; with a war, per enemy by war state (winning: no defense operations; defensive or nearly defeated: no
-     *  attacks or raids), operations against a civilization we cannot attack, close defense operations of cities no longer threatened, rapid
-     *  response when the total threat is at most one major's.
-     *  Launches: a barbarian camp operation (eradicating barbarians, not at war, no critical defense, none running, willing to take the risk);
-     *  at war, nuke attacks ([shouldLaunchNuke]); for a major, Vox Populi's city attacks and raids against each enemy ([doCityAttacks]);
-     *  naval superiority and bombardment while there is room for them ([launchOpportunityNavalOperations]).
+     *  The stops of Vox Populi's CheckLandDefenses and CheckSeaDefenses for [enemy] at war with us, by our war state against them (a
+     *  non-major counts as offensive): stalemate or better, none (VP's troubled, which we lack, none either); defensive, our offensive
+     *  operations against them; nearly defeated, our offensive operations against anyone - by land and by sea alike.
      */
-    fun updateOperations(civ: Civilization) {
-        val military = civ.ai.military
-        val operations = civ.ai.operations
-        val barbs = civ.ai.isMilitaryStrategyActive(ERADICATE_BARBARIANS)
-        val atWar = civ.ai.isMilitaryStrategyActive(AT_WAR)
-
-        // Are we willing to risk pressing forward vs. barbarians?
-        var willingToAcceptRisk = military.totalThreatWeight / 2 < military.barbarianThreatTotal(civ)
-        if (civ.religionManager.religion?.founderBeliefUniqueMap?.hasUnique(com.unciv.models.ruleset.unique.UniqueType.ConvertAdjacentBarbarians) == true)
-            willingToAcceptRisk = true // CvPlayerTraits::GetLandBarbarianConversionPercent > 0: the belief that converts them here
-        // if they have one of our civilians
-        val barbarians = civ.gameInfo.civilizations.firstOrNull { it.isBarbarian }
-        if (barbarians?.units?.getCivUnits()?.any { it.originalOwner == civ.civID && UnitAiTypes.current(it).let { t -> t == UnitAiType.SETTLE || t == UnitAiType.WORKER } } == true)
-            willingToAcceptRisk = true
-
-        // Operations vs. Barbarians
-        if (!barbs || atWar || !willingToAcceptRisk) operations.killAll(AiOperationType.DESTROY_BARBARIAN_CAMP, OperationAbortReason.WAR_STATE_CHANGE)
-
-        // Operations vs. other civs: are our wars over?
-        if (!atWar) {
-            for (type in listOf(AiOperationType.BASIC_CITY_ATTACK, AiOperationType.PILLAGE_ENEMY, AiOperationType.RAPID_RESPONSE,
-                AiOperationType.CITY_CLOSE_DEFENSE, AiOperationType.NAVAL_ATTACK))
-                operations.killAll(type, OperationAbortReason.WAR_STATE_CHANGE)
-        } else {
-            val stateAllWars = WarStateAi.stateAllWars(civ)
-            for (other in validMajors(civ)) {
-                // If we've made peace with this player (or are losing everywhere), abort all operations related to him
-                if (cannotAttack(civ, other) || stateAllWars == StateAllWars.Losing) {
-                    for (operation in listOfNotNull(sneakAttackOperation(civ, other), basicAttackOperation(civ, other), showOfForceOperation(civ, other)))
-                        operations.kill(operation, OperationAbortReason.WAR_STATE_CHANGE)
-                }
-                when (WarStateAi.warState(civ, other)) {
-                    // If we are dominant, shouldn't be running a defensive strategy
-                    WarState.NearlyWon, WarState.Offensive ->
-                        for (type in listOf(AiOperationType.RAPID_RESPONSE, AiOperationType.CITY_CLOSE_DEFENSE))
-                            operations.firstOfType(type)?.takeIf { it.enemyCivId == other.civID }?.let { operations.kill(it, OperationAbortReason.WAR_STATE_CHANGE) }
-                    // If we are losing, make sure attacks are not running; if nearly defeated, call off all operations in enemy territory
-                    WarState.Defensive, WarState.NearlyDefeated ->
-                        for (type in listOf(AiOperationType.BASIC_CITY_ATTACK, AiOperationType.PILLAGE_ENEMY, AiOperationType.NAVAL_ATTACK))
-                            operations.firstOfType(type)?.takeIf { it.enemyCivId == other.civID }?.let { operations.kill(it, OperationAbortReason.WAR_STATE_CHANGE) }
-                    else -> Unit
-                }
-            }
-            // Are there city defense operations for cities that no longer need defending?
-            for (city in civ.cities) {
-                if (civ.ai.plotDanger.cityThreat(city) == 0)
-                    operations.firstOfType(AiOperationType.CITY_CLOSE_DEFENSE, target = city.getCenterTile())?.let { operations.kill(it, OperationAbortReason.WAR_STATE_CHANGE) }
-            }
-            // Are we running a rapid response tactic and the overall threat level is very low?
-            if (military.totalThreatWeight <= civ.gameInfo.ruleset.ai.define(AiDefine.AI_MILITARY_THREAT_WEIGHT_MAJOR))
-                operations.firstOfType(AiOperationType.RAPID_RESPONSE)?.let { operations.kill(it, OperationAbortReason.WAR_STATE_CHANGE) }
+    private fun checkDefenses(civ: Civilization, enemy: Civilization) {
+        val warState = (if (enemy.isMajorCiv) WarStateAi.warState(civ, enemy) else WarState.Offensive) ?: return
+        val against = when (warState) {
+            WarState.Defensive -> enemy
+            WarState.NearlyDefeated -> null
+            else -> return
         }
-
-        // Operation vs. Barbarians: not at war, no critical defense needs, none running, willing to risk it
-        if (barbs && !atWar && !civ.ai.isMilitaryStrategyActive(EMPIRE_DEFENSE_CRITICAL) &&
-            operations.firstOfType(AiOperationType.DESTROY_BARBARIAN_CAMP) == null && willingToAcceptRisk)
-            AiOperationLogic.addOperation(civ, AiOperationType.DESTROY_BARBARIAN_CAMP)
-
-        // Operation vs. other civs: at war, consider nukes
-        if (atWar) for (other in validMajors(civ)) if (shouldLaunchNuke(civ, other)) requestNukeAttack(civ, other)
-
-        // Vox Populi: only majors set up operations; city attacks and raids against each enemy
-        if (civ.isMajorCiv) for (enemy in enemiesAtWar(civ)) doCityAttacks(civ, enemy)
-        launchOpportunityNavalOperations(civ)
+        for (naval in listOf(false, true)) civ.ai.operations.stopAll(offensive = true, naval = naval, enemy = against, reason = OperationAbortReason.WAR_STATE_CHANGE)
     }
     //endregion
 

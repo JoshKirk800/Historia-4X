@@ -2,7 +2,6 @@ package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.unit.tactical.TacticalTargetType
-import com.unciv.logic.automation.unit.tactical.TacticalTargets
 import com.unciv.logic.battle.Nuke
 import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.city.City
@@ -12,7 +11,7 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 
 /**
- *  The naval operations of CvAIOperation.cpp: CvAINavalOperation (CvAIOperationNavalBombardment, CvAIOperationNavalSuperiority,
+ *  The naval operations of CvAIOperation.cpp: CvAINavalOperation (CvAIOperationNavalSuperiority,
  *  CvAIOperationPureNavalCityAttack), CvAIOperationNavalAttack and its descendants NavalSneakAttack / NavalCityStateAttack (an invasion:
  *  land units that embark, with warships), and CvAIOperationNukeAttack: Init, target finding, ArmyInPosition, CheckOnTarget. The base
  *  machinery is [AiOperationLogic], the ships are moved by [com.unciv.logic.automation.unit.NavalOperationMoves].
@@ -21,7 +20,7 @@ import com.unciv.models.ruleset.ai.AiDefine
  *  slots (UNITAI_ASSAULT_SEA is the Frigate, Galleass and the like), all moving as a formation on water.
  *  Not ported: the colonization party of CvAINavalEscortedOperation (AI_OPERATION_COLONIZE), which no caller in the original ever creates.
  *  Deviations, with the reason: an army's operation area is the one the original gives it
- *  (bombardment, superiority and pure naval attacks: the water at the muster point, which no city lies on, so cities do not train for
+ *  (superiority and pure naval attacks: the water at the muster point, which no city lies on, so cities do not train for
  *  them, their ships come from the reserves and the last one is bought; invasions: the landmass of the target); FindBestTarget of the
  *  invasions and the pure naval attack is "obsolete" in the original and is not ported (the target is the city chosen by the military
  *  AI); a naval target is visible to the original's whole-map loops only when revealed, as here.
@@ -102,12 +101,12 @@ object NavalOperationLogic {
         return null
     }
 
-    /** CvAIOperationNavalBombardment::Init and CvAIOperationNavalSuperiority::Init: [AiOperationType.NAVAL_BOMBARDMENT], [AiOperationType.NAVAL_SUPERIORITY] */
+    /** CvAIOperationNavalSuperiority::Init: [AiOperationType.NAVAL_SUPERIORITY] */
     fun initFleet(civ: Civilization, operation: AiOperation) {
         val operations = civ.ai.operations
         if (startCity(civ, operation) == null) { AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_MUSTER); return }
         val army = operations.newArmy(operation, AiOperationLogic.formationName(civ, operation.type))
-        val target = findFleetTarget(civ, operation)
+        val target = findSuperiorityTarget(civ, operation)
         if (target == null) { AiOperationLogic.abortOperation(operation, OperationAbortReason.LOST_TARGET); return }
         operation.targetTile = target.position
         army.goalTile = target.position
@@ -121,7 +120,7 @@ object NavalOperationLogic {
         if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation, muster, muster)) {
             army.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
             // the superiority fleet is on its way as soon as it is together, it never gathers on its own
-            operation.state = if (operation.type == AiOperationType.NAVAL_SUPERIORITY) OperationState.MOVING_TO_TARGET else OperationState.GATHERING_FORCES
+            operation.state = OperationState.MOVING_TO_TARGET
         } else operation.state = OperationState.RECRUITING_UNITS
     }
 
@@ -198,30 +197,10 @@ object NavalOperationLogic {
     /** The enemy units on [tile] (CvUnit::isEnemy for our team: at war with us, barbarians included) */
     private fun enemyUnitsOn(civ: Civilization, tile: Tile) = tile.getUnits().filter { it.civ != civ && civ.isAtWarWith(it.civ) }.toList()
 
-    /** CvAIOperationNavalBombardment::FindBestTarget / CvAIOperationNavalSuperiority::FindBestTarget */
-    fun findFleetTarget(civ: Civilization, operation: AiOperation): Tile? {
+    /** CvAIOperationNavalSuperiority::FindBestTarget, from the operation's initial unit */
+    fun findSuperiorityTarget(civ: Civilization, operation: AiOperation): Tile? {
         val unit = initialUnitOf(civ, operation) ?: return null
-        return if (operation.type == AiOperationType.NAVAL_BOMBARDMENT) findBombardmentTarget(civ, unit) else findSuperiorityTarget(civ, unit)
-    }
-
-    /**
-     *  The shallow water tile next to a coastal land tile with an enemy defender (cities are left alone, they fire back) that [unit] reaches
-     *  in the fewest turns.
-     */
-    private fun findBombardmentTarget(civ: Civilization, unit: MapUnit): Tile? {
-        var best: Tile? = null
-        var bestTurns = Int.MAX_VALUE
-        for (tile in civ.gameInfo.tileMap.tileList) {
-            if (!civ.hasExplored(tile) || !isCoastalLand(tile)) continue
-            // Enemy defender here?
-            if (TacticalTargets.visibleEnemyDefender(civ, tile) == null) continue
-            for (adjacent in tile.neighbors) {
-                if (!isShallowWater(adjacent)) continue
-                val turns = AiOperationLogic.turnsToReach(unit, adjacent)
-                if (turns < bestTurns) { bestTurns = turns; best = adjacent }
-            }
-        }
-        return best
+        return findSuperiorityTarget(civ, unit)
     }
 
     /**
@@ -359,30 +338,6 @@ object NavalOperationLogic {
         return false
     }
 
-    /**
-     *  CvAIOperationNavalBombardment::ArmyInPosition: gathered, a better target may have shown up; arrived (the army is at its goal), the
-     *  tactical AI gets a bombardment zone around the target.
-     */
-    fun bombardmentInPosition(civ: Civilization, operation: AiOperation, army: AiArmy): Boolean {
-        when (operation.state) {
-            OperationState.GATHERING_FORCES -> {
-                val changed = AiOperationLogic.baseArmyInPosition(operation, army)
-                retargetFleet(civ, operation, army)
-                return changed
-            }
-            OperationState.MOVING_TO_TARGET -> {
-                if (army.position == army.goalTile) {
-                    val target = AiOperationLogic.targetTile(civ, operation)
-                    if (target != null) civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.BombardmentZone,
-                        turns = civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_MAP_BOMBARDMENT_ZONE_TURNS))
-                    operation.state = OperationState.SUCCESSFUL_FINISH
-                }
-                return false
-            }
-            else -> return AiOperationLogic.baseArmyInPosition(operation, army)
-        }
-    }
-
     /** CvAIOperationNavalSuperiority::ArmyInPosition: the fleet never reaches a final target, it looks for the next one every turn */
     fun superiorityInPosition(civ: Civilization, operation: AiOperation, army: AiArmy): Boolean {
         if (operation.state != OperationState.GATHERING_FORCES && operation.state != OperationState.MOVING_TO_TARGET)
@@ -392,9 +347,9 @@ object NavalOperationLogic {
         return changed
     }
 
-    /** The shared tail of the bombardment's and superiority's ArmyInPosition: revisit the target, abort with none, else move the goal */
+    /** The tail of the superiority's ArmyInPosition: revisit the target, abort with none, else move the goal */
     private fun retargetFleet(civ: Civilization, operation: AiOperation, army: AiArmy) {
-        val better = findFleetTarget(civ, operation)
+        val better = findSuperiorityTarget(civ, operation)
         if (better == null) { AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_TARGET); return }
         if (better.position == operation.targetTile) return
         // Reset our destination to be a few plots shy of the final target

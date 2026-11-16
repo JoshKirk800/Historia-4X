@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.strategy
 
+import com.unciv.Constants
 import com.unciv.logic.automation.city.ConstructionAutomation
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.unit.tactical.OperationalMoves
@@ -23,6 +24,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.unciv.logic.trade.Trade
+import com.unciv.logic.trade.TradeOffer
+import com.unciv.logic.trade.TradeOfferType
 import kotlin.math.abs
 
 /**
@@ -562,81 +566,58 @@ class OperationTests {
     }
     //endregion
 
-    //region Barbarian camps and the kill rules (CvMilitaryAI::UpdateOperations)
-
-    private fun placeCamp(at: HexCoord = HexCoord(4, 0)) {
-        game.getTile(at).setImprovement("Barbarian encampment")
-        civ.ai.military.scanForBarbarians(civ)
-    }
-
-    private fun activate(vararg strategies: String) { for (name in strategies) civ.ai.militaryStrategies[name] = 0 }
+    //region The stops of UpdateOperations (Vox Populi's CvMilitaryAI::UpdateOperations, CheckLandDefenses)
 
     @Test
-    fun `a barbarian camp operation starts when eradicating, at peace, not in critical defense and willing to take the risk`() {
-        placeCamp()
-        civ.ai.military.totalThreatWeight = 1
+    fun `a peace treaty ends every operation against the enemy`() {
+        civ.getDiplomacyManager(enemy)!!.declareWar()
+        fillAttackReserves()
+        attack()
+        closeDefense()
+        assertEquals(2, ops.operations.size)
+        val diplomacy = civ.getDiplomacyManager(enemy)!!
+        diplomacy.makePeace()
+        diplomacy.trades.add(Trade().apply { ourOffers.add(TradeOffer(Constants.peaceTreaty, TradeOfferType.Treaty, 1, 10)) })
+        assertTrue(diplomacy.turnsToPeaceTreaty() > 0)
         MilitaryOperations.updateOperations(civ)
-        assertEquals(0, ops.numOperationsOfType(AiOperationType.DESTROY_BARBARIAN_CAMP)) // not eradicating
-        activate(MilitaryOperations.ERADICATE_BARBARIANS)
-        activate(MilitaryOperations.EMPIRE_DEFENSE_CRITICAL)
-        MilitaryOperations.updateOperations(civ)
-        assertEquals(0, ops.numOperationsOfType(AiOperationType.DESTROY_BARBARIAN_CAMP)) // critical defense
-        civ.ai.militaryStrategies.remove(MilitaryOperations.EMPIRE_DEFENSE_CRITICAL)
-        MilitaryOperations.updateOperations(civ)
-        val camp = ops.firstOfType(AiOperationType.DESTROY_BARBARIAN_CAMP)!!
-        assertEquals(game.getTile(HexCoord(4, 0)).position, camp.targetTile)
-        // Only one runs at a time
-        MilitaryOperations.updateOperations(civ)
-        assertEquals(1, ops.numOperationsOfType(AiOperationType.DESTROY_BARBARIAN_CAMP))
+        assertTrue(ops.operations.isEmpty())
     }
 
     @Test
-    fun `a barbarian camp operation is not started when the barbarian threat is smaller than half of the total threat`() {
-        placeCamp()
-        civ.ai.military.totalThreatWeight = 100 // 100 / 2 >= the camp's major threat weight 3
-        activate(MilitaryOperations.ERADICATE_BARBARIANS)
+    fun `at peace with war allowed an attack waits for its war`() {
+        fillAttackReserves()
+        val operation = attack()
         MilitaryOperations.updateOperations(civ)
-        assertEquals(0, ops.numOperationsOfType(AiOperationType.DESTROY_BARBARIAN_CAMP))
-        // A barbarian that holds one of our workers makes up our mind
-        val captive = game.addUnit("Worker", game.gameInfo.getBarbarianCivilization(), game.getTile(HexCoord(5, 0)))
-        captive.originalOwner = civ.civID
-        MilitaryOperations.updateOperations(civ)
-        assertEquals(1, ops.numOperationsOfType(AiOperationType.DESTROY_BARBARIAN_CAMP))
-        assertTrue(ops.firstOfType(AiOperationType.DESTROY_BARBARIAN_CAMP)!!.civilianRescue)
+        assertTrue(operation in ops.operations)
     }
 
     @Test
-    fun `a barbarian camp operation is killed when war breaks out or the camp is gone`() {
-        placeCamp()
-        civ.ai.military.totalThreatWeight = 1
-        activate(MilitaryOperations.ERADICATE_BARBARIANS)
+    fun `a war going badly ends the attacks on that enemy only`() {
+        val other = neutralCiv()
+        game.addCity(other, game.getTile(HexCoord(0, 8)))
+        civ.diplomacyFunctions.makeCivilizationsMeet(other)
+        civ.getDiplomacyManager(enemy)!!.declareWar()
+        civ.getDiplomacyManager(other)!!.declareWar()
+        fillAttackReserves()
+        val onEnemy = attack()
+        val onOther = AiOperationLogic.addOperation(civ, AiOperationType.BASIC_CITY_ATTACK, other, other.cities.first(), city)
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Stalemate
+        civ.ai.warStates.warStates[other.civID] = WarState.Stalemate
         MilitaryOperations.updateOperations(civ)
-        assertEquals(1, ops.numOperationsOfType(AiOperationType.DESTROY_BARBARIAN_CAMP))
-        game.getTile(HexCoord(4, 0)).removeImprovement()
-        ops.sweep()
-        assertEquals(0, ops.numOperationsOfType(AiOperationType.DESTROY_BARBARIAN_CAMP))
-
-        placeCamp(HexCoord(3, 0))
+        assertTrue(onEnemy in ops.operations && onOther in ops.operations)
+        // CheckLandDefenses: defensive against one enemy stops our attacks on it
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Defensive
         MilitaryOperations.updateOperations(civ)
-        assertEquals(1, ops.numOperationsOfType(AiOperationType.DESTROY_BARBARIAN_CAMP))
-        activate(MilitaryOperations.AT_WAR)
+        assertFalse(onEnemy in ops.operations)
+        assertTrue(onOther in ops.operations)
+        // nearly defeated by one: our attacks on anyone
+        civ.ai.warStates.warStates[enemy.civID] = WarState.NearlyDefeated
         MilitaryOperations.updateOperations(civ)
-        assertEquals(0, ops.numOperationsOfType(AiOperationType.DESTROY_BARBARIAN_CAMP))
-    }
-
-    @Test
-    fun `a camp operation whose units are weaker than the camp's defender is dropped, once recruiting is over`() {
-        placeCamp()
-        game.addUnit("Swordsman", game.gameInfo.getBarbarianCivilization(), game.getTile(HexCoord(4, 0)))
-        unit("Warrior"); unit("Archer", HexCoord(1, 0))
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.DESTROY_BARBARIAN_CAMP)
-        assertEquals(OperationState.GATHERING_FORCES, operation.state)
-        // FAST_ATTACK/DEFENSE is the required slot: the Warrior fills it (DEFENSE), 2 more power than the Archer? the Swordsman is stronger
-        assertTrue(AiOperationLogic.shouldAbort(civ, operation))
+        assertFalse(onOther in ops.operations)
     }
     //endregion
 
-    //region City defense operations (CvAIOperationCityCloseDefense, UpdateOperations kill rules)
+    //region City defense operations (CvAIOperationCityCloseDefense)
 
     @Test
     fun `the defense operation targets the most threatened city, else the city nearest the enemy capital`() {
@@ -651,33 +632,6 @@ class OperationTests {
         assertNull(CityThreat.mostThreatenedCity(civ))
         ops.operations.clear()
         assertEquals(city.getCenterTile().position, closeDefense().targetTile)
-    }
-
-    @Test
-    fun `a defense operation is killed when its city is no longer threatened, and is not launched by the update`() {
-        val second = threatenSecondCity()
-        activate(MilitaryOperations.AT_WAR)
-        val operation = closeDefense()
-        assertEquals(second.getCenterTile().position, operation.targetTile)
-        MilitaryOperations.updateOperations(civ)
-        assertEquals("a threatened city keeps its operation", 1, ops.numOperationsOfType(AiOperationType.CITY_CLOSE_DEFENSE))
-        game.gameInfo.tileMap[HexCoord(-4, 0)].getUnits().toList().forEach { it.destroy() }
-        civ.ai.invalidateTurnCaches()
-        MilitaryOperations.updateOperations(civ)
-        assertEquals(0, ops.numOperationsOfType(AiOperationType.CITY_CLOSE_DEFENSE))
-        // BNW's UpdateOperations never launches close defense or rapid response (commented out)
-        MilitaryOperations.updateOperations(civ)
-        assertEquals(0, ops.operations.size)
-    }
-
-    @Test
-    fun `without a war all attack and defense operations are killed`() {
-        fillAttackReserves()
-        attack()
-        closeDefense()
-        assertEquals(2, ops.operations.size)
-        MilitaryOperations.updateOperations(civ)
-        assertTrue(ops.operations.isEmpty())
     }
     //endregion
 

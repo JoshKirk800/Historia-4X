@@ -37,25 +37,31 @@ enum class AiOperationType(
     SNEAK_CITY_ATTACK(OperationMoveType.EnemyTerritory),
     SMALL_CITY_ATTACK(OperationMoveType.EnemyTerritory),
     CITY_STATE_ATTACK(OperationMoveType.EnemyTerritory),
-    DESTROY_BARBARIAN_CAMP(OperationMoveType.EnemyTerritory),
     PILLAGE_ENEMY(OperationMoveType.EnemyTerritory),
     CITY_CLOSE_DEFENSE(OperationMoveType.None),
     RAPID_RESPONSE(OperationMoveType.None),
     NAVAL_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
     NAVAL_SNEAK_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
     CITY_STATE_NAVAL_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
-    NAVAL_BOMBARDMENT(OperationMoveType.NavalFleet, allNaval = true),
     NAVAL_SUPERIORITY(OperationMoveType.FreeformNaval, tacticalMayInterrupt = true, allNaval = true),
     PURE_NAVAL_CITY_ATTACK(OperationMoveType.NavalFleet, tacticalMayInterrupt = true, allNaval = true),
     /** CvAIOperationNukeAttack: the original's STATIC move type, it only works with the nuke already in place */
-    NUKE_ATTACK(OperationMoveType.None);
+    NUKE_ATTACK(OperationMoveType.None),
+    /**
+     *  Brave New World's barbarian camp and naval bombardment operations, which Vox Populi has not: never started; kept only so that a
+     *  save holding one loads ([AiOperations.setTransients] drops them)
+     */
+    DESTROY_BARBARIAN_CAMP(OperationMoveType.None),
+    NAVAL_BOMBARDMENT(OperationMoveType.None);
 
     /** The operations CvCity-bound settlers run (CvAIEscortedOperation) */
     val isEscorted get() = this == FOUND_CITY || this == QUICK_COLONIZE
     /** CvAIEnemyTerritoryOperation and its descendants that walk (the land ones) */
     val isEnemyTerritory get() = moveType == OperationMoveType.EnemyTerritory
     /** The attacks on a city by land (CvAIOperationBasicCityAttack and its subclasses) */
-    val isCityAttack get() = isEnemyTerritory && this != DESTROY_BARBARIAN_CAMP && this != PILLAGE_ENEMY
+    val isCityAttack get() = isEnemyTerritory && this != PILLAGE_ENEMY
+    /** Retired types ([DESTROY_BARBARIAN_CAMP], [NAVAL_BOMBARDMENT]) */
+    val isRetired get() = this == DESTROY_BARBARIAN_CAMP || this == NAVAL_BOMBARDMENT
     /** CvAIOperationNavalAttack and its subclasses: land units that embark, with warships, against a coastal city */
     val isNavalInvasion get() = this == NAVAL_ATTACK || this == NAVAL_SNEAK_ATTACK || this == CITY_STATE_NAVAL_ATTACK
     /** CvAINavalOperation and its subclasses: the operations of ships only */
@@ -162,9 +168,6 @@ class AiOperation : IsPartOfGameInfoSerialization {
     var createdTurn = 0
     /** CvAIEscortedOperation::m_bEscorted */
     var escorted = true
-    /** CvAIOperationDestroyBarbarianCamp::m_bCivilianRescue and the barbarian unit's [MapUnit.id] */
-    var civilianRescue = false
-    var unitToRescue = -1
 
     fun clone(): AiOperation {
         val toReturn = AiOperation()
@@ -175,7 +178,6 @@ class AiOperation : IsPartOfGameInfoSerialization {
         for (slot in slotsToBuild) toReturn.slotsToBuild.add(slot.copy())
         for (commitment in committedCities) toReturn.committedCities.add(commitment.clone())
         toReturn.lastTurnMoved = lastTurnMoved; toReturn.createdTurn = createdTurn; toReturn.escorted = escorted
-        toReturn.civilianRescue = civilianRescue; toReturn.unitToRescue = unitToRescue
         return toReturn
     }
 
@@ -221,6 +223,7 @@ class AiOperations : IsPartOfGameInfoSerialization {
 
     fun setTransients(civ: Civilization) {
         this.civ = civ
+        operations.removeAll { it.type.isRetired }
     }
 
     //region Queries (CvPlayer::haveAIOperationOfType, numOperationsOfType, getAIOperation, CvUnit::getArmyID)
@@ -242,15 +245,28 @@ class AiOperations : IsPartOfGameInfoSerialization {
     fun offensiveOperationsAgainst(enemy: Civilization): List<AiOperation> = operations.filter { isOffensiveAgainst(it, enemy) }
 
     /** CvPlayer::GetNumOffensiveOperations, land plus sea: the military operations not aborted whose target is outside our territory */
-    fun numOffensiveOperations(): Int = operations.count {
-        !it.type.isEscorted && it.type != AiOperationType.RAPID_RESPONSE && it.state != OperationState.ABORTED &&
-            it.targetTile?.let { tile -> civ.gameInfo.tileMap[tile].getOwner() != civ } == true
+    fun numOffensiveOperations(): Int = operations.count { !it.type.isEscorted && it.state != OperationState.ABORTED && isOffensive(it) }
+
+    /**
+     *  CvPlayer::StopAllLandOffensiveOperationsAgainstPlayer and its Sea / Defensive siblings: the military operations still running
+     *  against [enemy] (null: anyone) that are [offensive] or not, by sea (naval invasions and fleets, CvAIOperation::IsNavalOperation)
+     *  or not, end for [reason]
+     */
+    fun stopAll(offensive: Boolean, naval: Boolean, enemy: Civilization?, reason: OperationAbortReason) {
+        for (op in operations.toList()) {
+            if (op.type.isEscorted || op.state == OperationState.SUCCESSFUL_FINISH || op.state == OperationState.ABORTED) continue
+            if (isOffensive(op) != offensive || (op.type.isNavalInvasion || op.type.allNaval) != naval) continue
+            if (enemy == null || op.enemyCivId == enemy.civID) kill(op, reason)
+        }
     }
 
+    /** CvAIOperation::IsOffensive: the target is outside our territory (rapid response never is) */
+    private fun isOffensive(op: AiOperation): Boolean =
+        op.type != AiOperationType.RAPID_RESPONSE && op.targetTile?.let { civ.gameInfo.tileMap[it].getOwner() != civ } == true
+
     private fun isOffensiveAgainst(op: AiOperation, enemy: Civilization): Boolean =
-        !op.type.isEscorted && op.type != AiOperationType.RAPID_RESPONSE && op.enemyCivId == enemy.civID &&
-            op.state != OperationState.SUCCESSFUL_FINISH && op.state != OperationState.ABORTED &&
-            op.targetTile?.let { civ.gameInfo.tileMap[it].getOwner() != civ } == true
+        !op.type.isEscorted && op.enemyCivId == enemy.civID &&
+            op.state != OperationState.SUCCESSFUL_FINISH && op.state != OperationState.ABORTED && isOffensive(op)
 
     /** CvPlayerAI::GetNumUnitsNeededToBeBuilt: the sum of CvAIOperation::GetNumUnitsNeededToBeBuilt, the slots not yet committed to a city */
     fun numUnitsNeededToBeBuilt() = operations.sumOf { it.slotsToBuild.size }

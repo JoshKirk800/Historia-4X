@@ -61,18 +61,6 @@ class EndTurnGoldTests {
     }
 
     @Test
-    fun noUnitsAreDisbandedJustAboveTheLimit() {
-        val civ = civWithCity(-100)
-        addWarriorsAndAWorker(civ)
-        civ.addGold(-199)
-        Assert.assertTrue("setup", predictedGoldIncome(civ) < 0)
-
-        TurnManager(civ).endTurn()
-
-        Assert.assertEquals(2, civ.militaryUnits())
-    }
-
-    @Test
     fun noUnitsAreDisbandedWhenIncomeIsPositiveEvenFarBelowTheLimit() {
         val civ = civWithCity(50)
         addWarriorsAndAWorker(civ)

@@ -178,7 +178,7 @@ class CityStateAiTests {
         assertTrue(value > 100)
         assertNull(CityStateAi.bullyGoldValue(a, cs, MinorCivApproach.Friendly))
         a.ai.deals.bulliedMinors.add(cs.civID)
-        assertEquals(value + 20, CityStateAi.bullyGoldValue(a, cs, MinorCivApproach.Bully))
+        assertEquals(value + 25, CityStateAi.bullyGoldValue(a, cs, MinorCivApproach.Bully))
         influence(30f)
         assertEquals(0, CityStateAi.bullyGoldValue(a, cs, MinorCivApproach.Bully))
     }
@@ -219,10 +219,12 @@ class CityStateAiTests {
 
     //region Route wish
 
+    /** A route quest from the city-state, and the average gold rate (above 20 in the first eras) VP wants before building a route */
     private fun giveRouteQuest() {
         val json = "{\"assignedQuests\":[{\"questName\":\"Route\",\"assigner\":\"${cs.civID}\",\"assignee\":\"${a.civID}\",\"assignedOnTurn\":1}]}"
         cs.questManager = json().fromJson(QuestManager::class.java, json)
         cs.questManager.setTransients(cs)
+        a.ai.warStates.avgGoldRate = 25
     }
 
     private fun contactWithApproach(approach: MinorCivApproach) {
@@ -236,6 +238,14 @@ class CityStateAiTests {
         assertEquals(Proximity.Neighbors, a.getProximity(cs))
         contactWithApproach(MinorCivApproach.Friendly)
         assertTrue(cs.civID in a.ai.wantsRouteToMinors)
+    }
+
+    @Test
+    fun `no route wish while our average gold rate is low`() {
+        giveRouteQuest()
+        a.ai.warStates.avgGoldRate = 20
+        contactWithApproach(MinorCivApproach.Friendly)
+        assertFalse(cs.civID in a.ai.wantsRouteToMinors)
     }
 
     @Test

@@ -66,6 +66,8 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var treatyWillingToOffer = PeaceTreatyType.None
     var treatyWillingToAccept = PeaceTreatyType.None
     var numWarsFought = 0
+    /** CvDiplomacyAI::GetNumWarsDeclaredOnUs (Vox Populi): how many times they declared war on us */
+    var numWarsDeclaredOnUs = 0
     /** CvTeam::GetTurnMadePeaceTreatyWithTeam: game turn, -1 = never */
     var turnMadePeace = -1
     /** CvTeam::GetNumTurnsLockedIntoWar */
@@ -212,6 +214,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.economicStrength = economicStrength; copy.militaryThreat = militaryThreat; copy.warmongerThreat = warmongerThreat
         copy.warmongerAmount = warmongerAmount; copy.treatyWillingToOffer = treatyWillingToOffer
         copy.treatyWillingToAccept = treatyWillingToAccept; copy.numWarsFought = numWarsFought; copy.turnMadePeace = turnMadePeace
+        copy.numWarsDeclaredOnUs = numWarsDeclaredOnUs
         copy.turnsLockedIntoWar = turnsLockedIntoWar; copy.musteringForAttack = musteringForAttack; copy.aggressor = aggressor
         copy.warProgress = warProgress
         copy.landDispute = landDispute; copy.lastTurnLandDispute = lastTurnLandDispute; copy.wonderDispute = wonderDispute

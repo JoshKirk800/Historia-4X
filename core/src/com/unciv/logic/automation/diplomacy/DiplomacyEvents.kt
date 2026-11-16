@@ -101,6 +101,7 @@ object DiplomacyEvents {
             }
             if (me == victim) {
                 val rules = me.gameInfo.ruleset.ai
+                if (declarer.isMajorCiv) memory.numWarsDeclaredOnUs++
                 if (wasFriends) {
                     memory.friendDeclaredWarOnUs = true
                     memory.declaredWarOnFriendValue += rules.define(AiDefine.OPINION_WEIGHT_WAR_FRIEND_EACH) * DiplomacyTurn.opinionDurationPercent(me)

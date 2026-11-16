@@ -1,7 +1,6 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.GrandStrategyAi
-import com.unciv.logic.automation.strategy.StateAllWars
 import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WarStateAi
@@ -448,38 +447,12 @@ object ApproachAi {
         stage("Close to world conquest, theirs or ours (Vox Populi)")
         addWorldConquestWeights(civ, other, closeToConquest, w)
 
-        stage("At war right now with someone else")
-        // At war right now with someone else
-        val stateAllWars = WarStateAi.stateAllWars(civ)
-        for (third in civ.gameInfo.civilizations) {
-            if (third == other || third == civ || !WarStateAi.isPlayerValid(civ, third) || !civ.isAtWarWith(third)) continue
-            w[WAR] += when (stateAllWars) {
-                StateAllWars.Neutral -> rules.define(AiDefine.APPROACH_WAR_AT_WAR_WITH_PLAYER_WARS_NEUTRAL)
-                StateAllWars.Winning -> rules.define(AiDefine.APPROACH_WAR_AT_WAR_WITH_PLAYER_WARS_WINNING)
-                StateAllWars.Losing -> rules.define(AiDefine.APPROACH_WAR_AT_WAR_WITH_PLAYER_WARS_LOSING)
-            }
-            w[HOSTILE] += rules.define(AiDefine.APPROACH_HOSTILE_AT_WAR_WITH_PLAYER)
-            w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_AT_WAR_WITH_PLAYER)
-            w[GUARDED] += rules.define(AiDefine.APPROACH_GUARDED_AT_WAR_WITH_PLAYER)
-            w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_AT_WAR_WITH_PLAYER)
-        }
-
-        stage("Gold we get from trade routes with them (the original's untuned constants)")
-        // Gold we get from trade routes with them (the original's untuned constants)
-        val tradeGold = tradeGoldFrom(civ, other)
-        if (tradeGold > 0) {
-            w[WAR] -= 5
-            w[HOSTILE] -= 5
-            w[DECEPTIVE] += 5
-            w[GUARDED] -= 1
-            w[AFRAID] -= 1
-            w[FRIENDLY] += 5
-            w[NEUTRAL] -= 2
-            // A war would leave us without income
-            val goldRate = civ.stats.statsForNextTurn.gold.toInt()
-            val delta = goldRate - tradeGold
-            if (goldRate >= 0 && delta < 0) w[WAR] += delta
-        }
+        stage("Bankruptcy and our lost capital (part 6)")
+        ApproachPart6Ai.addBankruptcyWeights(civ, other, w)
+        stage("At war right now, war states (part 6)")
+        ApproachPart6Ai.addAtWarWeights(civ, other, w)
+        stage("Dangerous neighbours (part 6)")
+        ApproachPart6Ai.addDangerousNeighbourWeights(civ, other, w)
 
         stage("War projection")
         // War projection

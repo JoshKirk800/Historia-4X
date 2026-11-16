@@ -61,6 +61,8 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     @Transient var numMeleeLandUnits = 0; private set
     @Transient var numAntiAirUnits = 0; private set
     @Transient var numNavalUnits = 0; private set
+    /** CvMilitaryAI::m_iNumNavalUnitsInArmies: naval units that serve in an operation's army */
+    @Transient var numNavalUnitsInArmies = 0; private set
     @Transient var numAirUnits = 0; private set
     /** Brave New World's mandatory reserve, see [bnwMandatoryReserve] */
     @Transient var mandatoryReserveSize = 0; private set
@@ -228,6 +230,7 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
      */
     fun updateBaseData(civ: Civilization) {
         var land = 0; var ranged = 0; var mobile = 0; var melee = 0; var antiAir = 0; var naval = 0; var air = 0; var inArmies = 0
+        var navalInArmies = 0
         for (unit in civ.units.getCivUnits()) {
             if (!unit.isMilitary()) continue
             val baseUnit = unit.baseUnit
@@ -242,12 +245,15 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
                         else -> melee++
                     }
                 }
-                baseUnit.isWaterUnit -> naval++
+                baseUnit.isWaterUnit -> {
+                    naval++
+                    if (civ.ai.operations.armyOf(unit) != null) navalInArmies++
+                }
                 baseUnit.isAirUnit() -> air++
             }
         }
         numLandUnits = land; numRangedLandUnits = ranged; numMobileLandUnits = mobile; numMeleeLandUnits = melee
-        numLandUnitsInArmies = inArmies
+        numLandUnitsInArmies = inArmies; numNavalUnitsInArmies = navalInArmies
         numAntiAirUnits = antiAir; numNavalUnits = naval; numAirUnits = air
         mandatoryReserveSize = bnwMandatoryReserve(civ)
         setRecommendedArmyNavySize(civ)

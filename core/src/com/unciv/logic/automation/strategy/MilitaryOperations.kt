@@ -15,11 +15,11 @@ import com.unciv.logic.automation.diplomacy.VictoryProgressAi
  *  The operation side of CvMilitaryAI: UpdateOperations (kill and launch rules), the Request* functions, IsAttackReady,
  *  MilitaryAIHelpers::NumberOfFillableSlots / FirstSlotCityCanFill, GetUnitForArmy, GetLandReservesAvailable and MakeEmergencyPurchases.
  *
- *  As in BNW's UpdateOperations, the launches are: barbarian camps (eradicate strategy), one basic city attack per war. Not launched,
- *  because the original has them commented out or never calls them: pillage raids (RequestPillageAttack has no caller), city close
- *  defense and rapid response (their launch is commented out in UpdateOperations, and their move type is never set, so the tactical AI
- *  would not move them); they exist as operations ([AiOperationLogic.addOperation]) with their kill rules. The naval and nuke operations
- *  are [NavalOperationLogic]'s.
+ *  The launches at war are Vox Populi's ([doCityAttacks]: city attacks at its attack targets and pillage raids); the rest of
+ *  UpdateOperations is still BNW's: barbarian camps (eradicate strategy), the opportunity naval operations. Not launched, because BNW
+ *  has them commented out: city close defense and rapid response (their launch is commented out in UpdateOperations, and their move type
+ *  is never set, so the tactical AI would not move them); they exist as operations ([AiOperationLogic.addOperation]) with their kill
+ *  rules. The naval and nuke operations are [NavalOperationLogic]'s.
  *  MakeEmergencyPurchases itself only buys the last unit of operations; the defensive emergency purchases of the original are the tactical
  *  AI's (CvTacticalAI::PlotEmergencyPurchases).
  */
@@ -172,45 +172,76 @@ object MilitaryOperations {
     }
 
     /**
-     *  CvMilitaryAI::RequestBasicAttack, with Vox Populi's targets ([MilitaryTargets.cityAttackTargets], only the preferred ones when
-     *  [careful]): an attack on the first target whose army can be formed but for [numUnitsWillingBuild] required slots
+     *  CvMilitaryAI::RequestCityAttack (Vox Populi), our basic attack: the first of Vox Populi's targets
+     *  ([MilitaryTargets.cityAttackTargets], only the preferred ones when [careful]) whose army can be formed but for
+     *  [numUnitsWillingBuild] required slots ([requestSpecificAttack]). When careful, a target already attacked waits until the army of
+     *  that attack has left our territory. Careless, Vox Populi uses the units at hand only; our careless callers (BNW's coop war and
+     *  demands) keep their own numbers.
      */
     fun requestBasicAttack(civ: Civilization, enemy: Civilization, numUnitsWillingBuild: Int, careful: Boolean = false): Boolean =
-        MilitaryTargets.cityAttackTargets(civ, enemy, careful).any { requestSpecificAttack(civ, it, numUnitsWillingBuild) }
-
-    /**
-     *  CvMilitaryAI::RequestSpecificAttack: the basic city attack (the naval attack by sea) on [target] if the forces are at hand but for
-     *  [numUnitsWillingToBuild] slots and the land units they use fit into the reserves. (The original then also starts a naval superiority
-     *  operation next to a coastal target - naval slice.)
-     */
-    fun requestSpecificAttack(civ: Civilization, target: MilitaryTarget, numUnitsWillingToBuild: Int): Boolean {
-        val bySea = target.attackBySea
-        val type = if (bySea) AiOperationType.NAVAL_ATTACK else AiOperationType.BASIC_CITY_ATTACK
-        val formation = civ.ai.operations.formationDef(sneakFormation(civ, bySea)) ?: return false
-        val fillable = numberOfFillableSlots(civ, formation, bySea)
-        if (fillable.required - fillable.filled > numUnitsWillingToBuild || fillable.landReservesUsed > landReservesAvailable(civ)) return false
-        val operation = AiOperationLogic.addOperation(civ, type, target.targetCity.civ, target.targetCity, target.musterCity)
-        if (!bySea && isOperationOk(operation) && target.targetCity.isCoastal()) {
-            // a coastal target also gets a naval superiority operation as escort, within the naval flavor's limit
-            val operations = civ.ai.operations
-            var maxOperations = civ.ai.personality(Flavor.Naval) / 2
-            if (SettleAreas.aiMapHint(civ.gameInfo) and 1 != 0) maxOperations *= 2
-            val running = operations.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY) + operations.numOperationsOfType(AiOperationType.NAVAL_BOMBARDMENT)
-            if (running <= maxOperations) AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
+        MilitaryTargets.cityAttackTargets(civ, enemy, careful).any { target ->
+            !(careful && previousArmyStillHome(civ, target)) && requestSpecificAttack(civ, target, numUnitsWillingBuild)
         }
-        return isOperationOk(operation)
+
+    /** RequestCityAttack's "don't duplicate operations": an attack of the same type on the target whose army is still in our territory */
+    private fun previousArmyStillHome(civ: Civilization, target: MilitaryTarget): Boolean {
+        val operation = civ.ai.operations.firstOfType(attackType(target), target.targetCity.civ, target.targetCity.getCenterTile()) ?: return false
+        val army = operation.firstArmy ?: return false
+        val center = AiOperationLogic.centerOfMass(civ, army, target.attackBySea) ?: return true
+        return center.getOwner() == civ
+    }
+
+    /** The operation of an attack on [target]: by land the basic city attack, by sea the naval invasion, with ships alone the pure naval attack */
+    private fun attackType(target: MilitaryTarget) = when {
+        target.pureNaval -> AiOperationType.PURE_NAVAL_CITY_ATTACK
+        target.attackBySea -> AiOperationType.NAVAL_ATTACK
+        else -> AiOperationType.BASIC_CITY_ATTACK
     }
 
     /**
-     *  CvMilitaryAI::RequestPureNavalAttack: a fleet takes a city of [enemy] by itself if all but [numUnitsWillingBuild] of the slots of
-     *  the pure naval formation are filled by ships at hand.
+     *  The attack on one target of Vox Populi's RequestCityAttack (addAIOperation with its PreconditionsAreMet): the attack
+     *  ([attackType]) on [target] if the forces are at hand but for [numUnitsWillingToBuild] required slots and - our BNW reserve - the
+     *  land units they use fit into the reserves ([landReservesAvailable]).
      */
-    fun requestPureNavalAttack(civ: Civilization, enemy: Civilization, numUnitsWillingBuild: Int): Boolean {
-        val (target, _) = MilitaryTargets.findBestAttackTarget(civ, AiOperationType.PURE_NAVAL_CITY_ATTACK, enemy) ?: return false
-        val formation = civ.ai.operations.formationDef("MUFORMATION_PURE_NAVAL_CITY_ATTACK") ?: return false
-        val fillable = numberOfFillableSlots(civ, formation, true)
-        if (fillable.required - fillable.filled > numUnitsWillingBuild) return false
-        return isOperationOk(AiOperationLogic.addOperation(civ, AiOperationType.PURE_NAVAL_CITY_ATTACK, enemy, target.targetCity, target.musterCity))
+    fun requestSpecificAttack(civ: Civilization, target: MilitaryTarget, numUnitsWillingToBuild: Int): Boolean {
+        val formationName = if (target.pureNaval) "MUFORMATION_PURE_NAVAL_CITY_ATTACK" else sneakFormation(civ, target.attackBySea)
+        val formation = civ.ai.operations.formationDef(formationName) ?: return false
+        val fillable = numberOfFillableSlots(civ, formation, target.attackBySea)
+        if (fillable.required - fillable.filled > numUnitsWillingToBuild) return false
+        if (fillable.landReservesUsed > 0 && fillable.landReservesUsed > landReservesAvailable(civ)) return false
+        return isOperationOk(AiOperationLogic.addOperation(civ, attackType(target), target.targetCity.civ, target.targetCity, target.musterCity))
+    }
+
+    /**
+     *  Vox Populi's CvMilitaryAI::RequestPillageAttack: a pillage raid on [enemy] while none runs, only with the units at hand. As
+     *  addAIOperation with no units to build: the required slots must be fillable before the operation is created
+     *  (PreconditionsAreMet), and one that still has units to build after its Init is ended at once (AI_ABORT_NO_UNITS).
+     */
+    fun requestPillageAttack(civ: Civilization, enemy: Civilization): Boolean {
+        val operations = civ.ai.operations
+        if (operations.firstOfType(AiOperationType.PILLAGE_ENEMY) != null) return false
+        val formation = operations.formationDef(AiOperationLogic.formationName(civ, AiOperationType.PILLAGE_ENEMY)) ?: return false
+        val fillable = numberOfFillableSlots(civ, formation, false)
+        if (fillable.filled < fillable.required) return false
+        val operation = AiOperationLogic.addOperation(civ, AiOperationType.PILLAGE_ENEMY, enemy)
+        if (isOperationOk(operation) && operation.slotsToBuild.isNotEmpty()) operations.kill(operation, OperationAbortReason.NO_UNITS)
+        return isOperationOk(operation) && operation in operations.operations
+    }
+
+    /**
+     *  Vox Populi's CvMilitaryAI::DoCityAttacks against [enemy], at war with us: when our units outside armies (land and naval) reach the
+     *  recommended land army size, or no offensive operation runs, and our war state is troubled or better (against a major; any other
+     *  enemy counts as offensive; VP's troubled is not one of ours: stalemate or better), a careful city attack willing to build two units
+     *  ([requestBasicAttack]) and, against a major, a pillage raid ([requestPillageAttack]).
+     */
+    fun doCityAttacks(civ: Civilization, enemy: Civilization) {
+        val military = civ.ai.military
+        val reserves = military.numLandUnits + military.numNavalUnits - military.numLandUnitsInArmies - military.numNavalUnitsInArmies
+        if (reserves < military.recommendedLandArmySize && civ.ai.operations.numOffensiveOperations() > 0) return
+        val warState = if (enemy.isMajorCiv) WarStateAi.warState(civ, enemy) else WarState.Offensive
+        if (warState == null || warState < WarState.Stalemate) return
+        requestBasicAttack(civ, enemy, 2, careful = true)
+        if (enemy.isMajorCiv) requestPillageAttack(civ, enemy)
     }
 
     /** CvMilitaryAI::RequestNukeAttack: with a nuke at hand, one that goes at [enemy]'s best city in its range */
@@ -312,6 +343,11 @@ object MilitaryOperations {
     private fun cannotAttack(civ: Civilization, other: Civilization) =
         !civ.isAtWarWith(other) && civ.getDiplomacyManager(other)?.canDeclareWar() != true
 
+    /** The players at war with us that Vox Populi's UpdateOperations loops over (CvMilitaryAI::IsPlayerValid: the barbarians too) */
+    private fun enemiesAtWar(civ: Civilization) = civ.gameInfo.civilizations.filter {
+        (it.isBarbarian || WarStateAi.isPlayerValid(civ, it)) && it != civ && civ.isAtWarWith(it)
+    }
+
     /**
      *  CvMilitaryAI::UpdateOperations: kills the operations that no longer make sense, then launches the new ones.
      *  Kills: barbarian camp operations when not eradicating barbarians, at war or not willing to take the risk; with no war all attacks, raids
@@ -319,10 +355,8 @@ object MilitaryOperations {
      *  attacks or raids), operations against a civilization we cannot attack, close defense operations of cities no longer threatened, rapid
      *  response when the total threat is at most one major's.
      *  Launches: a barbarian camp operation (eradicating barbarians, not at war, no critical defense, none running, willing to take the risk);
-     *  at war and not losing all wars, one basic attack on a target chosen by score x target value among enemies of at most average
-     *  strength (or any with AI_MILITARY_IGNORE_BAD_ODDS) whose attack needs at most one unit to be built and fits the land reserves; nuke
- *  attacks ([shouldLaunchNuke]); one pure naval city attack at a time per war ([requestPureNavalAttack]); naval superiority and bombardment
- *  while there is room for them ([launchOpportunityNavalOperations]).
+     *  at war, nuke attacks ([shouldLaunchNuke]); for a major, Vox Populi's city attacks and raids against each enemy ([doCityAttacks]);
+     *  naval superiority and bombardment while there is room for them ([launchOpportunityNavalOperations]).
      */
     fun updateOperations(civ: Civilization) {
         val military = civ.ai.military
@@ -385,42 +419,9 @@ object MilitaryOperations {
         // Operation vs. other civs: at war, consider nukes
         if (atWar) for (other in validMajors(civ)) if (shouldLaunchNuke(civ, other)) requestNukeAttack(civ, other)
 
-        // at war and not losing everywhere, one new attack on the best target
-        if (atWar && WarStateAi.stateAllWars(civ) != StateAllWars.Losing) launchBasicAttack(civ)
-
-        // naval attack: naval operations as part of a war effort, but only one at a time
-        if (atWar) for (other in validMajors(civ)) {
-            if (WarStateAi.warState(civ, other) == null) continue
-            if (operations.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK) == null) requestPureNavalAttack(civ, other, 1)
-        }
+        // Vox Populi: only majors set up operations; city attacks and raids against each enemy
+        if (civ.isMajorCiv) for (enemy in enemiesAtWar(civ)) doCityAttacks(civ, enemy)
         launchOpportunityNavalOperations(civ)
-    }
-
-    /** The attack part of UpdateOperations: score the best target of each enemy, then choose by score x target value */
-    private fun launchBasicAttack(civ: Civilization) {
-        val rules = civ.gameInfo.ruleset.ai
-        val candidates = ArrayList<Pair<MilitaryTarget, Int>>()
-        for (other in validMajors(civ)) {
-            val warState = WarStateAi.warState(civ, other) ?: continue
-            if (warState == WarState.Defensive || warState == WarState.NearlyDefeated) continue
-            val strength = WarStateAi.militaryStrengthComparedToUs(civ, other)
-            var targetValue: TargetValue? = null
-            if ((strength != null && strength <= StrengthLevel.Average) || rules.define(AiDefine.AI_MILITARY_IGNORE_BAD_ODDS) == 1) {
-                targetValue = WarStateAi.targetValue(civ, other)
-                if (targetValue == null || targetValue <= TargetValue.Impossible) continue
-            } else continue
-            val (target, score) = MilitaryTargets.findBestAttackTarget(civ, AiOperationType.BASIC_CITY_ATTACK, other) ?: continue
-            val formationName = if (target.attackBySea) "MUFORMATION_NAVAL_INVASION" else AiOperationLogic.formationName(civ, AiOperationType.BASIC_CITY_ATTACK)
-            val formation = civ.ai.operations.formationDef(formationName) ?: continue
-            val fillable = numberOfFillableSlots(civ, formation, target.attackBySea)
-            if (fillable.required - fillable.filled > 1 || fillable.landReservesUsed > landReservesAvailable(civ)) continue
-            candidates.add(target to score * targetValue.ordinal)
-        }
-        if (candidates.isEmpty()) return
-        candidates.sortByDescending { it.second }
-        if (candidates.sumOf { it.second } <= 0) return
-        val chosen = WonderProductionAi.chooseFromTopChoices(civ, candidates, candidates.size, "AttackByWeight")
-        requestSpecificAttack(civ, chosen, 1)
     }
     //endregion
 

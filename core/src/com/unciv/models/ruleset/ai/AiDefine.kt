@@ -892,6 +892,9 @@ enum class AiDefine(val default: Float) {
     RECKLESS_EXPANDER_LAND_THRESHOLD(250f),
     // DoUpdateWonderSpammers (ExpanderAi): world wonders above the median (less the handicap's WonderBlockMod) that make a spammer
     WONDER_SPAMMER_THRESHOLD(3f),
+    // IsTooEarlyForDoF (Vox Populi): DOF_TURN_BUFFER less this per era (a negative value), but never below JUST_MET_TURN_BUFFER
+    DOF_TURN_BUFFER_REDUCTION_PER_ERA(-5f),
+    JUST_MET_TURN_BUFFER(10f),
     // The index of the Ancient era (VP's GD_INT_GET(ANCIENT_ERA)): conquerors of capitals then draw the most war (ApproachWinningAi)
     ANCIENT_ERA(0f),
     // The index of the Classical era (VP's GD_INT_GET(CLASSICAL_ERA)): after it the biggest competitor weighs more (ApproachAi part 4)

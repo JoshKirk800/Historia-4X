@@ -250,7 +250,7 @@ object WarSanityAi {
 
     /** CvDiplomacyAIHelpers::IgnoresBackstabbing: [observer] and [victim] broke a DoF with each other before, or ([checkCurrent])
      *  [victim] is untrustworthy */
-    private fun ignoresBackstabbing(observer: Civilization, victim: Civilization, checkCurrent: Boolean = false): Boolean {
+    internal fun ignoresBackstabbing(observer: Civilization, victim: Civilization, checkCurrent: Boolean = false): Boolean {
         if (observer.ai.diplomacy.memoryOf(victim).doFBrokenTurn >= 0 || victim.ai.diplomacy.memoryOf(observer).doFBrokenTurn >= 0) return true
         return checkCurrent && OpinionAi.isUntrustworthyFriend(victim)
     }

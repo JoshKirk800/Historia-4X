@@ -167,6 +167,9 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var ignoredNoDiggingPromise = false
     var brokenCoopWarPromise = false
     var wantsResearchAgreement = false
+    /** CvDiplomacyAI::IsWantsDoFWithPlayer / IsWantsToEndDoFWithPlayer (Vox Populi): set each turn by [FriendshipPlanningAi.updateFriendships] */
+    var wantsDoF = false
+    var wantsToEndDoF = false
     /** CvDiplomacyAI::m_paiPlayerMadeExpansionPromiseTurn: turn they promised not to expand towards us, -1 = never (EverMadeExpansionPromise) */
     var expansionPromiseTurn = -1
     /** CvDiplomacyAI::m_paePlayerExpansionPromiseData: their expansion posture when they promised; the promise breaks when it rises above it */
@@ -256,6 +259,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.brokenNoConvertPromise = brokenNoConvertPromise; copy.ignoredNoConvertPromise = ignoredNoConvertPromise
         copy.brokenNoDiggingPromise = brokenNoDiggingPromise; copy.ignoredNoDiggingPromise = ignoredNoDiggingPromise
         copy.brokenCoopWarPromise = brokenCoopWarPromise; copy.wantsResearchAgreement = wantsResearchAgreement
+        copy.wantsDoF = wantsDoF; copy.wantsToEndDoF = wantsToEndDoF
         copy.expansionPromiseTurn = expansionPromiseTurn; copy.expansionPromisePosture = expansionPromisePosture
         copy.borderPromiseTurn = borderPromiseTurn; copy.borderPromisePosture = borderPromisePosture
         copy.protectedMinorAttacked = protectedMinorAttacked; copy.protectedMinorAttackedUnseen = protectedMinorAttackedUnseen
@@ -294,6 +298,10 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     var insaneTargets = HashSet<String>()
     /** CvPlayer::GetWondersConstructed (Vox Populi): the world wonders this civilization has built */
     var wondersConstructed = 0
+    /** CvDiplomacyAI::GetMostValuableFriend (Vox Populi), civID; null = none. Set each turn by [FriendshipPlanningAi.updateFriendships] */
+    var mostValuableFriend: String? = null
+    /** The turn of CvDiplomacyAI::HasEndedFriendshipThisTurn: we last broke a friendship (war, denouncement or ending it), -1 = never */
+    var endedFriendshipTurn = -1
 
     @Transient lateinit var civ: Civilization
 
@@ -308,6 +316,8 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         copy.militaryRating = militaryRating
         copy.insaneTargets.addAll(insaneTargets)
         copy.wondersConstructed = wondersConstructed
+        copy.mostValuableFriend = mostValuableFriend
+        copy.endedFriendshipTurn = endedFriendshipTurn
         return copy
     }
 

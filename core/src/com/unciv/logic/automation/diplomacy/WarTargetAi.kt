@@ -59,14 +59,13 @@ object WarTargetAi {
         val canCrossOcean = civ.tech.embarkedUnitsCanEnterOcean || civ.tech.allUnitsCanEnterOcean
         val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
         val goingForConquest = civ.ai.isGoingForWorldConquest()
-        val dampener = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get("PeaceTreatyDampenerTurns") ?: 20
         val planning = ArrayList<Civilization>()
         val lastResort = ArrayList<Civilization>()
         var anyPeaceTreaty = false
         for (other in majors) {
             if (other in atWar) continue
             val memory = ai.memoryOf(other)
-            if (memory.numWarsFought > 0 && memory.turnMadePeace > -1 && civ.gameInfo.turns - memory.turnMadePeace < dampener) {
+            if (isRecentPeaceTreaty(civ, other, rules)) {
                 anyPeaceTreaty = true
                 lastResort.clear()
                 continue
@@ -179,6 +178,14 @@ object WarTargetAi {
                 isRecentDemandAccepted(other, civ)))
             best = if (memory.opinion <= MajorCivOpinion.Enemy) MajorCivApproach.Guarded else MajorCivApproach.Neutral
         return best
+    }
+
+    /** A peace treaty with [other] after a war, fewer than the handicap's PeaceTreatyDampenerTurns (Vox Populi) ago */
+    internal fun isRecentPeaceTreaty(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        if (memory.numWarsFought <= 0 || memory.turnMadePeace <= -1) return false
+        val dampener = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get("PeaceTreatyDampenerTurns") ?: 20
+        return civ.gameInfo.turns - memory.turnMadePeace < dampener
     }
 
     /** CvDiplomacyAI::SetCivApproach as far as ours goes: a new war approach takes BNW's war face from the approach scores */

@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.automation.civilization.CityConquestAutomation
 import com.unciv.logic.automation.civilization.CityConquestAutomation.ConquestChoice
 import com.unciv.logic.automation.civilization.UseGoldAutomation
+import com.unciv.logic.automation.diplomacy.PactPlanningAi
 import com.unciv.logic.automation.diplomacy.WarGoal
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -139,70 +140,82 @@ class EconomicMilitaryAiTests {
 
     //region Military sizing
 
-    @Test
-    fun `recommended army is a threat and flavor scaled reserve plus strike force`() {
-        val civ = neutralCiv()
-        civ.ai.setPersonalityFlavor(Flavor.Offense, 5)
-        civ.ai.setPersonalityFlavor(Flavor.Defense, 5)
-        civ.ai.setDiplomacyValue(DiplomacyPersonality.Boldness, 6)
-        game.addCity(civ, tile(0, 0))
-        game.addCity(civ, tile(4, 0))
-        val military = civ.ai.military
-        military.updateBaseData(civ)
-        // multiplier 0.40 + (threat 0 + 5 + 5) / 100 = 0.5; reserve (3 + 2 cities) x 0.5 = 2, + Prince 3 - 1 = 4
-        assertEquals(4, military.mandatoryReserveSize)
-        // strike force (7 + boldness 6 + 2) x 0.5 = 7
-        assertEquals(11, military.recommendedMilitarySize)
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
-        military.updateBaseData(civ)
-        // conquest doubles the basic attack: (14 + 6 + 2) x 0.5 = 11
-        assertEquals(15, military.recommendedMilitarySize)
+    /** Gives [city] a building worth [gold] gold a turn and refreshes its stats */
+    private fun addGoldIncome(city: City, gold: Float) {
+        city.cityConstructions.addBuilding(game.createBuilding().apply { this.gold = gold })
+        city.cityStats.update()
     }
 
     @Test
-    fun `land units are counted by role and the defense state follows reserve and recommended size`() {
+    fun `the soft supply cap is the supply when the income pays for all units and two per city when it pays for none`() {
         val civ = neutralCiv()
-        civ.ai.setPersonalityFlavor(Flavor.Offense, 5)
-        civ.ai.setPersonalityFlavor(Flavor.Defense, 5)
-        civ.ai.setDiplomacyValue(DiplomacyPersonality.Boldness, 6)
-        game.addCity(civ, tile(0, 0))
+        val capital = game.addCity(civ, tile(0, 0))
         game.addCity(civ, tile(4, 0))
+        addGoldIncome(capital, 1000f)
+        val supply = civ.stats.getUnitSupply()
+        assertTrue("supply $supply", supply > 5)
+        assertEquals(supply, EconomicAi.softSupplyCap(civ))
+        // a unit that uses supply but is no land or sea combat unit leaves one less
+        game.addUnit("Worker", civ, tile(1, 1))
+        assertEquals(supply - 1, EconomicAi.softSupplyCap(civ))
+        // an income that pays for no unit: the floor of 2 per city
+        addGoldIncome(capital, -2000f)
+        assertEquals(4, EconomicAi.softSupplyCap(civ))
+    }
+
+    @Test
+    fun `the affordable units are split by the land and naval defense weights after the explorers`() {
+        val civ = neutralCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Naval, 10)
+        for (t in game.tileMap.values) if (t.position.x >= 1) game.setTileTerrain(t.position, Constants.coast)
+        for (t in game.tileMap.values) t.setTerrainTransients()
+        val capital = game.addCity(civ, tile(0, 0))
+        game.addCity(civ, tile(0, -3))
+        addGoldIncome(capital, 1000f)
+        assertEquals(2, PactPlanningAi.numEffectiveCoastalCities(civ))
+        val military = civ.ai.military
+        military.updateBaseData(civ)
+        val cap = EconomicAi.softSupplyCap(civ)
+        // land 10 x (3 + 2 cities) = 50, naval 7 x 2 coastal cities = 14, both x 100: land truncated, sea rounded
+        val sizes = "cap $cap, land ${military.recommendedLandArmySize}, navy ${military.recommendedNavySize}"
+        assertEquals(sizes, cap * 50 / 64, military.recommendedLandArmySize)
+        assertEquals(sizes, (cap * 14 / 64f + 0.5f).toInt(), military.recommendedNavySize)
+        // a scout's share comes off the top
+        game.addUnit("Scout", civ, tile(-1, 0))
+        military.updateBaseData(civ)
+        assertEquals(sizes, (cap - 1) * 50 / 64, military.recommendedLandArmySize)
+    }
+
+    @Test
+    fun `land units are counted by role, explorers included, and the land defense state follows the recommended army`() {
+        val civ = neutralCiv()
+        addGoldIncome(game.addCity(civ, tile(0, 0)), 1000f)
         val free = game.tileMap.values.filter { !it.isCityCenter() }.iterator()
         game.addUnit("Archer", civ, free.next())
         game.addUnit("Horseman", civ, free.next())
-        game.addUnit("Warrior", civ, free.next())
+        val warrior = game.addUnit("Warrior", civ, free.next())
+        UnitAiTypes.set(warrior, UnitAiType.EXPLORE)
         val military = civ.ai.military
         military.doTurnBeforeStrategies(civ)
         assertEquals(1, military.numRangedLandUnits)
         assertEquals(1, military.numMobileLandUnits)
         assertEquals(1, military.numMeleeLandUnits)
-        // 3 land units < reserve 4
+        // landlocked: every affordable unit belongs to the land army, which 3 units are below
+        val recommended = military.recommendedLandArmySize
+        assertEquals(EconomicAi.softSupplyCap(civ), recommended)
+        assertTrue("recommended $recommended", recommended > 4)
         assertEquals(DefenseState.Critical, military.landDefenseState)
-        repeat(9) { game.addUnit("Warrior", civ, free.next()) }
+        // no navy wanted, and no ship is at most half of none
+        assertEquals(0, military.recommendedNavySize)
+        assertEquals(DefenseState.Critical, military.navalDefenseState)
+        repeat(recommended - 4) { game.addUnit("Warrior", civ, free.next()) }
         military.doTurnBeforeStrategies(civ)
-        // 12: at least 11 recommended, below 11 x 5/4 = 13
+        assertEquals(DefenseState.Critical, military.landDefenseState)
+        // the recommended army, below 125% of it
+        game.addUnit("Warrior", civ, free.next())
+        military.doTurnBeforeStrategies(civ)
+        assertEquals(recommended, military.numLandUnits)
         assertEquals(DefenseState.Neutral, military.landDefenseState)
-        // explorers do not count
-        repeat(2) { UnitAiTypes.set(civ.units.getCivUnits().first { u -> u.name == "Warrior" && UnitAiTypes.current(u) != UnitAiType.EXPLORE }, UnitAiType.EXPLORE) }
-        military.doTurnBeforeStrategies(civ)
-        assertEquals(DefenseState.Needed, military.landDefenseState)
-    }
-
-    @Test
-    fun `recommended navy grows with coastal cities, the naval flavor and conquest over time`() {
-        val civ = neutralCiv()
-        civ.ai.setPersonalityFlavor(Flavor.Naval, 10)
-        for (position in listOf(HexCoord(1, 0), HexCoord(5, 0))) game.setTileTerrain(position, Constants.coast)
-        for (t in game.tileMap.values) t.setTerrainTransients()
-        game.addCity(civ, tile(0, 0))
-        game.addCity(civ, tile(4, 0))
-        assertTrue(civ.cities.all { it.isCoastal() })
-        // (1 + 2) x (0.75 + 0 / 4 + 10 / 40) = 3
-        assertEquals(3, MilitaryAi.recommendedNavySize(civ))
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
-        game.gameInfo.turns = 100
-        // + 10 x min(turn, 200) / 200
-        assertEquals(8, MilitaryAi.recommendedNavySize(civ))
     }
 
     @Test

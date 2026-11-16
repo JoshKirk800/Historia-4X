@@ -140,7 +140,7 @@ object CityDangerAi {
     /** CvDiplomacyAI::GetNumberOfThreatenedCities: at war with [other], our cities in danger from them and their war allies */
     fun numberOfThreatenedCities(civ: Civilization, other: Civilization): Int {
         if (!civ.isAtWarWith(other)) return 0
-        val enemies = WarAlliesAi.offensiveWarAllies(civ, other, includeMinors = true, reverse = true) + other
+        val enemies = WarAlliesAi.warAllies(civ, other, includeMinors = true, reverse = true) + other
         return civ.cities.count { isInDangerFromPlayers(it, enemies) }
     }
 }

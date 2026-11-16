@@ -25,17 +25,22 @@ object WarAlliesAi {
     private fun resurrectedBy(civ: Civilization, other: Civilization) = civ.ai.diplomacy.memories[other.civID]?.resurrectedUs == true
 
     /**
-     *  CvDiplomacyAI::GetOffensiveWarAllies (GetWarAllies, not defensive). Normal mode: who fights [other] on our side, among the met
-     *  players with cities not at war with us (and, while we fight [other], at war with them): our defensive pact partners at war with
-     *  them, those at war with them we have a DoF with or who resurrected us, an AI's trusted ally by opinion (not our biggest
-     *  competitor, no reason to avoid exchanges), and coop war partners against them or against a defensive pact partner of theirs
-     *  (ongoing or preparing); [includeMinors] adds the city-states allied with us or with one of those. [reverse]: who fights us on
-     *  [other]'s side (a major), among the met players with cities [other] is not at war with (and, while we fight [other], at war with
-     *  us): their defensive pact partners at war with us, those at war with us they have a DoF with or who resurrected them, and their
+     *  CvDiplomacyAI::GetWarAllies (GetOffensiveWarAllies when not [defensive], GetDefensiveWarAllies when it is). Normal mode: who
+     *  fights [other] on our side, among the met players with cities not at war with us (and, while we fight [other], at war with them):
+     *  our defensive pact partners (at war with them, unless [defensive]), those at war with them we have a DoF with or who resurrected
+     *  us, an AI's trusted ally by opinion (not our biggest competitor, no reason to avoid exchanges), and coop war partners against
+     *  them (ongoing or preparing) or against a defensive pact partner of theirs (ongoing; or preparing, unless [defensive]);
+     *  [includeMinors] adds the city-states allied with us or with one of those. [reverse]: who fights us on [other]'s side (a major),
+     *  among the met players with cities [other] is not at war with (and, while we fight [other], at war with us): their defensive
+     *  pact partners (at war with us, unless [defensive]), those at war with us they have a DoF with or who resurrected them, and their
      *  partners in an ongoing coop war against us or against a defensive pact partner of ours; plus the city-states allied with
-     *  [other] or with one of those.
+     *  [other] or with one of those. [newWarsOnly] (defensive only): the wars a declaration would add - nothing while we fight [other],
+     *  else only those not yet at war with the side they would join against.
      */
-    fun offensiveWarAllies(civ: Civilization, other: Civilization, includeMinors: Boolean, reverse: Boolean): List<Civilization> {
+    fun warAllies(civ: Civilization, other: Civilization, includeMinors: Boolean, reverse: Boolean, defensive: Boolean = false,
+                  newWarsOnly: Boolean = false): List<Civilization> {
+        val newOnly = defensive && newWarsOnly
+        if (newOnly && civ.isAtWarWith(other)) return emptyList()
         if (reverse && !other.isMajorCiv) return emptyList()
         val (us, them) = if (reverse) other to civ else civ to other
         val result = ArrayList<Civilization>()
@@ -50,28 +55,32 @@ object WarAlliesAi {
                 continue
             }
             val atWarWithThem = loop.isAtWarWith(them)
-            if (hasDefensivePact(us, loop) && atWarWithThem) { result.add(loop); continue }
+            if (hasDefensivePact(us, loop) && (defensive || atWarWithThem)) { result.add(loop); continue }
             if (atWarWithThem && (OpinionAi.isDoFAccepted(us, loop) || resurrectedBy(us, loop))) { result.add(loop); continue }
             if (!reverse && !atWarWithThem && !avoidExchangesWithPlayer(us, loop) && !us.isHuman() &&
                 CompetitorAi.biggestCompetitor(us) != loop.civID && us.ai.diplomacy.memoryOf(loop).opinion == MajorCivOpinion.Ally) {
                 result.add(loop); continue
             }
-            if (isCoopWarAlly(us, loop, them, reverse)) result.add(loop)
+            if (isCoopWarAlly(us, loop, them, reverse, defensive)) result.add(loop)
         }
         for (minor in minors) {
             val ally = minor.allyCiv ?: continue
             if (ally == us || ally in result) result.add(minor)
         }
-        return result
+        if (!newOnly) return result
+        return result.filter { if (reverse) !civ.isAtWarWith(it) else !other.isAtWarWith(it) }
     }
 
-    /** A coop war of [us] with [loop] against [them], or against a defensive pact partner of [them] (ongoing; or preparing, normal mode) */
-    private fun isCoopWarAlly(us: Civilization, loop: Civilization, them: Civilization, reverse: Boolean): Boolean {
-        fun counts(state: CoopWarState?) = state == CoopWarState.Accepted || (!reverse && state == CoopWarState.Soon)
-        if (counts(CoopWarAi.state(us, loop, them))) return true
+    /** A coop war of [us] with [loop] against [them] (ongoing; or preparing, normal mode), or against a defensive pact partner of [them]
+     *  (ongoing; or preparing, normal mode and not [defensive]) */
+    private fun isCoopWarAlly(us: Civilization, loop: Civilization, them: Civilization, reverse: Boolean, defensive: Boolean): Boolean {
+        val direct = CoopWarAi.state(us, loop, them)
+        if (direct == CoopWarState.Accepted || (!reverse && direct == CoopWarState.Soon)) return true
         for (third in us.gameInfo.civilizations) {
             if (third == them || !third.isMajorCiv || !third.isAlive() || third.cities.isEmpty() || !us.knows(third)) continue
-            if (hasDefensivePact(third, them) && counts(CoopWarAi.state(us, loop, third))) return true
+            if (!hasDefensivePact(third, them)) continue
+            val state = CoopWarAi.state(us, loop, third)
+            if (state == CoopWarState.Accepted || (!reverse && !defensive && state == CoopWarState.Soon)) return true
         }
         return false
     }

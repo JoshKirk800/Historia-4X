@@ -188,7 +188,7 @@ object CompetitorAi {
 
     /** CvDiplomacyAI::IsHolyCityCapturedBy, currently: [other] holds the holy city of the religion [civ] founded */
     @Readonly
-    private fun isHolyCityCapturedBy(civ: Civilization, other: Civilization): Boolean {
+    fun isHolyCityCapturedBy(civ: Civilization, other: Civilization): Boolean {
         val religion = civ.religionManager.religion?.takeIf { it.foundingCivName == civ.civName } ?: return false
         return other.cities.any { it.isHolyCityOf(religion.name) }
     }

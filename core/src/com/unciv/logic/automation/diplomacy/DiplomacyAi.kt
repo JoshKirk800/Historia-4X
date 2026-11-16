@@ -127,6 +127,8 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var doFLevel = DoFLevel.New
     /** CvDiplomacyAI::GetDoFBrokenTurn (Vox Populi): the turn they broke a DoF with us (war or denouncement), -1 = never */
     var doFBrokenTurn = -1
+    /** CvDiplomacyAI::GetLiberatedCitiesTurn (Vox Populi): the turn they last liberated a city of ours or resurrected us, -1 = never */
+    var liberatedCitiesTurn = -1
     /** CvDiplomacyAI::m_paiDeclaredWarOnFriendValue (decays) */
     var declaredWarOnFriendValue = 0
 
@@ -228,7 +230,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.turnsSinceSidedWithProtectedMinor = turnsSinceSidedWithProtectedMinor
         copy.doFCounter = doFCounter; copy.denouncedCounter = denouncedCounter; copy.denouncementActive = denouncementActive
         copy.friendDenouncedUs = friendDenouncedUs; copy.friendDeclaredWarOnUs = friendDeclaredWarOnUs
-        copy.doFLevel = doFLevel; copy.doFBrokenTurn = doFBrokenTurn
+        copy.doFLevel = doFLevel; copy.doFBrokenTurn = doFBrokenTurn; copy.liberatedCitiesTurn = liberatedCitiesTurn
         copy.declaredWarOnFriendValue = declaredWarOnFriendValue
         for ((target, entry) in coopWars) copy.coopWars[target] = entry.clone()
         copy.demandCounter = demandCounter
@@ -278,6 +280,8 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     var biggestCompetitor: String? = null
     /** CvPlayer::m_iMilitaryRating (Vox Populi), -1 = not moved yet (the starting rating): read through [WarDamageAi.militaryRating] */
     var militaryRating = -1
+    /** CvDiplomacyAI::IsSaneDiplomaticTarget (Vox Populi) is false for these civIDs: set each turn by [WarSanityAi.updateSaneTargets] */
+    var insaneTargets = HashSet<String>()
 
     @Transient lateinit var civ: Civilization
 
@@ -290,6 +294,7 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         copy.lastTotalLandDisputeLevel = lastTotalLandDisputeLevel
         copy.biggestCompetitor = biggestCompetitor
         copy.militaryRating = militaryRating
+        copy.insaneTargets.addAll(insaneTargets)
         return copy
     }
 

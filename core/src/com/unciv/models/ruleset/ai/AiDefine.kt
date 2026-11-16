@@ -618,6 +618,8 @@ enum class AiDefine(val default: Float) {
     REQUEST_PEACE_LEEWAY_THRESHOLD_REDUCTION_PER_WAR(3f),
     // GetPeaceBlockReason (Vox Populi): no peace with a major before this many turns of war
     WAR_MAJOR_MINIMUM_TURNS(5f),
+    // CanBackstab and IsWillingToAttackFriend (Vox Populi): turns after we broke a DoF with someone in which attacking them is backstabbing
+    DOF_BROKEN_BACKSTAB_TIMER(10f),
     TURNS_SINCE_PEACE_WEIGHT_DAMPENER(25f),
     WARMONGER_THREAT_CRITICAL_PERCENT_THRESHOLD(40f),
     WARMONGER_THREAT_CRITICAL_THRESHOLD(200f),

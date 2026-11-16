@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.StateAllWars
+import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.Civilization
@@ -108,10 +109,11 @@ object ApproachAi {
         stage("Wanted war last turn: the war must be going better than a stalemate")
         // Wanted war last turn: the war must be going better than a stalemate
         if (warState != null && warState > WarState.Stalemate && old == MajorCivApproach.War) w[WAR] += rules.define(AiDefine.APPROACH_WAR_CURRENTLY_WAR)
-        stage("Conquest grand strategy: not at war yet, or the war going better than defensive")
-        // Conquest grand strategy: not at war yet, or the war going better than defensive
-        if ((warState == null || warState > WarState.Defensive) && civ.ai.isGoingForWorldConquest())
-            w[WAR] += rules.define(AiDefine.APPROACH_WAR_CONQUEST_GRAND_STRATEGY)
+        stage("Conquest bias (Vox Populi): not at war yet, or the war going better than defensive")
+        // Conquest bias (Vox Populi, D7, in place of BNW's APPROACH_WAR_CONQUEST_GRAND_STRATEGY): going for world conquest or close to it
+        val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
+        if ((warState == null || warState > WarState.Defensive) && (civ.ai.isGoingForWorldConquest() || closeToConquest))
+            w[WAR] += civ.ai.majorCivApproachBias(MajorCivApproach.War) * (if (closeToConquest) 2 else 1)
 
         stage("Personality")
         // Personality
@@ -201,8 +203,10 @@ object ApproachAi {
         addPromiseWeights(civ, other, memory, w, rules)
         stage("military threat")
         addMilitaryThreatWeights(memory.militaryThreat, w, rules)
-        stage("nukes")
-        addNukeWeights(civ, other, w)
+        stage("nukes (Vox Populi)")
+        addNukeWeights(civ, other, w, rules)
+        stage("Close to world conquest, theirs or ours (Vox Populi)")
+        addWorldConquestWeights(civ, other, closeToConquest, w)
 
         stage("At war right now with someone else")
         // At war right now with someone else
@@ -337,11 +341,15 @@ object ApproachAi {
         if (memory.turnMadePeace > -1 && civ.gameInfo.turns - memory.turnMadePeace < rules.define(AiDefine.TURNS_SINCE_PEACE_WEIGHT_DAMPENER))
             scale(w, WAR, rules.define(AiDefine.APPROACH_WAR_HAS_MADE_PEACE_BEFORE_PERCENT))
 
-        stage("Duel: no friendly or deceptive")
+        stage("Duel: no friendly or deceptive; war decisively (Vox Populi)")
         // Duel: no friendly or deceptive
         if (civ.gameInfo.civilizations.count { it.isMajorCiv && it.isAlive() } == 2) {
             w[DECEPTIVE] = 0
             w[FRIENDLY] = 0
+            // Vox Populi (DUEL in SelectBestApproachTowardsMajorCiv, on our scale: VP's personality bias is ours x 100): one who competes for
+            // victory wants war, one who goes for or is close to world conquest overwhelmingly so
+            if (VictoryProgressAi.isCompetingForVictory(civ)) w[WAR] += civ.ai.majorCivApproachBias(MajorCivApproach.War) * 5
+            if (civ.ai.isGoingForWorldConquest() || closeToConquest) w[WAR] += if (closeToConquest) 1000 else 100
         }
 
         stage("Agreed to a coop war against them")
@@ -448,26 +456,106 @@ object ApproachAi {
         }
     }
 
-    /** Nukes: who has them and how likely they are to use them (the original's untuned constants) */
-    private fun addNukeWeights(civ: Civilization, other: Civilization, w: IntArray) {
-        val theirNukes = other.units.getCivUnits().count { it.isNuclearWeapon() }
-        val ourNukes = civ.units.getCivUnits().count { it.isNuclearWeapon() }
-        if (theirNukes == 0 && ourNukes == 0) return
-        val likelihood = when {
-            other.isHuman() -> 100   // assume humans will use them if they have them
-            civ.ai.diplomacy.memoryOf(other).numTimesNuked > 0 || other.ai.diplomacy.memoryOf(civ).numTimesNuked > 0 -> 100
-            else -> {
-                val flavor = other.ai.personalityAndGrandStrategy(Flavor.UseNuke) + 1
-                flavor * flavor    // using nukes has to pass two rolls
+    /**
+     *  Nukes after Vox Populi (NUKES in CvDiplomacyAI::SelectBestApproachTowardsMajorCiv, Release-5.4.8; D7, in place of the original's
+     *  untuned constants, which froze every pair where both sides held weapons). On our scale: VP's personality bias is ours × 100.
+     *  How likely they are to use them: 100 for a human, after any nuclear attack between us, or when they see us as Immense or are nearly
+     *  defeated by us; else their UseNuke personality flavor × 10.
+     *  We have weapons and they do not: War and Hostile + bias × 8, only when we want an opportunity attack ([wantsOpportunityAttack]).
+     *  They have them and we do not, likely 60 and up: Afraid + bias × 5. Both, likely 30 and up: Guarded + bias × 2 - caution only.
+     *  They nuked us (at most 10 times counted): War and Hostile + bias × times / 2, Guarded and Afraid + bias × times.
+     *  VP's attack multipliers for an easy or exposed target are 1: we have neither notion (step 0 of the plan).
+     */
+    private fun addNukeWeights(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
+        fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
+        val theirNukes = other.units.getCivUnits().any { it.isNuclearWeapon() }
+        val ourNukes = civ.units.getCivUnits().any { it.isNuclearWeapon() }
+        val timesNukedByThem = civ.ai.diplomacy.memories[other.civID]?.numTimesNuked ?: 0
+        if (theirNukes || ourNukes) {
+            val likelihood = when {
+                other.isHuman() -> 100
+                timesNukedByThem > 0 || (other.ai.diplomacy.memories[civ.civID]?.numTimesNuked ?: 0) > 0 -> 100
+                WarStateAi.militaryStrengthComparedToUs(other, civ) == StrengthLevel.Immense
+                    || WarStateAi.warState(other, civ) == WarState.NearlyDefeated -> 100
+                else -> other.ai.personalityFlavorVector()[Flavor.UseNuke.ordinal] * 10
+            }
+            if (ourNukes && !theirNukes) {
+                if (wantsOpportunityAttack(civ, other, rules)) {
+                    w[WAR] += bias(MajorCivApproach.War) * 8
+                    w[HOSTILE] += bias(MajorCivApproach.Hostile) * 8
+                }
+            } else if (theirNukes && !ourNukes && likelihood >= 60) {
+                w[AFRAID] += bias(MajorCivApproach.Afraid) * 5
+            } else if (theirNukes && ourNukes && likelihood >= 30) {
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * 2
             }
         }
-        if (theirNukes == 0 && ourNukes > 0) {
-            w[WAR] += 25; w[HOSTILE] += 25; w[DECEPTIVE] += 25; w[GUARDED] -= 25; w[AFRAID] -= 50
-        } else if (theirNukes > 0 && ourNukes == 0 && likelihood > 50) {
-            w[AFRAID] += 50; w[GUARDED] += 50; w[DECEPTIVE] -= 25; w[WAR] -= 50
-        } else if (theirNukes > 0 && ourNukes > 0 && likelihood > 25) {
-            w[GUARDED] += 25; w[DECEPTIVE] -= 25; w[WAR] -= 25; w[NEUTRAL] += 25
+        if (timesNukedByThem > 0) {
+            val times = minOf(timesNukedByThem, 10)
+            w[WAR] += bias(MajorCivApproach.War) * times / 2
+            w[HOSTILE] += bias(MajorCivApproach.Hostile) * times / 2
+            w[GUARDED] += bias(MajorCivApproach.Guarded) * times
+            w[AFRAID] += bias(MajorCivApproach.Afraid) * times
         }
+    }
+
+    /**
+     *  World conquest after Vox Populi (SelectBestApproachTowardsMajorCiv: THEY'RE CLOSE TO WINNING, and the Domination part of GRAND
+     *  STRATEGY WEIGHT), on our scale (VP's bias is ours × 100).
+     *  They are close to world conquest: War, Hostile and Guarded + bias × 5.
+     *  We compete for victory, are close to world conquest, and go for it or hold another major's capital: War and Hostile + bias × 5,
+     *  and + bias × 5 more for each capital of another major they hold (we must take all of them). VP's other Domination terms (flavor
+     *  weights, friendship with the strong while not yet close) are not taken in: the plan's step 4 covers the endgame only.
+     */
+    private fun addWorldConquestWeights(civ: Civilization, other: Civilization, closeToConquest: Boolean, w: IntArray) {
+        fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
+        if (VictoryProgressAi.isCloseToWorldConquest(other, civ.gameInfo.ruleset.ai)) {
+            w[WAR] += bias(MajorCivApproach.War) * 5
+            w[HOSTILE] += bias(MajorCivApproach.Hostile) * 5
+            w[GUARDED] += bias(MajorCivApproach.Guarded) * 5
+        }
+        if (closeToConquest && VictoryProgressAi.isCompetingForVictory(civ)
+            && (civ.ai.isGoingForWorldConquest() || VictoryProgressAi.capitalsConquered(civ) > 0)) {
+            val theirCapitals = VictoryProgressAi.capitalsConquered(other)
+            w[WAR] += bias(MajorCivApproach.War) * 5 * (1 + theirCapitals)
+            w[HOSTILE] += bias(MajorCivApproach.Hostile) * 5 * (1 + theirCapitals)
+        }
+    }
+
+    /**
+     *  CvDiplomacyAI::SelectBestApproachTowardsMajorCiv, OPPORTUNITY ATTACK DESIRE (Vox Populi): whether we want to exploit a weakness of
+     *  [other]'s, over the inputs we have (`phaseE/vp-conquest-endgame-plan.md`, step 0 table). Always with a coop war against them; else,
+     *  unless the war state forbids new wars (VP's IsNoNewWars has no counterpart here, so never), with a reason that depends on whether we
+     *  hold back: we hold back from distant players and, unless they are untrustworthy, took our capital or holy city, or the game is
+     *  conquest-only, from friends and from those with a declaration of friendship. Holding back, a reason is: we or they are close to world
+     *  conquest, they provoked us, they took a key city of ours, their warmonger threat is severe, they conquered 3 or more capitals, or the
+     *  game is conquest-only. Not holding back, also: we go for world conquest from the Medieval era; and when they are close or neighbours,
+     *  we go for world conquest, they provoked us, our opinion of them is Enemy or worse, or they expand recklessly.
+     *  Left out (no counterpart): easy and good targets, major, early-game, biggest and league competitors, wonder spammers, our own
+     *  backstabber flag, the conqueror traits, earlier friendship that ended. "Provoked" is a demand of theirs while we are at war (VP also
+     *  counts a demand we accepted or a second demand, which we do not track).
+     */
+    fun wantsOpportunityAttack(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
+        if (CoopWarAi.isLockedIntoCoopWar(civ, other, rules)) return true
+        val memory = civ.ai.diplomacy.memories[other.civID]
+        val proximity = DiplomacyTurn.proximity(civ, other)
+        val aggressiveMode = VictoryProgressAi.isAiAggressiveMode(civ)
+        val holyCity = civ.religionManager.religion?.name?.let { religion -> civ.gameInfo.getCities().firstOrNull { it.isHolyCityOf(religion) } }
+        val tookKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) || holyCity?.civ == other
+        val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
+        val theyAreClose = VictoryProgressAi.isCloseToWorldConquest(other, rules)
+        val provokedUs = memory != null && memory.demandCounter != -1 && civ.isAtWarWith(other)
+        val severeThreat = civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe
+        val victoryConcern = theyAreClose || VictoryProgressAi.capitalsConquered(other) >= 3
+        val holdBack = proximity <= DiplomacyTurn.PROXIMITY_FAR || (!OpinionAi.isUntrustworthyFriend(other) && !tookKeyCity && !aggressiveMode
+            && OpinionAi.isDoFAccepted(civ, other))
+        if (holdBack)
+            return closeToConquest || provokedUs || tookKeyCity || severeThreat || victoryConcern || aggressiveMode
+        val medievalOrLater = civ.getEra().eraNumber >= rules.define(AiDefine.MEDIEVAL_ERA)
+        if ((civ.ai.isGoingForWorldConquest() && medievalOrLater) || tookKeyCity || victoryConcern || severeThreat || closeToConquest
+            || theyAreClose || aggressiveMode) return true
+        return proximity >= DiplomacyTurn.PROXIMITY_CLOSE && (civ.ai.isGoingForWorldConquest() || provokedUs
+            || (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Enemy || WarStateAi.isPlayerRecklessExpander(civ, other))
     }
 
     /** CvPlayerTrade::GetAllTradeValueFromPlayerTimes100(YIELD_GOLD) / 100: gold we earn from routes between us and them */

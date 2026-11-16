@@ -122,10 +122,12 @@ object WarStateAi {
 
     //region CvDiplomacyAI::DoUpdateOnePlayerMilitaryStrength
 
+    /** The ratio of their might to ours. After Vox Populi (CvDiplomacyAI::DoUpdatePlayerStrengthEstimates, D7) the nuclear part of each
+     *  side's might is the one against the other side's units and shelters, not the global one ([NuclearMight]). */
     private fun militaryStrengthOf(civ: Civilization, other: Civilization, rules: AiRuleset): StrengthLevel {
         val base = rules.define(AiDefine.MILITARY_STRENGTH_BASE)
-        val ours = base + civ.ai.militaryMight()
-        val theirs = other.ai.militaryMight() + base
+        val ours = base + civ.ai.militaryMight() - civ.ai.nuclearMight() + NuclearMight.of(civ, other)
+        val theirs = other.ai.militaryMight() - other.ai.nuclearMight() + NuclearMight.of(other, civ) + base
         val ratio = theirs * rules.define(AiDefine.MILITARY_STRENGTH_RATIO_MULTIPLIER) / ours
         return when {
             ratio >= rules.define(AiDefine.MILITARY_STRENGTH_IMMENSE_THRESHOLD) -> StrengthLevel.Immense

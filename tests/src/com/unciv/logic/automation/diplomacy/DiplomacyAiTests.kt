@@ -263,12 +263,16 @@ class DiplomacyAiTests {
     }
 
     @Test
-    fun `approach biases and the conquest grand strategy add to the weights`() {
+    fun `approach biases add to the weights, and the conquest grand strategy adds the war bias once more`() {
         val base = weights(a, b, null)
         a.ai.setMajorCivApproachBias(MajorCivApproach.Guarded, 6)
         assertEquals(6, weights(a, b, null)[MajorCivApproach.Guarded.ordinal] - base[MajorCivApproach.Guarded.ordinal])
+        a.ai.setMajorCivApproachBias(MajorCivApproach.War, 7)
+        val warBias = weights(a, b, null)
+        assertEquals(7, warBias[MajorCivApproach.War.ordinal] - base[MajorCivApproach.War.ordinal])
+        // Vox Populi's conquest bias (SelectBestApproachTowardsMajorCiv, WORLD CONQUEST), not BNW's APPROACH_WAR_CONQUEST_GRAND_STRATEGY
         a.ai.grandStrategy = GrandStrategyAi.CONQUEST
-        assertEquals(5, weights(a, b, null)[MajorCivApproach.War.ordinal] - base[MajorCivApproach.War.ordinal])
+        assertEquals(7, weights(a, b, null)[MajorCivApproach.War.ordinal] - warBias[MajorCivApproach.War.ordinal])
     }
 
     @Test

@@ -144,6 +144,7 @@ class CivAi : IsPartOfGameInfoSerialization {
 
     @Transient @Cache private var militaryMightTurn = -1
     @Transient @Cache private var militaryMightCache = 0
+    @Transient @Cache private var nuclearMightCache = 0
     @Transient private var tourismTurn = -1
     @Transient private var tourismCache = 0
     @Transient private var plotDangerTurn = -1
@@ -386,20 +387,29 @@ class CivAi : IsPartOfGameInfoSerialization {
      *  × health / 100, halved for water units; the sum × min(2, 1 + √gold / 100).
      *  The unit type's power is [com.unciv.models.ruleset.unit.BaseUnit.getAiPower] (CvUnitEntry::GetPower);
      *  the unit level is 1 + its promotions gained by experience (CvUnit::getLevel starts at 1).
+     *  After Vox Populi (CvPlayer::updateMightStatistics, D7) nuclear weapons are not counted as units: their [nuclearMight] is added instead.
      */
     @Readonly fun militaryMight(): Int {
         val turn = civ.gameInfo.turns
         if (militaryMightTurn == turn) return militaryMightCache
         var sum = 0
         for (unit in civ.units.getCivUnits()) {
+            if (unit.isNuclearWeapon()) continue
             var power = unit.getAiPower()
             if (unit.baseUnit.isWaterUnit) power /= 2
             sum += power
         }
         val goldMultiplier = min(2f, 1f + sqrt(max(0, civ.gold).toFloat()) / 100f)
-        militaryMightCache = (sum * goldMultiplier).toInt()
+        nuclearMightCache = NuclearMight.of(civ, null)
+        militaryMightCache = (sum * goldMultiplier).toInt() + nuclearMightCache
         militaryMightTurn = turn
         return militaryMightCache
+    }
+
+    /** The global nuclear might in [militaryMight] (CvPlayer::GetNuclearMight): [NuclearMight.of] against all other living majors */
+    @Readonly fun nuclearMight(): Int {
+        militaryMight()
+        return nuclearMightCache
     }
 
     /** CvPlayerCulture::GetTourism, computed once per turn */

@@ -310,6 +310,10 @@ object Nuke {
         targetedCity.population.addPopulation(-populationLoss)
     }
 
+    /** The factor a nuclear attack's population loss in [city] is multiplied by: 0.25 with a Bomb Shelter (UniqueType.PopulationLossFromNukes) */
+    @Readonly
+    fun populationLossModifier(city: City): Float = city.getAggregateModifier(UniqueType.PopulationLossFromNukes)
+
     @Readonly
     private fun City.getAggregateModifier(uniqueType: UniqueType): Float {
         var modifier = 1f

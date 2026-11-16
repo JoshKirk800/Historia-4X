@@ -862,4 +862,9 @@ enum class AiDefine(val default: Float) {
     RELIGION_MAX_MISSIONARIES(4f),
     RELIGION_MISSIONARY_RANGE_IN_TURNS(10f),
     RELIGION_ADJACENT_CITY_DISTANCE(10f),
+    // Vox Populi (D7: the Historia 4X AI takes VP's rules; the default is the VP database's value, BNW has no such define)
+    // CvDiplomacyAI::IsCloseToWorldConquest: domination progress (VictoryProgressAi) at or above this is close to world conquest
+    CLOSE_TO_DOMINATION_VICTORY_THRESHOLD(50f),
+    // The index of the Medieval era (VP's GD_INT_GET(MEDIEVAL_ERA)): from it a conqueror wants opportunity attacks on anyone (ApproachAi)
+    MEDIEVAL_ERA(2f),
 }

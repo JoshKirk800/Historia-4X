@@ -577,10 +577,11 @@ object ApproachAi {
 
     /**
      *  Part 12, zero-out conditions (Vox Populi), each also setting the approach's last-turn value to 0 in [overrides]:
-     *  no possible attack target among their cities ([MilitaryAi.havePossibleAttackTarget]) zeroes war and hostile; so does a recent
-     *  peace treaty (after a war, within TURNS_SINCE_PEACE_WEIGHT_DAMPENER turns) in the final pass, and a war we cannot declare (not in
-     *  the strategic pass when only the treaty stops it); afraid goes when they cannot declare war on us; hostile (and war, if they
-     *  resurrected us) towards a liberator. Not yet: war bankruptcy, liberated capitals and recent liberations (inputs of branch B2).
+     *  no possible attack target among their cities ([MilitaryAi.havePossibleAttackTarget]) zeroes war and hostile, and so does a war that
+     *  would bankrupt us ([WarSanityAi.isWarWouldBankruptUs]); so does a recent peace treaty (after a war, within
+     *  TURNS_SINCE_PEACE_WEIGHT_DAMPENER turns) in the final pass, and a war we cannot declare (not in the strategic pass when only the
+     *  treaty stops it); afraid goes when they cannot declare war on us; hostile (and war, if they resurrected us) towards a liberator.
+     *  Not yet: liberated capitals and recent liberations (inputs of branch B2).
      *  @return VP's bNoFriendlyObvious as far as we have it (we or they denounced, or they are untrustworthy), else its bNoFriendly (they
      *  provoked us, we want an opportunity attack, and they are an easy target or not stronger than Strong with a preferred attack
      *  target); either sets friendly to 0 in the strategic pass
@@ -588,6 +589,7 @@ object ApproachAi {
     private fun zeroOut(civ: Civilization, other: Civilization, strategic: Boolean, w: IntArray, overrides: IntArray, rules: AiRuleset): NoFriendly {
         fun zero(i: Int) { w[i] = 0; overrides[i] = 0 }
         if (!civ.ai.military.havePossibleAttackTarget(other)) { zero(WAR); zero(HOSTILE) }
+        if (WarSanityAi.isWarWouldBankruptUs(civ, other)) { zero(WAR); zero(HOSTILE) }
         val memory = civ.ai.diplomacy.memoryOf(other)
         val atWar = civ.isAtWarWith(other)
         val recentPeace = memory.numWarsFought > 0 && memory.turnMadePeace > -1 &&

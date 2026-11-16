@@ -87,6 +87,10 @@ class TacticalState : IsPartOfGameInfoSerialization {
             return built
         }
 
+    /** The last map built ([map]), whatever its turn, without building one: what the diplomacy reads at the start of a turn, as VP's
+     *  GetComparativeDanger reads the player's tactical analysis map as it stands. Null until a map was built since loading. */
+    val lastMap: TacticalMap? get() = cachedMap
+
     fun invalidateMap() {
         cachedMap = null
     }

@@ -75,4 +75,17 @@ class CityDangerTests {
         assertEquals("b has no one at war with a on its side", emptyList<Civilization>(),
             WarAlliesAi.offensiveWarAllies(a, b, includeMinors = false, reverse = true))
     }
+
+    @Test
+    fun `our capital about to fall weighs three times and is serious danger`() {
+        a.getDiplomacyManager(b)!!.declareWar()
+        val capital = a.cities.first()
+        capital.health = 50
+        capital.damageTakenLastTurn = 60
+        val danger = CityDangerAi.comparativeDanger(a, b, listOf(a), listOf(b))
+        assertEquals(3, danger.ours)
+        assertTrue(danger.seriousUs)
+        assertEquals(0, danger.theirs)
+        assertFalse(danger.seriousThem)
+    }
 }

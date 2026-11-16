@@ -319,6 +319,9 @@ class PolicyAutomationTests {
         assertEquals(8, opinion.hypotheticalUnhappiness(branch("Order")))
         assertEquals(0, opinion.hypotheticalUnhappiness(branch("Autocracy")))
         setPriorities(0, 0, 0, 0)
+        // Two civilizations each holding its capital are both close to world conquest, which moves the approach set at contact;
+        // a neutral one leaves the ideology scores to the public opinion
+        civ.ai.diplomacy.memoryOf(autocrat).approach = MajorCivApproach.Neutral
         val r = randoms(4)
         val scores = PolicyAutomation.scoreIdeologies(civ, ideologies, Random(4))
         // Autocracy has one adopter: 1 free tenet

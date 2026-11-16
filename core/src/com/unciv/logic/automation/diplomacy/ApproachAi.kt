@@ -444,8 +444,8 @@ object ApproachAi {
         addDoFHistoryWeights(civ, other, w, rules)
         stage("nukes (Vox Populi)")
         addNukeWeights(civ, other, w, rules)
-        stage("Close to world conquest, theirs or ours (Vox Populi)")
-        addWorldConquestWeights(civ, other, closeToConquest, w)
+        stage("They are close to world conquest (Vox Populi)")
+        addTheyAreCloseToConquestWeights(civ, other, w)
 
         stage("Bankruptcy and our lost capital (part 6)")
         ApproachPart6Ai.addBankruptcyWeights(civ, other, w)
@@ -453,6 +453,11 @@ object ApproachAi {
         ApproachPart6Ai.addAtWarWeights(civ, other, w)
         stage("Dangerous neighbours (part 6)")
         ApproachPart6Ai.addDangerousNeighbourWeights(civ, other, w)
+        val deception = appliesDeception(civ, other, rules)
+        stage("Early game strategy (part 6)")
+        ApproachGrandStrategyAi.addEarlyGameWeights(civ, other, deception, w, rules)
+        stage("Grand strategy: domination (part 6)")
+        ApproachGrandStrategyAi.addDominationWeights(civ, other, deception, w, rules)
 
         stage("War projection")
         // War projection
@@ -1007,25 +1012,15 @@ object ApproachAi {
     }
 
     /**
-     *  World conquest after Vox Populi (SelectBestApproachTowardsMajorCiv: THEY'RE CLOSE TO WINNING, and the Domination part of GRAND
-     *  STRATEGY WEIGHT), on our scale (VP's bias is ours × 100).
-     *  They are close to world conquest: War, Hostile and Guarded + bias × 5.
-     *  We compete for victory, are close to world conquest, and go for it or hold another major's capital: War and Hostile + bias × 5,
-     *  and + bias × 5 more for each capital of another major they hold (we must take all of them). VP's other Domination terms (flavor
-     *  weights, friendship with the strong while not yet close) are not taken in: the plan's step 4 covers the endgame only.
+     *  THEY'RE CLOSE TO WINNING after Vox Populi, on our scale (VP's bias is ours x 100): one close to world conquest draws war, hostility
+     *  and guard 5 x bias. Our own domination weights are [ApproachGrandStrategyAi.addDominationWeights].
      */
-    private fun addWorldConquestWeights(civ: Civilization, other: Civilization, closeToConquest: Boolean, w: IntArray) {
+    private fun addTheyAreCloseToConquestWeights(civ: Civilization, other: Civilization, w: IntArray) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
         if (VictoryProgressAi.isCloseToWorldConquest(other, civ.gameInfo.ruleset.ai)) {
             w[WAR] += bias(MajorCivApproach.War) * 5
             w[HOSTILE] += bias(MajorCivApproach.Hostile) * 5
             w[GUARDED] += bias(MajorCivApproach.Guarded) * 5
-        }
-        if (closeToConquest && VictoryProgressAi.isCompetingForVictory(civ)
-            && (civ.ai.isGoingForWorldConquest() || VictoryProgressAi.capitalsConquered(civ) > 0)) {
-            val theirCapitals = VictoryProgressAi.capitalsConquered(other)
-            w[WAR] += bias(MajorCivApproach.War) * 5 * (1 + theirCapitals)
-            w[HOSTILE] += bias(MajorCivApproach.Hostile) * 5 * (1 + theirCapitals)
         }
     }
 

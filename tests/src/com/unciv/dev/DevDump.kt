@@ -7,6 +7,9 @@ import com.unciv.logic.automation.diplomacy.ApproachAi
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.automation.strategy.AiOperationLogic
+import com.unciv.logic.automation.strategy.AiOperationType
+import com.unciv.logic.automation.strategy.MilitaryOperations
+import com.unciv.logic.automation.strategy.MilitaryTargets
 import com.unciv.logic.automation.strategy.NavalOperationLogic
 import com.unciv.logic.automation.strategy.OperationAbortReason
 import com.unciv.logic.files.UncivFiles
@@ -56,7 +59,8 @@ class DevDump {
                 "approach" -> approach(game, out)
                 "operations" -> operations(game, out)
                 "nukes" -> nukes(game, out)
-                else -> out.append("unknown mode $mode (approach, operations, nukes)\n")
+                "targets" -> targets(game, out)
+                else -> out.append("unknown mode $mode (approach, operations, nukes, targets)\n")
             }
             out.append("\n")
         }
@@ -106,6 +110,25 @@ class DevDump {
                     out.append("    army ${army.id} ${army.formation} ${army.state}, ${army.numSlotsFilled()}/${army.slots.size} filled, " +
                         "at ${army.position}, goal ${army.goalTile}: $units\n")
                 }
+            }
+        }
+    }
+
+    /** For each AI with a war approach towards a major it is not at war with: the sneak attack it would request and whether it is ready */
+    private fun targets(game: GameInfo, out: StringBuilder) {
+        out.append("sneak attack targets at turn ${game.turns}\n")
+        for (civ in game.civilizations.filter { it.isMajorCiv && it.isAlive() && !it.isHuman() }) {
+            for (other in game.civilizations.filter { it.isMajorCiv && it.isAlive() && it != civ && civ.knows(it) }) {
+                if (civ.ai.diplomacy.approachTowards(other) != MajorCivApproach.War || civ.isAtWarWith(other)) continue
+                val found = MilitaryTargets.findBestAttackTarget(civ, AiOperationType.SNEAK_CITY_ATTACK, other)
+                val explored = other.cities.count { it.getCenterTile().isExplored(civ) }
+                out.append("${civ.civName} -> ${other.civName}: their cities ${other.cities.size}, explored $explored; ")
+                if (found == null) { out.append("no target\n"); continue }
+                val (target, score) = found
+                val formation = if (target.attackBySea) "MUFORMATION_NAVAL_INVASION" else AiOperationLogic.formationName(civ, AiOperationType.BASIC_CITY_ATTACK)
+                val type = if (target.attackBySea) AiOperationType.NAVAL_SNEAK_ATTACK else AiOperationType.SNEAK_CITY_ATTACK
+                out.append("target ${target.targetCity.name} from ${target.musterCity.name}, by sea ${target.attackBySea}, path ${target.pathLength}, " +
+                    "score $score, ready ${MilitaryOperations.isAttackReady(civ, formation, type)}, operations ${civ.ai.operations.operations.map { it.type }}\n")
             }
         }
     }

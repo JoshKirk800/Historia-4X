@@ -2,6 +2,7 @@ package com.unciv.dev
 
 import com.unciv.logic.GameInfo
 import com.unciv.logic.automation.strategy.AiOperationType
+import com.unciv.logic.automation.strategy.OperationAbortReason
 
 /**
  * What the barbarians do and what the naval and nuke operations come to, for [FullGameSim]'s report: civilians the barbarians took
@@ -60,9 +61,15 @@ class BarbarianStats(private val game: GameInfo) {
             val sum = totals.getOrPut(type) { IntArray(2) }
             sum[0] += counts[0]; sum[1] += counts[1]
         }
+        val aborts = HashMap<AiOperationType, HashMap<OperationAbortReason, Int>>()
+        for (civ in game.civilizations) for ((type, reasons) in civ.ai.operations.statsAbortReasons)
+            for ((reason, n) in reasons) aborts.getOrPut(type) { HashMap() }.merge(reason, n, Int::plus)
         for (type in AiOperationType.entries) {
             val counts = totals[type] ?: continue
-            text.appendLine(String.format(java.util.Locale.ROOT, "%-24s created=%3d succeeded=%3d", type.name, counts[0], counts[1]))
+            // the reasons the others ended for, most frequent first (tools/study_diff.py reads them)
+            val reasons = aborts[type]?.entries?.sortedByDescending { it.value }?.joinToString(", ") { "${it.key}=${it.value}" }
+            text.appendLine(String.format(java.util.Locale.ROOT, "%-24s created=%3d succeeded=%3d", type.name, counts[0], counts[1]) +
+                if (reasons != null) " aborted: $reasons" else "")
         }
         return text.toString()
     }

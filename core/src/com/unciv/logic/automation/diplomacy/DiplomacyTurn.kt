@@ -130,12 +130,12 @@ object DiplomacyTurn {
 
     //region War damage (CvDiplomacyAI::DoWarDamageDecay, DoUpdateWarDamageLevel, DoUpdateOtherPlayerWarDamageLevel)
 
+    /** BNW's decay of its estimate of what each player lost to us, at peace (what we lost is VP's: [WarDamageAi.doTurn]) */
     private fun warDamageDecay(civ: Civilization, others: List<Civilization>) {
         for (other in others) {
             val memory = civ.ai.diplomacy.memoryOf(other)
             if (civ.isAtWarWith(other)) continue
             // Goes down by 1/20th every turn at peace, at least 1
-            if (memory.warValueLost > 0) memory.warValueLost = max(0, memory.warValueLost - max(1, memory.warValueLost / 20))
             if (memory.theirWarValueLostToUs > 0)
                 memory.theirWarValueLostToUs = max(0, memory.theirWarValueLostToUs - max(1, memory.theirWarValueLostToUs / 20))
         }

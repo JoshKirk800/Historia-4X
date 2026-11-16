@@ -166,6 +166,7 @@ class CityTurnManager(val city: City) {
                 removedPopulation += it.params[0].toInt() - 1
             }
 
+            com.unciv.logic.automation.diplomacy.WarDamageAi.onRazingTurn(city, removedPopulation)
             if (city.population.population <= removedPopulation) {
                 city.espionage.removeAllPresentSpies(SpyFleeReason.Other)
                 city.civ.addNotification(

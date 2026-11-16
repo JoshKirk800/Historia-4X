@@ -463,6 +463,7 @@ class CivAi : IsPartOfGameInfoSerialization {
         if (civ.isBarbarian || civ.isSpectator || civ.isDefeated()) return
         ensureInitialized()
         timeThis("AI.Cramped") { updateCramped() }
+        if (civ.isMajorCiv || civ.isCityState) com.unciv.logic.automation.diplomacy.WarDamageAi.doTurn(civ)
         if (civ.isMajorCiv) timeThis("AI.GrandStrategy") { GrandStrategyAi.doTurn(civ) }
         if (civ.isMajorCiv) timeThis("AI.WarStates") { WarStateAi.doTurn(civ) }
         if (civ.isCityState) minorCivStatus = MinorCivStatusAi.status(civ)

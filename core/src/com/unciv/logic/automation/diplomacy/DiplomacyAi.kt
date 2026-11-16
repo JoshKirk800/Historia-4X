@@ -265,6 +265,8 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     var turnsSinceSettledLastCity = -1
     /** CvDiplomacyAI::GetBiggestCompetitor, civID; null = none. Set each turn by [CompetitorAi.updateBiggestCompetitor] */
     var biggestCompetitor: String? = null
+    /** CvPlayer::m_iMilitaryRating (Vox Populi), -1 = not moved yet (the starting rating): read through [WarDamageAi.militaryRating] */
+    var militaryRating = -1
 
     @Transient lateinit var civ: Civilization
 
@@ -276,6 +278,7 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         copy.turnsSinceSettledLastCity = turnsSinceSettledLastCity
         copy.lastTotalLandDisputeLevel = lastTotalLandDisputeLevel
         copy.biggestCompetitor = biggestCompetitor
+        copy.militaryRating = militaryRating
         return copy
     }
 

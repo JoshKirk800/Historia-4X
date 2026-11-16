@@ -674,12 +674,17 @@ object AiOperationLogic {
             }
             OperationState.MOVING_TO_TARGET -> {
                 val com = centerOfMass(civ, army)
+                val enemy = enemy(civ, operation)
                 // Are we within tactical range of our target?
-                if (com != null && target != null &&
-                    com.aerialDistanceTo(target) <= civ.gameInfo.ruleset.ai.define(AiDefine.AI_OPERATIONAL_CITY_ATTACK_DEPLOY_RANGE)) {
-                    enemy(civ, operation)?.let { civ.ai.diplomacy.memoryOf(it).musteringForAttack = true }
+                var inPlace = com != null && target != null &&
+                    com.aerialDistanceTo(target) <= civ.gameInfo.ruleset.ai.define(AiDefine.AI_OPERATIONAL_CITY_ATTACK_DEPLOY_RANGE)
+                // Vox Populi (CvAIOperation::CheckOnTarget): at peace, more than two of our units in the enemy's sight - the jig is up
+                if (!inPlace && enemy != null && !civ.isAtWarWith(enemy) &&
+                    armyUnits(civ, army).count { (_, unit) -> unit.getTile() in enemy.viewableTiles } > 2) inPlace = true
+                if (inPlace) {
+                    enemy?.let { civ.ai.diplomacy.memoryOf(it).musteringForAttack = true }
                     // Notify tactical AI to focus on this area
-                    civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.City)
+                    if (target != null) civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.City)
                     operation.state = OperationState.SUCCESSFUL_FINISH
                 }
                 return false

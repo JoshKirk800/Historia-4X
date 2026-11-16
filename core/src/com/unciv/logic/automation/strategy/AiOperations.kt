@@ -70,7 +70,9 @@ enum class OperationAbortReason {
     NONE, SUCCESS, NO_TARGET, REPEAT_TARGET, LOST_TARGET, TARGET_ALREADY_CAPTURED, NO_ROOM_DEPLOY, HALF_STRENGTH, NO_MUSTER,
     LOST_CIVILIAN, ESCORT_DIED, KILLED, WAR_STATE_CHANGE, DIPLO_OPINION_CHANGE, LOST_PATH, NO_NUKES,
     /** Vox Populi's AI_ABORT_TIMED_OUT: [AiOperationLogic.shouldAbort]'s failsafe */
-    TIMED_OUT
+    TIMED_OUT,
+    /** Vox Populi's AI_ABORT_TARGET_NOT_VALID: war on the enemy may no longer be declared ([WarAi.doMakeWarOnPlayer]) */
+    TARGET_NOT_VALID
 }
 
 /** ArmyAIState */
@@ -232,11 +234,15 @@ class AiOperations : IsPartOfGameInfoSerialization {
      *  CvPlayer::HasAnyOffensiveOperationsAgainstPlayer (Vox Populi's getFirstOffensiveAIOperation): a military operation still running
      *  against [enemy] whose target is outside our territory (CvAIOperation::IsOffensive; rapid response never is)
      */
-    fun hasAnyOffensiveOperationsAgainst(enemy: Civilization): Boolean = operations.any { op ->
+    fun hasAnyOffensiveOperationsAgainst(enemy: Civilization): Boolean = operations.any { isOffensiveAgainst(it, enemy) }
+
+    /** The operations of [hasAnyOffensiveOperationsAgainst] (CvPlayer::StopAllLand/SeaOffensiveOperationsAgainstPlayer stop these) */
+    fun offensiveOperationsAgainst(enemy: Civilization): List<AiOperation> = operations.filter { isOffensiveAgainst(it, enemy) }
+
+    private fun isOffensiveAgainst(op: AiOperation, enemy: Civilization): Boolean =
         !op.type.isEscorted && op.type != AiOperationType.RAPID_RESPONSE && op.enemyCivId == enemy.civID &&
             op.state != OperationState.SUCCESSFUL_FINISH && op.state != OperationState.ABORTED &&
             op.targetTile?.let { civ.gameInfo.tileMap[it].getOwner() != civ } == true
-    }
 
     /** CvPlayerAI::GetNumUnitsNeededToBeBuilt: the sum of CvAIOperation::GetNumUnitsNeededToBeBuilt, the slots not yet committed to a city */
     fun numUnitsNeededToBeBuilt() = operations.sumOf { it.slotsToBuild.size }

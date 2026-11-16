@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.diplomacy
 
+import com.unciv.logic.automation.civilization.CityStateAi
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.ReligionState
@@ -170,10 +171,16 @@ object OpinionAi {
         term(DiplomaticModifiers.BulliedProtectedMinor, protectedMinorBulliedScore(memory, rules))
         term(DiplomaticModifiers.SidedWithProtectedMinor, if (isAngryAboutSidedWithProtectedMinor(memory, rules)) rules.define(AiDefine.OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR) else 0)
 
-        // Declaration of friendship
-        term(DiplomaticModifiers.DeclarationOfFriendship, if (isDoFAccepted(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_DOF) else 0)
-        term(DiplomaticModifiers.DeclaredFriendshipWithOurAllies, if (isPlayerDoFWithAnyFriend(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_DOF_WITH_FRIEND) else 0)
-        term(DiplomaticModifiers.DeclaredFriendshipWithOurEnemies, if (isPlayerDoFWithAnyEnemy(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_DOF_WITH_ENEMY) else 0)
+        // Friendship, pacts, open borders, research agreements, city-states protected together (Vox Populi)
+        term(DiplomaticModifiers.DeclarationOfFriendship, dofAcceptedScore(civ, other, rules))
+        term(DiplomaticModifiers.DeclaredFriendshipWithOurAllies, dofWithAnyFriendScore(civ, other, rules))
+        term(DiplomaticModifiers.DeclaredFriendshipWithOurEnemies, dofWithAnyEnemyScore(civ, other, rules))
+        term(DiplomaticModifiers.DefensivePact, dpAcceptedScore(civ, other, rules))
+        term(DiplomaticModifiers.DefensivePactWithOurAllies, dpWithAnyFriendScore(civ, other, rules))
+        term(DiplomaticModifiers.DefensivePactWithOurEnemies, dpWithAnyEnemyScore(civ, other, rules))
+        term(DiplomaticModifiers.OpenBorders, openBordersScore(civ, other, rules))
+        term(DiplomaticModifiers.ResearchAgreement, researchAgreementScore(civ, other, rules))
+        term(DiplomaticModifiers.ProtectingSameCityStates, sameProtectedMinorScore(civ, other, rules))
 
         // Friends not getting along: the worst of the traitor terms
         term(DiplomaticModifiers.BetrayedDeclarationOfFriendship, traitorScore(civ, other, rules))
@@ -282,8 +289,7 @@ object OpinionAi {
             DisputeLevel.None -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_NONE)
         }
         if (civ.ai.isDiplomat()) {
-            val troublemaker = memory.minorCivDispute > DisputeLevel.Weak || isAngryAboutProtectedMinorKilled(memory, rules) ||
-                isAngryAboutProtectedMinorAttacked(memory, rules)
+            val troublemaker = isMinorCivTroublemaker(memory, rules, ignoreBullying = true)
             if (weight > 0) weight += rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_DIPLOMAT)
             else if (!troublemaker) weight += (rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_NONE_DIPLOMAT) -
                 civ.ai.diplomacyValue(DiplomacyPersonality.Neediness)) * era(civ) / 2
@@ -675,13 +681,178 @@ object OpinionAi {
     fun isDenouncedPlayer(civ: Civilization, other: Civilization): Boolean =
         civ.getDiplomacyManager(other)?.hasFlag(DiplomacyFlags.Denunciation) == true
 
-    /** IsPlayerDoFwithAnyFriend: they have a DoF with someone we have a DoF with */
-    fun isPlayerDoFWithAnyFriend(civ: Civilization, other: Civilization): Boolean =
-        civ.diplomacy.values.any { it.otherCiv != other && it.hasFlag(DiplomacyFlags.DeclarationOfFriendship) && isDoFAccepted(other, it.otherCiv) }
+    /**
+     *  IsMinorCivTroublemaker: a city-state dispute above weak, a protected city-state of ours they killed or attacked, unless
+     *  [ignoreBullying] one they bullied or a bullying promise they broke or ignored. Coups and the city-state attack promise: none.
+     */
+    fun isMinorCivTroublemaker(memory: MajorCivMemory, rules: AiRuleset, ignoreBullying: Boolean = false): Boolean {
+        if (memory.minorCivDispute > DisputeLevel.Weak) return true
+        if (isAngryAboutProtectedMinorKilled(memory, rules) || isAngryAboutProtectedMinorAttacked(memory, rules)) return true
+        return !ignoreBullying && (isAngryAboutProtectedMinorBullied(memory, rules) || memory.brokenBullyCityStatePromise ||
+            memory.ignoredBullyCityStatePromise)
+    }
 
-    /** IsPlayerDoFwithAnyEnemy: they have a DoF with someone we have denounced */
-    fun isPlayerDoFWithAnyEnemy(civ: Civilization, other: Civilization): Boolean =
-        civ.diplomacy.values.any { it.otherCiv != other && it.hasFlag(DiplomacyFlags.Denunciation) && isDoFAccepted(other, it.otherCiv) }
+    private fun hasDefensivePact(civ: Civilization, other: Civilization) =
+        civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
+
+    /** A living major with a city, by civID, else null (VP's checks on the most valuable friend, ally and biggest competitor) */
+    private fun livingMajor(civ: Civilization, id: String?): Civilization? =
+        id?.let { civ.gameInfo.getCivilizationOrNull(it) }?.takeIf { it.isMajorCiv && it.isAlive() && it.cities.isNotEmpty() }
+
+    /** Our biggest competitor when we denounced or fight them (VP's eWorstCompetitor in the "with any enemy" scores) */
+    private fun opposedCompetitor(civ: Civilization): Civilization? =
+        livingMajor(civ, CompetitorAi.biggestCompetitor(civ))?.takeIf { isDenouncedPlayer(civ, it) || civ.isAtWarWith(it) }
+
+    /**
+     *  GetPlayerNumMajorsConquered for ourselves (DoUpdateConquestStats): the majors whose original capital we hold. VP also counts
+     *  the majors we killed whose capital is gone; Unciv keeps no killer: none.
+     */
+    private fun numMajorsConquered(civ: Civilization): Int =
+        civ.cities.count { city -> city.isOriginalCapital && city.foundingCivObject.let { it != null && it != civ && it.isMajorCiv } }
+
+    /**
+     *  GetDOFAcceptedScore: with a DoF OPINION_WEIGHT_DOF, plus _DOF_MOST_VALUED_FRIEND for our most valuable friend; without one, the
+     *  weight of the friendship level we had (friends, allies, battle brothers); scaled by inverted DoF willingness
+     */
+    fun dofAcceptedScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val ai = civ.ai.diplomacy
+        val weight = if (isDoFAccepted(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_DOF) +
+            (if (ai.mostValuableFriend == other.civID) rules.define(AiDefine.OPINION_WEIGHT_DOF_MOST_VALUED_FRIEND) else 0)
+        else when (ai.memoryOf(other).doFLevel) {
+            DoFLevel.Friends -> rules.define(AiDefine.OPINION_WEIGHT_DOF_TYPE_FRIENDS)
+            DoFLevel.Allies -> rules.define(AiDefine.OPINION_WEIGHT_DOF_TYPE_ALLIES)
+            DoFLevel.BattleBrothers -> rules.define(AiDefine.OPINION_WEIGHT_DOF_TYPE_BATTLE_BROTHERS)
+            DoFLevel.Untrustworthy, DoFLevel.New -> 0
+        }
+        return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.DoFWillingness), invert = true)
+    }
+
+    /**
+     *  GetDOFWithAnyFriendScore: OPINION_WEIGHT_DOF_WITH_FRIEND, _SUBSEQUENT for each further friend (a DoF) we share, plus
+     *  _DOF_WITH_MOST_VALUED_FRIEND / _ALLY when they are friends with our most valuable friend or ally; scaled by work-with willingness
+     */
+    fun dofWithAnyFriendScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val mutual = countedMajors(civ).count { it != other && isDoFAccepted(civ, it) && isDoFAccepted(other, it) }
+        if (mutual <= 0) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_DOF_WITH_FRIEND) + rules.define(AiDefine.OPINION_WEIGHT_DOF_WITH_FRIEND_SUBSEQUENT) * (mutual - 1)
+        val ai = civ.ai.diplomacy
+        val bestFriend = livingMajor(civ, ai.mostValuableFriend)?.takeIf { isDoFAccepted(civ, it) }
+        val bestAlly = livingMajor(civ, ai.mostValuableAlly)?.takeIf { isDoFAccepted(civ, it) && hasDefensivePact(civ, it) }
+        weight += mostValuedBonus(bestFriend, bestAlly, rules.define(AiDefine.OPINION_WEIGHT_DOF_WITH_MOST_VALUED_FRIEND),
+            rules.define(AiDefine.OPINION_WEIGHT_DOF_WITH_MOST_VALUED_ALLY)) { isDoFAccepted(other, it) }
+        return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness))
+    }
+
+    /**
+     *  The most valuable partner bonus of the "with any friend" scores: with both partners, [first]'s weight is checked first when it
+     *  is the stronger (more negative or equal), else [second]'s; with one, the stronger weight when [sharedWith] it. (VP's branch
+     *  without defensive pacts does not arise: Unciv always allows them.)
+     */
+    private fun mostValuedBonus(first: Civilization?, second: Civilization?, firstWeight: Int, secondWeight: Int,
+                                sharedWith: (Civilization) -> Boolean): Int {
+        if (first != null && second != null) {
+            return if (firstWeight <= secondWeight) {
+                if (sharedWith(first)) firstWeight else if (sharedWith(second)) secondWeight else 0
+            } else {
+                if (sharedWith(second)) secondWeight else if (sharedWith(first)) firstWeight else 0
+            }
+        }
+        val shared = (first != null && sharedWith(first)) || (second != null && sharedWith(second))
+        return if (shared) minOf(firstWeight, secondWeight) else 0
+    }
+
+    /**
+     *  GetDOFWithAnyEnemyScore: OPINION_WEIGHT_DOF_WITH_ENEMY, _SUBSEQUENT for each further player we denounced or fight that they are
+     *  friends with, plus _DOF_WITH_BIGGEST_COMPETITOR when that is our biggest competitor; scaled by neediness. The league rival: none.
+     */
+    fun dofWithAnyEnemyScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val enemies = countedMajors(civ).count { isDoFAccepted(other, it) && (isDenouncedPlayer(civ, it) || civ.isAtWarWith(it)) }
+        if (enemies <= 0) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_DOF_WITH_ENEMY) + rules.define(AiDefine.OPINION_WEIGHT_DOF_WITH_ENEMY_SUBSEQUENT) * (enemies - 1)
+        val competitor = opposedCompetitor(civ)
+        if (competitor != null && isDoFAccepted(other, competitor)) weight += rules.define(AiDefine.OPINION_WEIGHT_DOF_WITH_BIGGEST_COMPETITOR)
+        return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.Neediness))
+    }
+
+    /**
+     *  GetDPAcceptedScore: with a defensive pact OPINION_WEIGHT_DP, plus _DP_MOST_VALUED_ALLY for our most valuable ally; x
+     *  OPINION_WEIGHT_DP_CONQUEROR_MULTIPLIER % once we have conquered a major, else scaled by warmonger hate
+     */
+    fun dpAcceptedScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        var weight = 0
+        if (hasDefensivePact(civ, other)) {
+            weight += rules.define(AiDefine.OPINION_WEIGHT_DP)
+            if (civ.ai.diplomacy.mostValuableAlly == other.civID) weight += rules.define(AiDefine.OPINION_WEIGHT_DP_MOST_VALUED_ALLY)
+        }
+        if (numMajorsConquered(civ) > 0) return weight * rules.define(AiDefine.OPINION_WEIGHT_DP_CONQUEROR_MULTIPLIER) / 100
+        return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.WarmongerHate))
+    }
+
+    /**
+     *  GetDPWithAnyFriendScore: OPINION_WEIGHT_DP_WITH_FRIEND, _SUBSEQUENT for each further defensive pact we share, plus
+     *  _DP_WITH_MOST_VALUED_ALLY / _FRIEND when they have one with our most valuable ally or friend; scaled by warmonger hate
+     */
+    fun dpWithAnyFriendScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val living = civ.gameInfo.civilizations.filter { it.isMajorCiv && it.isAlive() && it.cities.isNotEmpty() && it != other }
+        val mutual = living.count { hasDefensivePact(civ, it) && hasDefensivePact(other, it) }
+        if (mutual <= 0) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_DP_WITH_FRIEND) + rules.define(AiDefine.OPINION_WEIGHT_DP_WITH_FRIEND_SUBSEQUENT) * (mutual - 1)
+        val ai = civ.ai.diplomacy
+        val bestAlly = livingMajor(civ, ai.mostValuableAlly)?.takeIf { hasDefensivePact(civ, it) }
+        val bestFriend = livingMajor(civ, ai.mostValuableFriend)?.takeIf { hasDefensivePact(civ, it) && isDoFAccepted(civ, it) }
+        weight += mostValuedBonus(bestAlly, bestFriend, rules.define(AiDefine.OPINION_WEIGHT_DP_WITH_MOST_VALUED_ALLY),
+            rules.define(AiDefine.OPINION_WEIGHT_DP_WITH_MOST_VALUED_FRIEND)) { hasDefensivePact(other, it) }
+        return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.WarmongerHate))
+    }
+
+    /**
+     *  GetDPWithAnyEnemyScore: OPINION_WEIGHT_DP_WITH_ENEMY, _SUBSEQUENT for each further player we denounced or fight that they have
+     *  a defensive pact with, plus _DP_WITH_BIGGEST_COMPETITOR for our biggest competitor; scaled by neediness. The league rival: none.
+     */
+    fun dpWithAnyEnemyScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val living = civ.gameInfo.civilizations.filter { it.isMajorCiv && it.isAlive() && it.cities.isNotEmpty() }
+        val enemies = living.count { hasDefensivePact(other, it) && (isDenouncedPlayer(civ, it) || civ.isAtWarWith(it)) }
+        if (enemies <= 0) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_DP_WITH_ENEMY) + rules.define(AiDefine.OPINION_WEIGHT_DP_WITH_ENEMY_SUBSEQUENT) * (enemies - 1)
+        val competitor = opposedCompetitor(civ)
+        if (competitor != null && hasDefensivePact(other, competitor)) weight += rules.define(AiDefine.OPINION_WEIGHT_DP_WITH_BIGGEST_COMPETITOR)
+        return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.Neediness))
+    }
+
+    /** GetOpenBordersScore: OPINION_WEIGHT_OPEN_BORDERS_MUTUAL both ways, _US when only they let us in, _THEM when only we let them in */
+    fun openBordersScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val theyAllow = civ.getDiplomacyManager(other)?.hasOpenBorders == true
+        val weAllow = other.getDiplomacyManager(civ)?.hasOpenBorders == true
+        return when {
+            weAllow && theyAllow -> rules.define(AiDefine.OPINION_WEIGHT_OPEN_BORDERS_MUTUAL)
+            theyAllow -> rules.define(AiDefine.OPINION_WEIGHT_OPEN_BORDERS_US)
+            weAllow -> rules.define(AiDefine.OPINION_WEIGHT_OPEN_BORDERS_THEM)
+            else -> 0
+        }
+    }
+
+    /** GetResearchAgreementScore: OPINION_WEIGHT_RA, plus _RA_SCIENTIFIC_MOD for a scientist (primary or secondary pursuit) or the nerd trait */
+    fun researchAgreementScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (civ.getDiplomacyManager(other)?.hasFlag(DiplomacyFlags.ResearchAgreement) != true) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_RA)
+        if (civ.ai.isScientist() || civ.ai.isSecondaryScientist() || civ.ai.hasTraitCategory(TraitCategory.Nerd))
+            weight += rules.define(AiDefine.OPINION_WEIGHT_RA_SCIENTIFIC_MOD)
+        return weight
+    }
+
+    /**
+     *  GetPtPSameCSScore: the city-states both of us protect, x OPINION_WEIGHT_PTP_SAME_MINOR_DIPLOMAT_MULTIPLIER % for a diplomat
+     *  (primary or secondary) when they make no trouble with city-states; _EACH per one, at least _MIN
+     */
+    fun sameProtectedMinorScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        var same = civ.gameInfo.civilizations.count {
+            it.isCityState && it.cities.isNotEmpty() && CityStateAi.isProtectedBy(it, other) && CityStateAi.isProtectedBy(it, civ)
+        }
+        if ((civ.ai.isDiplomat() || civ.ai.isSecondaryDiplomat()) && !isMinorCivTroublemaker(civ.ai.diplomacy.memoryOf(other), rules))
+            same = same * rules.define(AiDefine.OPINION_WEIGHT_PTP_SAME_MINOR_DIPLOMAT_MULTIPLIER) / 100
+        if (same <= 0) return 0
+        return minOf(rules.define(AiDefine.OPINION_WEIGHT_PTP_SAME_MINOR_MIN), same * rules.define(AiDefine.OPINION_WEIGHT_PTP_SAME_MINOR_EACH))
+    }
 
     /** IsPlayerDenouncedFriend: they denounced someone we have a DoF with */
     fun isPlayerDenouncedFriend(civ: Civilization, other: Civilization): Boolean =

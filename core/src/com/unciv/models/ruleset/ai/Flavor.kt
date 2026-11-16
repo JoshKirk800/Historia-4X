@@ -93,6 +93,8 @@ enum class DiplomacyPersonality {
     Meanness,
     /** Vox Populi's Leaders column (VP database, every BNW leader): the willingness to work with others (ApproachAi part 9, GUARDED) */
     WorkWithWillingness,
+    /** Vox Populi's Leaders column: the willingness to work against others (ApproachAi part 4, friendship with the enemies of our biggest competitor) */
+    WorkAgainstWillingness,
 }
 
 /** The original's MajorCivApproachTypes in XML order (MAJOR_CIV_APPROACH_WAR ...), used for the leaders' approach biases */

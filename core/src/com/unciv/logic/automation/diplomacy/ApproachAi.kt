@@ -70,7 +70,7 @@ object ApproachAi {
                        random: Random): MajorCivApproach {
         val memory = civ.ai.diplomacy.memoryOf(other)
         val firstUpdate = memory.turnMet == civ.gameInfo.turns
-        val w = approachWeights(civ, other, if (firstUpdate) null else memory.approach, rules)
+        val w = approachWeights(civ, other, if (firstUpdate) null else memory.approach, rules, strategic)
         for (i in w.indices) w[i] *= 100
         val mods = approachMods(civ)
         if (!strategic && validPlayers.size > 1) prioritize(civ, other, validPlayers, mods, w)
@@ -254,9 +254,11 @@ object ApproachAi {
 
     /**
      *  The weights of SelectBestApproachTowardsMajorCiv before part 9, by [MajorCivApproach.ordinal], on our scale (VP's / 100).
-     *  [oldApproach] is last turn's approach, null on the first update (no last-turn biases).
+     *  [oldApproach] is last turn's approach, null on the first update (no last-turn biases). [strategic]: the strategic pass, which
+     *  leaves out the terms that read the competitors chosen after it (part 4).
      */
-    fun approachWeights(civ: Civilization, other: Civilization, oldApproach: MajorCivApproach?, rules: AiRuleset): IntArray {
+    fun approachWeights(civ: Civilization, other: Civilization, oldApproach: MajorCivApproach?, rules: AiRuleset,
+                        strategic: Boolean = false): IntArray {
         val ai = civ.ai.diplomacy
         val memory = ai.memoryOf(other)
         val w = IntArray(APPROACHES.size)
@@ -418,6 +420,9 @@ object ApproachAi {
         }
         stage("Captured cities (part 3)")
         addCapturedCitiesWeights(civ, other, w)
+
+        stage("Key players (part 4)")
+        addKeyPlayerWeights(civ, other, strategic, w, rules)
 
         stage("promises")
         addPromiseWeights(civ, other, memory, w, rules)
@@ -968,18 +973,88 @@ object ApproachAi {
     }
 
     /**
-     *  CvDiplomacyAI::SelectBestApproachTowardsMajorCiv, OPPORTUNITY ATTACK DESIRE (Vox Populi): whether we want to exploit a weakness of
-     *  [other]'s, over the inputs we have (`phaseE/vp-conquest-endgame-plan.md`, step 0 table). Always with a coop war against them; else,
-     *  unless we take no new wars ([WarStateAi.isNoNewWars]: then only when endgame-aggressive towards them, they took a key city of ours or
-     *  they are close to world conquest), with a reason that depends on whether we
-     *  hold back: we hold back from distant players and, unless they are untrustworthy, took our capital or holy city, or the game is
-     *  conquest-only, from friends and from those with a declaration of friendship. Holding back, a reason is: we or they are close to world
-     *  conquest, they provoked us, they took a key city of ours, their warmonger threat is severe, they conquered 3 or more capitals, or the
-     *  game is conquest-only. Not holding back, also: we go for world conquest from the Medieval era; and when they are close or neighbours,
-     *  we go for world conquest, they provoked us, our opinion of them is Enemy or worse, or they expand recklessly.
-     *  Left out (no counterpart): easy and good targets, major, early-game, biggest and league competitors, wonder spammers, our own
-     *  backstabber flag, the conqueror traits, earlier friendship that ended. "Provoked" is a demand of theirs while we are at war (VP also
-     *  counts a demand we accepted or a second demand, which we do not track).
+     *  Part 4, KEY PLAYERS (Vox Populi), the final pass only (the competitors are chosen after the strategic pass). Their enemies are
+     *  our friends: a player that denounced our biggest competitor adds friendly (WorkAgainstWillingness / 4), one at war with it more
+     *  (/ 2). Our biggest competitor: war and hostile up 5 times their bias after the Classical era (3 before), guarded and deceptive 5
+     *  times after it. Else a major or early-game competitor: deceptive up 3 times, guarded 2, and when we go for world conquest, they
+     *  are neighbours, [victoryConcern] or they provoked us, war and hostile 3 times (deceptive 2 more if deception applies). Else, from
+     *  the Renaissance, competing for victory and with no victory concern: friendly and neutral up by our VictoryCompetitiveness (and its
+     *  complement), deceptive down by it. With a World Congress, our diplomacy is glad of any player that is not our league competitor:
+     *  friendly 2 times its bias unless they are untrustworthy, or provoked us while we do not go for a diplomatic victory.
+     *  As none (no input yet): easy targets (their extra war), the most valuable friend and ally and the league's prime competitor and
+     *  ally (`phaseE/vp-approach-plan.md`, C3b), sanctions.
+     */
+    private fun addKeyPlayerWeights(civ: Civilization, other: Civilization, strategic: Boolean, w: IntArray, rules: AiRuleset) {
+        if (strategic) return
+        fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
+        val biggest = CompetitorAi.biggestCompetitor(civ)
+        if (biggest != null && biggest != other.civID) {
+            val against = civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)
+            val third = civ.gameInfo.getCivilization(biggest)
+            if (OpinionAi.isDenouncedPlayer(other, third)) w[FRIENDLY] += bias(MajorCivApproach.Friendly) * against / 4
+            if (other.isAtWarWith(third)) w[FRIENDLY] += bias(MajorCivApproach.Friendly) * against / 2
+        }
+        val era = civ.getEra().eraNumber
+        val concern = victoryConcern(civ, other, rules)
+        val provoked = provokedUs(civ, other)
+        val neighbours = DiplomacyTurn.proximity(civ, other) == DiplomacyTurn.PROXIMITY_NEIGHBORS
+        if (biggest == other.civID) {
+            val afterClassical = era > rules.define(AiDefine.CLASSICAL_ERA)
+            w[WAR] += bias(MajorCivApproach.War) * if (afterClassical) 5 else 3
+            w[HOSTILE] += bias(MajorCivApproach.Hostile) * if (afterClassical) 5 else 3
+            if (afterClassical) {
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * 5
+                w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * 5
+            }
+        } else if (CompetitorAi.isMajorCompetitor(civ, other) || CompetitorAi.isEarlyGameCompetitor(civ, other, rules)) {
+            w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * 3
+            w[GUARDED] += bias(MajorCivApproach.Guarded) * 2
+            if (civ.ai.isGoingForWorldConquest() || neighbours || concern || provoked) {
+                w[WAR] += bias(MajorCivApproach.War) * 3
+                w[HOSTILE] += bias(MajorCivApproach.Hostile) * 3
+                if (appliesDeception(civ, other, rules)) w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * 2
+            }
+        } else if (era >= rules.define(AiDefine.RENAISSANCE_ERA) && !concern && VictoryProgressAi.isCompetingForVictory(civ)) {
+            val competitiveness = civ.ai.diplomacyValue(DiplomacyPersonality.VictoryCompetitiveness)
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * competitiveness / 2
+            w[NEUTRAL] += bias(MajorCivApproach.Neutral) * (11 - competitiveness) / 2
+            w[DECEPTIVE] -= bias(MajorCivApproach.Deceptive) * competitiveness
+        }
+        if (civ.gameInfo.league != null && !OpinionAi.isUntrustworthyFriend(other) && (civ.ai.isGoingForDiploVictory() || !provoked))
+            w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
+    }
+
+    /**
+     *  Part 4, bVictoryConcern (Vox Populi): they are close to world conquest or conquered 3 or more capitals; or, when we compete for
+     *  victory, we are endgame aggressive towards them, or they stand in the way of our victory: a strong land dispute when we go for
+     *  world conquest, a strong city-state dispute for a diplomatic victory, a strong wonder dispute for a culture victory. VP's victory
+     *  dispute and block levels and its tech and policy blocks have no input here.
+     */
+    fun victoryConcern(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
+        if (VictoryProgressAi.isCloseToWorldConquest(other, rules) || VictoryProgressAi.capitalsConquered(other) >= 3) return true
+        if (!VictoryProgressAi.isCompetingForVictory(civ)) return false
+        val memory = civ.ai.diplomacy.memories[other.civID] ?: return VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)
+        return VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)
+            || (civ.ai.isGoingForWorldConquest() && memory.landDispute >= DisputeLevel.Strong)
+            || (civ.ai.isGoingForDiploVictory() && memory.minorCivDispute >= DisputeLevel.Strong)
+            || (civ.ai.isGoingForCultureVictory() && memory.wonderDispute >= DisputeLevel.Strong)
+    }
+
+    /**
+     *  CvDiplomacyAI::SelectBestApproachTowardsMajorCiv, OPPORTUNITY ATTACK DESIRE (Vox Populi, part 4): whether we want to exploit a
+     *  weakness of [other]'s, over the inputs we have. Always with a coop war against them; else, unless we take no new wars
+     *  ([WarStateAi.isNoNewWars]: then only when endgame-aggressive towards them, they took a key city of ours or they are close to world
+     *  conquest), with a reason that depends on whether we hold back: we hold back from distant players and, unless they are
+     *  untrustworthy, took our capital or holy city, or the game is conquest-only, from those with a declaration of friendship or a
+     *  defensive pact with us. Holding back, a reason is: we or they are close to world conquest, they provoked us, they took a key city
+     *  of ours, their warmonger threat is severe, they are an early-game competitor or our biggest competitor, [victoryConcern], or the
+     *  game is conquest-only. Not holding back: we go for world conquest from the Medieval era, they took a key city, [victoryConcern],
+     *  a severe warmonger threat, either of us close to world conquest, a major competitor, or a conquest-only game; and when they are
+     *  close or neighbours, also: we go for world conquest, they provoked us, our opinion of them is Enemy or worse, an early-game
+     *  competitor, or a reckless expander.
+     *  Left out (no counterpart): easy and good targets, the league competitor, wonder spammers, our own backstabber flag, the conqueror
+     *  traits, earlier friendship that ended. "Provoked" is a demand of theirs while we are at war (VP also counts a demand we accepted or
+     *  a second demand, which we do not track).
      */
     fun wantsOpportunityAttack(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
         if (CoopWarAi.isLockedIntoCoopWar(civ, other, rules)) return true
@@ -994,16 +1069,20 @@ object ApproachAi {
         if (WarStateAi.isNoNewWars(civ) && !VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules) && !tookKeyCity && !theyAreClose)
             return false
         val severeThreat = civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe
-        val victoryConcern = theyAreClose || VictoryProgressAi.capitalsConquered(other) >= 3
+        val concern = victoryConcern(civ, other, rules)
+        val earlyGameCompetitor = CompetitorAi.isEarlyGameCompetitor(civ, other, rules)
+        val friendOrAlly = OpinionAi.isDoFAccepted(civ, other) || civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
         val holdBack = proximity <= DiplomacyTurn.PROXIMITY_FAR || (!OpinionAi.isUntrustworthyFriend(other) && !tookKeyCity && !aggressiveMode
-            && OpinionAi.isDoFAccepted(civ, other))
+            && friendOrAlly)
         if (holdBack)
-            return closeToConquest || provokedUs || tookKeyCity || severeThreat || victoryConcern || aggressiveMode
+            return closeToConquest || provokedUs || tookKeyCity || severeThreat || earlyGameCompetitor
+                || CompetitorAi.biggestCompetitor(civ) == other.civID || concern || theyAreClose || aggressiveMode
         val medievalOrLater = civ.getEra().eraNumber >= rules.define(AiDefine.MEDIEVAL_ERA)
-        if ((civ.ai.isGoingForWorldConquest() && medievalOrLater) || tookKeyCity || victoryConcern || severeThreat || closeToConquest
-            || theyAreClose || aggressiveMode) return true
+        if ((civ.ai.isGoingForWorldConquest() && medievalOrLater) || tookKeyCity || concern || severeThreat || closeToConquest
+            || theyAreClose || CompetitorAi.isMajorCompetitor(civ, other) || aggressiveMode) return true
         return proximity >= DiplomacyTurn.PROXIMITY_CLOSE && (civ.ai.isGoingForWorldConquest() || provokedUs
-            || (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Enemy || WarStateAi.isPlayerRecklessExpander(civ, other))
+            || (memory?.opinion ?: MajorCivOpinion.Neutral) <= MajorCivOpinion.Enemy || earlyGameCompetitor
+            || WarStateAi.isPlayerRecklessExpander(civ, other))
     }
 
     /** CvPlayerTrade::GetAllTradeValueFromPlayerTimes100(YIELD_GOLD) / 100: gold we earn from routes between us and them */

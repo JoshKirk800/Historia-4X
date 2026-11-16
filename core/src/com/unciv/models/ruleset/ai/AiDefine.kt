@@ -865,6 +865,8 @@ enum class AiDefine(val default: Float) {
     // Vox Populi (D7: the Historia 4X AI takes VP's rules; the default is the VP database's value, BNW has no such define)
     // CvDiplomacyAI::IsCloseToWorldConquest: domination progress (VictoryProgressAi) at or above this is close to world conquest
     CLOSE_TO_DOMINATION_VICTORY_THRESHOLD(50f),
+    // The index of the Classical era (VP's GD_INT_GET(CLASSICAL_ERA)): after it the biggest competitor weighs more (ApproachAi part 4)
+    CLASSICAL_ERA(1f),
     // The index of the Medieval era (VP's GD_INT_GET(MEDIEVAL_ERA)): from it a conqueror wants opportunity attacks on anyone (ApproachAi)
     MEDIEVAL_ERA(2f),
     // The indices of the Renaissance, Modern and Atomic eras (VP's GD_INT_GET(*_ERA)): from them a culture or spaceship victory, and

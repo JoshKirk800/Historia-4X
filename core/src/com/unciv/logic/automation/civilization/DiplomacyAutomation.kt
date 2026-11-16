@@ -6,16 +6,22 @@ import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.OperationAbortReason
 import com.unciv.logic.automation.diplomacy.AggressivePosture
+import com.unciv.logic.automation.diplomacy.ApproachAi
+import com.unciv.logic.automation.diplomacy.CompetitorAi
 import com.unciv.logic.automation.diplomacy.CoopWarAi
 import com.unciv.logic.automation.diplomacy.CoopWarState
+import com.unciv.logic.automation.diplomacy.DisputeLevel
 import com.unciv.logic.automation.diplomacy.IntrigueAi
 import com.unciv.logic.automation.diplomacy.DiploStatement
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.MajorCivMemory
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.OpinionAi
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.automation.diplomacy.WarAi
+import com.unciv.logic.automation.diplomacy.WarFace
 import com.unciv.logic.automation.diplomacy.WarGoal
+import com.unciv.logic.automation.diplomacy.WarSanityAi
 import com.unciv.logic.automation.strategy.PurchaseType
 import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.automation.strategy.TargetValue
@@ -25,6 +31,7 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.PopupAlert
 import com.unciv.logic.civilization.diplomacy.Demand
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.trade.TradeLogic
 import com.unciv.logic.trade.TradeOffer
 import com.unciv.logic.trade.TradeOfferType
@@ -35,6 +42,8 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.MinorCivApproach
+import com.unciv.models.ruleset.QuestName
 import com.unciv.models.ruleset.tile.ResourceType
 
 /**
@@ -280,51 +289,107 @@ object DiplomacyAutomation {
         return true
     }
 
-    /** The deterministic part of CvDiplomacyAI::GetDenounceWeight (all but the random 0..4) */
-    fun denounceWeightBeforeRandom(civ: Civilization, other: Civilization, bias: Boolean): Int {
+    /**
+     *  CvDiplomacyAI::GetDenounceWeight (Vox Populi, Release-5.4.8; D7): denounce willingness; by our approach (friendly never;
+     *  hostile +6, afraid -10, neutral -8, guarded +1, deceptive -25, war +8 at war, else by its face: hostile +8, neutral -4,
+     *  friendly -25) and opinion (unforgivable +10, enemy +5, competitor +2, neutral -5, favourable or better never); their land
+     *  dispute (strong +2, fierce +5); -2 per defensive pact of theirs; our biggest competitor +10, a major competitor +2;
+     *  untrustworthy +25; endgame aggression + the handicap's larger victory dispute or block percent / 10; resurrection -25 (by
+     *  them) or -15 (by us), a defensive pact -10, a liberator -10, cities they liberated -5; each other major tied to them (a
+     *  friendship, a pact, a denouncement, a war) that we neither hate nor approach worse than deceptively nor distrust, by
+     *  neighbourhood, our opinion of it, its strength and our DoF or pact with it: added when it denounced or fights them, else taken
+     *  away; +2 per city-state we do not mean to conquer or bully that asks us to denounce them (unless close to a peaceful victory);
+     *  +3 going for a diplomatic victory, +3 when a friend asks ([bias]). VP's loop also takes in ourselves; as none: vassals,
+     *  victory dispute and block levels, sanctions, diplomat pursuits and traits.
+     */
+    fun denounceWeight(civ: Civilization, other: Civilization, bias: Boolean): Int {
         val ai = civ.ai.diplomacy
+        val rules = civ.gameInfo.ruleset.ai
+        val memory = ai.memoryOf(other)
         var weight = civ.ai.diplomacyValue(DiplomacyPersonality.DenounceWillingness)
-        when (ai.approachTowards(other)) {
-            MajorCivApproach.Hostile -> weight += 6
-            MajorCivApproach.Afraid -> weight -= 10
-            else -> {}
+        weight += when (ai.approachTowards(other)) {
+            MajorCivApproach.Friendly -> return 0
+            MajorCivApproach.Hostile -> 6
+            MajorCivApproach.Afraid -> -10
+            MajorCivApproach.Neutral -> -8
+            MajorCivApproach.Guarded -> 1
+            MajorCivApproach.Deceptive -> -25
+            MajorCivApproach.War -> if (civ.isAtWarWith(other)) 8 else when (memory.warFace) {
+                WarFace.Hostile -> 8
+                WarFace.Friendly -> -25
+                else -> -4
+            }
         }
         weight += when (ai.opinionOf(other)) {
             MajorCivOpinion.Unforgivable -> 10
             MajorCivOpinion.Enemy -> 5
             MajorCivOpinion.Competitor -> 2
-            MajorCivOpinion.Favorable -> -10
-            MajorCivOpinion.Friend -> -25
-            MajorCivOpinion.Ally -> -50
-            MajorCivOpinion.Neutral -> 0
+            MajorCivOpinion.Neutral -> -5
+            MajorCivOpinion.Favorable, MajorCivOpinion.Friend, MajorCivOpinion.Ally -> return 0
         }
-        if (civ.isAtWarWith(other)) weight += 2
-        // Others we like who denounced them
+        weight += when (memory.landDispute) {
+            DisputeLevel.Strong -> 2
+            DisputeLevel.Fierce -> 5
+            else -> 0
+        }
+        weight -= 2 * other.diplomacy.values.count { it.diplomaticStatus == DiplomaticStatus.DefensivePact }
+        if (CompetitorAi.biggestCompetitor(civ) == other.civID) weight += 10
+        else if (CompetitorAi.isMajorCompetitor(civ, other)) weight += 2
+        if (OpinionAi.isUntrustworthyFriend(other)) weight += 25
+        val handicap = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values
+        if (VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules))
+            weight += maxOf(handicap?.get("VictoryDisputePercent") ?: 100, handicap?.get("VictoryBlockPercent") ?: 100) / 10
+        if (memory.resurrectedUs) weight -= 25
+        if (civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact) weight -= 10
+        if (WarSanityAi.isLiberator(civ, other, onlyMajorCities = true)) weight -= 10
+        if (memory.numCitiesLiberated > 0) weight -= 5
+        if (other.ai.diplomacy.memories[civ.civID]?.resurrectedUs == true) weight -= 15
         for (third in civ.gameInfo.civilizations) {
-            if (!third.isMajorCiv || third == civ || third == other) continue
-            if (!OpinionAi.isDenouncedPlayer(third, other)) continue
-            if (ai.opinionOf(third) <= MajorCivOpinion.Competitor) continue
-            val approach = ai.approachTowards(third)
-            if (approach == MajorCivApproach.Hostile || approach == MajorCivApproach.War) continue
-            if (DiplomacyTurn.proximity(civ, third) == DiplomacyTurn.PROXIMITY_NEIGHBORS) weight += 1
-            val strength = WarStateAi.militaryStrengthComparedToUs(civ, third)
-            if (strength != null && strength > StrengthLevel.Average) weight += strength.ordinal - StrengthLevel.Average.ordinal
-            if (OpinionAi.isDoFAccepted(civ, third)) weight += 4
+            if (!third.isMajorCiv || third == civ || third == other || !third.isAlive()) continue
+            val tie = third.getDiplomacyManager(other)?.diplomaticStatus
+            val againstThem = OpinionAi.isDenouncedPlayer(third, other) || third.isAtWarWith(other)
+            if (!againstThem && !OpinionAi.isDoFAccepted(third, other) && tie != DiplomaticStatus.DefensivePact) continue
+            if (ai.opinionOf(third) <= MajorCivOpinion.Enemy) continue
+            if (ApproachAi.VP_ORDER.indexOf(ai.approachTowards(third)) <= ApproachAi.VP_ORDER.indexOf(MajorCivApproach.Deceptive)) continue
+            if (OpinionAi.isUntrustworthyFriend(third)) continue
+            var mod = 0
+            if (DiplomacyTurn.proximity(civ, third) == DiplomacyTurn.PROXIMITY_NEIGHBORS) mod++
+            mod += ai.opinionOf(third).ordinal - MajorCivOpinion.Neutral.ordinal
+            val strength = WarStateAi.militaryStrengthComparedToUs(civ, third) ?: StrengthLevel.Average
+            if (strength > StrengthLevel.Average) mod += strength.ordinal - StrengthLevel.Average.ordinal
+            if (OpinionAi.isDoFAccepted(civ, third)) mod += 4
+            if (civ.getDiplomacyManager(third)?.diplomaticStatus == DiplomaticStatus.DefensivePact) mod += 2
+            weight += if (againstThem) mod else -mod
         }
+        val closeToPeacefulVictory = VictoryProgressAi.scienceVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD) ||
+            VictoryProgressAi.cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD) ||
+            VictoryProgressAi.diplomaticVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)
+        if (!closeToPeacefulVictory) for (cityState in civ.gameInfo.civilizations) {
+            if (!cityState.isCityState || !WarStateAi.isPlayerValid(civ, cityState) || civ.isAtWarWith(cityState)) continue
+            val approach = civ.ai.minorCivApproaches[cityState.civID]
+            if (approach == MinorCivApproach.Conquest || approach == MinorCivApproach.Bully) continue
+            if (cityState.questManager.getAssignedQuestsFor(civ)
+                    .any { it.questName == QuestName.DenounceCiv.value && it.data1 == other.civName }) weight += 2
+        }
+        if (civ.ai.isGoingForDiploVictory()) weight += 3
         if (bias) weight += 3
         return weight
     }
 
-    /** CvDiplomacyAI::GetDenounceWeight */
-    fun denounceWeight(civ: Civilization, other: Civilization, bias: Boolean, purpose: String): Int =
-        denounceWeightBeforeRandom(civ, other, bias) + civ.ai.random("DiplomacyAI.DenounceWeight$purpose" + other.civID).nextInt(5)
-
-    /** CvDiplomacyAI::IsDenounceAcceptable: a weight of 18 or more */
+    /**
+     *  CvDiplomacyAI::IsDenounceAcceptable (Vox Populi): not while at war and wanting peace or in the war's first turn, not when we
+     *  denounced them already, are their friends, met them within 10 turns or broke a DoF with them within DOF_BROKEN_BACKSTAB_TIMER;
+     *  then a [denounceWeight] above 25.
+     */
     fun isDenounceAcceptable(civ: Civilization, other: Civilization, bias: Boolean): Boolean {
-        if (civ.isAtWarWith(other)) return false
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        if (civ.isAtWarWith(other) && (memory.wantsPeace || WarStateAi.turnsAtWar(civ, other) == 0)) return false
         if (OpinionAi.isDenouncedPlayer(civ, other)) return false
         if (OpinionAi.isDoFAccepted(civ, other)) return false
-        return denounceWeight(civ, other, bias, "Acceptable") >= 18
+        if (civ.gameInfo.turns - memory.turnMet < 10) return false
+        val broken = other.ai.diplomacy.memories[civ.civID]?.doFBrokenTurn ?: -1
+        if (broken >= 0 && civ.gameInfo.turns - broken < civ.gameInfo.ruleset.ai.define(AiDefine.DOF_BROKEN_BACKSTAB_TIMER)) return false
+        return denounceWeight(civ, other, bias) > 25
     }
 
     private fun doDenounceStatement(civ: Civilization, other: Civilization): Boolean {
@@ -350,7 +415,7 @@ object DiplomacyAutomation {
             if (!friend.knows(candidate) || friend.isAtWarWith(candidate)) continue
             if (OpinionAi.isDenouncedPlayer(friend, candidate)) continue
             if (!civ.isAtWarWith(candidate) && !OpinionAi.isDenouncedPlayer(civ, candidate)) continue
-            val weight = denounceWeight(civ, friend, bias = false, "RequestFriend" + candidate.civID) +
+            val weight = denounceWeight(civ, friend, bias = false) +
                 civ.ai.diplomacyValue(DiplomacyPersonality.Neediness)
             if (weight >= 23 && weight > bestWeight) {
                 bestWeight = weight
@@ -401,7 +466,7 @@ object DiplomacyAutomation {
 
     /** CvDiplomacyAI::IsFriendDenounceRefusalUnacceptable */
     fun isFriendDenounceRefusalUnacceptable(civ: Civilization, target: Civilization): Boolean {
-        val desire = denounceWeight(civ, target, bias = false, "Refusal") + civ.ai.diplomacyValue(DiplomacyPersonality.Neediness) -
+        val desire = denounceWeight(civ, target, bias = false) + civ.ai.diplomacyValue(DiplomacyPersonality.Neediness) -
             civ.ai.diplomacyValue(DiplomacyPersonality.Forgiveness)
         return desire >= 23
     }

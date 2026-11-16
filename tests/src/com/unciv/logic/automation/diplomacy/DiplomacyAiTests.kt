@@ -4,6 +4,7 @@ import com.unciv.logic.automation.civilization.DiplomacyAutomation
 import com.unciv.logic.automation.strategy.AiOperationType
 import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticModifiers
@@ -358,26 +359,28 @@ class DiplomacyAiTests {
     }
 
     @Test
-    fun `denouncing needs a weight of 18`() {
+    fun `denouncing needs a weight above 25, after Vox Populi`() {
+        game.gameInfo.turns = 20 // met over 10 turns ago
         a.ai.setDiplomacyValue(DiplomacyPersonality.DenounceWillingness, 6)
         a.ai.diplomacy.setApproach(b, MajorCivApproach.Hostile)
         a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Enemy)
-        // 6 + hostile 6 + enemy 5 = 17; with the bias +3 = 20 >= 18 whatever the roll
-        assertEquals(17, DiplomacyAutomation.denounceWeightBeforeRandom(a, b, bias = false))
-        assertTrue(DiplomacyAutomation.isDenounceAcceptable(a, b, bias = true))
+        // 6 + hostile 6 + enemy 5 = 17; with a friend's request +3 = 20
+        assertEquals(17, DiplomacyAutomation.denounceWeight(a, b, bias = false))
+        assertFalse(DiplomacyAutomation.isDenounceAcceptable(a, b, bias = true))
 
-        a.ai.setDiplomacyValue(DiplomacyPersonality.DenounceWillingness, 4)
-        a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Competitor)
-        // 4 + 6 + 2 = 12, at most 16 with the roll
-        assertEquals(12, DiplomacyAutomation.denounceWeightBeforeRandom(a, b, bias = false))
-        assertFalse(DiplomacyAutomation.isDenounceAcceptable(a, b, bias = false))
+        // Our biggest competitor: +10
+        a.ai.diplomacy.biggestCompetitor = b.civID
+        assertEquals(27, DiplomacyAutomation.denounceWeight(a, b, bias = false))
+        assertTrue(DiplomacyAutomation.isDenounceAcceptable(a, b, bias = false))
 
-        // A friend of ours who denounced them adds 4 (DoF), 1 more if a neighbor
+        // A friend of ours who denounced them: our opinion of it (friend, 2 above neutral) + 4 for the DoF, 1 more if a neighbour
         a.getDiplomacyManager(c)!!.signDeclarationOfFriendship()
+        a.ai.diplomacy.setApproach(c, MajorCivApproach.Neutral)
         a.ai.diplomacy.setOpinion(c, MajorCivOpinion.Friend)
+        a.ai.warStates.militaryStrengths[c.civID] = StrengthLevel.Average
         c.getDiplomacyManager(b)!!.denounce()
         val neighbor = if (DiplomacyTurn.proximity(a, c) == DiplomacyTurn.PROXIMITY_NEIGHBORS) 1 else 0
-        assertEquals(16 + neighbor, DiplomacyAutomation.denounceWeightBeforeRandom(a, b, bias = false))
+        assertEquals(27 + 2 + 4 + neighbor, DiplomacyAutomation.denounceWeight(a, b, bias = false))
 
         // Never a friend
         a.getDiplomacyManager(b)!!.signDeclarationOfFriendship()

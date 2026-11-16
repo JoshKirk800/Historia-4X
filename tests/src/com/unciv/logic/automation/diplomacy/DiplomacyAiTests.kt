@@ -225,16 +225,15 @@ class DiplomacyAiTests {
     }
 
     @Test
-    fun `killing a city-state's unit pleases the majors at war with that city-state, and only them`() {
+    fun `killing a city-state's unit pleases nobody - common foes are between majors`() {
         val cityState = game.addCiv(cityStateType = "Cultured")
         game.addCity(cityState, game.getTile(HexCoord(0, 8)))
         for (major in listOf(a, b, c)) meet(major, cityState)
         cityState.getDiplomacyManager(a)!!.declareWar()
         cityState.getDiplomacyManager(b)!!.declareWar()
-        val power = game.ruleset.units.getValue("Warrior").getAiPower()
-        DiplomacyEvents.onUnitKilled(cityState, b, power)
-        assertTrue("a is at war with the city-state too", a.ai.diplomacy.memoryOf(b).commonFoeValue > 0)
-        assertEquals("c is not", 0, c.ai.diplomacy.memoryOf(b).commonFoeValue)
+        DiplomacyEvents.onUnitKilled(cityState, b, game.ruleset.units.getValue("Warrior"))
+        assertEquals(0, a.ai.diplomacy.memoryOf(b).commonFoeValue)
+        assertTrue("the city-state keeps its loss", cityState.ai.diplomacy.memoryOf(b).warValueLost > 0)
     }
 
     @Test

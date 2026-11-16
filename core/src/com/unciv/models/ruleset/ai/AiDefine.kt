@@ -622,7 +622,8 @@ enum class AiDefine(val default: Float) {
     WARMONGER_THREAT_PER_TURN_DECAY(-5f),
     WARMONGER_THREAT_SEVERE_PERCENT_THRESHOLD(25f),
     WARMONGER_THREAT_SEVERE_THRESHOLD(100f),
-    WAR_DAMAGE_LEVEL_CITY_WEIGHT(150f),
+    // CvCity::GetWarValue (Vox Populi's value: WarDamageAi)
+    WAR_DAMAGE_LEVEL_CITY_WEIGHT(175f),
     WAR_DAMAGE_LEVEL_INVOLVED_CITY_POP_MULTIPLIER(150f),
     WAR_DAMAGE_LEVEL_THRESHOLD_CRIPPLED(67f),
     WAR_DAMAGE_LEVEL_THRESHOLD_MAJOR(25f),
@@ -884,4 +885,16 @@ enum class AiDefine(val default: Float) {
     APPROACH_SHIFT_PERCENT(0.3f),
     // CvPlayer::IsEmpireVeryUnhappy without VP's happiness rules: excess happiness at or below this (BNW's -10; VP's 35 counts VP happiness)
     VERY_UNHAPPY_THRESHOLD(-10f),
+    // CvCity::GetWarValue (WarDamageAi): per world wonder, and the % for the owner's original capital and for its holy city
+    WAR_DAMAGE_LEVEL_WORLD_WONDER_MULTIPLIER(200f),
+    WAR_PROGRESS_CAPITAL_MULTIPLIER(200f),
+    WAR_PROGRESS_HOLY_CITY_MULTIPLIER(150f),
+    // CvUnit::pillage: the war value of a pillaged tile before its multipliers (WarDamageAi)
+    PILLAGED_TILE_BASE_WAR_VALUE(40f),
+    // CvGame::GetStartingMilitaryRating: the military rating at the start, and what each later start era adds (WarDamageAi)
+    MILITARY_RATING_STARTING_VALUE(1000f),
+    MILITARY_RATING_PER_ADVANCED_START_ERA(1000f),
+    // CvPlayer::DoMilitaryRatingDecay: tenths of a percent of the gap to the starting rating recovered each turn at Standard speed
+    // (VP's GameSpeeds column: 30 Quick, 20 Standard, 13 Epic, 7 Marathon; divided here by Unciv's speed modifier)
+    MILITARY_RATING_DECAY_PERCENT(20f),
 }

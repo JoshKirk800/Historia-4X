@@ -7,6 +7,7 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.unit.BaseUnit
 
 /**
  *  What CvDiplomacyAI remembers of events in the game: the calls other game code makes into it (CvTeam::declareWar, CvTeam::makePeace,
@@ -137,46 +138,27 @@ object DiplomacyEvents {
     //region War damage, conquest, liberation
 
     /**
-     *  CvDiplomacyAI::ChangeWarValueLost: [loser] lost [value] to [winner]; the majors at war with the loser like the winner for it (common
-     *  foe). A city-state's losses count too (its own record of them is not read by anything): the majors at war with it like whoever hurts it.
+     *  CvUnit::kill: a combat unit of [owner] killed by [killer]. The war damage is the unit's value against the strongest unit of its
+     *  domain its owner can build ([WarDamageAi.unitWarValue]), applied by the killer ([WarDamageAi.applyWarDamage]); the killer also
+     *  notes it in its estimate of the owner's losses (BNW's record, read by its war projection and taunts).
      */
-    fun changeWarValueLost(loser: Civilization, winner: Civilization, value: Int) {
-        if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(winner).warValueLost += value
-        else if (!loser.isCityState) return
-        if (value <= 0) return
-        for (third in loser.gameInfo.civilizations) {
-            if (!third.isMajorCiv || third == winner || third == loser || !WarStateAi.isPlayerValid(loser, third)) continue
-            if (loser.isAtWarWith(third)) third.ai.diplomacy.changeCommonFoeValue(winner, value)
-        }
-    }
-
-    /** CvUnit::kill: a unit of [owner] killed by [killer] - the war damage both sides note */
-    fun onUnitKilled(owner: Civilization, killer: Civilization, unitPower: Int) {
-        if (owner.isBarbarian || killer.isBarbarian) return
-        val rules = owner.gameInfo.ruleset.ai
-        val value = DiplomacyTurn.warValueOfUnit(unitPower, DiplomacyTurn.powerOfStrongestBuildableLandUnit(killer), rules)
-        changeWarValueLost(owner, killer, value)
+    fun onUnitKilled(owner: Civilization, killer: Civilization, unit: BaseUnit) {
+        if (owner.isBarbarian || killer.isBarbarian || unit.getAiPower() <= 0) return
+        val value = WarDamageAi.unitWarValue(unit, owner)
+        WarDamageAi.applyWarDamage(killer, owner, value)
         if (killer.isMajorCiv) killer.ai.diplomacy.memoryOf(owner).theirWarValueLostToUs += value
     }
 
     /**
-     *  CvPlayer::acquireCity by conquest: the war damage (the conqueror's and the loser's view), the loser forgets
-     *  liberation credit, and the warmonger penalties (CvDiplomacyAIHelpers::ApplyWarmongerPenalties) unless the city was the conqueror's.
-     *
-     *  The original also adds WAR_DAMAGE_LEVEL_CITY_WEIGHT + population x WAR_DAMAGE_LEVEL_UNINVOLVED_CITY_POP_MULTIPLIER to every other
-     *  player's estimate of what the loser lost to the conqueror (OtherPlayerWarValueLost[loser][conqueror]). That is not kept: the only
-     *  readers of those estimates (CvDiplomacyAI::GetWarScore, the taunt about an attacked protected city-state) read [X][me], what X lost
-     *  to the reading player itself, which the conqueror's own record above covers; the third-party entries are read by the log only.
-     *  Call before the city changes hands.
+     *  CvPlayer::acquireCity by conquest: the war damage (CvUnitCombat: the conqueror applies the city's [WarDamageAi.cityWarValue];
+     *  BNW's record of the loser's losses notes it too), the loser forgets liberation credit, and the warmonger penalties
+     *  (CvDiplomacyAIHelpers::ApplyWarmongerPenalties) unless the city was the conqueror's. Call before the city changes hands.
      */
     fun onCityConquered(conqueror: Civilization, loser: Civilization, city: City) {
         if (conqueror.isBarbarian || loser.isBarbarian) return
-        val rules = conqueror.gameInfo.ruleset.ai
-        var value = rules.define(AiDefine.WAR_DAMAGE_LEVEL_CITY_WEIGHT) +
-            city.population.population * rules.define(AiDefine.WAR_DAMAGE_LEVEL_INVOLVED_CITY_POP_MULTIPLIER)
-        if (city.isOriginalCapital) value = value * 3 / 2
+        val value = WarDamageAi.cityWarValue(city)
         if (conqueror.isMajorCiv) conqueror.ai.diplomacy.memoryOf(loser).theirWarValueLostToUs += value
-        changeWarValueLost(loser, conqueror, value)
+        WarDamageAi.applyWarDamage(conqueror, loser, value)
         if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesLiberated = 0
         // CvPlayer::acquireCity (Vox Populi): the loser counts the cities the conqueror took, the conqueror the turn it last took one
         if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesCapturedBy++

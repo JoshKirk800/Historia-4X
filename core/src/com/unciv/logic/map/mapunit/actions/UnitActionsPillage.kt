@@ -49,6 +49,8 @@ object UnitActionsPillage {
                     unit.baseUnit.name
                 )
 
+                // CvUnit::pillage: the war damage the diplomacy AIs note
+                tile.getImprovementToPillage()?.let { com.unciv.logic.automation.diplomacy.WarDamageAi.onPillage(unit.civ, tile, it) }
                 pillageLooting(tile, unit)
                 tile.setPillaged()  // Also triggers reassignPopulation
                 if (tile.resource != null) tile.getOwner()?.cache?.updateCivResources()    // this might take away a resource

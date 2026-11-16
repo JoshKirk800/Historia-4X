@@ -228,6 +228,16 @@ class AiOperations : IsPartOfGameInfoSerialization {
     /** CvPlayer::numOperationsOfType */
     fun numOperationsOfType(type: AiOperationType) = operations.count { it.type == type }
 
+    /**
+     *  CvPlayer::HasAnyOffensiveOperationsAgainstPlayer (Vox Populi's getFirstOffensiveAIOperation): a military operation still running
+     *  against [enemy] whose target is outside our territory (CvAIOperation::IsOffensive; rapid response never is)
+     */
+    fun hasAnyOffensiveOperationsAgainst(enemy: Civilization): Boolean = operations.any { op ->
+        !op.type.isEscorted && op.type != AiOperationType.RAPID_RESPONSE && op.enemyCivId == enemy.civID &&
+            op.state != OperationState.SUCCESSFUL_FINISH && op.state != OperationState.ABORTED &&
+            op.targetTile?.let { civ.gameInfo.tileMap[it].getOwner() != civ } == true
+    }
+
     /** CvPlayerAI::GetNumUnitsNeededToBeBuilt: the sum of CvAIOperation::GetNumUnitsNeededToBeBuilt, the slots not yet committed to a city */
     fun numUnitsNeededToBeBuilt() = operations.sumOf { it.slotsToBuild.size }
 

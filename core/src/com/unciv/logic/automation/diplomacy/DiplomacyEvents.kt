@@ -7,6 +7,7 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.unit.BaseUnit
 
 /**
@@ -49,6 +50,10 @@ object DiplomacyEvents {
         val rules = gameInfo.ruleset.ai
         // DoSomeoneDeclaredWarOnMe: "shocked and disappointed" until the next update
         if (victim.isMajorCiv && declarer.isMajorCiv) victim.ai.diplomacy.memoryOf(declarer).warGoal = WarGoal.Peace
+        // CvTeam::DoDeclareWar (Vox Populi): the declarer is the aggressor, unless a defensive pact called it in; either side that
+        // wanted the war is one too
+        if (declarer.isMajorCiv) declarer.ai.diplomacy.memoryOf(victim).aggressor = !isDefensivePact || wantedWar(declarer, victim)
+        if (victim.isMajorCiv) victim.ai.diplomacy.memoryOf(declarer).aggressor = wantedWar(victim, declarer)
         if (!declarer.isMajorCiv) return
         for (observer in gameInfo.civilizations) {
             if (!observer.isMajorCiv || observer == declarer || !observer.isAlive() || !observer.knows(declarer)) continue
@@ -62,6 +67,18 @@ object DiplomacyEvents {
         }
         // DoPlayerDeclaredWarOnSomeone runs for the declarer too (ePlayer == me)
         playerDeclaredWarOnSomeone(declarer, declarer, victim)
+    }
+
+    /** CvTeam::DoDeclareWar's test of a side that wanted the war: an offensive operation against them, an AI's war approach (Conquest
+     *  towards a city-state), the army in place for the attack, or (against a major) a coop war being prepared */
+    private fun wantedWar(civ: Civilization, target: Civilization): Boolean {
+        if (civ.ai.operations.hasAnyOffensiveOperationsAgainst(target)) return true
+        val memory = civ.ai.diplomacy.memoryOf(target)
+        if (memory.musteringForAttack) return true
+        if (target.isCityState) return !civ.isHuman() && civ.ai.minorCivApproaches[target.civID] == MinorCivApproach.Conquest
+        if (!civ.isHuman() && memory.approach == MajorCivApproach.War) return true
+        val coop = CoopWarAi.globalState(civ, target)
+        return coop == CoopWarState.Soon || coop == CoopWarState.Accepted
     }
 
     /** CvDiplomacyAI::DoPlayerDeclaredWarOnSomeone, from [me]'s point of view */
@@ -127,6 +144,7 @@ object DiplomacyEvents {
         // CvDiplomacyAI::ResetSentAttackProtectedMinorTaunts: at peace with a city-state the taunts about it start over
         if (other.isCityState) for (tauntMemory in ai.memories.values) tauntMemory.sentAttackProtectedMinorTaunts.remove(other.civID)
         memory.musteringForAttack = false
+        memory.aggressor = false
         if (!other.isMajorCiv) return
         // Coop wars against them are over
         for (partnerMemory in ai.memories.values) partnerMemory.coopWars[other.civID]?.state = null

@@ -867,6 +867,11 @@ enum class AiDefine(val default: Float) {
     CLOSE_TO_DOMINATION_VICTORY_THRESHOLD(50f),
     // The index of the Medieval era (VP's GD_INT_GET(MEDIEVAL_ERA)): from it a conqueror wants opportunity attacks on anyone (ApproachAi)
     MEDIEVAL_ERA(2f),
+    // The indices of the Renaissance, Modern and Atomic eras (VP's GD_INT_GET(*_ERA)): from them a culture or spaceship victory, and
+    // the culture and tech terms, count among the major competitors (CompetitorAi)
+    RENAISSANCE_ERA(3f),
+    MODERN_ERA(5f),
+    ATOMIC_ERA(6f),
     // CvDiplomacyAI::IsCloseToDiploVictory, IsCloseToSpaceshipVictory, IsCloseToCultureVictory (VP database values)
     CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD(55f),
     CLOSE_TO_SCIENCE_VICTORY_THRESHOLD(80f),

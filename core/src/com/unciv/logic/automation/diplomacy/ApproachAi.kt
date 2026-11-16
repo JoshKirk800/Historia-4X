@@ -44,12 +44,14 @@ object ApproachAi {
     /** A developer's view into [approachWeights]: called with the name of the step about to run and the weights so far (the live array: copy it). Null in the game. */
     @JvmField var debugSink: ((String, IntArray) -> Unit)? = null
 
-    /** CvDiplomacyAI::DoUpdateMajorCivApproaches: the strategic pass, then the final pass, over every valid major */
+    /** CvDiplomacyAI::DoUpdateMajorCivApproaches: the strategic pass, then (as VP's DoTurn) the major competitors, then the final pass,
+     *  over every valid major */
     fun updateApproaches(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
         val majors = others.filter { it.isMajorCiv }
         val random = civ.ai.random("DiplomacyAI.MajorCivApproach")
-        for (strategic in listOf(true, false))
-            for (other in majors) selectApproach(civ, other, strategic, majors, rules, random)
+        for (other in majors) selectApproach(civ, other, strategic = true, majors, rules, random)
+        CompetitorAi.updateMajorCompetitors(civ, others, rules)
+        for (other in majors) selectApproach(civ, other, strategic = false, majors, rules, random)
     }
 
     /** DoFirstContactInitRelationship: an approach right when we meet (the others keep theirs), as the first update of that player */

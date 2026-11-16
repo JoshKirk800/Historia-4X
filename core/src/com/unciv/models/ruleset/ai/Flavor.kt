@@ -100,7 +100,11 @@ enum class DiplomacyPersonality {
 /** The original's MajorCivApproachTypes in XML order (MAJOR_CIV_APPROACH_WAR ...), used for the leaders' approach biases */
 enum class MajorCivApproach { War, Hostile, Deceptive, Guarded, Afraid, Friendly, Neutral }
 
-/** The original's MinorCivApproachTypes in XML order (MINOR_CIV_APPROACH_IGNORE ...), used for the leaders' approach biases */
+/**
+ *  The original's MinorCivApproachTypes in XML order (MINOR_CIV_APPROACH_IGNORE ...), used for the leaders' approach biases. Vox Populi's
+ *  approach to a city-state is one of four: war ([Conquest]), hostile ([Bully]), neutral ([Ignore]) and friendly; [Protective] is BNW's
+ *  and is never chosen (a save's Protective loads as Friendly, `CivAi.setTransients`), its leader bias is not read.
+ */
 enum class MinorCivApproach { Ignore, Friendly, Protective, Conquest, Bully }
 
 /**

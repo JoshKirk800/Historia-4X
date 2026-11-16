@@ -290,6 +290,9 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     /** CvDiplomacyAI::m_eDemandTargetPlayer, civID */
     var demandTarget: String? = null
     var demandReady = false
+    /** CvDiplomacyAI::m_eCSWarTarget and m_eCSBullyTarget (Vox Populi), civIDs: the city-states [CityStateAi.updateMinorCivApproaches] chose */
+    var csWarTarget: String? = null
+    var csBullyTarget: String? = null
     /** CvDiplomacyAI::GetTotalLandDisputeLevel as of the last [DiplomacyTurn.doTurn] (the disputes it sums change only there) */
     var lastTotalLandDisputeLevel = 0
     /** CvPlayer::m_iTurnsSinceSettledLastCity: turns since this civilization founded a city, -1 = never (counted by [DiplomacyTurn.doTurn]) */
@@ -316,6 +319,8 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         for ((id, memory) in memories) copy.memories[id] = memory.clone()
         copy.demandTarget = demandTarget
         copy.demandReady = demandReady
+        copy.csWarTarget = csWarTarget
+        copy.csBullyTarget = csBullyTarget
         copy.turnsSinceSettledLastCity = turnsSinceSettledLastCity
         copy.lastTotalLandDisputeLevel = lastTotalLandDisputeLevel
         copy.biggestCompetitor = biggestCompetitor

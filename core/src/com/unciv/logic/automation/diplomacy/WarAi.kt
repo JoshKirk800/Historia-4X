@@ -42,16 +42,14 @@ object WarAi {
         CoopWarAi.doCoopWarCounters(civ, rules)
     }
 
-    /** MilitaryAIHelpers::IsTestStrategy_AtWar: at war with at least one major */
-    fun isAtWarWithAMajor(civ: Civilization): Boolean = civ.getCivsAtWarWith().any { it.isMajorCiv }
-
     /**
      *  CvDiplomacyAI::DoMakeWarOnPlayer (Vox Populi, D7). At war: nothing to do. When we may not declare war on [target] (not valid, a
      *  peace treaty): no army counts as in place and our offensive operations against them stop. We want to attack a major we have
-     *  the war approach towards (a city-state: our conquest approach while at war with no major, BNW's stand-in for VP's city-state war
-     *  target) and want a show of force against our demand target, the attack first. An army in place ([MajorCivMemory.musteringForAttack],
-     *  set when an attack reaches its target or is discovered on the way) declares the war - on a major once no coop war against them
-     *  is still being prepared - or makes the demand ready; with neither wish our operations against them stop. Without one we request
+     *  the war approach towards or the city-state that is our war target ([DiplomacyAi.csWarTarget]), and want a show of force against
+     *  our demand target or our city-state bully target ([DiplomacyAi.csBullyTarget]), the attack first. An army in place
+     *  ([MajorCivMemory.musteringForAttack], set when an attack reaches its target or is discovered on the way) declares the war - on a
+     *  major once no coop war against them is still being prepared - or makes the demand to a major ready (a city-state's tribute is
+     *  DoContactMinorCivs'); with neither wish our operations against them stop. Without one we request
      *  the attack (the war goal Prepare) or the show of force, or else stop any operation against them. The attack goes at VP's
      *  RequestCityAttack targets ([com.unciv.logic.automation.strategy.MilitaryTargets.cityAttackTargets]) through our sneak and
      *  city-state attacks, careful (preferred targets only) against a city-state while a dangerous major fights us, against a major
@@ -73,8 +71,8 @@ object WarAi {
         val wantToAttack: Boolean
         val wantShowOfForce: Boolean
         if (target.isCityState) {
-            wantToAttack = !isAtWarWithAMajor(civ) && civ.ai.minorCivApproaches[target.civID] == MinorCivApproach.Conquest
-            wantShowOfForce = false
+            wantToAttack = ai.csWarTarget == target.civID
+            wantShowOfForce = ai.csBullyTarget == target.civID
         } else {
             // Vox Populi's bWantToAttack: the war approach, which its war targets (WarTargetAi) give within the conflict budget
             wantToAttack = ai.approachTowards(target) == MajorCivApproach.War
@@ -85,7 +83,7 @@ object WarAi {
             when {
                 // Not before the allies of a coop war against them are ready
                 wantToAttack -> if (target.isCityState || CoopWarAi.globalState(civ, target) != CoopWarState.Soon) declareWar(civ, target)
-                wantShowOfForce -> ai.demandReady = true
+                wantShowOfForce -> if (target.isMajorCiv) ai.demandReady = true
                 else -> stopOffensiveOperations(civ, target, OperationAbortReason.DIPLO_OPINION_CHANGE)
             }
             return

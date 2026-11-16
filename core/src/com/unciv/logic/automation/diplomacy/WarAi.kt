@@ -3,6 +3,7 @@ package com.unciv.logic.automation.diplomacy
 import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.OperationAbortReason
 import com.unciv.logic.automation.strategy.WarStateAi
+import com.unciv.logic.automation.strategy.TargetValue
 import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DeclareWarReason
@@ -21,20 +22,21 @@ object WarAi {
     /** The share of the way to its target an attack operation must have covered before war is declared (CvDiplomacyAI::DoMakeWarOnPlayer) */
     const val PERCENT_TO_DECLARE_WAR = 85
 
-    /** CvDiplomacyAI::MakeWar */
+    /**
+     *  CvDiplomacyAI::MakeWar (Vox Populi, D7): every valid target in turn, ranked by its strategic war score (a major) or its target
+     *  value + 1 on VP's scale (a city-state; none counts 0), times (1 + proximity) squared; ties in player order.
+     */
     fun makeWar(civ: Civilization, rules: AiRuleset) {
         val ai = civ.ai.diplomacy
         val targets = civ.gameInfo.civilizations.filter { (it.isMajorCiv || it.isCityState) && WarStateAi.isPlayerValid(civ, it) }
             .map { target ->
-                var weight = (ai.warProjection(target)?.ordinal ?: -1) + 1
+                var weight = if (target.isMajorCiv)
+                    ai.memoryOf(target).strategicApproachValues.getOrNull(MajorCivApproach.War.ordinal) ?: 0
+                else vpTargetValue(ai.targetValue(target)) + 1
                 // Square the distance enum to make it crucial
                 val proximity = 1 + DiplomacyTurn.proximity(civ, target)
                 weight *= proximity
                 weight *= proximity
-                if (target.isMajorCiv) {
-                    if (ai.opinionOf(target) == MajorCivOpinion.Unforgivable) weight *= 2
-                    weight *= 10  // majors before city-states
-                }
                 target to weight
             }.sortedByDescending { it.second }
         for ((target, _) in targets) doMakeWarOnPlayer(civ, target, rules)
@@ -112,5 +114,15 @@ object WarAi {
             civ.getDiplomacyManager(minor)!!.makePeace()
             DiplomacyEvents.onPeace(civ, minor)
         }
+    }
+
+    /** BNW's target value on VP's TargetValueTypes scale (VP adds Difficult and Cakewalk); none = NO_TARGET_VALUE, -1 */
+    private fun vpTargetValue(value: TargetValue?): Int = when (value) {
+        null -> -1
+        TargetValue.Impossible -> 0
+        TargetValue.Bad -> 1
+        TargetValue.Average -> 3
+        TargetValue.Favorable -> 4
+        TargetValue.Soft -> 5
     }
 }

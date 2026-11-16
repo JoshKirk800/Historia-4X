@@ -83,7 +83,10 @@ object WarDamageAi {
      *  CvCity's razing turn: the owner razing [city] applies war damage to the major it took the city from (not to a city-state or a
      *  dead player): WAR_DAMAGE_LEVEL_CITY_WEIGHT + population x WAR_DAMAGE_LEVEL_INVOLVED_CITY_POP_MULTIPLIER + world wonders x
      *  WAR_DAMAGE_LEVEL_WORLD_WONDER_MULTIPLIER, over half the razing turns left (population over [removedPopulation] a turn), with no
-     *  rating change and no common foe. Call before the population goes down.
+     *  rating change and no common foe; and, between majors, the former owner's diplomacy holds the razing against the owner
+     *  (CvDiplomacyAI::ChangeCivilianKillerValue: 500 x its era, at least 1, x the game speed's OpinionDurationPercent / 100, capped at
+     *  CIVILIAN_KILLER_VALUE_PER_OPINION_WEIGHT x OPINION_WEIGHT_CIVILIAN_KILLER_MAX x that percent / 100). Call before the population
+     *  goes down.
      */
     fun onRazingTurn(city: City, removedPopulation: Int) {
         val former = city.civ.gameInfo.getCivilizationOrNull(city.previousOwner) ?: return
@@ -94,6 +97,12 @@ object WarDamageAi {
             city.cityConstructions.getBuiltBuildings().count { it.isWonder } * rules.define(AiDefine.WAR_DAMAGE_LEVEL_WORLD_WONDER_MULTIPLIER)
         val turnsLeft = (city.population.population + removedPopulation - 1) / maxOf(1, removedPopulation)
         applyWarDamage(city.civ, former, value / maxOf(1, turnsLeft / 2), noRating = true, noCommonFoe = true)
+        if (city.civ.isMajorCiv) {
+            val memory = former.ai.diplomacy.memoryOf(city.civ)
+            val percent = DiplomacyTurn.opinionDurationPercent(former)
+            memory.civilianKillerValue = minOf(memory.civilianKillerValue + 500 * maxOf(1, former.getEraNumber()) * percent / 100,
+                OpinionAi.maxCivilianKillerValue(former))
+        }
     }
 
     /**

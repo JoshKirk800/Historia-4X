@@ -107,6 +107,29 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var negativeReligiousConversionPoints = 0
     var numTimesNuked = 0
     var numTimesRobbed = 0
+    /**
+     *  Vox Populi's turn stamps of the stacked deeds (CvDiplomacyAI::Get*Turn): set whenever the count changes and is above 0, -1 at 0;
+     *  the counts halve once per duration ([OpinionAi.testOpinionModifiers]) and their opinion terms fade ([OpinionTimers.adjust])
+     */
+    var civiliansReturnedTurn = -1
+    var landmarksBuiltTurn = -1
+    var intrigueSharedTurn = -1
+    var robbedTurn = -1
+    var beatenToWonderTurn = -1
+    var religiousConversionTurn = -1
+    /** CvDiplomacyAI::GetNegativeArchaeologyPoints (Vox Populi): artifacts they dug up in our lands, and the turn of the last */
+    var numArtifactsStolen = 0
+    var stoleArtifactTurn = -1
+    /** CvDiplomacyAI::GetNumCitiesEverLiberatedBy (Vox Populi): cities of ours they ever liberated, as long as they took none since */
+    var numCitiesEverLiberated = 0
+    /** CvDiplomacyAI::IsPlayerLiberatedCapital / IsPlayerLiberatedHolyCity (Vox Populi): they gave back our capital / holy city */
+    var liberatedCapital = false
+    var liberatedHolyCity = false
+    /** CvDiplomacyAI::IsPlayerCapturedCapital / IsPlayerCapturedHolyCity (Vox Populi): they took our original capital / holy city */
+    var capturedCapital = false
+    var capturedHolyCity = false
+    /** CvDiplomacyAI::GetCivilianKillerValue (Vox Populi): their razing of our cities, capped, decaying each turn */
+    var civilianKillerValue = 0
     var turnsSinceAttackedProtectedMinor = -1
     var numProtectedMinorsAttacked = 0
     var turnsSinceKilledProtectedMinor = -1
@@ -238,6 +261,14 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.numTimesCultureBombed = numTimesCultureBombed
         copy.negativeReligiousConversionPoints = negativeReligiousConversionPoints
         copy.numTimesNuked = numTimesNuked; copy.numTimesRobbed = numTimesRobbed
+        copy.civiliansReturnedTurn = civiliansReturnedTurn; copy.landmarksBuiltTurn = landmarksBuiltTurn
+        copy.intrigueSharedTurn = intrigueSharedTurn; copy.robbedTurn = robbedTurn; copy.beatenToWonderTurn = beatenToWonderTurn
+        copy.religiousConversionTurn = religiousConversionTurn
+        copy.numArtifactsStolen = numArtifactsStolen; copy.stoleArtifactTurn = stoleArtifactTurn
+        copy.numCitiesEverLiberated = numCitiesEverLiberated
+        copy.liberatedCapital = liberatedCapital; copy.liberatedHolyCity = liberatedHolyCity
+        copy.capturedCapital = capturedCapital; copy.capturedHolyCity = capturedHolyCity
+        copy.civilianKillerValue = civilianKillerValue
         copy.turnsSinceAttackedProtectedMinor = turnsSinceAttackedProtectedMinor
         copy.numProtectedMinorsAttacked = numProtectedMinorsAttacked
         copy.turnsSinceKilledProtectedMinor = turnsSinceKilledProtectedMinor; copy.numProtectedMinorsKilled = numProtectedMinorsKilled

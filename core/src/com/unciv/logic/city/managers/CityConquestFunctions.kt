@@ -264,7 +264,7 @@ class CityConquestFunctions(val city: City) {
     private fun diplomaticRepercussionsForLiberatingCity(conqueringCiv: Civilization, conqueredCiv: Civilization) {
         val foundingCiv = city.foundingCivObject!!
         // What the diplomacy AIs make of it (CvPlayer::DoLiberatePlayer: liberated cities, resurrection, warmonger negated)
-        DiplomacyEvents.onCityLiberated(conqueringCiv, foundingCiv, receiverWasAlive = !foundingCiv.isDefeated())
+        DiplomacyEvents.onCityLiberated(conqueringCiv, foundingCiv, city, receiverWasAlive = !foundingCiv.isDefeated())
 
         if (foundingCiv.isMajorCiv) {
             if (foundingCiv.isDefeated()) { // resurrected civ

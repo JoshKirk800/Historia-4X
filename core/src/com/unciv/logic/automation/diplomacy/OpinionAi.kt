@@ -11,6 +11,7 @@ import com.unciv.logic.league.LeagueAlignmentMemory
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
+import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
@@ -94,21 +95,32 @@ object OpinionAi {
         term(DiplomaticModifiers.MilitaryPosture, militaryPostureScore(civ, other, rules))
         term(DiplomaticModifiers.WarMongerer, warmongerThreatScore(civ, other))
 
-        // Nice things
-        term(DiplomaticModifiers.ReturnedCapturedUnits, memory.numCiviliansReturned * rules.define(AiDefine.OPINION_WEIGHT_RETURNED_CIVILIAN))
-        term(DiplomaticModifiers.BuiltLandmarksForUs, landmarksScore(civ.getDiplomacyManager(other)?.landmarksBuiltForUs ?: 0, rules))
-        term(DiplomaticModifiers.ResurrectedUs, if (memory.resurrectedUs) rules.define(AiDefine.OPINION_WEIGHT_RESURRECTED) else 0)
-        term(DiplomaticModifiers.LiberatedCity, liberatedCitiesScore(memory.numCitiesLiberated, rules))
-        // The embassy is state (TradeLogic sets it): its value is the opinion term
-        if (write != null) {
-            val embassyWeight = -rules.define(AiDefine.OPINION_WEIGHT_EMBASSY).toFloat()
-            if (write.hasModifier(DiplomaticModifiers.EstablishedEmbassy)) write.setModifier(DiplomaticModifiers.EstablishedEmbassy, embassyWeight)
-            if (write.hasModifier(DiplomaticModifiers.SharedEmbassies)) write.setModifier(DiplomaticModifiers.SharedEmbassies, embassyWeight)
-            if (write.hasModifier(DiplomaticModifiers.ReceivedEmbassy)) write.setModifier(DiplomaticModifiers.ReceivedEmbassy, 0f)
-        }
-        if (hasEmbassyWith(civ, other)) total += rules.define(AiDefine.OPINION_WEIGHT_EMBASSY)
+        // War deeds (Vox Populi)
+        term(DiplomaticModifiers.CivilianKiller, maxOf(civilianKillerScore(civ, other, rules), civilianKillerGlobalScore(civ, other, rules)))
+        term(DiplomaticModifiers.UsedNuclearWeapons, if (memory.numTimesNuked > 0) rules.define(AiDefine.OPINION_WEIGHT_NUKED_MAX) else 0)
+        term(DiplomaticModifiers.CapturedOurHolyCity, holyCityCapturedScore(civ, other, rules))
+        term(DiplomaticModifiers.CapturedOurCities, capitalCapturedScore(civ, other, rules))
 
-        term(DiplomaticModifiers.SharedIntrigue, memory.numTimesIntrigueShared * rules.define(AiDefine.OPINION_WEIGHT_INTRIGUE_SHARED_BY))
+        // Nice things (Vox Populi)
+        term(DiplomaticModifiers.ReturnedCapturedUnits, civiliansReturnedScore(civ, other, rules))
+        term(DiplomaticModifiers.BuiltLandmarksForUs, landmarksScore(civ, other, rules))
+        term(DiplomaticModifiers.ResurrectedUs, resurrectedScore(civ, other, rules))
+        term(DiplomaticModifiers.LiberatedCapital, liberatedCapitalScore(civ, other, rules))
+        term(DiplomaticModifiers.LiberatedHolyCity, if (memory.liberatedHolyCity) rules.define(AiDefine.OPINION_WEIGHT_LIBERATED_HOLY_CITY) else 0)
+        term(DiplomaticModifiers.LiberatedCity, liberatedCitiesScore(civ, other, rules))
+        // The embassies are state (TradeLogic sets them): the first one there shows the opinion term, any other shows 0
+        val embassy = embassyScore(civ, other, rules)
+        if (write != null) {
+            var shown = false
+            for (modifier in listOf(DiplomaticModifiers.SharedEmbassies, DiplomaticModifiers.EstablishedEmbassy, DiplomaticModifiers.ReceivedEmbassy)) {
+                if (!write.hasModifier(modifier)) continue
+                write.setModifier(modifier, if (shown) 0f else -embassy.toFloat())
+                shown = true
+            }
+        }
+        total += embassy
+        term(DiplomaticModifiers.HasDiplomat, diplomatScore(civ, other, rules))
+        term(DiplomaticModifiers.SharedIntrigue, intrigueSharedScore(civ, other, rules))
 
         // Asked us to do things we don't like
         term(DiplomaticModifiers.AskedUsNotToSettle, if (memory.noSettleRequestEverAsked) rules.define(AiDefine.OPINION_WEIGHT_ASKED_NO_SETTLE) else 0)
@@ -130,7 +142,8 @@ object OpinionAi {
             if (ourIdeology == theirIdeology) term(DiplomaticModifiers.SameIdeology, rules.define(AiDefine.OPINION_WEIGHT_SAME_LATE_POLICIES) * latePolicies)
             else term(DiplomaticModifiers.DifferentIdeology, rules.define(AiDefine.OPINION_WEIGHT_DIFFERENT_LATE_POLICIES) * latePolicies)
         }
-        term(DiplomaticModifiers.SpiedOnUs, memory.numTimesRobbed * rules.define(AiDefine.OPINION_WEIGHT_ROBBED_BY))
+        term(DiplomaticModifiers.SpiedOnUs, robbedScore(civ, other, rules))
+        term(DiplomaticModifiers.StoleArtifacts, stoleArtifactsScore(civ, other, rules))
 
         // Broken promises
         term(DiplomaticModifiers.BetrayedPromiseToNotAttackUs, if (memory.brokenMilitaryPromise) rules.define(AiDefine.OPINION_WEIGHT_BROKEN_MILITARY_PROMISE) else 0)
@@ -180,8 +193,6 @@ object OpinionAi {
         term(DiplomaticModifiers.SharedEnemy, commonFoeScore(memory.commonFoeValue, rules))
         val assist = recentAssistScore(memory.recentAssistValue, rules)
         term(if (assist < 0) DiplomaticModifiers.HelpedUs else DiplomaticModifiers.RefusedToHelpUs, assist)
-        term(DiplomaticModifiers.UsedNuclearWeapons, if (memory.numTimesNuked > 0) rules.define(AiDefine.OPINION_WEIGHT_NUKED_MAX) else 0)
-        term(DiplomaticModifiers.CapturedOurCities, if (isCapitalCapturedBy(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_CAPTURED_CAPITAL) else 0)
 
         // World Congress
         val league = civ.gameInfo.league
@@ -347,25 +358,214 @@ object OpinionAi {
         return if (score < 5) 0 else score
     }
 
-    /** GetLandmarksBuiltForMeScore: the first counts fully, each later one a third (integer division as the original) */
-    fun landmarksScore(count: Int, rules: AiRuleset): Int {
+    /** The game turn the timed terms count from */
+    private fun turn(civ: Civilization) = civ.gameInfo.turns
+
+    private fun loyalty(civ: Civilization) = civ.ai.diplomacyValue(DiplomacyPersonality.Loyalty)
+    private fun forgiveness(civ: Civilization) = civ.ai.diplomacyValue(DiplomacyPersonality.Forgiveness)
+
+    /** A "first one in full, each further one less" term, fading over [baseTurns] adjusted by [personality] (VP's diminishing modifier) */
+    private fun diminishing(civ: Civilization, count: Int, stamp: Int, first: Int, subsequent: Int, baseTurns: Int, personality: Int,
+                            invert: Boolean = false): Int {
         if (count <= 0) return 0
-        val weight = rules.define(AiDefine.OPINION_WEIGHT_BUILT_LANDMARK)
-        return weight + (weight / 3) * (count - 1)
+        val value = first + subsequent * (count - 1)
+        val duration = OpinionTimers.adjustDuration(civ, baseTurns, personality, invert)
+        return OpinionTimers.adjust(value, duration, stamp, turn(civ), OpinionTimers.Type.Diminishing, count, first)
     }
 
-    /** GetLiberatedCitiesScore */
-    fun liberatedCitiesScore(count: Int, rules: AiRuleset): Int = when {
-        count >= 3 -> rules.define(AiDefine.OPINION_WEIGHT_LIBERATED_THREE_CITIES)
-        count >= 2 -> rules.define(AiDefine.OPINION_WEIGHT_LIBERATED_TWO_CITIES)
-        count >= 1 -> rules.define(AiDefine.OPINION_WEIGHT_LIBERATED_ONE_CITY)
-        else -> 0
+    /** A "the same for each one" term, fading over [baseTurns] adjusted by [personality] (VP's stacked modifier) */
+    private fun stacked(civ: Civilization, count: Int, stamp: Int, each: Int, baseTurns: Int, personality: Int, invert: Boolean = false): Int {
+        if (count <= 0) return 0
+        val duration = OpinionTimers.adjustDuration(civ, baseTurns, personality, invert)
+        return OpinionTimers.adjust(each * count, duration, stamp, turn(civ), OpinionTimers.Type.Stacked, count)
     }
 
-    /** CvTeam::HasEmbassyAtTeam: we have an embassy in their capital */
-    fun hasEmbassyWith(civ: Civilization, other: Civilization): Boolean {
-        val diplomacy = civ.getDiplomacyManager(other) ?: return false
-        return diplomacy.hasModifier(DiplomaticModifiers.EstablishedEmbassy) || diplomacy.hasModifier(DiplomaticModifiers.SharedEmbassies)
+    /**
+     *  Vox Populi's TestOpinionModifiers for the stacked deeds, before the opinions: each count halves once per its duration (the
+     *  deed's TURNS_UNTIL_FORGOTTEN or _FORGIVEN, adjusted by loyalty or inverted forgiveness and the game speed) and takes the turn
+     *  as its new stamp. VP sets the stamp to the current turn whenever it rewrites the count, which it does every turn, so its deeds
+     *  never fade; the stamp moves here only when the count does (the design its comments describe). And DoCounters' decay of the
+     *  civilian killer value (CIVILIAN_KILLER_VALUE_PER_TURN_DECAY).
+     */
+    fun testOpinionModifiers(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
+        val now = turn(civ)
+        fun decayed(count: Int, stamp: Int, baseTurns: AiDefine, personality: Int, invert: Boolean, set: (Int, Int) -> Unit) {
+            if (count <= 0 || stamp < 0) return
+            val duration = OpinionTimers.adjustDuration(civ, rules.define(baseTurns), personality, invert)
+            val left = OpinionTimers.decayStacks(count, stamp, now, duration)
+            if (left != count) set(left, if (left > 0) now else -1)
+        }
+        val loyalty = loyalty(civ)
+        val forgiveness = forgiveness(civ)
+        for (other in others) {
+            if (!other.isMajorCiv) continue
+            val m = civ.ai.diplomacy.memoryOf(other)
+            decayed(m.numCiviliansReturned, m.civiliansReturnedTurn, AiDefine.RETURNED_CIVILIAN_TURNS_UNTIL_FORGOTTEN, loyalty, false) { c, t ->
+                m.numCiviliansReturned = c; m.civiliansReturnedTurn = t }
+            val diplomacy = civ.getDiplomacyManager(other)
+            if (diplomacy != null) decayed(diplomacy.landmarksBuiltForUs, m.landmarksBuiltTurn, AiDefine.BUILT_LANDMARK_TURNS_UNTIL_FORGOTTEN, loyalty, false) { c, t ->
+                diplomacy.landmarksBuiltForUs = c; m.landmarksBuiltTurn = t }
+            decayed(m.numCitiesLiberated, m.liberatedCitiesTurn, AiDefine.LIBERATED_CITY_TURNS_UNTIL_FORGOTTEN, loyalty, false) { c, t ->
+                m.numCitiesLiberated = c; m.liberatedCitiesTurn = t }
+            decayed(m.negativeReligiousConversionPoints, m.religiousConversionTurn, AiDefine.RELIGIOUS_CONVERSION_TURNS_UNTIL_FORGIVEN, forgiveness, true) { c, t ->
+                m.negativeReligiousConversionPoints = c; m.religiousConversionTurn = t }
+            decayed(m.numTimesRobbed, m.robbedTurn, AiDefine.ROBBED_US_TURNS_UNTIL_FORGIVEN, forgiveness, true) { c, t ->
+                m.numTimesRobbed = c; m.robbedTurn = t }
+            decayed(m.numWondersBeatenTo, m.beatenToWonderTurn, AiDefine.BEATEN_TO_WONDER_TURNS_UNTIL_FORGIVEN, forgiveness, true) { c, t ->
+                m.numWondersBeatenTo = c; m.beatenToWonderTurn = t }
+            decayed(m.numArtifactsStolen, m.stoleArtifactTurn, AiDefine.EXCAVATED_ARTIFACT_TURNS_UNTIL_FORGIVEN, forgiveness, true) { c, t ->
+                m.numArtifactsStolen = c; m.stoleArtifactTurn = t }
+            decayed(m.numTimesIntrigueShared, m.intrigueSharedTurn, AiDefine.SHARED_INTRIGUE_TURNS_UNTIL_FORGOTTEN, loyalty, false) { c, t ->
+                m.numTimesIntrigueShared = c; m.intrigueSharedTurn = t }
+            m.civilianKillerValue = maxOf(0, m.civilianKillerValue - rules.define(AiDefine.CIVILIAN_KILLER_VALUE_PER_TURN_DECAY))
+        }
+    }
+
+    /** GetMaxCivilianKillerValue: CIVILIAN_KILLER_VALUE_PER_OPINION_WEIGHT x OPINION_WEIGHT_CIVILIAN_KILLER_MAX x the game speed's OpinionDurationPercent / 100 */
+    fun maxCivilianKillerValue(civ: Civilization): Int {
+        val rules = civ.gameInfo.ruleset.ai
+        return rules.define(AiDefine.CIVILIAN_KILLER_VALUE_PER_OPINION_WEIGHT) * rules.define(AiDefine.OPINION_WEIGHT_CIVILIAN_KILLER_MAX) *
+            DiplomacyTurn.opinionDurationPercent(civ) / 100
+    }
+
+    /** GetCivilianKillerScore: OPINION_WEIGHT_CIVILIAN_KILLER_MAX x their civilian killer value's share of the maximum */
+    fun civilianKillerScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val value = civ.ai.diplomacy.memoryOf(other).civilianKillerValue
+        if (value <= 0) return 0
+        val percent = value * 100 / maxOf(maxCivilianKillerValue(civ), 1)
+        return if (percent > 0) rules.define(AiDefine.OPINION_WEIGHT_CIVILIAN_KILLER_MAX) * percent / 100 else 0
+    }
+
+    /**
+     *  GetCivilianKillerGlobalScore: towards someone we see as neutral or worse, with no DoF or pact, OPINION_WEIGHT_CIVILIAN_KILLER_WORLD
+     *  when another major we know holds a civilian killer score of OPINION_WEIGHT_CIVILIAN_KILLER_WORLD_THRESHOLD or more against them
+     *  and we care: not at war with it, no denouncement either way, not untrustworthy, not approached as afraid or deceptive or worse,
+     *  not seen as an enemy, and it never betrayed a friendship with us. (VP's backstabber clause: our own backstabber flag is not kept.)
+     */
+    fun civilianKillerGlobalScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        if (memory.opinion > MajorCivOpinion.Neutral || isDoFAccepted(civ, other) ||
+            civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact) return 0
+        for (third in civ.gameInfo.civilizations) {
+            if (third == civ || third == other || !third.isMajorCiv || !WarStateAi.isPlayerValid(civ, third)) continue
+            if (civilianKillerScore(third, other, rules) < rules.define(AiDefine.OPINION_WEIGHT_CIVILIAN_KILLER_WORLD_THRESHOLD)) continue
+            val ourMemory = civ.ai.diplomacy.memoryOf(third)
+            val approach = ourMemory.approach
+            val dontCare = ourMemory.doFBrokenTurn >= 0 || civ.isAtWarWith(third) || isDenouncedPlayer(civ, third) ||
+                isDenouncedPlayer(third, civ) || isUntrustworthyFriend(third) || approach == MajorCivApproach.Afraid ||
+                (approach != null && approach <= MajorCivApproach.Deceptive) || ourMemory.opinion <= MajorCivOpinion.Enemy
+            if (!dontCare) return rules.define(AiDefine.OPINION_WEIGHT_CIVILIAN_KILLER_WORLD)
+        }
+        return 0
+    }
+
+    /** IsCapitalCapturedBy (not only currently): they took our original capital, or hold it now */
+    private fun capitalCaptured(civ: Civilization, other: Civilization) =
+        civ.ai.diplomacy.memoryOf(other).capturedCapital || isCapitalCapturedBy(civ, other)
+
+    /** IsHolyCityCapturedBy (not only currently): they took our holy city, or hold it now */
+    private fun holyCityCaptured(civ: Civilization, other: Civilization) =
+        civ.ai.diplomacy.memoryOf(other).capturedHolyCity || CompetitorAi.isHolyCityCapturedBy(civ, other)
+
+    /** GetHolyCityCapturedByScore: OPINION_WEIGHT_CAPTURED_HOLY_CITY. Returning it by deal and vassalage have no counterpart: none. */
+    fun holyCityCapturedScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int =
+        if (holyCityCaptured(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_CAPTURED_HOLY_CITY) else 0
+
+    /** GetCapitalCapturedByScore: OPINION_WEIGHT_CAPTURED_CAPITAL. Returning it by deal and vassalage have no counterpart: none. */
+    fun capitalCapturedScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int =
+        if (capitalCaptured(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_CAPTURED_CAPITAL) else 0
+
+    /** GetCiviliansReturnedToMeScore: OPINION_WEIGHT_RETURNED_CIVILIAN, _SUBSEQUENT for each further one, fading with loyalty */
+    fun civiliansReturnedScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val m = civ.ai.diplomacy.memoryOf(other)
+        return diminishing(civ, m.numCiviliansReturned, m.civiliansReturnedTurn, rules.define(AiDefine.OPINION_WEIGHT_RETURNED_CIVILIAN),
+            rules.define(AiDefine.OPINION_WEIGHT_RETURNED_CIVILIAN_SUBSEQUENT), rules.define(AiDefine.RETURNED_CIVILIAN_TURNS_UNTIL_FORGOTTEN), loyalty(civ))
+    }
+
+    /** GetLandmarksBuiltForMeScore: OPINION_WEIGHT_BUILT_LANDMARK, _SUBSEQUENT for each further one, fading with loyalty */
+    fun landmarksScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val count = civ.getDiplomacyManager(other)?.landmarksBuiltForUs ?: 0
+        return diminishing(civ, count, civ.ai.diplomacy.memoryOf(other).landmarksBuiltTurn, rules.define(AiDefine.OPINION_WEIGHT_BUILT_LANDMARK),
+            rules.define(AiDefine.OPINION_WEIGHT_BUILT_LANDMARK_SUBSEQUENT), rules.define(AiDefine.BUILT_LANDMARK_TURNS_UNTIL_FORGOTTEN), loyalty(civ))
+    }
+
+    /** GetResurrectedScore: OPINION_WEIGHT_RESURRECTED, divided by the liberator-captured divisors when they took our capital or holy city */
+    fun resurrectedScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (!civ.ai.diplomacy.memoryOf(other).resurrectedUs) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_RESURRECTED)
+        if (capitalCaptured(civ, other)) weight = weight * 100 / maxOf(100, rules.define(AiDefine.OPINION_WEIGHT_LIBERATOR_CAPTURED_CAPITAL_DIVISOR))
+        if (holyCityCaptured(civ, other)) weight = weight * 100 / maxOf(100, rules.define(AiDefine.OPINION_WEIGHT_LIBERATOR_CAPTURED_HOLY_CITY_DIVISOR))
+        return weight
+    }
+
+    /** GetLiberatedCapitalScore: OPINION_WEIGHT_LIBERATED_CAPITAL, divided when they took our holy city */
+    fun liberatedCapitalScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (!civ.ai.diplomacy.memoryOf(other).liberatedCapital) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_LIBERATED_CAPITAL)
+        if (holyCityCaptured(civ, other)) weight = weight * 100 / maxOf(100, rules.define(AiDefine.OPINION_WEIGHT_LIBERATOR_CAPTURED_HOLY_CITY_DIVISOR))
+        return weight
+    }
+
+    /**
+     *  GetLiberatedCitiesScore, none when they took our capital: OPINION_WEIGHT_LIBERATED_CITY per city, fading with loyalty, divided when
+     *  they took our holy city, then by the cities they took from us less those they ever liberated, plus 1
+     */
+    fun liberatedCitiesScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (capitalCaptured(civ, other)) return 0
+        val m = civ.ai.diplomacy.memoryOf(other)
+        var weight = stacked(civ, m.numCitiesLiberated, m.liberatedCitiesTurn, rules.define(AiDefine.OPINION_WEIGHT_LIBERATED_CITY),
+            rules.define(AiDefine.LIBERATED_CITY_TURNS_UNTIL_FORGOTTEN), loyalty(civ))
+        if (weight == 0) return 0
+        if (holyCityCaptured(civ, other)) weight = weight * 100 / maxOf(100, rules.define(AiDefine.OPINION_WEIGHT_LIBERATOR_CAPTURED_HOLY_CITY_DIVISOR))
+        return weight / maxOf(1, m.numCitiesCapturedBy - m.numCitiesEverLiberated + 1)
+    }
+
+    /** GetEmbassyScore: OPINION_WEIGHT_EMBASSY_MUTUAL with embassies both ways, _EMBASSY with ours in their capital, _EMBASSY_THEM with theirs in ours */
+    fun embassyScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val diplomacy = civ.getDiplomacyManager(other) ?: return 0
+        val ours = diplomacy.hasModifier(DiplomaticModifiers.EstablishedEmbassy) || diplomacy.hasModifier(DiplomaticModifiers.SharedEmbassies)
+        val theirs = diplomacy.hasModifier(DiplomaticModifiers.ReceivedEmbassy) || diplomacy.hasModifier(DiplomaticModifiers.SharedEmbassies)
+        return when {
+            ours && theirs -> rules.define(AiDefine.OPINION_WEIGHT_EMBASSY_MUTUAL)
+            ours -> rules.define(AiDefine.OPINION_WEIGHT_EMBASSY)
+            theirs -> rules.define(AiDefine.OPINION_WEIGHT_EMBASSY_THEM)
+            else -> 0
+        }
+    }
+
+    /**
+     *  GetDiplomatScore: OPINION_WEIGHT_DIPLOMAT (and _MOD more for a scientist or the nerd trait) while one of their spies is a diplomat
+     *  in our capital; none after they robbed us or broke or ignored a spy promise
+     */
+    fun diplomatScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val m = civ.ai.diplomacy.memoryOf(other)
+        if (m.numTimesRobbed > 0 || m.brokenSpyPromise || m.ignoredSpyPromise) return 0
+        val capital = civ.getCapital() ?: return 0
+        if (other.espionageManager.spyList.none { it.isDiplomat && it.getCityOrNull() == capital }) return 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_DIPLOMAT)
+        if (civ.ai.isScientist() || civ.ai.hasTraitCategory(TraitCategory.Nerd)) weight += rules.define(AiDefine.OPINION_WEIGHT_DIPLOMAT_MOD)
+        return weight
+    }
+
+    /** GetTimesIntrigueSharedScore: OPINION_WEIGHT_INTRIGUE_SHARED_BY, _SUBSEQUENT for each further one, fading with loyalty */
+    fun intrigueSharedScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val m = civ.ai.diplomacy.memoryOf(other)
+        return diminishing(civ, m.numTimesIntrigueShared, m.intrigueSharedTurn, rules.define(AiDefine.OPINION_WEIGHT_INTRIGUE_SHARED_BY),
+            rules.define(AiDefine.OPINION_WEIGHT_INTRIGUE_SHARED_BY_SUBSEQUENT), rules.define(AiDefine.SHARED_INTRIGUE_TURNS_UNTIL_FORGOTTEN), loyalty(civ))
+    }
+
+    /** GetTimesRobbedScore: OPINION_WEIGHT_ROBBED_BY per theft, fading with (inverted) forgiveness */
+    fun robbedScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val m = civ.ai.diplomacy.memoryOf(other)
+        return stacked(civ, m.numTimesRobbed, m.robbedTurn, rules.define(AiDefine.OPINION_WEIGHT_ROBBED_BY),
+            rules.define(AiDefine.ROBBED_US_TURNS_UNTIL_FORGIVEN), forgiveness(civ), invert = true)
+    }
+
+    /** GetStoleArtifactsScore: OPINION_WEIGHT_EXCAVATED_ARTIFACT per artifact, fading with (inverted) forgiveness */
+    fun stoleArtifactsScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val m = civ.ai.diplomacy.memoryOf(other)
+        return stacked(civ, m.numArtifactsStolen, m.stoleArtifactTurn, rules.define(AiDefine.OPINION_WEIGHT_EXCAVATED_ARTIFACT),
+            rules.define(AiDefine.EXCAVATED_ARTIFACT_TURNS_UNTIL_FORGIVEN), forgiveness(civ), invert = true)
     }
 
     /** CvPlayerReligions::HasOthersReligionInMostCities: [civ] founded no religion and more than half its cities follow [other]'s */

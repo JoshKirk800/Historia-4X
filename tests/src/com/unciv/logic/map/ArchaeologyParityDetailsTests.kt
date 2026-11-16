@@ -101,7 +101,7 @@ class ArchaeologyParityDetailsTests {
     }
 
     @Test
-    fun `a foreign landmark improves AI major opinion with diminishing integer credit reset at war`() {
+    fun `a foreign landmark improves AI major opinion, the first 20 and each further one 10, reset at war`() {
         val ownerCity = owner.cities.first()
         val diplomacy = owner.getDiplomacyManager(builder)!!
         fun landmarkOpinion(): Float {
@@ -113,7 +113,7 @@ class ArchaeologyParityDetailsTests {
         assertEquals(20f, landmarkOpinion(), 0.001f)
         val second = site(-1, 7, ownerCity)
         assertTrue(ArchaeologyFunctions.execute(builder, second, ArchaeologyChoice.Landmark, null))
-        assertEquals(26f, landmarkOpinion(), 0.001f)
+        assertEquals(30f, landmarkOpinion(), 0.001f)
         assertEquals(2, diplomacy.clone().landmarksBuiltForUs)
         assertEquals(2, json().fromJson(DiplomacyManager::class.java, json().toJson(diplomacy)).landmarksBuiltForUs)
         builder.getDiplomacyManager(owner)!!.declareWar()

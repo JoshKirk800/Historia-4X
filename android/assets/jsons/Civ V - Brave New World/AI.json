@@ -9556,7 +9556,8 @@
         "BarbarianSeaTargetRange": 4,
         "VictoryDisputePercent": 50,
         "VictoryBlockPercent": 50,
-        "AggressionIncrease": 0
+        "AggressionIncrease": 0,
+        "PeaceTreatyDampenerTurns": 20
       }
     },
     {
@@ -9593,7 +9594,8 @@
         "BarbarianSeaTargetRange": 6,
         "VictoryDisputePercent": 60,
         "VictoryBlockPercent": 60,
-        "AggressionIncrease": 2
+        "AggressionIncrease": 2,
+        "PeaceTreatyDampenerTurns": 20
       }
     },
     {
@@ -9630,7 +9632,8 @@
         "BarbarianSeaTargetRange": 8,
         "VictoryDisputePercent": 80,
         "VictoryBlockPercent": 80,
-        "AggressionIncrease": 4
+        "AggressionIncrease": 4,
+        "PeaceTreatyDampenerTurns": 20
       }
     },
     {
@@ -9667,7 +9670,8 @@
         "BarbarianSeaTargetRange": 10,
         "VictoryDisputePercent": 90,
         "VictoryBlockPercent": 90,
-        "AggressionIncrease": 6
+        "AggressionIncrease": 6,
+        "PeaceTreatyDampenerTurns": 18
       }
     },
     {
@@ -9704,7 +9708,8 @@
         "BarbarianSeaTargetRange": 12,
         "VictoryDisputePercent": 110,
         "VictoryBlockPercent": 110,
-        "AggressionIncrease": 9
+        "AggressionIncrease": 9,
+        "PeaceTreatyDampenerTurns": 16
       }
     },
     {
@@ -9741,7 +9746,8 @@
         "BarbarianSeaTargetRange": 15,
         "VictoryDisputePercent": 125,
         "VictoryBlockPercent": 125,
-        "AggressionIncrease": 12
+        "AggressionIncrease": 12,
+        "PeaceTreatyDampenerTurns": 14
       }
     },
     {
@@ -9778,7 +9784,8 @@
         "BarbarianSeaTargetRange": 18,
         "VictoryDisputePercent": 134,
         "VictoryBlockPercent": 134,
-        "AggressionIncrease": 14
+        "AggressionIncrease": 14,
+        "PeaceTreatyDampenerTurns": 12
       }
     },
     {
@@ -9815,7 +9822,8 @@
         "BarbarianSeaTargetRange": 20,
         "VictoryDisputePercent": 150,
         "VictoryBlockPercent": 150,
-        "AggressionIncrease": 16
+        "AggressionIncrease": 16,
+        "PeaceTreatyDampenerTurns": 11
       }
     },
     {
@@ -9852,7 +9860,8 @@
         "BarbarianSeaTargetRange": 10,
         "VictoryDisputePercent": 100,
         "VictoryBlockPercent": 100,
-        "AggressionIncrease": 0
+        "AggressionIncrease": 0,
+        "PeaceTreatyDampenerTurns": 20
       }
     }
   ],

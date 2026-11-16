@@ -63,14 +63,8 @@ object WarAi {
             !atWarWithAMajor && civ.ai.minorCivApproaches[target.civID] == MinorCivApproach.Conquest
         } else {
             operation = MilitaryOperations.sneakAttackOperation(civ, target)
-            val approach = ai.approachTowards(target)
-            // Vox Populi (CvDiplomacyAI::DoUpdateWarTargets, D7): close to world conquest, or endgame aggressive towards the target, a
-            // Hostile or Deceptive approach is reason enough for war
-            val endgame = (approach == MajorCivApproach.Hostile || approach == MajorCivApproach.Deceptive)
-                && (VictoryProgressAi.isCloseToWorldConquest(civ, rules) || VictoryProgressAi.isEndgameAggressiveTo(civ, target, rules))
-            // Let's not get into another war right now
-            (approach == MajorCivApproach.War || endgame || (approach == MajorCivApproach.Deceptive && civ.ai.isGoingForWorldConquest()))
-                && !atWarWithAMajor
+            // Vox Populi's bWantToAttack: the war approach, which its war targets (WarTargetAi) give within the conflict budget
+            ai.approachTowards(target) == MajorCivApproach.War
         }
         val canDeclare = civ.getDiplomacyManager(target)?.canDeclareWar() == true
         if (operation == null && !memory.musteringForAttack) {

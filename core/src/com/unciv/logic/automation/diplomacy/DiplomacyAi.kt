@@ -129,6 +129,8 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var doFBrokenTurn = -1
     /** CvDiplomacyAI::GetLiberatedCitiesTurn (Vox Populi): the turn they last liberated a city of ours or resurrected us, -1 = never */
     var liberatedCitiesTurn = -1
+    /** CvDiplomacyAI::GetDemandAcceptedTurn (Vox Populi): the turn they last paid a tribute we demanded, -1 = never or refused since */
+    var demandAcceptedTurn = -1
     /** CvDiplomacyAI::m_paiDeclaredWarOnFriendValue (decays) */
     var declaredWarOnFriendValue = 0
 
@@ -231,6 +233,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.doFCounter = doFCounter; copy.denouncedCounter = denouncedCounter; copy.denouncementActive = denouncementActive
         copy.friendDenouncedUs = friendDenouncedUs; copy.friendDeclaredWarOnUs = friendDeclaredWarOnUs
         copy.doFLevel = doFLevel; copy.doFBrokenTurn = doFBrokenTurn; copy.liberatedCitiesTurn = liberatedCitiesTurn
+        copy.demandAcceptedTurn = demandAcceptedTurn
         copy.declaredWarOnFriendValue = declaredWarOnFriendValue
         for ((target, entry) in coopWars) copy.coopWars[target] = entry.clone()
         copy.demandCounter = demandCounter

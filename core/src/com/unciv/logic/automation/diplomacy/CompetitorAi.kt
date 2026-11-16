@@ -181,7 +181,7 @@ object CompetitorAi {
     /** CvPlayer::GetFractionOriginalCapitalsUnderControl (UpdateMilitaryStats): the original capitals of majors [civ] holds, its own
      *  capital aside, in % of the other majors that ever lived */
     @Readonly
-    private fun fractionOriginalCapitalsUnderControl(civ: Civilization, majorsEver: Int): Int {
+    internal fun fractionOriginalCapitalsUnderControl(civ: Civilization, majorsEver: Int): Int {
         val held = civ.cities.count { it.isOriginalCapital && it.foundingCivObject?.isMajorCiv == true && !it.isCapital() }
         return held * 100 / maxOf(1, majorsEver - 1)
     }

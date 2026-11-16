@@ -20,6 +20,9 @@ class CityTurnManager(val city: City) {
 
     fun startTurn():Unit = timeThis("CityTurnManager.startTurn") {
         city.clearCaches()
+        // CvCity::flipDamageReceivedPerTurn (Vox Populi, in CvPlayer::doTurn): smooth the damage taken
+        city.damageTakenLastTurn = (city.damageTakenThisTurn * 80 + city.damageTakenLastTurn * 20) / 100
+        city.damageTakenThisTurn = 0
         
         for (resource in city.getResourcesGeneratedByCity()) {
             if (resource.resource.isStockpiled && resource.resource.isCityWide)

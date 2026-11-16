@@ -81,6 +81,10 @@ class City : IsPartOfGameInfoSerialization, INamed {
     var everOwnedBy = HashSet<String>()
     var turnAcquired = 0
     var health = 200
+    /** CvCity::m_iDamageTakenThisTurn (Vox Populi): combat damage taken since the owner's turn began (CityCombatant.takeDamage) */
+    var damageTakenThisTurn = 0
+    /** CvCity::m_iDamageTakenLastTurn: 80% of the last turn's damage and 20% of the one before, smoothed at each turn's start */
+    var damageTakenLastTurn = 0
 
 
     var population = CityPopulationManager()
@@ -198,6 +202,8 @@ class City : IsPartOfGameInfoSerialization, INamed {
         toReturn.id = if (id != NO_ID) id else pseudoRandomId(civ)
         toReturn.name = name
         toReturn.health = health
+        toReturn.damageTakenThisTurn = damageTakenThisTurn
+        toReturn.damageTakenLastTurn = damageTakenLastTurn
         toReturn.population = population.clone()
         toReturn.cityConstructions = cityConstructions.clone()
         toReturn.expansion = expansion.clone()

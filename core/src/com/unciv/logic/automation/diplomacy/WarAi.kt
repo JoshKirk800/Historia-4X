@@ -52,8 +52,11 @@ object WarAi {
      *  target) and want a show of force against our demand target, the attack first. An army in place ([MajorCivMemory.musteringForAttack],
      *  set when an attack reaches its target or is discovered on the way) declares the war - on a major once no coop war against them
      *  is still being prepared - or makes the demand ready; with neither wish our operations against them stop. Without one we request
-     *  the attack (the war goal Prepare) or the show of force, or else stop any operation against them. VP's requests are its
-     *  RequestCityAttack (three units to build, careful without new wars); ours are still BNW's sneak and city-state attacks.
+     *  the attack (the war goal Prepare) or the show of force, or else stop any operation against them. The attack goes at VP's
+     *  RequestCityAttack targets ([com.unciv.logic.automation.strategy.MilitaryTargets.cityAttackTargets]) through our sneak and
+     *  city-state attacks, careful (preferred targets only) against a city-state while a dangerous major fights us, against a major
+     *  without new wars or while one fights us that our cities are exposed to or that threatens them, unless a coop war against them is
+     *  being prepared ([WarStateAi.numDangerousMajorsAtWarWith]).
      */
     fun doMakeWarOnPlayer(civ: Civilization, target: Civilization, rules: AiRuleset) {
         val ai = civ.ai.diplomacy
@@ -91,8 +94,15 @@ object WarAi {
             wantToAttack -> {
                 memory.warGoal = WarGoal.Prepare
                 if (target.isCityState) {
-                    if (MilitaryOperations.cityStateAttackOperation(civ, target) == null) MilitaryOperations.requestCityStateAttack(civ, target)
-                } else if (MilitaryOperations.sneakAttackOperation(civ, target) == null) MilitaryOperations.requestSneakAttack(civ, target)
+                    val careful = WarStateAi.numDangerousMajorsAtWarWith(civ, excludePhonyWars = true, excludeIfNoTarget = false) > 0
+                    if (MilitaryOperations.cityStateAttackOperation(civ, target) == null) MilitaryOperations.requestCityStateAttack(civ, target, careful)
+                } else if (MilitaryOperations.sneakAttackOperation(civ, target) == null) {
+                    val coop = CoopWarAi.globalState(civ, target)
+                    val coopPreparing = coop == CoopWarState.Soon || coop == CoopWarState.Accepted
+                    val careful = (WarStateAi.isNoNewWars(civ) || WarStateAi.numDangerousMajorsAtWarWith(civ, excludePhonyWars = true, excludeIfNoTarget = true) > 0) &&
+                        !coopPreparing
+                    MilitaryOperations.requestSneakAttack(civ, target, careful)
+                }
             }
             wantShowOfForce -> if (MilitaryOperations.showOfForceOperation(civ, target) == null) MilitaryOperations.requestShowOfForce(civ, target)
             else -> {

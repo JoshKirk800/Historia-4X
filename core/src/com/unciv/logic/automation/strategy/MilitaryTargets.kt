@@ -156,6 +156,21 @@ object MilitaryTargets {
     }
 
     /**
+     *  The targets Vox Populi's CvMilitaryAI::RequestCityAttack tries against [enemy], in turn: the potential attack targets among their
+     *  cities ([MilitaryAi.potentialAttackTargets], best score first), only the preferred ones when [careful]; a naval or combined army
+     *  goes by sea.
+     */
+    fun cityAttackTargets(civ: Civilization, enemy: Civilization, careful: Boolean): List<MilitaryTarget> =
+        civ.ai.military.potentialAttackTargets
+            .filter { it.targetCity.civ == enemy && (!careful || it.preferred) && it.musterCity.civ == civ }
+            .map { target ->
+                MilitaryTarget(target.musterCity, target.targetCity).apply {
+                    attackBySea = target.armyType != TargetArmyType.Land
+                    pathLength = target.pathLength
+                }
+            }
+
+    /**
      *  CvMilitaryAI::FindBestAttackTarget: for every pair of one of our cities and one revealed city of [enemy] the power of the units
      *  near both and the way there (land route length, or by sea - [shouldAttackBySea]); the 25 shortest routes are scored
      *  ([scoreTarget]) and one of the best quarter chosen by weight.

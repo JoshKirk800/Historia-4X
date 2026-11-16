@@ -689,10 +689,10 @@
     "MINOR_CIV_CONTACT_GOLD_FIRST": 30,
     "MINOR_CIV_CONTACT_GOLD_OTHER": 15,
     "MINOR_CIV_DISPUTE_ALLIES_WEIGHT": 10,
-    "MINOR_CIV_DISPUTE_FIERCE_THRESHOLD": 700,
+    "MINOR_CIV_DISPUTE_FIERCE_THRESHOLD": 1400,
     "MINOR_CIV_DISPUTE_FRIENDS_WEIGHT": 5,
-    "MINOR_CIV_DISPUTE_STRONG_THRESHOLD": 400,
-    "MINOR_CIV_DISPUTE_WEAK_THRESHOLD": 200,
+    "MINOR_CIV_DISPUTE_STRONG_THRESHOLD": 1000,
+    "MINOR_CIV_DISPUTE_WEAK_THRESHOLD": 700,
     "MINOR_CIV_GLOBAL_QUEST_FIRST_POSSIBLE_TURN": 30,
     "MINOR_CIV_GLOBAL_QUEST_FIRST_POSSIBLE_TURN_RAND": 20,
     "MINOR_CIV_GLOBAL_QUEST_MIN_TURNS_BETWEEN": 40,
@@ -782,12 +782,12 @@
     "NORMAL_ANNEX": 0.5,
     "NUKE_BLAST_RADIUS": 2,
     "NUM_OR_TECH_PREREQS": 3,
-    "OPINION_THRESHOLD_ALLY": -80,
-    "OPINION_THRESHOLD_COMPETITOR": 15,
-    "OPINION_THRESHOLD_ENEMY": 40,
-    "OPINION_THRESHOLD_FAVORABLE": -15,
-    "OPINION_THRESHOLD_FRIEND": -40,
-    "OPINION_THRESHOLD_UNFORGIVABLE": 80,
+    "OPINION_THRESHOLD_ALLY": -160,
+    "OPINION_THRESHOLD_COMPETITOR": 30,
+    "OPINION_THRESHOLD_ENEMY": 80,
+    "OPINION_THRESHOLD_FAVORABLE": -30,
+    "OPINION_THRESHOLD_FRIEND": -80,
+    "OPINION_THRESHOLD_UNFORGIVABLE": 160,
     "OPINION_WEIGHT_ADOPTING_HIS_RELIGION": -5,
     "OPINION_WEIGHT_ADOPTING_MY_RELIGION": -3,
     "OPINION_WEIGHT_ASKED_NO_SETTLE": 20,
@@ -845,22 +845,33 @@
     "OPINION_WEIGHT_KILLED_MANY_PROTECTED_MINORS": 10,
     "OPINION_WEIGHT_KILLED_PROTECTED_MINOR": 40,
     "OPINION_WEIGHT_KILLED_PROTECTED_MINOR_NUM_TURNS_UNTIL_FORGIVEN": 50,
-    "OPINION_WEIGHT_LAND_FIERCE": 30,
-    "OPINION_WEIGHT_LAND_NONE": -6,
-    "OPINION_WEIGHT_LAND_STRONG": 20,
-    "OPINION_WEIGHT_LAND_WEAK": 10,
+    "OPINION_WEIGHT_LAND_FIERCE": 40,
+    "OPINION_WEIGHT_LAND_NONE": -10,
+    "OPINION_WEIGHT_LAND_NONE_WARMONGER": -5,
+    "OPINION_WEIGHT_LAND_STRONG": 25,
+    "OPINION_WEIGHT_LAND_WARMONGER": 10,
+    "OPINION_WEIGHT_LAND_WEAK": 15,
     "OPINION_WEIGHT_LIBERATED_ONE_CITY": -30,
     "OPINION_WEIGHT_LIBERATED_THREE_CITIES": -60,
     "OPINION_WEIGHT_LIBERATED_TWO_CITIES": -50,
     "OPINION_WEIGHT_MADE_DEMAND_OF_US": 20,
+    "OPINION_WEIGHT_MILITARY_AGGRESSIVE_POSTURE_HIGH": 40,
+    "OPINION_WEIGHT_MILITARY_AGGRESSIVE_POSTURE_INCREDIBLE": 60,
+    "OPINION_WEIGHT_MILITARY_AGGRESSIVE_POSTURE_LOW": 10,
+    "OPINION_WEIGHT_MILITARY_AGGRESSIVE_POSTURE_MEDIUM": 20,
+    "OPINION_WEIGHT_MINOR_CIV_DIPLOMAT": 10,
     "OPINION_WEIGHT_MINOR_CIV_FIERCE": 30,
     "OPINION_WEIGHT_MINOR_CIV_NONE": 0,
+    "OPINION_WEIGHT_MINOR_CIV_NONE_DIPLOMAT": -5,
     "OPINION_WEIGHT_MINOR_CIV_STRONG": 20,
     "OPINION_WEIGHT_MINOR_CIV_WEAK": 10,
     "OPINION_WEIGHT_NUKED_MAX": 50,
     "OPINION_WEIGHT_PAID_TRIBUTE": 30,
     "OPINION_WEIGHT_PER_NEGATIVE_CONVERSION": 2,
-    "OPINION_WEIGHT_RECKLESS_EXPANDER": 35,
+    "OPINION_WEIGHT_RECKLESS_EXPANDER": 20,
+    "OPINION_WEIGHT_RECKLESS_EXPANDER_PER_CITY": 10,
+    "OPINION_WEIGHT_RECKLESS_EXPANDER_PER_TILE": 1,
+    "OPINION_WEIGHT_RECKLESS_EXPANDER_STRATEGIC_MOD": 20,
     "OPINION_WEIGHT_RESURRECTED": -200,
     "OPINION_WEIGHT_RETURNED_CIVILIAN": -20,
     "OPINION_WEIGHT_ROBBED_BY": 20,
@@ -884,10 +895,16 @@
     "OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_NUM_TURNS": 45,
     "OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL": -15,
     "OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_NUM_TURNS": 45,
-    "OPINION_WEIGHT_WONDER_FIERCE": 20,
+    "OPINION_WEIGHT_WONDER_CULTURAL": 10,
+    "OPINION_WEIGHT_WONDER_FIERCE": 50,
     "OPINION_WEIGHT_WONDER_NONE": 0,
-    "OPINION_WEIGHT_WONDER_STRONG": 15,
-    "OPINION_WEIGHT_WONDER_WEAK": 10,
+    "OPINION_WEIGHT_WONDER_NONE_CULTURAL": -5,
+    "OPINION_WEIGHT_WONDER_SPAMMER": 20,
+    "OPINION_WEIGHT_WONDER_SPAMMER_CAP": 60,
+    "OPINION_WEIGHT_WONDER_SPAMMER_PER_WONDER": 5,
+    "OPINION_WEIGHT_WONDER_SPAMMER_STRATEGIC_MOD": 20,
+    "OPINION_WEIGHT_WONDER_STRONG": 35,
+    "OPINION_WEIGHT_WONDER_WEAK": 20,
     "PEACE_TREATY_LENGTH": 10,
     "PEACE_WILLINGNESS_ACCEPT_PROJECTION_DEFEAT": -20,
     "PEACE_WILLINGNESS_ACCEPT_PROJECTION_DESTRUCTION": -50,
@@ -1144,9 +1161,9 @@
     "WAR_STATE_THRESHOLD_NEARLY_WON": 75,
     "WAR_STATE_THRESHOLD_OFFENSIVE": 57,
     "WAR_STATE_THRESHOLD_STALEMATE": 42,
-    "WONDER_DISPUTE_FIERCE_THRESHOLD": 10,
-    "WONDER_DISPUTE_STRONG_THRESHOLD": 7,
-    "WONDER_DISPUTE_WEAK_THRESHOLD": 5,
+    "WONDER_DISPUTE_FIERCE_THRESHOLD": 24,
+    "WONDER_DISPUTE_STRONG_THRESHOLD": 12,
+    "WONDER_DISPUTE_WEAK_THRESHOLD": 1,
     "WONDER_SPAMMER_THRESHOLD": 3,
     "WOUNDED_DAMAGE_MULTIPLIER": 33
   },
@@ -9593,7 +9610,11 @@
         "PeaceTreatyDampenerTurns": 20,
         "LandDisputePercent": 50,
         "WonderBlockPercent": 50,
-        "WonderBlockMod": -2
+        "WonderBlockMod": -2,
+        "WonderDisputePercent": 50,
+        "MinorCivDisputePercent": 50,
+        "HumanOpinionChange": -10,
+        "AIOpinionChange": 0
       }
     },
     {
@@ -9634,7 +9655,11 @@
         "PeaceTreatyDampenerTurns": 20,
         "LandDisputePercent": 60,
         "WonderBlockPercent": 60,
-        "WonderBlockMod": -2
+        "WonderBlockMod": -2,
+        "WonderDisputePercent": 60,
+        "MinorCivDisputePercent": 60,
+        "HumanOpinionChange": -5,
+        "AIOpinionChange": 0
       }
     },
     {
@@ -9675,7 +9700,11 @@
         "PeaceTreatyDampenerTurns": 20,
         "LandDisputePercent": 70,
         "WonderBlockPercent": 80,
-        "WonderBlockMod": -2
+        "WonderBlockMod": -2,
+        "WonderDisputePercent": 70,
+        "MinorCivDisputePercent": 70,
+        "HumanOpinionChange": 0,
+        "AIOpinionChange": 0
       }
     },
     {
@@ -9716,7 +9745,11 @@
         "PeaceTreatyDampenerTurns": 18,
         "LandDisputePercent": 80,
         "WonderBlockPercent": 90,
-        "WonderBlockMod": -1
+        "WonderBlockMod": -1,
+        "WonderDisputePercent": 80,
+        "MinorCivDisputePercent": 80,
+        "HumanOpinionChange": 0,
+        "AIOpinionChange": 0
       }
     },
     {
@@ -9757,7 +9790,11 @@
         "PeaceTreatyDampenerTurns": 16,
         "LandDisputePercent": 90,
         "WonderBlockPercent": 110,
-        "WonderBlockMod": -1
+        "WonderBlockMod": -1,
+        "WonderDisputePercent": 90,
+        "MinorCivDisputePercent": 90,
+        "HumanOpinionChange": 0,
+        "AIOpinionChange": 0
       }
     },
     {
@@ -9798,7 +9835,11 @@
         "PeaceTreatyDampenerTurns": 14,
         "LandDisputePercent": 100,
         "WonderBlockPercent": 125,
-        "WonderBlockMod": 0
+        "WonderBlockMod": 0,
+        "WonderDisputePercent": 100,
+        "MinorCivDisputePercent": 100,
+        "HumanOpinionChange": 0,
+        "AIOpinionChange": 0
       }
     },
     {
@@ -9839,7 +9880,11 @@
         "PeaceTreatyDampenerTurns": 12,
         "LandDisputePercent": 115,
         "WonderBlockPercent": 134,
-        "WonderBlockMod": 0
+        "WonderBlockMod": 0,
+        "WonderDisputePercent": 115,
+        "MinorCivDisputePercent": 115,
+        "HumanOpinionChange": 0,
+        "AIOpinionChange": 0
       }
     },
     {
@@ -9880,7 +9925,11 @@
         "PeaceTreatyDampenerTurns": 11,
         "LandDisputePercent": 125,
         "WonderBlockPercent": 150,
-        "WonderBlockMod": 0
+        "WonderBlockMod": 0,
+        "WonderDisputePercent": 125,
+        "MinorCivDisputePercent": 125,
+        "HumanOpinionChange": 0,
+        "AIOpinionChange": 0
       }
     },
     {
@@ -9921,7 +9970,11 @@
         "PeaceTreatyDampenerTurns": 20,
         "LandDisputePercent": 100,
         "WonderBlockPercent": 100,
-        "WonderBlockMod": 0
+        "WonderBlockMod": 0,
+        "WonderDisputePercent": 100,
+        "MinorCivDisputePercent": 100,
+        "HumanOpinionChange": 0,
+        "AIOpinionChange": 0
       }
     }
   ],

@@ -117,7 +117,7 @@ enum class DiplomacyFlags {
  */
 enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = true) {
     // Negative
-    LeaderPersonality("Our leader's temperament"),
+    BaseOpinion("Our view of foreign leaders"),
     LandDispute("You are taking land we want"),
     WonderDispute("You have beaten us to Wonders"),
     MinorCivDispute("You are allied with City-States we protect"),
@@ -154,6 +154,8 @@ enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = tr
     SidedWithProtectedMinor("You sided with a City-State over us"),
     SpiedOnUs("You stole technology from us!"),
     RecklessExpander("You are expanding recklessly"),
+    WonderSpammer("You are building too many Wonders"),
+    MilitaryPosture("Your military is massing near our borders"),
     RefusedToHelpUs("You refused to help us"),
     DislikedTheirProposal("We dislike your proposals in the World Congress"),
     FoiledOurProposal("You foiled our proposal in the World Congress"),
@@ -378,16 +380,17 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
             else -> RelationshipLevel.Neutral
         }
 
-        // CvDiplomacyAI::DoUpdateOnePlayerOpinion: the opinion is minus the opinion weight, the levels are the OPINION_THRESHOLD_* defines
+        // CvDiplomacyAI::DoUpdateOnePlayerOpinion: the opinion is minus the opinion weight, the levels are the OPINION_THRESHOLD_* defines,
+        // inclusive on the unfriendly side and strict on the friendly one (as OpinionAi.opinionLevel)
         val weight = -opinionOfOtherCiv()
         val rules = civInfo.gameInfo.ruleset.ai
         return when {
             weight >= rules.define(AiDefine.OPINION_THRESHOLD_UNFORGIVABLE) -> RelationshipLevel.Unforgivable
             weight >= rules.define(AiDefine.OPINION_THRESHOLD_ENEMY) -> RelationshipLevel.Enemy
             weight >= rules.define(AiDefine.OPINION_THRESHOLD_COMPETITOR) -> RelationshipLevel.Competitor
-            weight >= rules.define(AiDefine.OPINION_THRESHOLD_FAVORABLE) -> RelationshipLevel.Neutral
-            weight >= rules.define(AiDefine.OPINION_THRESHOLD_FRIEND) -> RelationshipLevel.Favorable
-            weight >= rules.define(AiDefine.OPINION_THRESHOLD_ALLY) -> RelationshipLevel.Friend
+            weight > rules.define(AiDefine.OPINION_THRESHOLD_FAVORABLE) -> RelationshipLevel.Neutral
+            weight > rules.define(AiDefine.OPINION_THRESHOLD_FRIEND) -> RelationshipLevel.Favorable
+            weight > rules.define(AiDefine.OPINION_THRESHOLD_ALLY) -> RelationshipLevel.Friend
             else -> RelationshipLevel.Ally
         }
     }

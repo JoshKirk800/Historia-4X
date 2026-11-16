@@ -6,14 +6,18 @@ import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomacyManager
 import com.unciv.logic.civilization.diplomacy.DiplomaticModifiers
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.league.LeagueAlignmentMemory
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
-import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
+import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
- *  CvDiplomacyAI::DoUpdateOpinions / DoUpdateOnePlayerOpinion / GetMajorCivOpinionWeight: one weight per known major (positive = bad), the sum of
- *  every BNW opinion term, mapped to the seven opinion levels by the OPINION_THRESHOLD_* defines.
+ *  CvDiplomacyAI::DoUpdateOpinions / DoUpdateOnePlayerOpinion / CalculateCivOpinionWeight: one weight per known major (positive = bad),
+ *  mapped to the seven opinion levels by the OPINION_THRESHOLD_* defines. Vox Populi's frame (`phaseE/vp-opinion-plan.md`): its
+ *  thresholds, its human shadow AI rule, its base score and its dispute, expander, wonder spammer and military posture scores; the
+ *  other terms are still BNW's until the plan's later branches.
  *
  *  The terms are written each turn into the [DiplomacyManager.diplomaticModifiers] of the pair, sign flipped (Unciv shows positive = good), so the
  *  diplomacy screen lists them and [DiplomacyManager.opinionOfOtherCiv] equals minus the weight. Terms the original computes but that Unciv has no game
@@ -32,23 +36,35 @@ object OpinionAi {
         }
     }
 
-    /** CvDiplomacyAI::DoUpdateOnePlayerOpinion (Unciv has no teams) */
+    /**
+     *  CvDiplomacyAI::DoUpdateOnePlayerOpinion (Unciv has no teams). A human's shadow AI does not weigh: enemy at war or having denounced
+     *  them, friend with a declaration of friendship or a defensive pact, else neutral (its terms are still written for the diplomacy
+     *  screen).
+     */
     fun updateOpinion(civ: Civilization, other: Civilization, rules: AiRuleset = civ.gameInfo.ruleset.ai) {
         val diplomacy = civ.getDiplomacyManager(other) ?: return
         val weight = opinionWeight(civ, other, rules, diplomacy)
         val memory = civ.ai.diplomacy.memoryOf(other)
+        if (civ.isHuman()) {
+            memory.opinion = when {
+                civ.isAtWarWith(other) || isDenouncedPlayer(civ, other) -> MajorCivOpinion.Enemy
+                isDoFAccepted(civ, other) || diplomacy.diplomaticStatus == DiplomaticStatus.DefensivePact -> MajorCivOpinion.Friend
+                else -> MajorCivOpinion.Neutral
+            }
+            return
+        }
         memory.opinionWeight = weight
         memory.opinion = opinionLevel(weight, rules)
     }
 
-    /** The OPINION_THRESHOLD_* mapping of DoUpdateOnePlayerOpinion */
+    /** The OPINION_THRESHOLD_* mapping of DoUpdateOnePlayerOpinion: at or above the unfriendly thresholds, strictly above the friendly ones */
     fun opinionLevel(weight: Int, rules: AiRuleset): MajorCivOpinion = when {
         weight >= rules.define(AiDefine.OPINION_THRESHOLD_UNFORGIVABLE) -> MajorCivOpinion.Unforgivable
         weight >= rules.define(AiDefine.OPINION_THRESHOLD_ENEMY) -> MajorCivOpinion.Enemy
         weight >= rules.define(AiDefine.OPINION_THRESHOLD_COMPETITOR) -> MajorCivOpinion.Competitor
-        weight >= rules.define(AiDefine.OPINION_THRESHOLD_FAVORABLE) -> MajorCivOpinion.Neutral
-        weight >= rules.define(AiDefine.OPINION_THRESHOLD_FRIEND) -> MajorCivOpinion.Favorable
-        weight >= rules.define(AiDefine.OPINION_THRESHOLD_ALLY) -> MajorCivOpinion.Friend
+        weight > rules.define(AiDefine.OPINION_THRESHOLD_FAVORABLE) -> MajorCivOpinion.Neutral
+        weight > rules.define(AiDefine.OPINION_THRESHOLD_FRIEND) -> MajorCivOpinion.Favorable
+        weight > rules.define(AiDefine.OPINION_THRESHOLD_ALLY) -> MajorCivOpinion.Friend
         else -> MajorCivOpinion.Ally
     }
 
@@ -67,13 +83,15 @@ object OpinionAi {
         }
         if (write != null) for (modifier in OWNED_TERMS) write.removeModifier(modifier)
 
-        // How nasty am I?
-        term(DiplomaticModifiers.LeaderPersonality,
-            (civ.ai.majorCivApproachBias(MajorCivApproach.Hostile) - civ.ai.majorCivApproachBias(MajorCivApproach.Friendly)) * 2)
-        val land = landDisputeScore(memory.landDispute, rules)
+        // VP's base score: the difficulty's opinion change
+        term(DiplomaticModifiers.BaseOpinion, baseOpinionScore(civ, other))
+        val land = landDisputeScore(civ, other, rules)
         term(if (land < 0) DiplomaticModifiers.NoLandDispute else DiplomaticModifiers.LandDispute, land)
-        term(DiplomaticModifiers.WonderDispute, wonderDisputeScore(memory.wonderDispute, rules))
-        term(DiplomaticModifiers.MinorCivDispute, minorCivDisputeScore(memory.minorCivDispute, rules))
+        term(DiplomaticModifiers.WonderDispute, wonderDisputeScore(civ, other, rules))
+        term(DiplomaticModifiers.MinorCivDispute, minorCivDisputeScore(civ, other, rules))
+        term(DiplomaticModifiers.RecklessExpander, recklessExpanderScore(civ, other, rules))
+        term(DiplomaticModifiers.WonderSpammer, wonderSpammerScore(civ, other, rules))
+        term(DiplomaticModifiers.MilitaryPosture, militaryPostureScore(civ, other, rules))
         term(DiplomaticModifiers.WarMongerer, warmongerThreatScore(civ, other))
 
         // Nice things
@@ -157,8 +175,6 @@ object OpinionAi {
         term(DiplomaticModifiers.DenouncedOurAllies, if (isPlayerDenouncedFriend(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_FRIEND) else 0)
         term(DiplomaticModifiers.DenouncedOurEnemies, if (isPlayerDenouncedEnemy(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_DENOUNCED_ENEMY) else 0)
 
-        term(DiplomaticModifiers.RecklessExpander, if (WarStateAi.isPlayerRecklessExpander(civ, other)) rules.define(AiDefine.OPINION_WEIGHT_RECKLESS_EXPANDER) else 0)
-
         // June 2011 additions
         term(DiplomaticModifiers.TradedWithUs, recentTradeScore(memory.recentTradeValue, rules))
         term(DiplomaticModifiers.SharedEnemy, commonFoeScore(memory.commonFoeValue, rules))
@@ -183,28 +199,146 @@ object OpinionAi {
 
     //region The terms (CvDiplomacyAI::Get*Score)
 
-    /** GetLandDisputeLevelScore */
-    fun landDisputeScore(level: DisputeLevel, rules: AiRuleset): Int = when (level) {
-        DisputeLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_LAND_FIERCE)
-        DisputeLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_LAND_STRONG)
-        DisputeLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_LAND_WEAK)
-        DisputeLevel.None -> rules.define(AiDefine.OPINION_WEIGHT_LAND_NONE)
+    /** A difficulty column (Vox Populi's HandicapInfos; 100 without the difficulty) */
+    private fun handicapValue(civ: Civilization, column: String, default: Int = 100): Int =
+        civ.gameInfo.ruleset.ai.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get(column) ?: default
+
+    /** GetBaseOpinionScore: the difficulty's HumanOpinionChange towards a human, its AIOpinionChange towards an AI */
+    fun baseOpinionScore(civ: Civilization, other: Civilization): Int =
+        handicapValue(civ, if (other.isHuman()) "HumanOpinionChange" else "AIOpinionChange", 0)
+
+    /** Our era for the dispute terms, at least 1 */
+    private fun era(civ: Civilization) = maxOf(1, civ.getEraNumber())
+
+    /** A dispute weight scaled by a personality value x the difficulty's percent, / 750 when it is bad, / 500 when it is good */
+    private fun scaleDispute(weight: Int, personality: Int, percent: Int): Int {
+        if (weight == 0) return 0
+        val scaled = weight * personality * percent
+        return if (scaled > 0) scaled / 750 else scaled / 500
     }
 
-    /** GetWonderDisputeLevelScore */
-    fun wonderDisputeScore(level: DisputeLevel, rules: AiRuleset): Int = when (level) {
-        DisputeLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_WONDER_FIERCE)
-        DisputeLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_WONDER_STRONG)
-        DisputeLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_WONDER_WEAK)
-        DisputeLevel.None -> rules.define(AiDefine.OPINION_WEIGHT_WONDER_NONE)
+    /**
+     *  GetLandDisputeLevelScore: by the land dispute level; a conqueror (Domination primary victory pursuit) adds
+     *  OPINION_WEIGHT_LAND_WARMONGER to a dispute and (OPINION_WEIGHT_LAND_NONE_WARMONGER - neediness) x era / 2 to none; scaled by
+     *  boldness x the difficulty's LandDisputePercent
+     */
+    fun landDisputeScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        var weight = when (civ.ai.diplomacy.memoryOf(other).landDispute) {
+            DisputeLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_LAND_FIERCE)
+            DisputeLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_LAND_STRONG)
+            DisputeLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_LAND_WEAK)
+            DisputeLevel.None -> rules.define(AiDefine.OPINION_WEIGHT_LAND_NONE)
+        }
+        if (civ.ai.isConqueror()) {
+            if (weight > 0) weight += rules.define(AiDefine.OPINION_WEIGHT_LAND_WARMONGER)
+            else if (weight < 0) weight += (rules.define(AiDefine.OPINION_WEIGHT_LAND_NONE_WARMONGER) -
+                civ.ai.diplomacyValue(DiplomacyPersonality.Neediness)) * era(civ) / 2
+        }
+        return scaleDispute(weight, civ.ai.diplomacyValue(DiplomacyPersonality.Boldness), handicapValue(civ, "LandDisputePercent"))
     }
 
-    /** GetMinorCivDisputeLevelScore */
-    fun minorCivDisputeScore(level: DisputeLevel, rules: AiRuleset): Int = when (level) {
-        DisputeLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_FIERCE)
-        DisputeLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_STRONG)
-        DisputeLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_WEAK)
-        DisputeLevel.None -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_NONE)
+    /**
+     *  GetWonderDisputeLevelScore: by the wonder dispute level; a cultural leader (Culture primary victory pursuit) adds
+     *  OPINION_WEIGHT_WONDER_CULTURAL to a dispute and, unless they spam wonders, (OPINION_WEIGHT_WONDER_NONE_CULTURAL - neediness) x
+     *  era / 2 to none; scaled by wonder competitiveness x the difficulty's WonderDisputePercent
+     */
+    fun wonderDisputeScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        var weight = when (memory.wonderDispute) {
+            DisputeLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_WONDER_FIERCE)
+            DisputeLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_WONDER_STRONG)
+            DisputeLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_WONDER_WEAK)
+            DisputeLevel.None -> rules.define(AiDefine.OPINION_WEIGHT_WONDER_NONE)
+        }
+        if (civ.ai.isCultural()) {
+            if (weight > 0) weight += rules.define(AiDefine.OPINION_WEIGHT_WONDER_CULTURAL)
+            else if (!memory.wonderSpammer) weight += (rules.define(AiDefine.OPINION_WEIGHT_WONDER_NONE_CULTURAL) -
+                civ.ai.diplomacyValue(DiplomacyPersonality.Neediness)) * era(civ) / 2
+        }
+        return scaleDispute(weight, civ.ai.diplomacyValue(DiplomacyPersonality.WonderCompetitiveness), handicapValue(civ, "WonderDisputePercent"))
+    }
+
+    /**
+     *  GetMinorCivDisputeLevelScore, once we have met a city-state: by the city-state dispute level; a diplomat (Diplomacy primary victory
+     *  pursuit) adds OPINION_WEIGHT_MINOR_CIV_DIPLOMAT to a dispute and, unless they trouble city-states (IsMinorCivTroublemaker without
+     *  bullying: a dispute above weak, a protected city-state of ours they killed or attacked), (OPINION_WEIGHT_MINOR_CIV_NONE_DIPLOMAT -
+     *  neediness) x era / 2 to none; scaled by city-state competitiveness x the difficulty's MinorCivDisputePercent. Coups and the
+     *  city-state attack promise have no counterpart (none).
+     */
+    fun minorCivDisputeScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (civ.gameInfo.civilizations.none { it.isCityState && it.isAlive() && civ.knows(it) }) return 0
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        var weight = when (memory.minorCivDispute) {
+            DisputeLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_FIERCE)
+            DisputeLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_STRONG)
+            DisputeLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_WEAK)
+            DisputeLevel.None -> rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_NONE)
+        }
+        if (civ.ai.isDiplomat()) {
+            val troublemaker = memory.minorCivDispute > DisputeLevel.Weak || isAngryAboutProtectedMinorKilled(memory, rules) ||
+                isAngryAboutProtectedMinorAttacked(memory, rules)
+            if (weight > 0) weight += rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_DIPLOMAT)
+            else if (!troublemaker) weight += (rules.define(AiDefine.OPINION_WEIGHT_MINOR_CIV_NONE_DIPLOMAT) -
+                civ.ai.diplomacyValue(DiplomacyPersonality.Neediness)) * era(civ) / 2
+        }
+        return scaleDispute(weight, civ.ai.diplomacyValue(DiplomacyPersonality.MinorCivCompetitiveness), handicapValue(civ, "MinorCivDisputePercent"))
+    }
+
+    /**
+     *  GetRecklessExpanderScore: for a reckless expander, OPINION_WEIGHT_RECKLESS_EXPANDER plus the larger of
+     *  (cities over ours or over RECKLESS_EXPANDER_CITIES_THRESHOLD % of the median, the smaller, less 1) x _PER_CITY and (tiles likewise
+     *  with RECKLESS_EXPANDER_LAND_THRESHOLD) x _PER_TILE, plus _STRATEGIC_MOD for a conqueror (primary or secondary victory pursuit) or
+     *  the warmonger trait; x boldness x the difficulty's LandDisputePercent / 500
+     */
+    fun recklessExpanderScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (!WarStateAi.isPlayerRecklessExpander(civ, other)) return 0
+        val players = civ.gameInfo.civilizations.filter { it.isMajorCiv && it.isAlive() && it.cities.isNotEmpty() }
+        val medianCities = ExpanderAi.median(players.map { it.cities.size })
+        val medianPlots = ExpanderAi.median(players.map { ExpanderAi.totalLand(it) })
+        val cities = other.cities.size
+        val plots = ExpanderAi.totalLand(other)
+        val cityDifference = minOf(cities - civ.cities.size,
+            (cities * 100 - medianCities * rules.define(AiDefine.RECKLESS_EXPANDER_CITIES_THRESHOLD)) / 100)
+        val plotDifference = minOf(plots - ExpanderAi.totalLand(civ),
+            (plots * 100 - medianPlots * rules.define(AiDefine.RECKLESS_EXPANDER_LAND_THRESHOLD)) / 100)
+        val cityWeight = if (cityDifference > 1) (cityDifference - 1) * rules.define(AiDefine.OPINION_WEIGHT_RECKLESS_EXPANDER_PER_CITY) else 0
+        val plotWeight = if (plotDifference > 1) (plotDifference - 1) * rules.define(AiDefine.OPINION_WEIGHT_RECKLESS_EXPANDER_PER_TILE) else 0
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_RECKLESS_EXPANDER) + maxOf(cityWeight, plotWeight)
+        if (civ.ai.isConqueror() || civ.ai.isSecondaryConqueror() || civ.ai.hasTraitCategory(TraitCategory.Warmonger))
+            weight += rules.define(AiDefine.OPINION_WEIGHT_RECKLESS_EXPANDER_STRATEGIC_MOD)
+        return weight * civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) * handicapValue(civ, "LandDisputePercent") / 500
+    }
+
+    /**
+     *  GetWonderSpammerScore: for a wonder spammer, OPINION_WEIGHT_WONDER_SPAMMER plus, by the wonders they built over ours or over the
+     *  median (the smaller) beyond WONDER_SPAMMER_THRESHOLD + 1 - the difficulty's WonderBlockMod, _PER_WONDER each (at most _CAP in
+     *  all), plus _STRATEGIC_MOD for a conqueror (primary or secondary victory pursuit) or the warmonger trait; x wonder
+     *  competitiveness x the difficulty's WonderBlockPercent / 750
+     */
+    fun wonderSpammerScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (!civ.ai.diplomacy.memoryOf(other).wonderSpammer) return 0
+        val theirs = other.ai.diplomacy.wondersConstructed
+        val difference = minOf(theirs - civ.ai.diplomacy.wondersConstructed, theirs - ExpanderAi.medianWonders(civ))
+        val beyond = rules.define(AiDefine.WONDER_SPAMMER_THRESHOLD) + 1 - handicapValue(civ, "WonderBlockMod", 0)
+        var weight = rules.define(AiDefine.OPINION_WEIGHT_WONDER_SPAMMER)
+        if (difference > beyond)
+            weight = minOf(weight + (difference - beyond) * rules.define(AiDefine.OPINION_WEIGHT_WONDER_SPAMMER_PER_WONDER),
+                rules.define(AiDefine.OPINION_WEIGHT_WONDER_SPAMMER_CAP))
+        if (civ.ai.isConqueror() || civ.ai.isSecondaryConqueror() || civ.ai.hasTraitCategory(TraitCategory.Warmonger))
+            weight += rules.define(AiDefine.OPINION_WEIGHT_WONDER_SPAMMER_STRATEGIC_MOD)
+        return weight * civ.ai.diplomacyValue(DiplomacyPersonality.WonderCompetitiveness) * handicapValue(civ, "WonderBlockPercent") / 750
+    }
+
+    /** GetMilitaryAggressivePostureScore: by their military posture towards us, none at war or under a peace treaty */
+    fun militaryPostureScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (civ.isAtWarWith(other) || (civ.getDiplomacyManager(other)?.turnsToPeaceTreaty() ?: 0) > 0) return 0
+        return when (civ.ai.diplomacy.memoryOf(other).militaryPosture) {
+            AggressivePosture.None -> 0
+            AggressivePosture.Low -> rules.define(AiDefine.OPINION_WEIGHT_MILITARY_AGGRESSIVE_POSTURE_LOW)
+            AggressivePosture.Medium -> rules.define(AiDefine.OPINION_WEIGHT_MILITARY_AGGRESSIVE_POSTURE_MEDIUM)
+            AggressivePosture.High -> rules.define(AiDefine.OPINION_WEIGHT_MILITARY_AGGRESSIVE_POSTURE_HIGH)
+            AggressivePosture.Incredible -> rules.define(AiDefine.OPINION_WEIGHT_MILITARY_AGGRESSIVE_POSTURE_INCREDIBLE)
+        }
     }
 
     /** GetWarmongerThreatScore: the warmonger score, counted from 5 */

@@ -2,6 +2,7 @@ package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.VictoryData
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.league.League
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.AiDefine
@@ -117,5 +118,53 @@ class VictoryProgressAiTests {
         assertFalse("d was resurrected", VictoryProgressAi.isEndgameAggressiveTo(d, a, rules))
         game.gameInfo.victoryData = VictoryData(a.civName, "Domination", game.gameInfo.turns)
         assertFalse("nobody competes once somebody won", VictoryProgressAi.isEndgameAggressiveTo(c, a, rules))
+    }
+    @Test
+    fun `science progress needs the spaceship, every tech alone stays at 78 and the Apollo Program makes it close`() {
+        game.gameInfo.gameParameters.victoryTypes.add("Scientific")
+        val rules = game.ruleset.ai
+        for (tech in game.ruleset.technologies.keys) a.tech.addTechnology(tech)
+        assertEquals(78, VictoryProgressAi.scienceVictoryProgress(a))
+        assertFalse(VictoryProgressAi.isCloseToAnyVictoryCondition(a, rules))
+        a.cities.first().cityConstructions.addBuilding("Apollo Program")
+        // one of seven steps: the Apollo Program and the six parts
+        assertEquals(78 + 21 / 7, VictoryProgressAi.scienceVictoryProgress(a))
+        assertTrue(VictoryProgressAi.isCloseToAnyVictoryCondition(a, rules))
+        game.gameInfo.gameParameters.victoryTypes.remove("Scientific")
+        assertEquals(0, VictoryProgressAi.scienceVictoryProgress(a))
+    }
+
+    @Test
+    fun `culture progress is the lowest influence over the other living majors, close from 60`() {
+        game.gameInfo.gameParameters.victoryTypes.add("Cultural")
+        val rules = game.ruleset.ai
+        meetAll()
+        for (other in listOf(b, c, d)) {
+            other.totalCultureForContests = 1000
+            a.culture.addInfluence(other, 700)
+        }
+        assertEquals(70, VictoryProgressAi.cultureVictoryProgress(a, rules))
+        assertTrue(VictoryProgressAi.isCloseToAnyVictoryCondition(a, rules))
+        d.totalCultureForContests = 2000
+        assertEquals("the weakest hold sets it", 35, VictoryProgressAi.cultureVictoryProgress(a, rules))
+        assertFalse(VictoryProgressAi.isCloseToAnyVictoryCondition(a, rules))
+    }
+
+    @Test
+    fun `diplomatic progress is our share of the votes needed, at most 59 before the United Nations`() {
+        game.gameInfo.gameParameters.victoryTypes.add("Diplomatic")
+        meetAll()
+        a.tech.addTechnology("Printing Press")
+        assertEquals("no World Congress", 0, VictoryProgressAi.diplomaticVictoryProgress(a))
+        val league = League.tryFound(game.gameInfo)!!
+        game.gameInfo.league = league
+        val needed = league.getVotesNeededForWorldLeader()
+        league.members[a.civID]!!.extraDelegates = needed / 2 - league.getDelegates(a)
+        assertEquals(needed / 2 * 100 / needed, VictoryProgressAi.diplomaticVictoryProgress(a))
+        league.members[a.civID]!!.extraDelegates += needed
+        assertEquals("all the votes, but no United Nations yet", 59, VictoryProgressAi.diplomaticVictoryProgress(a))
+        assertTrue(VictoryProgressAi.isCloseToAnyVictoryCondition(a, game.ruleset.ai))
+        league.unitedNations = true
+        assertEquals(79, VictoryProgressAi.diplomaticVictoryProgress(a))
     }
 }

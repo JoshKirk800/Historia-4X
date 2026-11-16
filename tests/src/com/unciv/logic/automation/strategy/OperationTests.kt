@@ -525,6 +525,23 @@ class OperationTests {
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
         assertEquals(1, operation.slotsToBuild.size)
     }
+
+    @Test
+    fun `a sneak attack goes at a potential attack target and asks for an army while not ready`() {
+        // RequestCityAttack: without a potential attack target there is nothing to attack and no army to build
+        assertFalse(MilitaryOperations.requestSneakAttack(civ, enemy))
+        assertEquals(0, civ.ai.military.numLandAttacksRequested)
+        civ.ai.military.updateAttackTargets(civ)
+        assertEquals(listOf(enemyCity), MilitaryTargets.cityAttackTargets(civ, enemy, careful = false).map { it.targetCity })
+        // Not ready: the land army for the first target is requested
+        assertFalse(MilitaryOperations.requestSneakAttack(civ, enemy))
+        assertEquals(1, civ.ai.military.numLandAttacksRequested)
+        fillAttackReserves()
+        repeat(6) { unit("Warrior") }
+        civ.ai.military.updateBaseData(civ)
+        assertTrue(MilitaryOperations.requestSneakAttack(civ, enemy))
+        assertEquals(enemyCity.location, ops.firstOfType(AiOperationType.SNEAK_CITY_ATTACK)!!.targetTile)
+    }
     //endregion
 
     //region Barbarian camps and the kill rules (CvMilitaryAI::UpdateOperations)

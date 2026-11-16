@@ -10,7 +10,8 @@ enum class MajorCivOpinion { Unforgivable, Enemy, Competitor, Neutral, Favorable
 /** WarProjectionTypes: how a war against a player would go, worst to best */
 enum class WarProjection { Destruction, Defeat, Stalemate, Unknown, Good, VeryGood }
 
-/** WarGoalTypes; "no war goal" is null */
+/** WarGoalTypes; "no war goal" is null. Only [Demand] and [Prepare] are set: Conquest, Damage and Peace were BNW's goals at war, no
+ *  longer set since Vox Populi's peace willingness ([PeaceAi]); kept so that older saves load. */
 enum class WarGoal { Demand, Prepare, Conquest, Damage, Peace }
 
 /** PeaceTreatyTypes: what a side gives up for peace, nothing to everything. [None] = NO_PEACE_TREATY_TYPE */

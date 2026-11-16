@@ -8,7 +8,8 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MultiUnitFormationDef
-import com.unciv.logic.automation.diplomacy.WarProjection
+import com.unciv.logic.automation.diplomacy.MajorCivOpinion
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 
 /**
  *  The operation side of CvMilitaryAI: UpdateOperations (kill and launch rules), the Request* functions, IsAttackReady,
@@ -208,28 +209,40 @@ object MilitaryOperations {
     }
 
     /**
-     *  The nuke trigger of UpdateOperations for an enemy at war with us (and we have nukes): nuke if they nuked us or we nuked them; else, if
-     *  the war projection is destruction (every turn) or got worse than last turn's known one, with two rolls of 0..9 below the FLAVOR_USE_NUKE of the
-     *  personality and grand strategy.
+     *  Vox Populi's CvMilitaryAI::DoNuke (Release-5.4.8; D7, in place of BNW's trigger in UpdateOperations), for an enemy at war with us
+     *  while we hold nukes. Launch when we will surely lose anyway (they are Immense compared to us, or our war state is nearly defeated),
+     *  or when either of us has nuked the other. Else roll every turn, a launch when 0..9 is at most our use-nuke flavor
+     *  ([useNukeFlavorForDiplomacy]), if they are Powerful compared to us, the war goes badly for us (defensive or worse: VP's
+     *  troubled state, between defensive and stalemate, is not one of ours), we see them as an enemy or worse, we go for or are close
+     *  to world conquest, or they are close to a victory.
+     *  BNW rolled only when the war was projected to end in destruction or its projection got worse, with two rolls; its AI held up to
+     *  23 nukes in a game and set off a handful.
      */
     fun shouldLaunchNuke(civ: Civilization, other: Civilization): Boolean {
         if (civ.units.getCivUnits().none { it.isNuclearWeapon() } || !civ.isAtWarWith(other)) return false
-        val diplomacy = civ.ai.diplomacy
-        // they nuked us, so we can nuke them; if we already nuked them, keep it up!
-        if (diplomacy.memoryOf(other).numTimesNuked > 0 || other.ai.diplomacy.memoryOf(civ).numTimesNuked > 0) return true
-        val memory = diplomacy.memoryOf(other)
-        val current = memory.warProjection
-        val last = memory.lastWarProjection
-        val roll = when {
-            current == WarProjection.Destruction -> true // roll every turn
-            current != null && current != WarProjection.Unknown && last != null && last != WarProjection.Unknown && current < last -> true
-            else -> false
-        }
+        val strength = WarStateAi.militaryStrengthComparedToUs(civ, other)
+        val warState = WarStateAi.warState(civ, other)
+        // if we will surely lose this war anyway, we might as well nuke them!
+        if (strength == StrengthLevel.Immense || warState == WarState.NearlyDefeated) return true
+        if (!other.isMajorCiv) return false
+        // if one of us has already nuked the other... well, keep the trend going!
+        if (civ.ai.diplomacy.memoryOf(other).numTimesNuked > 0 || other.ai.diplomacy.memoryOf(civ).numTimesNuked > 0) return true
+        val rules = civ.gameInfo.ruleset.ai
+        val roll = strength == StrengthLevel.Powerful
+            || (warState != null && warState <= WarState.Defensive)
+            || civ.ai.diplomacy.opinionOf(other) <= MajorCivOpinion.Enemy
+            || civ.ai.isGoingForWorldConquest() || VictoryProgressAi.isCloseToWorldConquest(civ, rules)
+            || VictoryProgressAi.isCloseToAnyVictoryCondition(other, rules)
         if (!roll) return false
-        val flavor = civ.ai.personalityAndGrandStrategy(Flavor.UseNuke)
-        val random = civ.ai.random("Nuke" + other.civID)
-        return random.nextInt(10) < flavor && random.nextInt(10) < flavor
+        return civ.ai.random("Nuke" + other.civID).nextInt(10) <= useNukeFlavorForDiplomacy(civ)
     }
+
+    /**
+     *  CvFlavorManager::GetPersonalityFlavorForDiplomacy for FLAVOR_USE_NUKE: the personality flavor on the 1..10 scale of the diplomacy AI
+     *  (a zeroed flavor counts as 1). VP's personality flavors run from 1 to 10 and are returned as they are; ours keep BNW's range of 0..20
+     *  (randomized around the leaders' 0..10 values), so they are kept within 1..10 instead of VP's rescaling of a wider range.
+     */
+    fun useNukeFlavorForDiplomacy(civ: Civilization): Int = civ.ai.personality(Flavor.UseNuke).coerceIn(1, 10)
 
     /**
      *  The end of UpdateOperations: naval operations with no enemy in mind, their total (superiority plus bombardment) held to FLAVOR_NAVAL / 2

@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.civilization.CivFlags
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.models.metadata.BaseRuleset
@@ -272,22 +273,6 @@ class PolicyAutomationTests {
     }
 
     @Test
-    fun `building happiness of the tenets counts per tenet that gives it, conquered-city buildings aside`() {
-        val city = civ.cities.first()
-        val second = game.addCity(civ, game.tileMap[3, -2])
-        for (c in listOf(city, second)) c.cityConstructions.addBuilding(game.ruleset.buildings["Monument"]!!)
-        city.cityConstructions.addBuilding(game.ruleset.buildings["Courthouse"]!!)
-        city.cityConstructions.addBuilding(game.ruleset.buildings["Heroic Epic"]!!)
-        // Order: Socialist Realism +2 per Monument, Universal Healthcare +1 per Heroic Epic
-        assertEquals(5, PolicyAutomation.branchBuildingHappiness(civ, branch("Order")))
-        // Socialist Realism, Young Pioneers, Universal Healthcare (Order), Academy of Sciences
-        assertEquals(4, PolicyAutomation.numHappinessPolicies(civ, branch("Order")))
-        // Autocracy: Police State's Courthouse counts for the happiness, not as a happiness tenet
-        assertEquals(1 + 3, PolicyAutomation.branchBuildingHappiness(civ, branch("Autocracy")))
-        assertEquals(3, PolicyAutomation.numHappinessPolicies(civ, branch("Autocracy")))
-    }
-
-    @Test
     fun `the public opinion an ideology would bring counts against it`() {
         val autocrat = game.addCiv()
         game.addCity(autocrat, game.tileMap[0, 6], replacePalace = true)
@@ -318,8 +303,9 @@ class PolicyAutomationTests {
     //region Ideology switch (DoConsiderIdeologySwitch)
     private lateinit var autocrat: Civilization
 
-    /** We follow Freedom, a dominant Autocracy makes 20 public opinion unhappiness (60 citizens / 3) */
+    /** We follow Freedom (turn 200: never switched counts from turn -1), a dominant Autocracy makes 20 public opinion unhappiness (60 citizens / 3) */
     private fun unhappyWithFreedom() {
+        game.gameInfo.turns = 200
         reachEra(civ, "Modern era")
         civ.policies.adopt(branch("Freedom"))
         autocrat = game.addCiv()
@@ -335,36 +321,33 @@ class PolicyAutomationTests {
     }
 
     @Test
-    fun `a very unhappy AI changes to the ideology its people prefer`() {
+    fun `a super unhappy AI changes to the ideology its people prefer when that ends the super unhappiness`() {
         unhappyWithFreedom()
+        // -19 + 20 - 0: very unhappy, but no revolt is coming
         civ.stats.happiness = -19
-        assertFalse("not below SUPER_UNHAPPY_THRESHOLD", PolicyAutomation.considerIdeologySwitch(civ))
+        assertFalse(PolicyAutomation.considerIdeologySwitch(civ))
         civ.stats.happiness = -20
         assertTrue(PolicyAutomation.considerIdeologySwitch(civ))
         assertEquals("Autocracy", civ.getIdeology()!!.name)
     }
 
     @Test
-    fun `the building happiness of the current ideology's tenets counts in full against a switch`() {
+    fun `no switch within 30 turns of the last one`() {
         unhappyWithFreedom()
-        val second = game.addCity(civ, game.tileMap[3, -2])
-        // Capitalism (Mint, Bank, Stock Exchange) and Urbanization (Water Mill, Hospital, Medical Lab): 6 per city
-        for (c in civ.cities) for (name in listOf("Mint", "Bank", "Stock Exchange", "Water Mill", "Hospital", "Medical Lab"))
-            c.cityConstructions.addBuilding(game.ruleset.buildings[name]!!)
-        civ.culture.publicOpinion.update()
-        assertEquals(20, civ.culture.publicOpinion.unhappiness)
-        civ.stats.happiness = -25
-        // 20 + Autocracy's 0 - Freedom's 12 = 8 < 10 (a per-tenet average, 12 / 3, would let it switch)
+        civ.culture.publicOpinion.turnIdeologySwitch = game.gameInfo.turns - 30
         assertFalse(PolicyAutomation.considerIdeologySwitch(civ))
-        second.cityConstructions.removeBuilding("Medical Lab")
-        second.cityConstructions.removeBuilding("Hospital")
-        civ.stats.happiness = -25
-        assertTrue("20 + 0 - 10 = 10", PolicyAutomation.considerIdeologySwitch(civ))
+        civ.culture.publicOpinion.turnIdeologySwitch = game.gameInfo.turns - 31
+        assertTrue(PolicyAutomation.considerIdeologySwitch(civ))
     }
 
     @Test
-    fun `no switch to the ideology a clear victory preference rules out`() {
+    fun `a very unhappy AI switches only with a city revolt coming, and not to the ideology a clear victory preference rules out`() {
         unhappyWithFreedom()
+        civ.stats.happiness = -15
+        val anarchy = game.ruleset.modOptions.constants.ideologyAnarchyTurns
+        civ.addFlag(CivFlags.CityRevoltCountdown.name, 2 + anarchy)
+        assertFalse("a revolt ${2 + anarchy} turns away", PolicyAutomation.considerIdeologySwitch(civ))
+        civ.addFlag(CivFlags.CityRevoltCountdown.name, 3 + anarchy)
         setPriorities(100, 100, 126, 100) // science more than 25% ahead of each: not Autocracy
         assertFalse(PolicyAutomation.considerIdeologySwitch(civ))
         setPriorities(100, 100, 125, 100) // not more than 25%

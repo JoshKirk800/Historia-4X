@@ -65,11 +65,24 @@ class ConquestApproachTests {
     @Test
     fun `others turn on a civilization close to world conquest`() {
         b.cities.first().moveToCiv(a)
-        val delta = stageDelta(c, a, "They are close to world conquest")
+        // Far apart: only the close-to-conquest term, not the one for conquerors close to us
+        c.proximity[a.civID] = Proximity.Far
+        a.proximity[c.civID] = Proximity.Far
+        val delta = stageDelta(c, a, "They are close to winning")
         assertEquals("War: bias x 5", 35, delta.of(MajorCivApproach.War))
         assertEquals("Hostile: bias x 5", 30, delta.of(MajorCivApproach.Hostile))
         assertEquals("Guarded: bias x 5", 20, delta.of(MajorCivApproach.Guarded))
         assertEquals(0, delta.of(MajorCivApproach.Friendly))
+    }
+
+    @Test
+    fun `a conqueror of capitals next to us in the Ancient era draws war and guard`() {
+        b.cities.first().moveToCiv(a)
+        c.proximity[a.civID] = Proximity.Neighbors
+        val delta = stageDelta(c, a, "They are close to winning")
+        // close to world conquest: bias x 5; one capital conquered, close by, in the Ancient era: bias x 3
+        assertEquals(35 + 21, delta.of(MajorCivApproach.War))
+        assertEquals(20 + 12, delta.of(MajorCivApproach.Guarded))
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.GameInfo
 import com.unciv.logic.automation.civilization.CityStateAi
+import com.unciv.logic.automation.diplomacy.VictoryPursuitAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
@@ -20,7 +21,8 @@ object FlavorManager {
     /**
      *  Sets up the personality of every civilization of a new game, in the original's order: CvFlavorManager::Init (with RandomizeWeights)
      *  for every player, CvFlavorManager::AdjustWeightsForMap for the living majors (CvGame::setInitialItems), then
-     *  CvDiplomacyAI::DoInitializePersonality for the majors (CvGame::InitPlayers... after setInitialItems).
+     *  CvDiplomacyAI::DoInitializePersonality for the majors (CvGame::InitPlayers... after setInitialItems) with its victory pursuits
+     *  ([VictoryPursuitAi.selectDefaultVictoryPursuits]).
      */
     fun initializeNewGame(gameInfo: GameInfo) {
         val civs = gameInfo.civilizations.filter { !it.isBarbarian && !it.isSpectator }
@@ -28,6 +30,7 @@ object FlavorManager {
         for (civ in civs) if (civ.isMajorCiv && civ.isAlive()) adjustWeightsForMap(civ)
         for (civ in civs) if (civ.isMajorCiv) initDiplomacyPersonality(civ)
         for (civ in civs) civ.ai.personalityInitialized = true
+        for (civ in civs) if (civ.isMajorCiv) VictoryPursuitAi.selectDefaultVictoryPursuits(civ)
     }
 
     /**
@@ -39,6 +42,7 @@ object FlavorManager {
         initPersonalityFlavors(civ, asHuman = true)
         adjustWeightsForMap(civ)
         initDiplomacyPersonality(civ, asHuman = true)
+        VictoryPursuitAi.selectDefaultVictoryPursuits(civ, asHuman = true)
     }
 
     /** The same set-up for one civilization joining later or loaded from a save without AI state */
@@ -47,6 +51,7 @@ object FlavorManager {
         if (adjustForMap) adjustWeightsForMap(civ)
         if (civ.isMajorCiv) initDiplomacyPersonality(civ)
         civ.ai.personalityInitialized = true
+        if (civ.isMajorCiv) VictoryPursuitAi.selectDefaultVictoryPursuits(civ)
     }
 
     /**

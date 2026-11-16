@@ -60,6 +60,8 @@ class Personality : RulesetObject() {
     var minorCivApproachBiases = LinkedHashMap<String, Int>()
     /** Vox Populi's leader trait categories that the leader's traits put it in, by [com.unciv.models.ruleset.ai.TraitCategory] name (1 = yes) */
     var traitCategories = LinkedHashMap<String, Int>()
+    /** Vox Populi's Leaders PrimaryVictoryPursuit (1) and SecondaryVictoryPursuit (2) hints by [com.unciv.models.ruleset.ai.VictoryPursuit] name */
+    var victoryPursuits = LinkedHashMap<String, Int>()
 
     @Pure
     private fun nameToVariable(value: PersonalityValue) = value.getProperty(this)

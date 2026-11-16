@@ -113,3 +113,6 @@ enum class MinorCivApproach { Ignore, Friendly, Protective, Conquest, Bully }
  *  (tools/gen_ai_data.py evaluates VP's rules on the ruleset's trait rows); the dynamic parts are [com.unciv.logic.automation.strategy.CivAi.hasTraitCategory]'s.
  */
 enum class TraitCategory { Warmonger, Nerd, Tourism, Diplomat, Smaller, Expansionist, Religious }
+
+/** Vox Populi's VictoryPursuitTypes in its enum order (ties between equal pursuit scores fall to the earlier one) */
+enum class VictoryPursuit { Domination, Diplomacy, Culture, Science }

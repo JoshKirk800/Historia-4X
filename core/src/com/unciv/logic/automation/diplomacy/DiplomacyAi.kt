@@ -90,6 +90,10 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var recentAssistValue = 0
     var numCiviliansReturned = 0
     var numCitiesLiberated = 0
+    /** CvDiplomacyAI::GetNumCitiesCapturedBy (Vox Populi): cities of ours this player conquered */
+    var numCitiesCapturedBy = 0
+    /** CvPlayer::GetLastCityCaptureTurn (Vox Populi): the turn we last conquered a city of this player, -1 never */
+    var lastCityCaptureTurn = -1
     var resurrectedUs = false
     var numTimesCultureBombed = 0
     var negativeReligiousConversionPoints = 0
@@ -200,6 +204,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.recentTradeValue = recentTradeValue; copy.commonFoeValue = commonFoeValue; copy.recentAssistValue = recentAssistValue
         copy.numPlotsBoughtNearUs = numPlotsBoughtNearUs
         copy.numCiviliansReturned = numCiviliansReturned; copy.numCitiesLiberated = numCitiesLiberated; copy.resurrectedUs = resurrectedUs
+        copy.numCitiesCapturedBy = numCitiesCapturedBy; copy.lastCityCaptureTurn = lastCityCaptureTurn
         copy.numTimesCultureBombed = numTimesCultureBombed
         copy.negativeReligiousConversionPoints = negativeReligiousConversionPoints
         copy.numTimesNuked = numTimesNuked; copy.numTimesRobbed = numTimesRobbed

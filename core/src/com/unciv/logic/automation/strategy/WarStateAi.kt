@@ -138,6 +138,21 @@ object WarStateAi {
     fun numberCivsAtWarWith(civ: Civilization): Int =
         civ.gameInfo.civilizations.count { it.isMajorCiv && it != civ && isPlayerValid(civ, it) && warState(civ, it) != null }
 
+    /**
+     *  CvPlayer::CountNumDangerousMajorsAtWarWith (Vox Populi): the living majors with cities we are at war with - for a city-state any
+     *  major it fights - leaving out phony wars ([excludePhonyWars], [WarIntentAi.isPhonyWar]) and ([excludeIfNoTarget]) those our
+     *  cities are not exposed to ([MilitaryAi.isExposedToEnemy]) that threaten none of them ([CityDangerAi.numberOfThreatenedCities])
+     */
+    fun numDangerousMajorsAtWarWith(civ: Civilization, excludePhonyWars: Boolean, excludeIfNoTarget: Boolean): Int {
+        val enemies = civ.gameInfo.civilizations.filter { it.isMajorCiv && civ.isAtWarWith(it) }
+        if (civ.isCityState) return enemies.size
+        return enemies.count { other ->
+            other.isAlive() && other.cities.isNotEmpty()
+                && !(excludePhonyWars && WarIntentAi.isPhonyWar(civ, other))
+                && !(excludeIfNoTarget && !civ.ai.military.isExposedToEnemy(civ, null, other) && CityDangerAi.numberOfThreatenedCities(civ, other) <= 0)
+        }
+    }
+
     /** CvDiplomacyAI::IsPlayerValid: alive, with at least one city, met, not ourselves (Unciv has no teams) */
     fun isPlayerValid(civ: Civilization, other: Civilization): Boolean =
         other != civ && !other.isBarbarian && !other.isSpectator && other.isAlive() && other.cities.isNotEmpty() && civ.knows(other)

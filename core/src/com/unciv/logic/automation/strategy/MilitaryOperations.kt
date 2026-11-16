@@ -131,16 +131,23 @@ object MilitaryOperations {
     private fun sneakFormation(civ: Civilization, bySea: Boolean) =
         if (bySea) "MUFORMATION_NAVAL_INVASION" else AiOperationLogic.formationName(civ, AiOperationType.BASIC_CITY_ATTACK)
 
-    /** CvMilitaryAI::RequestSneakAttack: one sneak attack at a time; the operation starts if the forces are at hand, else cities are asked for units */
-    fun requestSneakAttack(civ: Civilization, enemy: Civilization): Boolean {
+    /**
+     *  CvMilitaryAI::RequestSneakAttack, with Vox Populi's targets (RequestCityAttack: [MilitaryTargets.cityAttackTargets], only the
+     *  preferred ones when [careful]): one sneak attack at a time; the first target whose army (by land or by sea) is at hand starts it,
+     *  else cities are asked for units for the best target's army
+     */
+    fun requestSneakAttack(civ: Civilization, enemy: Civilization, careful: Boolean = false): Boolean {
         val operations = civ.ai.operations
         if (operations.firstOfType(AiOperationType.NAVAL_SNEAK_ATTACK) != null || operations.firstOfType(AiOperationType.SNEAK_CITY_ATTACK) != null) return false
-        val (target, _) = MilitaryTargets.findBestAttackTarget(civ, AiOperationType.SNEAK_CITY_ATTACK, enemy) ?: return false
-        val type = sneakType(target.attackBySea)
-        if (isAttackReady(civ, sneakFormation(civ, target.attackBySea), type)) {
+        val targets = MilitaryTargets.cityAttackTargets(civ, enemy, careful)
+        if (targets.isEmpty()) return false
+        for (target in targets) {
+            val type = sneakType(target.attackBySea)
+            if (!isAttackReady(civ, sneakFormation(civ, target.attackBySea), type)) continue
             val operation = AiOperationLogic.addOperation(civ, type, enemy, target.targetCity, target.musterCity)
             if (isOperationOk(operation)) return true
-        } else requestUnits(civ, target.attackBySea)
+        }
+        requestUnits(civ, targets.first().attackBySea)
         return false
     }
 
@@ -151,9 +158,12 @@ object MilitaryOperations {
         return isOperationOk(AiOperationLogic.addOperation(civ, type, enemy, target.targetCity, target.musterCity))
     }
 
-    /** CvMilitaryAI::RequestCityStateAttack; true whenever a target exists, as in the original, started or not */
-    fun requestCityStateAttack(civ: Civilization, enemy: Civilization): Boolean {
-        val (target, _) = MilitaryTargets.findBestAttackTarget(civ, AiOperationType.CITY_STATE_ATTACK, enemy) ?: return false
+    /**
+     *  CvMilitaryAI::RequestCityStateAttack, with Vox Populi's targets ([MilitaryTargets.cityAttackTargets], only the preferred ones when
+     *  [careful]); true whenever a target exists, as in the original, started or not
+     */
+    fun requestCityStateAttack(civ: Civilization, enemy: Civilization, careful: Boolean = false): Boolean {
+        val target = MilitaryTargets.cityAttackTargets(civ, enemy, careful).firstOrNull() ?: return false
         val type = if (target.attackBySea) AiOperationType.CITY_STATE_NAVAL_ATTACK else AiOperationType.CITY_STATE_ATTACK
         val formation = if (target.attackBySea) "MUFORMATION_CITY_STATE_INVASION" else AiOperationLogic.formationName(civ, AiOperationType.CITY_STATE_ATTACK)
         if (isAttackReady(civ, formation, type)) AiOperationLogic.addOperation(civ, type, enemy, target.targetCity, target.musterCity)
@@ -161,11 +171,12 @@ object MilitaryOperations {
         return true
     }
 
-    /** CvMilitaryAI::RequestBasicAttack: an attack on the best target, if all but [numUnitsWillingBuild] required slots can be filled */
-    fun requestBasicAttack(civ: Civilization, enemy: Civilization, numUnitsWillingBuild: Int): Boolean {
-        val (target, _) = MilitaryTargets.findBestAttackTarget(civ, AiOperationType.BASIC_CITY_ATTACK, enemy) ?: return false
-        return requestSpecificAttack(civ, target, numUnitsWillingBuild)
-    }
+    /**
+     *  CvMilitaryAI::RequestBasicAttack, with Vox Populi's targets ([MilitaryTargets.cityAttackTargets], only the preferred ones when
+     *  [careful]): an attack on the first target whose army can be formed but for [numUnitsWillingBuild] required slots
+     */
+    fun requestBasicAttack(civ: Civilization, enemy: Civilization, numUnitsWillingBuild: Int, careful: Boolean = false): Boolean =
+        MilitaryTargets.cityAttackTargets(civ, enemy, careful).any { requestSpecificAttack(civ, it, numUnitsWillingBuild) }
 
     /**
      *  CvMilitaryAI::RequestSpecificAttack: the basic city attack (the naval attack by sea) on [target] if the forces are at hand but for

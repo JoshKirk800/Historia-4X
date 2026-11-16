@@ -92,6 +92,15 @@ class CityStateAiTests {
         CityStateAi.updateMinorCivProtection(a, cs, MinorCivApproach.Bully)
         assertFalse(CityStateAi.isProtectedBy(cs, a))
     }
+
+    @Test
+    fun `an AI pledges to protect its ally whatever its approach`() {
+        influence(70f)
+        cs.cityStateFunctions.updateAllyCivForCityState()
+        assertEquals(a, cs.allyCiv)
+        CityStateAi.updateMinorCivProtection(a, cs, MinorCivApproach.Ignore)
+        assertTrue(CityStateAi.isProtectedBy(cs, a))
+    }
     //endregion
 
     //region Gifts

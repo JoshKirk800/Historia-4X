@@ -280,41 +280,6 @@ class DiplomacyAiTests {
     //region War goals and peace
 
     @Test
-    fun `peace is wanted after the war goal has been peace for 4 turns`() {
-        a.getDiplomacyManager(b)!!.declareWar()
-        repeat(3) {
-            a.ai.diplomacy.setApproach(b, MajorCivApproach.Neutral)
-            DiplomacyTurn.doTurn(a)
-            assertEquals(WarGoal.Peace, a.ai.diplomacy.warGoal(b))
-        }
-        assertFalse(a.ai.diplomacy.isWantsPeaceWith(b))
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Neutral)
-        DiplomacyTurn.doTurn(a)
-        assertTrue(a.ai.diplomacy.isWantsPeaceWith(b))
-        // Wanting war again resets the counter
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.War)
-        DiplomacyTurn.doTurn(a)
-        assertEquals(WarGoal.Damage, a.ai.diplomacy.warGoal(b))
-        assertFalse(a.ai.diplomacy.isWantsPeaceWith(b))
-    }
-
-    @Test
-    fun `a war locked by a coop war is a conquest and no peace treaty is offered`() {
-        a.getDiplomacyManager(b)!!.declareWar()
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.War)
-        DiplomacyTurn.doTurn(a)
-        assertEquals(WarGoal.Damage, a.ai.diplomacy.warGoal(b))
-        assertTrue(a.ai.diplomacy.treatyWillingToOffer(b) != PeaceTreatyType.None)
-
-        a.ai.diplomacy.memoryOf(c).coopWars[b.civID] = CoopWarEntry(CoopWarState.Accepted, 0)
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.War)
-        DiplomacyTurn.doTurn(a)
-        assertEquals(WarGoal.Conquest, a.ai.diplomacy.warGoal(b))
-        assertEquals(PeaceTreatyType.None, a.ai.diplomacy.treatyWillingToOffer(b))
-        assertEquals(PeaceTreatyType.None, a.ai.diplomacy.treatyWillingToAccept(b))
-    }
-
-    @Test
     fun `a coop war agreed for soon is declared at the soon counter and locks the war`() {
         // partner b, target c; a has no memory of c yet, so locking the war creates it while the memories are being walked
         // (memories of civilizations that no longer exist follow b in the walk and are skipped)

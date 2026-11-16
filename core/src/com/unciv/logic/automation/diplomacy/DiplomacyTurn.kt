@@ -108,14 +108,12 @@ object DiplomacyTurn {
                 val preparing = memory.coopWars.values.any { it.state == CoopWarState.Soon || it.state == CoopWarState.Accepted }
                 if (!preparing) ai.changeRecentAssistValue(other, assistDecay, decay = true)
             } else if (memory.recentAssistValue > 0) ai.changeRecentAssistValue(other, -assistDecay, decay = true)
-            PromiseAi.decayPromiseValues(memory, rules, civ.gameInfo.turns)
             memory.declaredWarOnFriendValue = max(0, memory.declaredWarOnFriendValue - rules.define(AiDefine.DECLARED_WAR_ON_FRIEND_PER_TURN_DECAY))
 
             if (memory.turnsSinceAttackedProtectedMinor >= 0) memory.turnsSinceAttackedProtectedMinor++
             if (memory.turnsSinceKilledProtectedMinor >= 0) memory.turnsSinceKilledProtectedMinor++
             if (memory.turnsSinceBulliedProtectedMinor >= 0) memory.turnsSinceBulliedProtectedMinor++
             if (memory.turnsSinceSidedWithProtectedMinor >= 0) memory.turnsSinceSidedWithProtectedMinor++
-            if (memory.demandCounter > -1) memory.demandCounter++
             if (memory.doFCounter > -1) memory.doFCounter++
             if (memory.denouncedCounter > -1) memory.denouncedCounter++
 

@@ -57,30 +57,109 @@ object PromiseAi {
     }
 
     /**
-     *  DoCounters' decays of the promise values. When a penalty has run out the promise may be asked again: the expansion promise is forgotten,
-     *  the border promise is not (the original stamps the border promise with the current turn when it resets it, so it was "ever made").
+     *  Vox Populi's promises with an opinion term: the weights of a broken and of an ignored one, how long each lasts
+     *  (TURNS_UNTIL_FORGIVEN) and whether the length scales with the game speed's OpinionDurationPercent.
      */
-    fun decayPromiseValues(memory: MajorCivMemory, rules: AiRuleset, turn: Int) {
-        val brokenExpansion = memory.brokenExpansionPromiseValue
-        val ignoredExpansion = memory.ignoredExpansionPromiseValue
-        memory.brokenExpansionPromiseValue = max(0, brokenExpansion - rules.define(AiDefine.EXPANSION_PROMISE_BROKEN_PER_TURN_DECAY))
-        memory.ignoredExpansionPromiseValue = max(0, ignoredExpansion - rules.define(AiDefine.EXPANSION_PROMISE_IGNORED_PER_TURN_DECAY))
-        if (penaltiesRanOut(brokenExpansion, ignoredExpansion, memory.brokenExpansionPromiseValue, memory.ignoredExpansionPromiseValue)) {
-            memory.expansionPromiseTurn = -1
-            memory.expansionPromisePosture = null
+    enum class PromiseKind(val broken: AiDefine?, val ignored: AiDefine?, val brokenTurns: AiDefine, val ignoredTurns: AiDefine, val gameSpeed: Boolean) {
+        Military(AiDefine.OPINION_WEIGHT_BROKEN_MILITARY_PROMISE, AiDefine.OPINION_WEIGHT_IGNORED_MILITARY_PROMISE,
+            AiDefine.MILITARY_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN, AiDefine.MILITARY_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN, false),
+        Expansion(AiDefine.OPINION_WEIGHT_BROKEN_EXPANSION_PROMISE, AiDefine.OPINION_WEIGHT_IGNORED_EXPANSION_PROMISE,
+            AiDefine.EXPANSION_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN, AiDefine.EXPANSION_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN, true),
+        Border(AiDefine.OPINION_WEIGHT_BROKEN_BORDER_PROMISE, AiDefine.OPINION_WEIGHT_IGNORED_BORDER_PROMISE,
+            AiDefine.BORDER_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN, AiDefine.BORDER_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN, true),
+        NoConvert(AiDefine.OPINION_WEIGHT_BROKEN_NO_CONVERT_PROMISE, AiDefine.OPINION_WEIGHT_IGNORED_NO_CONVERT_PROMISE,
+            AiDefine.CONVERT_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN, AiDefine.CONVERT_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN, true),
+        NoDigging(AiDefine.OPINION_WEIGHT_BROKEN_NO_DIG_PROMISE, AiDefine.OPINION_WEIGHT_IGNORED_NO_DIG_PROMISE,
+            AiDefine.DIGGING_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN, AiDefine.DIGGING_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN, true),
+        Spy(AiDefine.OPINION_WEIGHT_BROKEN_SPY_PROMISE, AiDefine.OPINION_WEIGHT_IGNORED_SPY_PROMISE,
+            AiDefine.SPY_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN, AiDefine.SPY_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN, true),
+        CoopWar(AiDefine.OPINION_WEIGHT_BROKEN_COOP_WAR_PROMISE, null,
+            AiDefine.COOP_WAR_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN, AiDefine.COOP_WAR_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN, false)
+    }
+
+    /** The broken and ignored flags of [kind] in [memory] */
+    fun state(memory: MajorCivMemory, kind: PromiseKind): Pair<Boolean, Boolean> = when (kind) {
+        PromiseKind.Military -> memory.brokenMilitaryPromise to memory.ignoredMilitaryPromise
+        PromiseKind.Expansion -> memory.brokenExpansionPromise to memory.ignoredExpansionPromise
+        PromiseKind.Border -> memory.brokenBorderPromise to memory.ignoredBorderPromise
+        PromiseKind.NoConvert -> memory.brokenNoConvertPromise to memory.ignoredNoConvertPromise
+        PromiseKind.NoDigging -> memory.brokenNoDiggingPromise to memory.ignoredNoDiggingPromise
+        PromiseKind.Spy -> memory.brokenSpyPromise to memory.ignoredSpyPromise
+        PromiseKind.CoopWar -> memory.brokenCoopWarPromise to false
+    }
+
+    /** VP's Set*PromiseState(NO_PROMISE_STATE): both flags off, the turn forgotten */
+    private fun clear(memory: MajorCivMemory, kind: PromiseKind) {
+        when (kind) {
+            PromiseKind.Military -> { memory.brokenMilitaryPromise = false; memory.ignoredMilitaryPromise = false }
+            PromiseKind.Expansion -> { memory.brokenExpansionPromise = false; memory.ignoredExpansionPromise = false }
+            PromiseKind.Border -> { memory.brokenBorderPromise = false; memory.ignoredBorderPromise = false }
+            PromiseKind.NoConvert -> { memory.brokenNoConvertPromise = false; memory.ignoredNoConvertPromise = false }
+            PromiseKind.NoDigging -> { memory.brokenNoDiggingPromise = false; memory.ignoredNoDiggingPromise = false }
+            PromiseKind.Spy -> { memory.brokenSpyPromise = false; memory.ignoredSpyPromise = false }
+            PromiseKind.CoopWar -> memory.brokenCoopWarPromise = false
         }
-        val brokenBorder = memory.brokenBorderPromiseValue
-        val ignoredBorder = memory.ignoredBorderPromiseValue
-        memory.brokenBorderPromiseValue = max(0, brokenBorder - rules.define(AiDefine.BORDER_PROMISE_BROKEN_PER_TURN_DECAY))
-        memory.ignoredBorderPromiseValue = max(0, ignoredBorder - rules.define(AiDefine.BORDER_PROMISE_IGNORED_PER_TURN_DECAY))
-        if (penaltiesRanOut(brokenBorder, ignoredBorder, memory.brokenBorderPromiseValue, memory.ignoredBorderPromiseValue)) {
-            memory.borderPromiseTurn = turn
-            memory.borderPromisePosture = null
+        memory.promiseTurns.remove(kind.name)
+    }
+
+    /** The promise [kind] of theirs was broken or ignored now (VP's Set*PromiseTurn on a state change) */
+    fun stamp(memory: MajorCivMemory, kind: PromiseKind, turn: Int) {
+        memory.promiseTurns[kind.name] = turn
+    }
+
+    /** How long a broken ([broken]) or ignored promise of [kind] lasts: its TURNS_UNTIL_FORGIVEN, scaled by the game speed where VP does */
+    private fun duration(civ: Civilization, kind: PromiseKind, broken: Boolean): Int {
+        val turns = civ.gameInfo.ruleset.ai.define(if (broken) kind.brokenTurns else kind.ignoredTurns)
+        return maxOf(1, if (kind.gameSpeed) turns * DiplomacyTurn.opinionDurationPercent(civ) / 100 else turns)
+    }
+
+    /**
+     *  Vox Populi's TestOpinionModifiers and TestBackstabbingPenalties for the promises: a broken or ignored promise is forgotten once its
+     *  duration has passed since its turn. Then, as before: a forgotten expansion promise may be asked again, a forgotten border promise
+     *  counts as ever made (the original stamps it with the current turn when it resets it).
+     */
+    fun testPromiseExpiry(civ: Civilization, memory: MajorCivMemory) {
+        val turn = civ.gameInfo.turns
+        for (kind in PromiseKind.entries) {
+            val (broken, ignored) = state(memory, kind)
+            if (!broken && !ignored) continue
+            val stamp = memory.promiseTurns[kind.name] ?: continue
+            if (turn - stamp < duration(civ, kind, broken)) continue
+            clear(memory, kind)
+            when (kind) {
+                PromiseKind.Expansion -> {
+                    memory.expansionPromiseTurn = -1
+                    memory.expansionPromisePosture = null
+                }
+                PromiseKind.Border -> {
+                    memory.borderPromiseTurn = turn
+                    memory.borderPromisePosture = null
+                }
+                else -> {}
+            }
         }
     }
 
-    private fun penaltiesRanOut(brokenBefore: Int, ignoredBefore: Int, broken: Int, ignored: Int) =
-        (brokenBefore != 0 && broken == 0 && ignored == 0) || (ignoredBefore != 0 && ignored == 0 && broken == 0)
+    /**
+     *  The opinion term of their promise of [kind] (VP's GetBroken*PromiseScore / GetIgnored*PromiseScore): the broken or the ignored
+     *  weight, fading over its duration from the turn it was broken or ignored (a standard timed modifier); a broken military promise
+     *  is a backstabbing penalty and does not fade. The no-convert weights are x the era's religion emphasis.
+     */
+    fun promiseScore(civ: Civilization, memory: MajorCivMemory, kind: PromiseKind, religionEmphasis: Int = 1): Int {
+        val (broken, ignored) = state(memory, kind)
+        if (!broken && !ignored) return 0
+        val rules = civ.gameInfo.ruleset.ai
+        var weight = rules.define((if (broken) kind.broken else kind.ignored) ?: return 0)
+        if (kind == PromiseKind.NoConvert) weight *= religionEmphasis
+        if (kind == PromiseKind.Military && broken) return weight
+        return timed(civ, memory, kind, weight)
+    }
+
+    /** [weight] fading over the duration of the broken or ignored promise of [kind] in [memory] from its turn (a standard timed modifier) */
+    fun timed(civ: Civilization, memory: MajorCivMemory, kind: PromiseKind, weight: Int): Int {
+        val stamp = memory.promiseTurns[kind.name] ?: return weight
+        return OpinionTimers.adjust(weight, duration(civ, kind, state(memory, kind).first), stamp, civ.gameInfo.turns, OpinionTimers.Type.Standard)
+    }
 
     /**
      *  CvDiplomacyAI::DoTestPromises. The military promise ends with its flag. For an AI, a promise a human made not to expand towards it or
@@ -97,13 +176,13 @@ object PromiseAi {
             // The shadow AI of a human does not judge promises
             if (civ.isHuman() || !other.isHuman()) continue
             val diplomacy = civ.getDiplomacyManager(other) ?: continue
-            if (testPosturePromise(civ, other, Demand.DoNotSettleNearUs, memory.expansionPromisePosture, memory.expansionPosture, memory.brokenExpansionPromiseValue))
+            if (testPosturePromise(civ, other, Demand.DoNotSettleNearUs, memory.expansionPromisePosture, memory.expansionPosture, memory.brokenExpansionPromise))
                 memory.expansionPromisePosture = null
             else if (memory.expansionPromisePosture != null && !diplomacy.hasFlag(Demand.DoNotSettleNearUs.agreedToDemand)) {
                 memory.expansionPromisePosture = null
                 other.addNotification("Your promise to [${civ.civName}] not to settle near them has expired.", NotificationCategory.Diplomacy, civ.civName)
             }
-            if (testPosturePromise(civ, other, Demand.DoNotBuyLandNearUs, memory.borderPromisePosture, memory.plotBuyingPosture, memory.brokenBorderPromiseValue))
+            if (testPosturePromise(civ, other, Demand.DoNotBuyLandNearUs, memory.borderPromisePosture, memory.plotBuyingPosture, memory.brokenBorderPromise))
                 memory.borderPromisePosture = null
             else if (memory.borderPromisePosture != null && !diplomacy.hasFlag(Demand.DoNotBuyLandNearUs.agreedToDemand)) {
                 memory.borderPromisePosture = null
@@ -114,50 +193,14 @@ object PromiseAi {
 
     /** Whether [other]'s promise of [demand] to [civ] broke now: the promise stands, its posture at the promise is known and has been exceeded */
     private fun testPosturePromise(civ: Civilization, other: Civilization, demand: Demand, promised: AggressivePosture?,
-                                   current: AggressivePosture, brokenValue: Int): Boolean {
+                                   current: AggressivePosture, broken: Boolean): Boolean {
         val diplomacy = civ.getDiplomacyManager(other) ?: return false
-        if (promised == null || !diplomacy.hasFlag(demand.agreedToDemand) || current <= promised || brokenValue != 0) return false
+        if (promised == null || !diplomacy.hasFlag(demand.agreedToDemand) || current <= promised || broken) return false
         diplomacy.setFlag(demand.violationOccurred, 2)
         return true
     }
 
-    fun brokenExpansionPromiseScore(memory: MajorCivMemory, opinionDurationPercent: Int, rules: AiRuleset): Int {
-        if (memory.brokenExpansionPromiseValue <= 0) return 0
-        return minOf(memory.brokenExpansionPromiseValue / (rules.define(AiDefine.BROKEN_EXPANSION_PROMISE_PER_OPINION_WEIGHT) * opinionDurationPercent),
-            rules.define(AiDefine.OPINION_WEIGHT_EXPANSION_PROMISE_BROKE_MAX))
-    }
-
-    fun ignoredExpansionPromiseScore(memory: MajorCivMemory, opinionDurationPercent: Int, rules: AiRuleset): Int {
-        if (memory.brokenExpansionPromiseValue > 0 || memory.ignoredExpansionPromiseValue <= 0) return 0
-        return minOf(memory.ignoredExpansionPromiseValue / (rules.define(AiDefine.IGNORED_EXPANSION_PROMISE_PER_OPINION_WEIGHT) * opinionDurationPercent),
-            rules.define(AiDefine.OPINION_WEIGHT_EXPANSION_PROMISE_IGNORED_MAX))
-    }
-
-    /** GetBrokenBorderPromiseScore: above the cap the original adds the cap to the value instead of capping (kept) */
-    fun brokenBorderPromiseScore(memory: MajorCivMemory, opinionDurationPercent: Int, rules: AiRuleset): Int {
-        if (memory.brokenBorderPromiseValue <= 0) return 0
-        var weight = memory.brokenBorderPromiseValue / (rules.define(AiDefine.BROKEN_BORDER_PROMISE_PER_OPINION_WEIGHT) * opinionDurationPercent)
-        if (weight > rules.define(AiDefine.OPINION_WEIGHT_BORDER_PROMISE_BROKE_MAX)) weight += rules.define(AiDefine.OPINION_WEIGHT_BORDER_PROMISE_BROKE_MAX)
-        return weight
-    }
-
-    fun ignoredBorderPromiseScore(memory: MajorCivMemory, opinionDurationPercent: Int, rules: AiRuleset): Int {
-        if (memory.brokenBorderPromiseValue > 0 || memory.ignoredBorderPromiseValue <= 0) return 0
-        return minOf(memory.ignoredBorderPromiseValue / (rules.define(AiDefine.IGNORED_BORDER_PROMISE_PER_OPINION_WEIGHT) * opinionDurationPercent),
-            rules.define(AiDefine.OPINION_WEIGHT_BORDER_PROMISE_IGNORED_MAX))
-    }
-
     //region Demands (Unciv's request flow) -> the original's promise memories
-
-    /** [recipient] was asked [demand] by [demander]: GetNoSetterRequestScore / GetStopSpyingRequestScore of the recipient */
-    fun onDemandAsked(demander: Civilization, recipient: Civilization, demand: Demand) {
-        val memory = recipient.ai.diplomacy.memoryOf(demander)
-        when (demand) {
-            Demand.DoNotSettleNearUs -> memory.noSettleRequestEverAsked = true
-            Demand.DontSpyOnUs -> memory.stopSpyingRequestEverAsked = true
-            else -> {}
-        }
-    }
 
     /**
      *  [recipient] agreed: DoFromUIDiploEvent's promise accepted. A human's expansion or border promise to an AI notes the posture it
@@ -165,7 +208,6 @@ object PromiseAi {
      *  military promise starts its counter.
      */
     fun onDemandAgreed(demander: Civilization, recipient: Civilization, demand: Demand) {
-        onDemandAsked(demander, recipient, demand)
         val memory = demander.ai.diplomacy.memoryOf(recipient)
         if (demand == Demand.DoNotAttackUs) memory.madeMilitaryPromise = true
         if (demander.isHuman()) return
@@ -183,37 +225,56 @@ object PromiseAi {
         }
     }
 
-    /** [recipient] refused: the demander remembers the ignored promise */
+    /** [recipient] refused: the demander remembers the ignored promise (VP's PROMISE_STATE_IGNORED, replacing a broken one), stamped with the turn */
     fun onDemandRefused(demander: Civilization, recipient: Civilization, demand: Demand) {
-        onDemandAsked(demander, recipient, demand)
         val memory = demander.ai.diplomacy.memoryOf(recipient)
-        val rules = demander.gameInfo.ruleset.ai
-        when (demand) {
-            Demand.DoNotSettleNearUs -> memory.ignoredExpansionPromiseValue =
-                rules.define(AiDefine.OPINION_WEIGHT_EXPANSION_PROMISE_IGNORED_MAX) * DiplomacyTurn.opinionDurationPercent(demander)
-            Demand.DoNotBuyLandNearUs -> memory.ignoredBorderPromiseValue =
-                rules.define(AiDefine.OPINION_WEIGHT_BORDER_PROMISE_IGNORED_MAX) * DiplomacyTurn.opinionDurationPercent(demander)
-            Demand.DontSpyOnUs -> memory.ignoredSpyPromise = true
-            Demand.DoNotSpreadReligion -> memory.ignoredNoConvertPromise = true
-            Demand.DoNotDigInOurLands -> memory.ignoredNoDiggingPromise = true
-            Demand.DoNotAttackUs -> memory.ignoredMilitaryPromise = true
+        val kind = kindOf(demand)
+        // VP's state setter only stamps a change of state
+        if (state(memory, kind).second) return
+        clear(memory, kind)
+        when (kind) {
+            PromiseKind.Military -> memory.ignoredMilitaryPromise = true
+            PromiseKind.Expansion -> memory.ignoredExpansionPromise = true
+            PromiseKind.Border -> memory.ignoredBorderPromise = true
+            PromiseKind.NoConvert -> memory.ignoredNoConvertPromise = true
+            PromiseKind.NoDigging -> memory.ignoredNoDiggingPromise = true
+            PromiseKind.Spy -> memory.ignoredSpyPromise = true
+            PromiseKind.CoopWar -> {}
         }
+        stamp(memory, kind, demander.gameInfo.turns)
     }
 
-    /** [promiser] broke the promise it made to [promisee] */
+    private fun kindOf(demand: Demand) = when (demand) {
+        Demand.DoNotSettleNearUs -> PromiseKind.Expansion
+        Demand.DoNotBuyLandNearUs -> PromiseKind.Border
+        Demand.DontSpyOnUs -> PromiseKind.Spy
+        Demand.DoNotSpreadReligion -> PromiseKind.NoConvert
+        Demand.DoNotDigInOurLands -> PromiseKind.NoDigging
+        Demand.DoNotAttackUs -> PromiseKind.Military
+    }
+
+    /** [promiser] broke the promise it made to [promisee]: the promisee remembers it, stamped with the turn of the break */
     fun onDemandBroken(promisee: Civilization, promiser: Civilization, demand: Demand) {
         val memory = promisee.ai.diplomacy.memoryOf(promiser)
-        val rules = promisee.gameInfo.ruleset.ai
-        when (demand) {
-            Demand.DoNotSettleNearUs -> if (memory.brokenExpansionPromiseValue == 0) memory.brokenExpansionPromiseValue =
-                rules.define(AiDefine.OPINION_WEIGHT_EXPANSION_PROMISE_BROKE_MAX) * DiplomacyTurn.opinionDurationPercent(promisee)
-            Demand.DoNotBuyLandNearUs -> if (memory.brokenBorderPromiseValue == 0) memory.brokenBorderPromiseValue =
-                rules.define(AiDefine.OPINION_WEIGHT_BORDER_PROMISE_BROKE_MAX) * DiplomacyTurn.opinionDurationPercent(promisee)
-            Demand.DontSpyOnUs -> memory.brokenSpyPromise = true
-            Demand.DoNotSpreadReligion -> memory.brokenNoConvertPromise = true
-            Demand.DoNotDigInOurLands -> memory.brokenNoDiggingPromise = true
-            Demand.DoNotAttackUs -> memory.brokenMilitaryPromise = true
+        val kind = kindOf(demand)
+        // VP's state setter only stamps a change of state
+        if (state(memory, kind).first) return
+        markBroken(memory, kind, promisee.gameInfo.turns)
+    }
+
+    /** VP's Set*PromiseState(PROMISE_STATE_BROKEN): the broken flag on (an ignored one off, the states are exclusive), the turn stamped */
+    fun markBroken(memory: MajorCivMemory, kind: PromiseKind, turn: Int) {
+        clear(memory, kind)
+        when (kind) {
+            PromiseKind.Military -> memory.brokenMilitaryPromise = true
+            PromiseKind.Expansion -> memory.brokenExpansionPromise = true
+            PromiseKind.Border -> memory.brokenBorderPromise = true
+            PromiseKind.NoConvert -> memory.brokenNoConvertPromise = true
+            PromiseKind.NoDigging -> memory.brokenNoDiggingPromise = true
+            PromiseKind.Spy -> memory.brokenSpyPromise = true
+            PromiseKind.CoopWar -> memory.brokenCoopWarPromise = true
         }
+        stamp(memory, kind, turn)
     }
 
     /**
@@ -310,7 +371,7 @@ object PromiseAi {
         if (civ.cities.isEmpty()) return false
         val memory = civ.ai.diplomacy.memoryOf(demander)
         promiseGate(civ, demander, MajorCivApproach.Hostile) {
-            memory.brokenExpansionPromiseValue > 0 || memory.ignoredExpansionPromiseValue > 0
+            memory.brokenExpansionPromise || memory.ignoredExpansionPromise
         }?.let { return it }
         if (civ.ai.isEconomicStrategyActive("ECONOMICAISTRATEGY_ENOUGH_EXPANSION")) return true
         val rules = civ.gameInfo.ruleset.ai

@@ -167,17 +167,21 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var coopWars = HashMap<String, CoopWarEntry>()
 
     // Requests, demands, promises
-    /** CvDiplomacyAI::m_paiDemandCounter: turns since they made a demand of us, -1 never */
-    var demandCounter = -1
-    var noSettleRequestEverAsked = false
-    var stopSpyingRequestEverAsked = false
+    /** CvDiplomacyAI::GetNumDemandsMade / GetDemandMadeTurn (Vox Populi): the tributes they demanded of us, halving over time, and the last turn */
+    var numDemandsMade = 0
+    var demandMadeTurn = -1
+    /**
+     *  CvDiplomacyAI::Get*PromiseTurn (Vox Populi): the turn each of their promises to us was last broken or ignored, by [PromiseKind]
+     *  name; the broken and ignored flags below clear once its duration has passed ([PromiseAi.testPromiseExpiry])
+     */
+    var promiseTurns = LinkedHashMap<String, Int>()
     var madeMilitaryPromise = false
     var brokenMilitaryPromise = false
     var ignoredMilitaryPromise = false
-    var brokenExpansionPromiseValue = 0
-    var ignoredExpansionPromiseValue = 0
-    var brokenBorderPromiseValue = 0
-    var ignoredBorderPromiseValue = 0
+    var brokenExpansionPromise = false
+    var ignoredExpansionPromise = false
+    var brokenBorderPromise = false
+    var ignoredBorderPromise = false
     var brokenAttackCityStatePromise = false
     var ignoredAttackCityStatePromise = false
     var brokenBullyCityStatePromise = false
@@ -280,12 +284,11 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.demandAcceptedTurn = demandAcceptedTurn; copy.recklessExpander = recklessExpander; copy.wonderSpammer = wonderSpammer
         copy.declaredWarOnFriendValue = declaredWarOnFriendValue
         for ((target, entry) in coopWars) copy.coopWars[target] = entry.clone()
-        copy.demandCounter = demandCounter
-        copy.noSettleRequestEverAsked = noSettleRequestEverAsked; copy.stopSpyingRequestEverAsked = stopSpyingRequestEverAsked
+        copy.numDemandsMade = numDemandsMade; copy.demandMadeTurn = demandMadeTurn; copy.promiseTurns.putAll(promiseTurns)
         copy.madeMilitaryPromise = madeMilitaryPromise; copy.brokenMilitaryPromise = brokenMilitaryPromise
         copy.ignoredMilitaryPromise = ignoredMilitaryPromise
-        copy.brokenExpansionPromiseValue = brokenExpansionPromiseValue; copy.ignoredExpansionPromiseValue = ignoredExpansionPromiseValue
-        copy.brokenBorderPromiseValue = brokenBorderPromiseValue; copy.ignoredBorderPromiseValue = ignoredBorderPromiseValue
+        copy.brokenExpansionPromise = brokenExpansionPromise; copy.ignoredExpansionPromise = ignoredExpansionPromise
+        copy.brokenBorderPromise = brokenBorderPromise; copy.ignoredBorderPromise = ignoredBorderPromise
         copy.brokenAttackCityStatePromise = brokenAttackCityStatePromise
         copy.ignoredAttackCityStatePromise = ignoredAttackCityStatePromise
         copy.brokenBullyCityStatePromise = brokenBullyCityStatePromise; copy.ignoredBullyCityStatePromise = ignoredBullyCityStatePromise

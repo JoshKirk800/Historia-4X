@@ -123,9 +123,9 @@ object OpinionAi {
         term(DiplomaticModifiers.SharedIntrigue, intrigueSharedScore(civ, other, rules))
 
         // Asked us to do things we don't like
-        term(DiplomaticModifiers.AskedUsNotToSettle, if (memory.noSettleRequestEverAsked) rules.define(AiDefine.OPINION_WEIGHT_ASKED_NO_SETTLE) else 0)
-        term(DiplomaticModifiers.AskedUsToStopSpying, if (memory.stopSpyingRequestEverAsked) rules.define(AiDefine.OPINION_WEIGHT_ASKED_STOP_SPYING) else 0)
-        term(DiplomaticModifiers.UnacceptableDemands, if (memory.demandCounter != -1) rules.define(AiDefine.OPINION_WEIGHT_MADE_DEMAND_OF_US) else 0)
+        term(DiplomaticModifiers.AskedUsNotToSettle, requestScore(civ, other, PromiseAi.PromiseKind.Expansion, AiDefine.OPINION_WEIGHT_ASKED_NO_SETTLE))
+        term(DiplomaticModifiers.AskedUsToStopSpying, requestScore(civ, other, PromiseAi.PromiseKind.Spy, AiDefine.OPINION_WEIGHT_ASKED_STOP_SPYING))
+        term(DiplomaticModifiers.UnacceptableDemands, demandMadeScore(civ, other, rules))
         term(DiplomaticModifiers.StealingTerritory, memory.numTimesCultureBombed * rules.define(AiDefine.OPINION_WEIGHT_CULTURE_BOMBED))
         val eraName = DiplomacyTurn.gameEraName(civ)
         val religionEmphasis = rules.eraDiplomacy(eraName).diploEmphasisReligion
@@ -146,27 +146,23 @@ object OpinionAi {
         term(DiplomaticModifiers.StoleArtifacts, stoleArtifactsScore(civ, other, rules))
 
         // Broken promises
-        term(DiplomaticModifiers.BetrayedPromiseToNotAttackUs, if (memory.brokenMilitaryPromise) rules.define(AiDefine.OPINION_WEIGHT_BROKEN_MILITARY_PROMISE) else 0)
+        term(DiplomaticModifiers.BetrayedPromiseToNotAttackUs,
+            if (memory.brokenMilitaryPromise) PromiseAi.promiseScore(civ, memory, PromiseAi.PromiseKind.Military) else 0)
         val brokenWithAnybody = !memory.brokenMilitaryPromise && hasBrokenMilitaryPromiseWithAnybody(other)
         term(DiplomaticModifiers.BetrayedPromiseToNotAttackOtherCiv, if (brokenWithAnybody) rules.define(AiDefine.OPINION_WEIGHT_BROKEN_MILITARY_PROMISE_WORLD) else 0)
         term(DiplomaticModifiers.RefusedToPromiseNotToAttackUs,
-            if (!memory.brokenMilitaryPromise && !brokenWithAnybody && memory.ignoredMilitaryPromise) rules.define(AiDefine.OPINION_WEIGHT_IGNORED_MILITARY_PROMISE) else 0)
-        val opinionDuration = DiplomacyTurn.opinionDurationPercent(civ)
-        term(DiplomaticModifiers.BetrayedPromiseToNotSettleCitiesNearUs, PromiseAi.brokenExpansionPromiseScore(memory, opinionDuration, rules))
-        term(DiplomaticModifiers.RefusedToNotSettleCitiesNearUs, PromiseAi.ignoredExpansionPromiseScore(memory, opinionDuration, rules))
-        term(DiplomaticModifiers.BrokenBorderPromise, PromiseAi.brokenBorderPromiseScore(memory, opinionDuration, rules))
-        term(DiplomaticModifiers.IgnoredBorderPromise, PromiseAi.ignoredBorderPromiseScore(memory, opinionDuration, rules))
-        term(DiplomaticModifiers.BetrayedPromiseToNotSpreadReligionToUs,
-            if (memory.brokenNoConvertPromise) rules.define(AiDefine.OPINION_WEIGHT_BROKEN_NO_CONVERT_PROMISE) * religionEmphasis else 0)
-        term(DiplomaticModifiers.RefusedToNotSpreadReligionToUs,
-            if (!memory.brokenNoConvertPromise && memory.ignoredNoConvertPromise) rules.define(AiDefine.OPINION_WEIGHT_IGNORED_NO_CONVERT_PROMISE) * religionEmphasis else 0)
-        term(DiplomaticModifiers.BetrayedPromiseToNotDigInOurLands, if (memory.brokenNoDiggingPromise) rules.define(AiDefine.OPINION_WEIGHT_BROKEN_NO_DIG_PROMISE) else 0)
-        term(DiplomaticModifiers.IgnoredRequestToStopDigging,
-            if (!memory.brokenNoDiggingPromise && memory.ignoredNoDiggingPromise) rules.define(AiDefine.OPINION_WEIGHT_IGNORED_NO_DIG_PROMISE) else 0)
-        term(DiplomaticModifiers.BetrayedPromiseToNotSendingSpiesToUs, if (memory.brokenSpyPromise) rules.define(AiDefine.OPINION_WEIGHT_BROKEN_SPY_PROMISE) else 0)
-        term(DiplomaticModifiers.RefusedToNotSendingSpiesToUs,
-            if (!memory.brokenSpyPromise && memory.ignoredSpyPromise) rules.define(AiDefine.OPINION_WEIGHT_IGNORED_SPY_PROMISE) else 0)
-        term(DiplomaticModifiers.BrokenCoopWarPromise, if (memory.brokenCoopWarPromise) rules.define(AiDefine.OPINION_WEIGHT_BROKEN_COOP_WAR_PROMISE) else 0)
+            if (!memory.brokenMilitaryPromise && !brokenWithAnybody) PromiseAi.promiseScore(civ, memory, PromiseAi.PromiseKind.Military) else 0)
+        fun promise(broken: DiplomaticModifiers, ignored: DiplomaticModifiers, kind: PromiseAi.PromiseKind, emphasis: Int = 1) {
+            val score = PromiseAi.promiseScore(civ, memory, kind, emphasis)
+            term(if (PromiseAi.state(memory, kind).first) broken else ignored, score)
+        }
+        promise(DiplomaticModifiers.BetrayedPromiseToNotSettleCitiesNearUs, DiplomaticModifiers.RefusedToNotSettleCitiesNearUs, PromiseAi.PromiseKind.Expansion)
+        promise(DiplomaticModifiers.BrokenBorderPromise, DiplomaticModifiers.IgnoredBorderPromise, PromiseAi.PromiseKind.Border)
+        promise(DiplomaticModifiers.BetrayedPromiseToNotSpreadReligionToUs, DiplomaticModifiers.RefusedToNotSpreadReligionToUs,
+            PromiseAi.PromiseKind.NoConvert, religionEmphasis)
+        promise(DiplomaticModifiers.BetrayedPromiseToNotDigInOurLands, DiplomaticModifiers.IgnoredRequestToStopDigging, PromiseAi.PromiseKind.NoDigging)
+        promise(DiplomaticModifiers.BetrayedPromiseToNotSendingSpiesToUs, DiplomaticModifiers.RefusedToNotSendingSpiesToUs, PromiseAi.PromiseKind.Spy)
+        term(DiplomaticModifiers.BrokenCoopWarPromise, PromiseAi.promiseScore(civ, memory, PromiseAi.PromiseKind.CoopWar))
 
         // Protected minors
         term(DiplomaticModifiers.DestroyedProtectedMinor, protectedMinorKilledScore(memory, rules))
@@ -358,6 +354,43 @@ object OpinionAi {
         return if (score < 5) 0 else score
     }
 
+    /**
+     *  GetNoSettleRequestScore / GetStopSpyingRequestScore (Vox Populi): they asked us for the promise of [kind] and we refused or
+     *  broke it (their memory of us), fading from that turn over the refused or broken promise's duration
+     */
+    fun requestScore(civ: Civilization, other: Civilization, kind: PromiseAi.PromiseKind, weight: AiDefine): Int {
+        val theirs = other.ai.diplomacy.memories[civ.civID] ?: return 0
+        val (broken, ignored) = PromiseAi.state(theirs, kind)
+        if (!broken && !ignored) return 0
+        return PromiseAi.timed(civ, theirs, kind, civ.gameInfo.ruleset.ai.define(weight))
+    }
+
+    /**
+     *  GetDemandMadeScore (Vox Populi): the first demand in full, each further one OPINION_WEIGHT_MADE_DEMAND_OF_US_SUBSEQUENT, fading
+     *  (diminishing) over MADE_DEMAND_TURNS_UNTIL_FORGIVEN adjusted by inverted forgiveness; halved (NO_TAKE_DIVISOR) unless we
+     *  gave in to them recently, tripled when we did and are bankrupt, growing towards that as bankruptcy nears
+     */
+    fun demandMadeScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        val memory = civ.ai.diplomacy.memories[other.civID] ?: return 0
+        if (memory.numDemandsMade <= 0) return 0
+        val first = rules.define(AiDefine.OPINION_WEIGHT_MADE_DEMAND_OF_US)
+        var weight = diminishing(civ, memory.numDemandsMade, memory.demandMadeTurn, first,
+            rules.define(AiDefine.OPINION_WEIGHT_MADE_DEMAND_OF_US_SUBSEQUENT), rules.define(AiDefine.MADE_DEMAND_TURNS_UNTIL_FORGIVEN),
+            forgiveness(civ), invert = true)
+        val multiplier = rules.define(AiDefine.OPINION_WEIGHT_MADE_DEMAND_BANKRUPT_MULTIPLIER)
+        val multiplierTurns = rules.define(AiDefine.OPINION_WEIGHT_MADE_DEMAND_BANKRUPT_MULTIPLIER_TURNS)
+        if (!WarTargetAi.isRecentDemandAccepted(other, civ))
+            weight = weight * 100 / maxOf(rules.define(AiDefine.OPINION_WEIGHT_MADE_DEMAND_YOU_NO_TAKE_DIVISOR), 1)
+        else if (civ.gold == 0 && WarStateAi.avgGoldRate(civ) <= 0) weight = weight * multiplier / 100
+        else {
+            val turnsToBankruptcy = WarStateAi.turnsToBankruptcy(civ, 0)
+            if (turnsToBankruptcy == 0) weight = weight * multiplier / 100
+            else if (turnsToBankruptcy < multiplierTurns)
+                weight += (weight * multiplier / 100 - weight) * (multiplierTurns - turnsToBankruptcy) / multiplierTurns
+        }
+        return weight
+    }
+
     /** The game turn the timed terms count from */
     private fun turn(civ: Civilization) = civ.gameInfo.turns
 
@@ -384,8 +417,9 @@ object OpinionAi {
      *  Vox Populi's TestOpinionModifiers for the stacked deeds, before the opinions: each count halves once per its duration (the
      *  deed's TURNS_UNTIL_FORGOTTEN or _FORGIVEN, adjusted by loyalty or inverted forgiveness and the game speed) and takes the turn
      *  as its new stamp. VP sets the stamp to the current turn whenever it rewrites the count, which it does every turn, so its deeds
-     *  never fade; the stamp moves here only when the count does (the design its comments describe). And DoCounters' decay of the
-     *  civilian killer value (CIVILIAN_KILLER_VALUE_PER_TURN_DECAY).
+     *  never fade; the stamp moves here only when the count does (the design its comments describe). The demands made of us decay the
+     *  same way. Then the promises broken or ignored long enough ago are forgotten ([PromiseAi.testPromiseExpiry]), and DoCounters'
+     *  decay of the civilian killer value (CIVILIAN_KILLER_VALUE_PER_TURN_DECAY).
      */
     fun testOpinionModifiers(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
         val now = turn(civ)
@@ -417,6 +451,9 @@ object OpinionAi {
                 m.numArtifactsStolen = c; m.stoleArtifactTurn = t }
             decayed(m.numTimesIntrigueShared, m.intrigueSharedTurn, AiDefine.SHARED_INTRIGUE_TURNS_UNTIL_FORGOTTEN, loyalty, false) { c, t ->
                 m.numTimesIntrigueShared = c; m.intrigueSharedTurn = t }
+            decayed(m.numDemandsMade, m.demandMadeTurn, AiDefine.MADE_DEMAND_TURNS_UNTIL_FORGIVEN, forgiveness, true) { c, t ->
+                m.numDemandsMade = c; m.demandMadeTurn = t }
+            PromiseAi.testPromiseExpiry(civ, m)
             m.civilianKillerValue = maxOf(0, m.civilianKillerValue - rules.define(AiDefine.CIVILIAN_KILLER_VALUE_PER_TURN_DECAY))
         }
     }

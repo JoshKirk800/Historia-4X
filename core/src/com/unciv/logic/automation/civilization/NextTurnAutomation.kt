@@ -144,7 +144,6 @@ object NextTurnAutomation {
             val demandingCiv = civInfo.gameInfo.getCivilization(popupAlert.value)
             if (demandingCiv.isDefeated()) return
             val diploManager = civInfo.getDiplomacyManager(demandingCiv)!!
-            PromiseAi.onDemandAsked(demandingCiv, civInfo, demand)
             if (PromiseAi.isDemandAcceptable(civInfo, demandingCiv, demand))
                 diploManager.agreeToDemand(demand)
             else diploManager.refuseDemand(demand)

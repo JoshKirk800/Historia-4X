@@ -147,8 +147,8 @@ object FriendshipPlanningAi {
                 ai.warmongerThreat(other) >= AiThreat.Severe || VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)) return false
             // Our recent assist value has the opposite sign of VP's (ours: negative = they helped us)
             if (memory.recentAssistValue < -75 || memory.numTimesCultureBombed > 0) return false
-            if (memory.brokenExpansionPromiseValue > 0 || memory.ignoredExpansionPromiseValue > 0 ||
-                memory.brokenBorderPromiseValue > 0 || memory.ignoredBorderPromiseValue > 0 ||
+            if (memory.brokenExpansionPromise || memory.ignoredExpansionPromise ||
+                memory.brokenBorderPromise || memory.ignoredBorderPromise ||
                 memory.brokenSpyPromise || memory.ignoredSpyPromise || memory.brokenBullyCityStatePromise || memory.ignoredBullyCityStatePromise ||
                 memory.brokenAttackCityStatePromise || memory.ignoredAttackCityStatePromise ||
                 memory.brokenNoConvertPromise || memory.ignoredNoConvertPromise || memory.brokenNoDiggingPromise || memory.ignoredNoDiggingPromise)
@@ -263,8 +263,8 @@ object FriendshipPlanningAi {
                 PromiseState.None -> 0
             }
         }
-        penalty(state(memory.brokenExpansionPromiseValue > 0, memory.ignoredExpansionPromiseValue > 0), if (bold) 10 else 5, if (bold) 10 else 2)
-        penalty(state(memory.brokenBorderPromiseValue > 0, memory.ignoredBorderPromiseValue > 0), if (bold) 10 else 5, if (bold) 10 else 2)
+        penalty(state(memory.brokenExpansionPromise, memory.ignoredExpansionPromise), if (bold) 10 else 5, if (bold) 10 else 2)
+        penalty(state(memory.brokenBorderPromise, memory.ignoredBorderPromise), if (bold) 10 else 5, if (bold) 10 else 2)
         penalty(state(memory.brokenBullyCityStatePromise, memory.ignoredBullyCityStatePromise), if (diplomatic) 10 else 5, if (diplomatic) 5 else 2)
         if (memory.brokenAttackCityStatePromise) return true
         penalty(state(false, memory.ignoredAttackCityStatePromise), 0, if (diplomatic) 10 else 5)

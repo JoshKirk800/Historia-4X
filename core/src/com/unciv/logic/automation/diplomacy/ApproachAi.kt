@@ -230,8 +230,8 @@ object ApproachAi {
     }
 
     /**
-     *  bProvokedUs of part 3 (Vox Populi) as far as we have it: a demand of theirs while at war (VP also: a demand we accepted, a second
-     *  demand), they denounced us, they are untrustworthy, they took our capital or holy city, they culture-bombed us, they killed a city-state
+     *  bProvokedUs of part 3 (Vox Populi) as far as we have it: demands of theirs while at war, more than one, or one we gave in to
+     *  recently, they denounced us, they are untrustworthy, they took our capital or holy city, they culture-bombed us, they killed a city-state
      *  we protect or attacked one (VP: without a promise not to; we keep no record of such a promise being made), or they hold more cities
      *  of ours than we of theirs while either is close.
      */
@@ -239,7 +239,8 @@ object ApproachAi {
         val memory = civ.ai.diplomacy.memories[other.civID]
         val rules = civ.gameInfo.ruleset.ai
         if (memory != null) {
-            if (memory.demandCounter != -1 && civ.isAtWarWith(other)) return true
+            if (memory.numDemandsMade > 0 && (civ.isAtWarWith(other) || memory.numDemandsMade > 1 ||
+                    WarTargetAi.isRecentDemandAccepted(other, civ))) return true
             if (memory.numTimesCultureBombed > 0 || OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)) return true
             if (OpinionAi.isAngryAboutProtectedMinorAttacked(memory, rules)) return true
         }
@@ -369,14 +370,15 @@ object ApproachAi {
             w[NEUTRAL] = -bias(MajorCivApproach.Neutral) * 2
         }
 
-        // Part 3, provocations (Vox Populi). Sanctions, the traitor's personal betrayal (and its easy-target weight) and demand counts wait
-        // for their inputs (branch B2).
+        // Part 3, provocations (Vox Populi). Sanctions, the traitor's personal betrayal (and its easy-target weight) wait for their inputs.
         stage("Demands (part 3)")
-        if (memory.demandCounter != -1) { // BNW keeps no count: one demand
-            w[HOSTILE] += bias(MajorCivApproach.Hostile)
-            w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) / 2
-            if (easy || (WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average) < StrengthLevel.Average) w[WAR] += bias(MajorCivApproach.War)
-            else w[GUARDED] += bias(MajorCivApproach.Guarded)
+        val demands = memory.numDemandsMade
+        if (demands > 0) {
+            w[HOSTILE] += bias(MajorCivApproach.Hostile) * demands
+            w[DECEPTIVE] += bias(MajorCivApproach.Deceptive) * demands / 2
+            if (easy || (WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average) < StrengthLevel.Average)
+                w[WAR] += bias(MajorCivApproach.War) * demands
+            else w[GUARDED] += bias(MajorCivApproach.Guarded) * demands
         }
         stage("Denouncements (part 3)")
         if (OpinionAi.isDenouncedPlayer(civ, other)) {
@@ -719,20 +721,20 @@ object ApproachAi {
             w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_IGNORED_MILITARY_PROMISE)
             w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_IGNORED_MILITARY_PROMISE)
         }
-        if (memory.brokenExpansionPromiseValue > 0) {
+        if (memory.brokenExpansionPromise) {
             w[WAR] += rules.define(AiDefine.APPROACH_WAR_BROKEN_EXPANSION_PROMISE)
             w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_BROKEN_EXPANSION_PROMISE)
             w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_BROKEN_EXPANSION_PROMISE)
-        } else if (memory.ignoredExpansionPromiseValue > 0) {
+        } else if (memory.ignoredExpansionPromise) {
             w[WAR] += rules.define(AiDefine.APPROACH_WAR_IGNORED_EXPANSION_PROMISE)
             w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_IGNORED_EXPANSION_PROMISE)
             w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_IGNORED_EXPANSION_PROMISE)
         }
-        if (memory.brokenBorderPromiseValue > 0) {
+        if (memory.brokenBorderPromise) {
             w[WAR] += rules.define(AiDefine.APPROACH_WAR_BROKEN_BORDER_PROMISE)
             w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_BROKEN_BORDER_PROMISE)
             w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_BROKEN_BORDER_PROMISE)
-        } else if (memory.ignoredBorderPromiseValue > 0) {
+        } else if (memory.ignoredBorderPromise) {
             w[WAR] += rules.define(AiDefine.APPROACH_WAR_IGNORED_BORDER_PROMISE)
             w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_IGNORED_BORDER_PROMISE)
             w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_IGNORED_BORDER_PROMISE)
@@ -1202,8 +1204,7 @@ object ApproachAi {
      *  victory pursuit) or the warmonger trait, they provoked us, our opinion of them is Enemy or worse, an early-game competitor, an
      *  easy target we see as a competitor or worse, a reckless expander or a wonder spammer. Bold is boldness above 7, the warmonger
      *  trait, or competing for victory by conquest. Left out (no counterpart): the league competitor, our own backstabber flag.
-     *  "Provoked" is a demand of theirs while we are at war (VP also counts a demand we accepted or a second demand, which we do not
-     *  track).
+     *  "Provoked" is the demands of part 3 ([provokedUs]' first reason).
      */
     fun wantsOpportunityAttack(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
         if (CoopWarAi.isLockedIntoCoopWar(civ, other, rules)) return true
@@ -1214,7 +1215,8 @@ object ApproachAi {
         val tookKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) || holyCity?.civ == other
         val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
         val theyAreClose = VictoryProgressAi.isCloseToWorldConquest(other, rules)
-        val provokedUs = memory != null && memory.demandCounter != -1 && civ.isAtWarWith(other)
+        val provokedUs = memory != null && memory.numDemandsMade > 0 && (civ.isAtWarWith(other) || memory.numDemandsMade > 1 ||
+            WarTargetAi.isRecentDemandAccepted(other, civ))
         if (WarStateAi.isNoNewWars(civ) && !VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules) && !tookKeyCity && !theyAreClose)
             return false
         val severeThreat = civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe

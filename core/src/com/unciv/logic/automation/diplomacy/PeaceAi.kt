@@ -160,8 +160,8 @@ object PeaceAi {
     private fun wantsPeace(civ: Civilization, other: Civilization, wantedBefore: Boolean, otherWars: Int, rules: AiRuleset): Boolean {
         val memory = civ.ai.diplomacy.memoryOf(other)
         val terrible = WarStateAi.isInTerribleShapeForWar(civ)
-        val ourAllies = WarAlliesAi.offensiveWarAllies(civ, other, includeMinors = true, reverse = false) + civ
-        val theirAllies = WarAlliesAi.offensiveWarAllies(civ, other, includeMinors = true, reverse = true) + other
+        val ourAllies = WarAlliesAi.warAllies(civ, other, includeMinors = true, reverse = false) + civ
+        val theirAllies = WarAlliesAi.warAllies(civ, other, includeMinors = true, reverse = true) + other
         val holyCity = civ.religionManager.religion?.takeIf { it.foundingCivName == civ.civName }
         val capturedKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) ||
             (holyCity != null && other.cities.any { it.isHolyCityOf(holyCity.name) })

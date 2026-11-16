@@ -71,9 +71,9 @@ class CityDangerTests {
         a.getDiplomacyManager(b)!!.declareWar()
         c.getDiplomacyManager(b)!!.declareWar()
         a.getDiplomacyManager(c)!!.signDefensivePact(30)
-        assertEquals(listOf(c), WarAlliesAi.offensiveWarAllies(a, b, includeMinors = false, reverse = false))
+        assertEquals(listOf(c), WarAlliesAi.warAllies(a, b, includeMinors = false, reverse = false))
         assertEquals("b has no one at war with a on its side", emptyList<Civilization>(),
-            WarAlliesAi.offensiveWarAllies(a, b, includeMinors = false, reverse = true))
+            WarAlliesAi.warAllies(a, b, includeMinors = false, reverse = true))
     }
 
     @Test

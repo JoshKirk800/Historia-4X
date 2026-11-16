@@ -242,6 +242,7 @@ object DiplomacyEvents {
     fun onCityLiberated(liberator: Civilization, receiver: Civilization, receiverWasAlive: Boolean) {
         if (receiver.isMajorCiv) {
             val memory = receiver.ai.diplomacy.memoryOf(liberator)
+            memory.liberatedCitiesTurn = receiver.gameInfo.turns // CvDiplomacyAI::SetLiberatedCitiesTurn (Vox Populi)
             if (receiverWasAlive) memory.numCitiesLiberated++
             else {
                 memory.resurrectedUs = true

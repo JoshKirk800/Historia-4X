@@ -213,14 +213,19 @@ object MilitaryOperations {
     }
 
     /**
-     *  Vox Populi's CvMilitaryAI::RequestPillageAttack: a pillage raid on [enemy] while none runs, only with the units at hand (an
-     *  operation that would have units to build aborts, AI_ABORT_NO_UNITS)
+     *  Vox Populi's CvMilitaryAI::RequestPillageAttack: a pillage raid on [enemy] while none runs, only with the units at hand. As
+     *  addAIOperation with no units to build: the required slots must be fillable before the operation is created
+     *  (PreconditionsAreMet), and one that still has units to build after its Init is ended at once (AI_ABORT_NO_UNITS).
      */
     fun requestPillageAttack(civ: Civilization, enemy: Civilization): Boolean {
-        if (civ.ai.operations.firstOfType(AiOperationType.PILLAGE_ENEMY) != null) return false
+        val operations = civ.ai.operations
+        if (operations.firstOfType(AiOperationType.PILLAGE_ENEMY) != null) return false
+        val formation = operations.formationDef(AiOperationLogic.formationName(civ, AiOperationType.PILLAGE_ENEMY)) ?: return false
+        val fillable = numberOfFillableSlots(civ, formation, false)
+        if (fillable.filled < fillable.required) return false
         val operation = AiOperationLogic.addOperation(civ, AiOperationType.PILLAGE_ENEMY, enemy)
-        if (isOperationOk(operation) && operation.slotsToBuild.isNotEmpty()) AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_UNITS)
-        return isOperationOk(operation)
+        if (isOperationOk(operation) && operation.slotsToBuild.isNotEmpty()) operations.kill(operation, OperationAbortReason.NO_UNITS)
+        return isOperationOk(operation) && operation in operations.operations
     }
 
     /**

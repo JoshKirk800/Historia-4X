@@ -245,8 +245,10 @@ object DiplomacyEvents {
 
     /**
      *  CvPlayer::acquireCity by conquest: the war damage (CvUnitCombat: the conqueror applies the city's [WarDamageAi.cityWarValue];
-     *  BNW's record of the loser's losses notes it too), the loser forgets liberation credit, and the warmonger penalties
-     *  (CvDiplomacyAIHelpers::ApplyWarmongerPenalties) unless the city was the conqueror's. Call before the city changes hands.
+     *  BNW's record of the loser's losses notes it too), the loser forgets liberation credit (Vox Populi: the liberated cities, ever
+     *  liberated, the liberated capital and holy city, the resurrection) and remembers a major taking its original capital or the holy
+     *  city of the religion it founded, and the warmonger penalties (CvDiplomacyAIHelpers::ApplyWarmongerPenalties) unless the city was
+     *  the conqueror's. Call before the city changes hands.
      */
     fun onCityConquered(conqueror: Civilization, loser: Civilization, city: City) {
         if (conqueror.isBarbarian || loser.isBarbarian) return
@@ -254,7 +256,22 @@ object DiplomacyEvents {
         if (conqueror.isMajorCiv) conqueror.ai.diplomacy.memoryOf(loser).theirWarValueLostToUs += value
         WarDamageAi.applyWarDamage(conqueror, loser, value)
         WarProgressAi.onCityConquered(conqueror, loser, city)
-        if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesLiberated = 0
+        if (loser.isMajorCiv) {
+            val memory = loser.ai.diplomacy.memoryOf(conqueror)
+            memory.numCitiesLiberated = 0
+            memory.liberatedCitiesTurn = -1
+            memory.numCitiesEverLiberated = 0
+            memory.liberatedCapital = false
+            memory.liberatedHolyCity = false
+            if (conqueror.isMajorCiv) {
+                memory.resurrectedUs = false
+                if (city.isOriginalCapital && city.foundingCivObject == loser) memory.capturedCapital = true
+                else {
+                    val ownReligion = loser.religionManager.religion?.takeIf { it.foundingCivName == loser.civName }
+                    if (ownReligion != null && city.isHolyCityOf(ownReligion.name)) memory.capturedHolyCity = true
+                }
+            }
+        }
         // CvPlayer::acquireCity (Vox Populi): the loser counts the cities the conqueror took, the conqueror the turn it last took one
         if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesCapturedBy++
         if (conqueror.isMajorCiv) conqueror.ai.diplomacy.memoryOf(loser).lastCityCaptureTurn = conqueror.gameInfo.turns
@@ -286,16 +303,25 @@ object DiplomacyEvents {
     }
 
     /**
-     *  CvPlayer::DoLiberatePlayer: [liberator] gave [city] back to [receiver]. A living receiver counts the liberated city; a dead one is
-     *  resurrected and forgets its grievances; the liberator's warmonger amounts go down for everyone who knows it.
+     *  CvPlayer::DoLiberatePlayer: [liberator] gave [city] back to [receiver], who counts its liberated capital, its holy city (of the
+     *  religion it founded), or else the liberated city (and the cities ever liberated); a dead receiver is also resurrected and forgets
+     *  its grievances; the liberator's warmonger amounts go down for everyone who knows it.
      *  Call before the city changes hands, with [receiverWasAlive] the receiver's state before.
      */
-    fun onCityLiberated(liberator: Civilization, receiver: Civilization, receiverWasAlive: Boolean) {
+    fun onCityLiberated(liberator: Civilization, receiver: Civilization, city: City, receiverWasAlive: Boolean) {
         if (receiver.isMajorCiv) {
             val memory = receiver.ai.diplomacy.memoryOf(liberator)
-            memory.liberatedCitiesTurn = receiver.gameInfo.turns // CvDiplomacyAI::SetLiberatedCitiesTurn (Vox Populi)
-            if (receiverWasAlive) memory.numCitiesLiberated++
-            else {
+            val ownReligion = receiver.religionManager.religion?.takeIf { it.foundingCivName == receiver.civName }
+            when {
+                city.isOriginalCapital && city.foundingCivObject == receiver -> memory.liberatedCapital = true
+                ownReligion != null && city.isHolyCityOf(ownReligion.name) -> memory.liberatedHolyCity = true
+                else -> {
+                    memory.numCitiesLiberated++
+                    memory.numCitiesEverLiberated++
+                    memory.liberatedCitiesTurn = receiver.gameInfo.turns // CvDiplomacyAI::SetNumCitiesLiberatedBy (Vox Populi)
+                }
+            }
+            if (!receiverWasAlive) {
                 memory.resurrectedUs = true
                 memory.landDispute = DisputeLevel.None
                 memory.wonderDispute = DisputeLevel.None
@@ -365,7 +391,10 @@ object DiplomacyEvents {
 
     /** CvCity: [loser] was building [wonder] when [builder] completed it (CvDiplomacyAI::ChangeNumWondersBeatenTo) */
     fun onWonderBeaten(loser: Civilization, builder: Civilization) {
-        if (loser.isMajorCiv && builder.isMajorCiv && loser != builder) loser.ai.diplomacy.memoryOf(builder).numWondersBeatenTo++
+        if (!loser.isMajorCiv || !builder.isMajorCiv || loser == builder) return
+        val memory = loser.ai.diplomacy.memoryOf(builder)
+        memory.numWondersBeatenTo++
+        memory.beatenToWonderTurn = loser.gameInfo.turns
     }
 
     /** CvCity::processBuilding (Vox Populi): [builder] completed a world wonder (CvPlayer::ChangeWondersConstructed) */
@@ -404,7 +433,10 @@ object DiplomacyEvents {
 
     /** CvPlayerEspionage: a spy of [thief] stealing from [victim] was identified or killed */
     fun onRobbed(victim: Civilization, thief: Civilization) {
-        if (victim.isMajorCiv) victim.ai.diplomacy.memoryOf(thief).numTimesRobbed++
+        if (!victim.isMajorCiv) return
+        val memory = victim.ai.diplomacy.memoryOf(thief)
+        memory.numTimesRobbed++
+        memory.robbedTurn = victim.gameInfo.turns
     }
 
     /** CvPlayerEspionage::ProcessSpy: a spy of [thief] stealing from [victim] was identified (the victim's CvEspionageAI::m_aiTurnLastSpyCaught) */
@@ -436,12 +468,32 @@ object DiplomacyEvents {
             city.isHolyCityOf(ownReligion) -> rules.define(AiDefine.RELIGION_DIPLO_HIT_CONVERT_HOLY_CITY)
             else -> rules.define(AiDefine.RELIGION_DIPLO_HIT_RELIGIOUS_FLIP_FRIENDLY_CITY)
         }
-        owner.ai.diplomacy.memoryOf(responsible).negativeReligiousConversionPoints += points
+        val memory = owner.ai.diplomacy.memoryOf(responsible)
+        memory.negativeReligiousConversionPoints += points
+        memory.religiousConversionTurn = owner.gameInfo.turns
     }
 
     /** CvPlayer::DoCivilianReturnLogic: [returner] gave back a captured civilian of [owner] */
     fun onCivilianReturned(owner: Civilization, returner: Civilization) {
-        if (owner.isMajorCiv) owner.ai.diplomacy.memoryOf(returner).numCiviliansReturned++
+        if (!owner.isMajorCiv) return
+        val memory = owner.ai.diplomacy.memoryOf(returner)
+        memory.numCiviliansReturned++
+        memory.civiliansReturnedTurn = owner.gameInfo.turns
+    }
+
+    /** CvPlayerCulture: [builder] built a Landmark in [owner]'s lands (CvDiplomacyAI::ChangeNumLandmarksBuiltForMe) */
+    fun onLandmarkBuilt(owner: Civilization, builder: Civilization) {
+        val diplomacy = owner.getDiplomacyManager(builder) ?: return
+        diplomacy.landmarksBuiltForUs++
+        owner.ai.diplomacy.memoryOf(builder).landmarksBuiltTurn = owner.gameInfo.turns
+    }
+
+    /** CvPlayerCulture: [digger] took an artifact or writing from [owner]'s lands (CvDiplomacyAI::ChangeNegativeArchaeologyPoints, Vox Populi) */
+    fun onArtifactStolen(owner: Civilization, digger: Civilization) {
+        if (!owner.isMajorCiv) return
+        val memory = owner.ai.diplomacy.memoryOf(digger)
+        memory.numArtifactsStolen++
+        memory.stoleArtifactTurn = owner.gameInfo.turns
     }
 
     /** CvCity::BuyPlot: [buyer] bought a tile within 3 tiles of one of [owner]'s cities (AI_ChangeNumPlotsAcquiredByOtherPlayer) */

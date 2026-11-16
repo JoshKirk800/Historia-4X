@@ -50,6 +50,7 @@ object DiplomacyTurn {
         ExpanderAi.updateRecklessExpanders(civ, others, rules)  // Vox Populi's DoUpdateRecklessExpanders and DoUpdateWonderSpammers
         ExpanderAi.updateWonderSpammers(civ, others, rules)
         WarSanityAi.updateSaneTargets(civ, rules)  // Vox Populi's DoUpdateSaneDiplomaticTargets, before its opinions
+        OpinionAi.testOpinionModifiers(civ, others, rules)  // Vox Populi's TestOpinionModifiers, before its opinions
         OpinionAi.updateOpinions(civ, others, rules)
         ApproachAi.updateApproaches(civ, others, rules)
         com.unciv.logic.automation.civilization.CityStateAi.updateMinorCivApproaches(civ)

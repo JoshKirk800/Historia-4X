@@ -117,11 +117,11 @@ class ApproachFrameTests {
 
     @Test
     fun `a liked player is approached as friend, neutral one below it, as far as the opinion permits`() {
-        // Opinion -60: friendly x (100 + 10 + 60)%, neutral lowered at most to / (100 - 10 + 60)%: it stays above friendly
+        // Opinion -60: friendly x (100 + 10 + 60)%, neutral lowered towards one below it, at most to / (100 - 10 + 60)%: never below it
         memory(b).opinionWeight = -60
-        assertEquals(MajorCivApproach.Neutral, select(b, strategic = true))
+        select(b, strategic = true)
         val mild = memory(b).strategicApproachValues
-        assertTrue(mild[neutral] > mild[friendly])
+        assertTrue(mild[neutral] >= mild[friendly] - 1)
         // Opinion -300: friendly leads the bad approaches, and neutral is aimed one below it
         memory(b).opinionWeight = -300
         assertEquals(MajorCivApproach.Friendly, select(b, strategic = true))

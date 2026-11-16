@@ -418,8 +418,8 @@ object ApproachAi {
 
         stage("promises")
         addPromiseWeights(civ, other, memory, w, rules)
-        stage("military threat")
-        addMilitaryThreatWeights(memory.militaryThreat, w, rules)
+        stage("Warmonger threat and strength compared to us (part 5)")
+        addStrengthWeights(civ, other, w, rules)
         stage("nukes (Vox Populi)")
         addNukeWeights(civ, other, w, rules)
         stage("Close to world conquest, theirs or ours (Vox Populi)")
@@ -672,34 +672,162 @@ object ApproachAi {
         }
     }
 
-    private fun addMilitaryThreatWeights(threat: AiThreat, w: IntArray, rules: AiRuleset) {
-        when (threat) {
+    /**
+     *  Part 5 of Vox Populi's SelectBestApproachTowardsMajorCiv, WARMONGER THREAT and STRENGTH COMPARED TO US (in place of BNW's military
+     *  threat term): a severe or critical warmonger is met with war, hostility and caution by our warmonger hate, a minor one with
+     *  friendliness; a weaker player invites war (more when we want an opportunity attack, deceptive only when deception applies), a
+     *  stronger one friendliness, caution or fear. Economic strength counts the same way, but a rich player is feared only when also
+     *  strong. The attack multipliers (easy or good targets, exposure) are 1 until branch C ports easy targets.
+     */
+    private fun addStrengthWeights(civ: Civilization, other: Civilization, w: IntArray, rules: AiRuleset) {
+        fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
+        val hate = civ.ai.diplomacyValue(DiplomacyPersonality.WarmongerHate)
+        val attack = 1 // iAttackMultiplier: 2 for an easy target, + 1 for a good attack target (branch C)
+        val theirAttack = 1 // iTheirAttackMultiplier: 2 if we are their easy target, + 1 if we are exposed (branch C)
+        when (civ.ai.diplomacy.warmongerThreat(other)) {
             AiThreat.Critical -> {
-                w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_MILITARY_THREAT_CRITICAL)
-                w[GUARDED] += rules.define(AiDefine.APPROACH_GUARDED_MILITARY_THREAT_CRITICAL)
-                w[AFRAID] += rules.define(AiDefine.APPROACH_AFRAID_MILITARY_THREAT_CRITICAL)
-                w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_MILITARY_THREAT_CRITICAL)
+                w[WAR] += bias(MajorCivApproach.War) * hate * 2
+                w[HOSTILE] += bias(MajorCivApproach.Hostile) * hate * 2
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * hate * theirAttack / 2
+                w[AFRAID] += bias(MajorCivApproach.Afraid) * (11 - hate) * theirAttack
+                w[DECEPTIVE] -= bias(MajorCivApproach.Deceptive) * hate / theirAttack
             }
             AiThreat.Severe -> {
-                w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_MILITARY_THREAT_SEVERE)
-                w[GUARDED] += rules.define(AiDefine.APPROACH_GUARDED_MILITARY_THREAT_SEVERE)
-                w[AFRAID] += rules.define(AiDefine.APPROACH_AFRAID_MILITARY_THREAT_SEVERE)
-                w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_MILITARY_THREAT_SEVERE)
+                w[WAR] += bias(MajorCivApproach.War) * hate
+                w[HOSTILE] += bias(MajorCivApproach.Hostile) * hate
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * hate * theirAttack
+                w[AFRAID] += bias(MajorCivApproach.Afraid) * (11 - hate) * theirAttack / 2
+                w[DECEPTIVE] -= bias(MajorCivApproach.Deceptive) * hate / theirAttack / 2
             }
             AiThreat.Major -> {
-                w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_MILITARY_THREAT_MAJOR)
-                w[GUARDED] += rules.define(AiDefine.APPROACH_GUARDED_MILITARY_THREAT_MAJOR)
-                w[AFRAID] += rules.define(AiDefine.APPROACH_AFRAID_MILITARY_THREAT_MAJOR)
-                w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_MILITARY_THREAT_MAJOR)
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * hate * theirAttack / 2
+                w[NEUTRAL] += bias(MajorCivApproach.Neutral) * hate * theirAttack / 2
+                w[DECEPTIVE] -= bias(MajorCivApproach.Deceptive) * hate / theirAttack / 3
             }
-            AiThreat.Minor -> {
-                w[DECEPTIVE] += rules.define(AiDefine.APPROACH_DECEPTIVE_MILITARY_THREAT_MINOR)
-                w[GUARDED] += rules.define(AiDefine.APPROACH_GUARDED_MILITARY_THREAT_MINOR)
-                w[AFRAID] += rules.define(AiDefine.APPROACH_AFRAID_MILITARY_THREAT_MINOR)
-                w[FRIENDLY] += rules.define(AiDefine.APPROACH_FRIENDLY_MILITARY_THREAT_MINOR)
+            AiThreat.Minor, AiThreat.None -> if (!provokedUs(civ, other)) {
+                w[NEUTRAL] += bias(MajorCivApproach.Neutral) * hate * theirAttack / 2
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * hate * theirAttack / 2
             }
-            AiThreat.None -> w[HOSTILE] += rules.define(AiDefine.APPROACH_HOSTILE_MILITARY_THREAT_NONE)
         }
+        val opportunity = wantsOpportunityAttack(civ, other, rules)
+        val deception = appliesDeception(civ, other, rules)
+        val military = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
+        /** The weaker-than-us cases, the same for military and economic strength: war and hostile (deceptive if deception applies) up,
+         *  afraid and guarded down, by [factor] (or half of it, without an opportunity attack); [deceptiveFactor] for deceptive */
+        fun weaker(factor: Int, deceptiveFactor: Int) {
+            w[WAR] += if (opportunity) bias(MajorCivApproach.War) * factor * attack else bias(MajorCivApproach.War) * factor / 2
+            w[HOSTILE] += if (opportunity) bias(MajorCivApproach.Hostile) * factor * attack else bias(MajorCivApproach.Hostile) * factor / 2
+            w[DECEPTIVE] += if (opportunity && deception) bias(MajorCivApproach.Deceptive) * deceptiveFactor * attack
+                else bias(MajorCivApproach.Deceptive) * factor / 2
+            w[AFRAID] -= bias(MajorCivApproach.Afraid) * factor * attack
+            w[GUARDED] -= bias(MajorCivApproach.Guarded) * factor * attack
+        }
+        /** POOR: a little war or deception, some neutrality */
+        fun poor() {
+            w[WAR] += if (opportunity) bias(MajorCivApproach.War) * 2 * attack else bias(MajorCivApproach.War)
+            w[DECEPTIVE] += if (opportunity) bias(MajorCivApproach.Deceptive) * 2 * attack else bias(MajorCivApproach.Deceptive)
+            w[NEUTRAL] += bias(MajorCivApproach.Neutral) * 2
+            w[AFRAID] -= bias(MajorCivApproach.Afraid) * 2 * attack
+            w[GUARDED] -= bias(MajorCivApproach.Guarded) * 2 * attack
+        }
+        when (military) {
+            StrengthLevel.Pathetic -> weaker(6, 6)
+            StrengthLevel.Weak -> weaker(4, 4)
+            StrengthLevel.Poor -> poor()
+            StrengthLevel.Average -> {
+                w[NEUTRAL] += bias(MajorCivApproach.Neutral) * 2
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
+            }
+            StrengthLevel.Strong -> {
+                w[NEUTRAL] += bias(MajorCivApproach.Neutral) * 2 * theirAttack
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2 * theirAttack
+                w[WAR] -= bias(MajorCivApproach.War) * 2 * theirAttack
+                w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 2 * theirAttack
+            }
+            StrengthLevel.Powerful -> {
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 3 * theirAttack
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * 3 * theirAttack
+                w[AFRAID] += bias(MajorCivApproach.Afraid) * 4 * theirAttack
+                w[WAR] -= bias(MajorCivApproach.War) * 4 * theirAttack
+                w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 4 * theirAttack
+            }
+            StrengthLevel.Immense -> {
+                w[AFRAID] += bias(MajorCivApproach.Afraid) * 8 * theirAttack
+                w[WAR] -= bias(MajorCivApproach.War) * 6 * theirAttack
+                w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 6 * theirAttack
+            }
+        }
+        when (civ.ai.diplomacy.memories[other.civID]?.economicStrength ?: StrengthLevel.Average) {
+            StrengthLevel.Pathetic -> weaker(6, 6)
+            StrengthLevel.Weak -> weaker(4, 2)
+            StrengthLevel.Poor -> poor()
+            StrengthLevel.Average -> {
+                w[NEUTRAL] += bias(MajorCivApproach.Neutral)
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly)
+            }
+            StrengthLevel.Strong -> {
+                w[NEUTRAL] += bias(MajorCivApproach.Neutral) * theirAttack
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * theirAttack
+                if (military >= StrengthLevel.Strong) {
+                    w[WAR] -= bias(MajorCivApproach.War) * 2 * theirAttack
+                    w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 2 * theirAttack
+                }
+            }
+            StrengthLevel.Powerful -> {
+                w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2 * theirAttack
+                w[GUARDED] += bias(MajorCivApproach.Guarded) * 2 * theirAttack
+                if (military > StrengthLevel.Strong) {
+                    w[AFRAID] += bias(MajorCivApproach.Afraid) * 4 * theirAttack
+                    w[WAR] -= bias(MajorCivApproach.War) * 4 * theirAttack
+                    w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 4 * theirAttack
+                } else if (military == StrengthLevel.Strong) {
+                    w[WAR] -= bias(MajorCivApproach.War) * 2 * theirAttack
+                    w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 2 * theirAttack
+                }
+            }
+            StrengthLevel.Immense -> when (military) {
+                StrengthLevel.Strong -> {
+                    w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2 * theirAttack
+                    w[GUARDED] += bias(MajorCivApproach.Guarded) * 2 * theirAttack
+                    w[WAR] -= bias(MajorCivApproach.War) * 2 * theirAttack
+                    w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 2 * theirAttack
+                }
+                StrengthLevel.Powerful -> {
+                    w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2 * theirAttack
+                    w[GUARDED] += bias(MajorCivApproach.Guarded) * 2 * theirAttack
+                    w[AFRAID] += bias(MajorCivApproach.Afraid) * 4 * theirAttack
+                    w[WAR] -= bias(MajorCivApproach.War) * 4 * theirAttack
+                    w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 4 * theirAttack
+                }
+                StrengthLevel.Immense -> {
+                    w[AFRAID] += bias(MajorCivApproach.Afraid) * 8 * theirAttack
+                    w[WAR] -= bias(MajorCivApproach.War) * 6 * theirAttack
+                    w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 6 * theirAttack
+                }
+                else -> {
+                    w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2 * theirAttack
+                    w[GUARDED] += bias(MajorCivApproach.Guarded) * 2 * theirAttack
+                }
+            }
+        }
+    }
+
+    /**
+     *  bApplyDeception of part 1: deceptive bonuses count only when deception could lead to war (DoUpdateWarTargets): we are close to
+     *  world conquest or endgame-aggressive towards them, or they are neighbours (or close, when we can cross the ocean) and we are a
+     *  backstabber, eager to denounce (above 8), lean to deception over friendship, or go for world conquest; never when either of us
+     *  denounced the other, they are untrustworthy or took a key city of ours (VP also: sanctions).
+     */
+    private fun appliesDeception(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
+        if (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ) || OpinionAi.isUntrustworthyFriend(other)) return false
+        if (OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other) return false
+        if (VictoryProgressAi.isCloseToWorldConquest(civ, rules) || VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)) return true
+        val proximity = DiplomacyTurn.proximity(civ, other)
+        val canCrossOcean = civ.tech.embarkedUnitsCanEnterOcean || civ.tech.allUnitsCanEnterOcean
+        if (proximity != DiplomacyTurn.PROXIMITY_NEIGHBORS && !(canCrossOcean && proximity >= DiplomacyTurn.PROXIMITY_CLOSE)) return false
+        return OpinionAi.isUntrustworthyFriend(civ) || civ.ai.diplomacyValue(DiplomacyPersonality.DenounceWillingness) > 8 ||
+            civ.ai.majorCivApproachBias(MajorCivApproach.Deceptive) > civ.ai.majorCivApproachBias(MajorCivApproach.Friendly) + 1 ||
+            civ.ai.isGoingForWorldConquest()
     }
 
     /**

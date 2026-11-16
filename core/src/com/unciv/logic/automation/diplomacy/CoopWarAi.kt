@@ -27,7 +27,7 @@ object CoopWarAi {
         civ.ai.diplomacy.memoryOf(partner).coopWars.getOrPut(target.civID) { CoopWarEntry() }
 
     /** GetGlobalCoopWarAcceptedState: the furthest any partner has agreed to go against [target] */
-    private fun globalState(civ: Civilization, target: Civilization): CoopWarState? {
+    fun globalState(civ: Civilization, target: Civilization): CoopWarState? {
         var best: CoopWarState? = null
         for ((_, memory) in civ.ai.diplomacy.memories) {
             val state = memory.coopWars[target.civID]?.state ?: continue

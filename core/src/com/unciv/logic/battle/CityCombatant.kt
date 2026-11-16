@@ -33,6 +33,7 @@ class CityCombatant(val city: City) : ICombatant {
 
     override fun takeDamage(damage: Int) {
         city.health -= damage
+        city.damageTakenThisTurn += damage  // CvCity::addDamageReceivedThisTurn (Vox Populi)
         if (city.health < 1) city.health = 1  // min health is 1
     }
 

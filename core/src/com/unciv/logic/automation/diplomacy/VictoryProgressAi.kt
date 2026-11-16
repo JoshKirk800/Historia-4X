@@ -50,12 +50,69 @@ object VictoryProgressAi {
         dominationVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DOMINATION_VICTORY_THRESHOLD)
 
     /**
-     *  CvDiplomacyAI::IsCloseToAnyVictoryCondition: nobody has won yet and [civ] is close to a victory. Only Domination so far; the
-     *  Diplomatic, Science and Culture tests (IsCloseToDiploVictory, IsCloseToSpaceshipVictory, IsCloseToCultureVictory) are step 6 of the plan.
+     *  CvDiplomacyAI::IsCloseToAnyVictoryCondition: nobody has won yet and [civ] is close to a victory: world conquest, or a diplomatic,
+     *  science or culture victory at or above their VP thresholds (55, 80, 60).
+     */
+    fun isCloseToAnyVictoryCondition(civ: Civilization, rules: AiRuleset): Boolean = civ.gameInfo.victoryData == null && (
+        isCloseToWorldConquest(civ, rules)
+            || diplomaticVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)
+            || scienceVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
+            || cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD))
+
+    /**
+     *  CvDiplomacyAI::GetDiplomaticVictoryProgress: our delegates as a percentage of those a World Leader vote needs, at most 59 before the
+     *  United Nations and 79 with it; 0 without a World Congress, when dead, once somebody has won or when no open victory is won by the vote.
+     *  Our delegates are those of the current session (VP counts them as if the United Nations already sat, CalculateStartingVotesForMember
+     *  with bFakeUN); VP's extra 20 per active United Nations resolution are VP data, not BNW's.
+     */
+    fun diplomaticVictoryProgress(civ: Civilization): Int {
+        val league = civ.gameInfo.league ?: return 0
+        if (!civ.isAlive() || civ.gameInfo.victoryData != null || !isVictoryOpen(civ, MilestoneType.WinDiplomaticVote)) return 0
+        val progress = league.getDelegates(civ) * 100 / maxOf(1, league.getVotesNeededForWorldLeader())
+        return minOf(progress, if (league.unitedNations) 79 else 59)
+    }
+
+    /**
+     *  CvDiplomacyAI::GetScienceVictoryProgress: the share of the techs known (of all but one), at most 78 plus 21 times the share of the
+     *  spaceship's steps done: each part the victory requires and added to the capital, and each building it requires (the Apollo Program).
+     *  0 when dead, once somebody has won or when no open victory is won by the spaceship.
      */
     @Readonly
-    fun isCloseToAnyVictoryCondition(civ: Civilization, rules: AiRuleset): Boolean =
-        civ.gameInfo.victoryData == null && isCloseToWorldConquest(civ, rules)
+    fun scienceVictoryProgress(civ: Civilization): Int {
+        if (!civ.isAlive() || civ.gameInfo.victoryData != null) return 0
+        val victory = civ.victoryManager.getAvailableVictories()
+            .firstOrNull { v -> v.milestoneObjects.any { it.type == MilestoneType.AddedSSPartsInCapital } } ?: return 0
+        val scienceProgress = civ.tech.techsResearched.size * 100 / maxOf(1, civ.gameInfo.ruleset.technologies.size - 1)
+        var required = victory.requiredSpaceshipParts.size
+        var completed = victory.requiredSpaceshipPartsAsCounter.entries.sumOf { (part, needed) ->
+            minOf(needed, civ.victoryManager.currentsSpaceshipParts[part])
+        }
+        for (milestone in victory.milestoneObjects) {
+            if (milestone.type != MilestoneType.BuiltBuilding) continue
+            required++
+            if (civ.cities.any { it.cityConstructions.isBuilt(milestone.params[0]) }) completed++
+        }
+        return minOf(scienceProgress, 78 + 21 * completed / maxOf(1, required))
+    }
+
+    /**
+     *  CvDiplomacyAI::GetCultureVictoryProgress with GetLowestTourismInfluence: the lowest influence percent over the other living majors,
+     *  starting from CULTURE_LEVEL_INFLUENTIAL, at most 99. 0 when dead, once somebody has won or when no open victory is won by influence.
+     */
+    @Readonly
+    fun cultureVictoryProgress(civ: Civilization, rules: AiRuleset): Int {
+        if (!civ.isAlive() || civ.gameInfo.victoryData != null || !isVictoryOpen(civ, MilestoneType.InfluentialOverAllCivs)) return 0
+        var lowest = rules.define(AiDefine.CULTURE_LEVEL_INFLUENTIAL)
+        for (other in civ.gameInfo.civilizations) {
+            if (other == civ || !other.isMajorCiv || !other.isAlive()) continue
+            lowest = minOf(lowest, maxOf(0, civ.culture.getInfluencePercent(other)))
+        }
+        return minOf(99, lowest)
+    }
+
+    @Readonly
+    private fun isVictoryOpen(civ: Civilization, milestone: MilestoneType) =
+        civ.victoryManager.getAvailableVictories().any { victory -> victory.milestoneObjects.any { it.type == milestone } }
 
     /**
      *  CvDiplomacyAI::DoUpdateCompetingForVictory: a civilization competes for victory until somebody has won (CvGame::
@@ -76,7 +133,6 @@ object VictoryProgressAi {
      *  CvDiplomacyAI::IsEndgameAggressive and IsEndgameAggressiveTo (set in DoUpdateCompetingForVictory): a civilization that competes for
      *  victory is aggressive towards every major it has met that is alive with a city and close to any victory (IsPlayerValid).
      */
-    @Readonly
     fun isEndgameAggressiveTo(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
         if (other == civ || !other.isMajorCiv || !other.isAlive() || other.cities.isEmpty() || !civ.knows(other)) return false
         return isCompetingForVictory(civ) && isCloseToAnyVictoryCondition(other, rules)

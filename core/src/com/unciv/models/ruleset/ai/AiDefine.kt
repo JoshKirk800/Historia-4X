@@ -867,4 +867,10 @@ enum class AiDefine(val default: Float) {
     CLOSE_TO_DOMINATION_VICTORY_THRESHOLD(50f),
     // The index of the Medieval era (VP's GD_INT_GET(MEDIEVAL_ERA)): from it a conqueror wants opportunity attacks on anyone (ApproachAi)
     MEDIEVAL_ERA(2f),
+    // CvDiplomacyAI::IsCloseToDiploVictory, IsCloseToSpaceshipVictory, IsCloseToCultureVictory (VP database values)
+    CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD(55f),
+    CLOSE_TO_SCIENCE_VICTORY_THRESHOLD(80f),
+    CLOSE_TO_CULTURE_VICTORY_THRESHOLD(60f),
+    // CvDiplomacyAI::GetLowestTourismInfluence starts from the influence percent of Influential (GlobalDefines CULTURE_LEVEL_INFLUENTIAL)
+    CULTURE_LEVEL_INFLUENTIAL(100f),
 }

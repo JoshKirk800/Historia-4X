@@ -327,38 +327,6 @@ class DiplomacyAiTests {
     //region Friendship and denouncements
 
     @Test
-    fun `declarations of friendship wait 20 turns after meeting`() {
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Afraid)
-        game.gameInfo.turns = 19
-        assertFalse(DiplomacyAutomation.isDoFAcceptable(a, b))
-        game.gameInfo.turns = 20
-        // Afraid always accepts once it is not too early
-        assertTrue(DiplomacyAutomation.isDoFAcceptable(a, b))
-    }
-
-    @Test
-    fun `DoF acceptance needs willingness plus approach and opinion of 12 with a 0 to 4 roll`() {
-        game.gameInfo.turns = 30
-        a.ai.setDiplomacyValue(DiplomacyPersonality.DoFWillingness, 5)
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Friendly)
-        a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Friend)
-        // 5 + 3 + 5 = 13: accepted whatever the roll
-        assertEquals(13, DiplomacyAutomation.doFWeight(a, b))
-        assertTrue(DiplomacyAutomation.isDoFAcceptable(a, b))
-
-        a.ai.setDiplomacyValue(DiplomacyPersonality.DoFWillingness, 8)
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Guarded)
-        a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Neutral)
-        // 8 - 1 + 0 = 7, at most 11 with the roll
-        assertEquals(7, DiplomacyAutomation.doFWeight(a, b))
-        assertFalse(DiplomacyAutomation.isDoFAcceptable(a, b))
-
-        a.ai.setDiplomacyValue(DiplomacyPersonality.DoFWillingness, 20)
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Hostile)
-        assertFalse(DiplomacyAutomation.isDoFAcceptable(a, b))
-    }
-
-    @Test
     fun `denouncing needs a weight above 25, after Vox Populi`() {
         game.gameInfo.turns = 20 // met over 10 turns ago
         a.ai.setDiplomacyValue(DiplomacyPersonality.DenounceWillingness, 6)

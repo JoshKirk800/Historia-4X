@@ -3,7 +3,7 @@ package com.unciv.logic.automation.strategy
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.diplomacy.AiThreat
-import com.unciv.logic.automation.unit.CitySiteEvaluator
+import com.unciv.logic.automation.diplomacy.PactPlanningAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
@@ -25,8 +25,8 @@ enum class ArmyType { Land, NavalInvasion }
  *  recommended army and navy sizes, defense states, offensive purchases and disbanding of obsolete units.
  *
  *  For the production port, the military AI's requests are its strategies' flavors (through `civ.ai.flavors()` / `city.ai.flavors()`)
- *  and this API: [landDefenseState], [navalDefenseState], [recommendedMilitarySize], [mandatoryReserveSize], [recommendedNavySize],
- *  [percentOfRecommendedMilitarySize], the unit counts ([numLandUnits], [numRangedLandUnits], [numMobileLandUnits], [numMeleeLandUnits],
+ *  and this API: [landDefenseState], [navalDefenseState], [recommendedLandArmySize], [recommendedNavySize], [recommendedExplorers],
+ *  [mandatoryReserveSize], the unit counts ([numLandUnits], [numRangedLandUnits], [numMobileLandUnits], [numMeleeLandUnits],
  *  [numAntiAirUnits], [numNavalUnits], [numAirUnits]), [highestThreat], [totalThreatWeight] and [barbarianThreatTotal].
  *
  *  Not ported, with the reason: UpdateWars (its only effect is a log line). The operation side (UpdateOperations, the Request* functions,
@@ -59,8 +59,12 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     @Transient var numAntiAirUnits = 0; private set
     @Transient var numNavalUnits = 0; private set
     @Transient var numAirUnits = 0; private set
+    /** Brave New World's mandatory reserve, see [bnwMandatoryReserve] */
     @Transient var mandatoryReserveSize = 0; private set
-    @Transient var recommendedMilitarySize = 0; private set
+    /** CvMilitaryAI::m_iRecLandUnits / m_iRecNavalUnits / m_iRecExplorerUnits (Vox Populi), see [setRecommendedArmyNavySize] */
+    @Transient var recommendedLandArmySize = 0; private set
+    @Transient var recommendedNavySize = 0; private set
+    @Transient var recommendedExplorers = 0; private set
     @Transient var landDefenseState = DefenseState.Neutral; private set
     @Transient var navalDefenseState = DefenseState.Neutral; private set
     @Transient var barbarianCampCount = 0; private set
@@ -173,26 +177,16 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     }
     //endregion
 
-    //region Army size (CvMilitaryAI::UpdateBaseData, UpdateDefenseState)
-
-    /** Whether a unit counts in UpdateBaseData: it can attack and is not exploring */
-    private fun countsAsMilitary(unit: MapUnit): Boolean {
-        if (!unit.isMilitary()) return false
-        val type = UnitAiTypes.current(unit)
-        return type != UnitAiType.EXPLORE && type != UnitAiType.EXPLORE_SEA
-    }
+    //region Army size (CvMilitaryAI::UpdateBaseData, SetRecommendedArmyNavySize, UpdateDefenseState)
 
     /**
-     *  CvMilitaryAI::UpdateBaseData. Counts the military units that are not exploring: land ones by role (ranged; else anti-air;
-     *  else mobile with more than 2 moves; else melee), naval and air ones. Multiplier = 0.40 + (highest threat + OFFENSE + DEFENSE) / 100
-     *  (personality and grand strategy). Mandatory reserve = (DEFEND_MY_LANDS_BASE_UNITS + cities x UNITS_PER_CITY + settlers) x
-     *  multiplier + max(0, handicap - 1), at least 1. Strike force (majors) = (7, doubled under conquest, + boldness + max(0, handicap - 1))
-     *  x multiplier, at least 1; city-states halve the reserve and have none. Both x 2/3 under NAVAL_MAP.
+     *  CvMilitaryAI::UpdateBaseData (Vox Populi). Counts the units that can attack, explorers included: land ones by role (ranged; else
+     *  anti-air; else mobile with more than 2 moves; else melee), naval and air ones; then [setRecommendedArmyNavySize].
      */
     fun updateBaseData(civ: Civilization) {
         var land = 0; var ranged = 0; var mobile = 0; var melee = 0; var antiAir = 0; var naval = 0; var air = 0; var inArmies = 0
         for (unit in civ.units.getCivUnits()) {
-            if (!countsAsMilitary(unit)) continue
+            if (!unit.isMilitary()) continue
             val baseUnit = unit.baseUnit
             when {
                 baseUnit.isLandUnit -> {
@@ -212,59 +206,120 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         numLandUnits = land; numRangedLandUnits = ranged; numMobileLandUnits = mobile; numMeleeLandUnits = melee
         numLandUnitsInArmies = inArmies
         numAntiAirUnits = antiAir; numNavalUnits = naval; numAirUnits = air
+        mandatoryReserveSize = bnwMandatoryReserve(civ)
+        setRecommendedArmyNavySize(civ)
+    }
 
+    /**
+     *  The mandatory reserve of Brave New World's CvMilitaryAI::UpdateBaseData, which Vox Populi dropped. Kept for
+     *  [MilitaryOperations.landReservesAvailable] until the operations recruit their units the Vox Populi way
+     *  (CvAIOperation::GrabUnitsFromTheReserves). (DEFEND_MY_LANDS_BASE_UNITS + cities x UNITS_PER_CITY + settlers) x (0.40 + (highest
+     *  threat + OFFENSE + DEFENSE) / 100) (personality and grand strategy) + max(0, handicap - 1), at least 1; city-states halve it;
+     *  x 2/3 under NAVAL_MAP.
+     */
+    private fun bnwMandatoryReserve(civ: Civilization): Int {
         val rules = civ.gameInfo.ruleset.ai
-        val navalMap = civ.ai.isEconomicStrategyActive(NAVAL_MAP)
         val flavorOffense = civ.ai.personalityAndGrandStrategy(Flavor.Offense)
         val flavorDefense = civ.ai.personalityAndGrandStrategy(Flavor.Defense)
         val multiplier = 0.40f + (highestThreat(civ) + flavorOffense + flavorDefense).toFloat() / 100f
-
         var unitsWanted = rules.define(AiDefine.AI_STRATEGY_DEFEND_MY_LANDS_BASE_UNITS)
         unitsWanted += (civ.cities.size * rules.defineFloat(AiDefine.AI_STRATEGY_DEFEND_MY_LANDS_UNITS_PER_CITY)).toInt()
         unitsWanted += UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.SETTLE, includeBeingTrained = true)
         var reserve = (unitsWanted * multiplier).toInt()
-        val difficulty = max(0, EconomicAi.gameHandicapIndex(civ.gameInfo) - 1)
-        reserve += difficulty
+        reserve += max(0, EconomicAi.gameHandicapIndex(civ.gameInfo) - 1)
         reserve = max(1, reserve)
-
-        if (civ.isCityState) {
-            reserve = max(1, reserve / 2)
-            unitsWanted = 0
-        } else {
-            unitsWanted = 7 // size of a basic attack
-            if (civ.ai.isGoingForWorldConquest()) unitsWanted *= 2
-            unitsWanted += civ.ai.diplomacyValue(DiplomacyPersonality.Boldness)
-            unitsWanted += difficulty
-            unitsWanted = max(1, (unitsWanted * multiplier).toInt())
-        }
-        if (navalMap) {
-            unitsWanted = unitsWanted * 2 / 3
-            reserve = reserve * 2 / 3
-        }
-        mandatoryReserveSize = reserve
-        recommendedMilitarySize = reserve + unitsWanted
+        if (civ.isCityState) reserve = max(1, reserve / 2)
+        if (civ.ai.isEconomicStrategyActive(NAVAL_MAP)) reserve = reserve * 2 / 3
+        return reserve
     }
 
-    /** CvMilitaryAI::UpdateDefenseState: land and naval unit counts against the reserve, the recommended size and 125% of it */
+    /**
+     *  CvMilitaryAI::SetRecommendedArmyNavySize (Vox Populi): splits the units we can afford ([EconomicAi.softSupplyCap]) between land
+     *  and sea. City-states want 2 ships with a coastal capital, the rest on land. Majors weigh land defense 10 x (DEFEND_MY_LANDS_BASE_UNITS
+     *  + cities x UNITS_PER_CITY + settlers, by default unit AI and in training), naval defense 7 x effective coastal cities x
+     *  UNITS_PER_CITY, offense 10 x BALANCE_BASIC_ATTACK_ARMY_SIZE under conquest; the naval share of offense is effective coastal cities
+     *  x NAVAL (personality) x 7 / cities. Defense x (100 + 2 x DEFENSE), offense x (100 + boldness + OFFENSE) (personality and grand
+     *  strategy). Explorers (units whose default unit AI is EXPLORE) take their own share first: at most a quarter of the cap, no more
+     *  than the supply leaves room for. Land is truncated, sea rounded, as in the original; a share our units already exceed grows to
+     *  them at the other's expense.
+     *
+     *  Missing inputs, counted as none: the cities exposed to an enemy (10 land and 10 naval weight each) and the preferred attack
+     *  targets (10 x BALANCE_BASIC_ATTACK_ARMY_SIZE offense each) of CvMilitaryAI::UpdateAttackTargets, and the explorers needed of
+     *  Vox Populi's CvEconomicAI::DoReconState.
+     */
+    private fun setRecommendedArmyNavySize(civ: Civilization) {
+        var maxPossibleUnits = EconomicAi.softSupplyCap(civ)
+        if (civ.isCityState) {
+            recommendedNavySize = if (civ.getCapital()?.isCoastal() == true) 2 else 0
+            recommendedLandArmySize = maxPossibleUnits - recommendedNavySize
+            return
+        }
+
+        val rules = civ.gameInfo.ruleset.ai
+        val unitsPerCity = rules.defineFloat(AiDefine.AI_STRATEGY_DEFEND_MY_LANDS_UNITS_PER_CITY)
+        val numCoastalCities = PactPlanningAi.numEffectiveCoastalCities(civ)
+        var landDefenseWeight = rules.define(AiDefine.AI_STRATEGY_DEFEND_MY_LANDS_BASE_UNITS) * 10
+        landDefenseWeight += (civ.cities.size * 10 * unitsPerCity).toInt()
+        landDefenseWeight += UnitAiTypes.numUnitsWithDefaultUnitAi(civ, UnitAiType.SETTLE, includeBeingTrained = true) * 10
+        var navalDefenseWeight = (numCoastalCities * 7 * unitsPerCity).toInt()
+
+        var totalOffenseWeight = 0
+        if (civ.ai.isGoingForWorldConquest()) totalOffenseWeight += rules.define(AiDefine.BALANCE_BASIC_ATTACK_ARMY_SIZE) * 10
+
+        val navalPercent = numCoastalCities * civ.ai.personality(Flavor.Naval) * 7 / max(1, civ.cities.size)
+        val defenseModifier = 100 + civ.ai.personalityAndGrandStrategy(Flavor.Defense) * 2
+        val offenseModifier = 100 + civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) + civ.ai.personalityAndGrandStrategy(Flavor.Offense)
+        landDefenseWeight *= defenseModifier
+        navalDefenseWeight *= defenseModifier
+        totalOffenseWeight *= offenseModifier
+        val totalWeight = totalOffenseWeight + landDefenseWeight + navalDefenseWeight
+
+        val numExplorers = UnitAiTypes.numUnitsWithDefaultUnitAi(civ, UnitAiType.EXPLORE, includeBeingTrained = false)
+        val numUnitsToSupply = civ.units.getCivUnitsSize()
+        val numUnitsSupplied = civ.stats.getUnitSupply()
+        var explorersNeeded = min(maxPossibleUnits / 4, 0)
+        if (numUnitsToSupply - numExplorers + explorersNeeded > numUnitsSupplied)
+            explorersNeeded = numExplorers + numUnitsSupplied - numUnitsToSupply
+        recommendedExplorers = explorersNeeded
+        maxPossibleUnits -= max(explorersNeeded, numExplorers)
+
+        var land = (maxPossibleUnits.toLong() * (100L * landDefenseWeight + totalOffenseWeight.toLong() * (100 - navalPercent)) / (100f * totalWeight)).toInt()
+        var naval = (maxPossibleUnits.toLong() * (100L * navalDefenseWeight + totalOffenseWeight.toLong() * navalPercent) / (100f * totalWeight) + 0.5f).toInt()
+        val numLand = numLandUnits - numExplorers
+        if (numLand > land) {
+            naval -= numLand - land
+            land = numLand
+        } else if (numNavalUnits > naval) {
+            land -= numNavalUnits - naval
+            naval = numNavalUnits
+        }
+        recommendedLandArmySize = land
+        recommendedNavySize = naval
+    }
+
+    /**
+     *  CvMilitaryAI::UpdateDefenseState (Vox Populi): land CRITICAL below the recommended army, NEUTRAL below 125% of it, else ENOUGH
+     *  (the original's NEEDED below 75% can never be reached); naval CRITICAL up to half the recommended navy, NEEDED up to it, NEUTRAL up
+     *  to 125%, else ENOUGH. A city under siege (a coastal one for the navy) makes a NEUTRAL or ENOUGH state CRITICAL.
+     */
     fun updateDefenseState(civ: Civilization) {
         landDefenseState = when {
-            numLandUnits < mandatoryReserveSize -> DefenseState.Critical
-            numLandUnits < recommendedMilitarySize -> DefenseState.Needed
-            numLandUnits < recommendedMilitarySize * 5 / 4 -> DefenseState.Neutral
+            numLandUnits < recommendedLandArmySize -> DefenseState.Critical
+            numLandUnits < recommendedLandArmySize * 3 / 4 -> DefenseState.Needed
+            numLandUnits < recommendedLandArmySize * 5 / 4 -> DefenseState.Neutral
             else -> DefenseState.Enough
         }
-        val navySize = recommendedNavySize(civ)
+        if (landDefenseState <= DefenseState.Neutral && civ.cities.any { CityDangerAi.isUnderSiege(it) })
+            landDefenseState = DefenseState.Critical
         navalDefenseState = when {
-            numNavalUnits <= navySize / 2 -> DefenseState.Critical
-            numNavalUnits <= navySize -> DefenseState.Needed
-            numNavalUnits <= navySize * 5 / 4 -> DefenseState.Neutral
+            numNavalUnits <= recommendedNavySize / 2 -> DefenseState.Critical
+            numNavalUnits <= recommendedNavySize -> DefenseState.Needed
+            numNavalUnits <= recommendedNavySize * 5 / 4 -> DefenseState.Neutral
             else -> DefenseState.Enough
         }
+        if (navalDefenseState <= DefenseState.Neutral && civ.cities.any { it.isCoastal() && CityDangerAi.isUnderSiege(it) })
+            navalDefenseState = DefenseState.Critical
     }
-
-    /** CvMilitaryAI::GetPercentOfRecommendedMilitarySize */
-    fun percentOfRecommendedMilitarySize(): Int =
-        if (recommendedMilitarySize <= 0) 100 else numLandUnits * 100 / recommendedMilitarySize
 
     /** CvMilitaryAI::HasAirforce */
     fun hasAirforce(): Boolean = numAirUnits > 0
@@ -273,8 +328,8 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     //region Purchases and disbanding
 
     /**
-     *  CvMilitaryAI::MakeOffensivePurchases: majors not at war (or winning all wars), with personality OFFENSE >= 7 and a land army below
-     *  the recommended size or a navy that is not ENOUGH, buy one unit in the capital - for the navy if its state is worse than the land
+     *  CvMilitaryAI::MakeOffensivePurchases (Brave New World; Vox Populi has none): majors not at war (or winning all wars), with personality
+     *  OFFENSE >= 7 and a land army below the recommended size ([recommendedLandArmySize]) or a navy that is not ENOUGH, buy one unit in the capital - for the navy if its state is worse than the land
      *  one (in the first coastal city if the capital is not; none if no city is): assault or attack ship; otherwise fast attack, attack or
      *  defense when there are no more melee than ranged units, else siege or ranged.
      */
@@ -282,7 +337,7 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         if (civ.isCityState) return
         if (civ.ai.isMilitaryStrategyActive(AT_WAR) && WarStateAi.stateAllWars(civ) != StateAllWars.Winning) return
         if (civ.ai.personality(Flavor.Offense) < 7) return
-        if (percentOfRecommendedMilitarySize() >= 100 && navalDefenseState <= DefenseState.Enough) return
+        if (numLandUnits >= recommendedLandArmySize && navalDefenseState <= DefenseState.Enough) return
         // Do we have operations running (if so let them recruit the units)?
         if (armyTypeBeingBuilt != null) return
         var city = civ.getCapital(firstCityIfNoCapital = false) ?: return
@@ -393,25 +448,6 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         const val AT_WAR = "MILITARYAISTRATEGY_AT_WAR"
         const val NAVAL_MAP = "ECONOMICAISTRATEGY_NAVAL_MAP"
         const val EXPAND_TO_OTHER_CONTINENTS = "ECONOMICAISTRATEGY_EXPAND_TO_OTHER_CONTINENTS"
-
-        /**
-         *  MilitaryAIHelpers::ComputeRecommendedNavySize: (1 + coastal cities) x (0.75 + highest threat / 4 + NAVAL / 40) x
-         *  AI_STRATEGY_NAVAL_UNITS_PER_CITY, at least 1; x 3/2 under NAVAL_MAP or EXPAND_TO_OTHER_CONTINENTS; x 3/2 for coastal civilizations
-         *  (start bias along the coast); + 10 x min(turn, 200) / 200 under conquest.
-         */
-        fun recommendedNavySize(civ: Civilization): Int {
-            val rules = civ.gameInfo.ruleset.ai
-            val flavorNaval = civ.ai.personalityAndGrandStrategy(Flavor.Naval)
-            var wanted = 1 + civ.cities.count { it.isCoastal() }
-            val multiplier = 0.75 + civ.ai.military.highestThreat(civ) / 4.0 + flavorNaval / 40.0
-            wanted = (wanted * multiplier * rules.defineFloat(AiDefine.AI_STRATEGY_NAVAL_UNITS_PER_CITY)).toInt()
-            wanted = max(1, wanted)
-            if (civ.ai.isEconomicStrategyActive(NAVAL_MAP) || civ.ai.isEconomicStrategyActive(EXPAND_TO_OTHER_CONTINENTS))
-                wanted = wanted * 3 / 2
-            if (CitySiteEvaluator.isCoastalCiv(civ)) wanted = wanted * 3 / 2
-            if (civ.ai.isGoingForWorldConquest()) wanted += 10 * min(civ.gameInfo.turns, 200) / 200
-            return wanted
-        }
 
         /** CvMilitaryAI::GetPowerOfStrongestBuildableUnit: the highest unit type power among units of the domain we can train */
         fun powerOfStrongestBuildableUnit(civ: Civilization, isLand: Boolean): Int {

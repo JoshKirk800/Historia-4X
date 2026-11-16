@@ -220,12 +220,14 @@ object PeaceAi {
         if (!terrible || state == WarState.NearlyWon) {
             if (strength < StrengthLevel.Average) ourMultiplier++
             if (WarStateAi.isEasyTarget(civ, other)) ourMultiplier++
+            if (civ.ai.military.havePreferredAttackTarget(other)) ourMultiplier++
             if (state == WarState.NearlyWon || theyAreTerrible) ourMultiplier++
         }
         if (!theyAreTerrible) {
             if (strength > StrengthLevel.Average) theirMultiplier++
             if (terrible) theirMultiplier++
             if (WarStateAi.isEasyTarget(other, civ)) theirMultiplier++
+            if (civ.ai.military.isExposedToEnemy(civ, null, other)) theirMultiplier++
         }
         val negativeThreshold = WarIntentAi.warScoreThresholdNegative(civ)
         when {

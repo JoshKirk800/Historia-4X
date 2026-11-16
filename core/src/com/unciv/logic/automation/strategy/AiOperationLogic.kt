@@ -80,7 +80,6 @@ object AiOperationLogic {
     fun deployRange(civ: Civilization, operation: AiOperation): Int {
         val rules = civ.gameInfo.ruleset.ai
         return when (operation.type) {
-            AiOperationType.DESTROY_BARBARIAN_CAMP -> rules.define(AiDefine.AI_OPERATIONAL_BARBARIAN_CAMP_DEPLOY_RANGE)
             AiOperationType.PILLAGE_ENEMY -> rules.define(AiDefine.AI_OPERATIONAL_PILLAGE_ENEMY_DEPLOY_RANGE)
             else -> rules.define(AiDefine.AI_OPERATIONAL_CITY_ATTACK_DEPLOY_RANGE)
         }
@@ -102,13 +101,13 @@ object AiOperationLogic {
             AiOperationType.SMALL_CITY_ATTACK ->
                 if (EconomicAi.gameHandicapIndex(civ.gameInfo) > 4) "MUFORMATION_BASIC_CITY_ATTACK_FORCE" else "MUFORMATION_SMALL_CITY_ATTACK_FORCE"
             AiOperationType.CITY_STATE_ATTACK -> if (biggerForces(civ)) "MUFORMATION_BIGGER_CITY_ATTACK_FORCE" else "MUFORMATION_CITY_STATE_ATTACK_FORCE"
-            AiOperationType.DESTROY_BARBARIAN_CAMP -> "MUFORMATION_ANTI_BARBARIAN_TEAM"
+            // never asked: a save's retired operations are dropped when it loads
+            AiOperationType.DESTROY_BARBARIAN_CAMP, AiOperationType.NAVAL_BOMBARDMENT -> "MUFORMATION_BASIC_CITY_ATTACK_FORCE"
             AiOperationType.PILLAGE_ENEMY -> "MUFORMATION_FAST_PILLAGERS"
             AiOperationType.CITY_CLOSE_DEFENSE -> "MUFORMATION_CLOSE_CITY_DEFENSE"
             AiOperationType.RAPID_RESPONSE -> "MUFORMATION_RAPID_RESPONSE_FORCE"
             AiOperationType.NAVAL_ATTACK, AiOperationType.NAVAL_SNEAK_ATTACK -> "MUFORMATION_NAVAL_INVASION"
             AiOperationType.CITY_STATE_NAVAL_ATTACK -> "MUFORMATION_CITY_STATE_INVASION"
-            AiOperationType.NAVAL_BOMBARDMENT -> "MUFORMATION_NAVAL_BOMBARDMENT"
             AiOperationType.NAVAL_SUPERIORITY -> "MUFORMATION_NAVAL_SQUADRON"
             AiOperationType.PURE_NAVAL_CITY_ATTACK -> "MUFORMATION_PURE_NAVAL_CITY_ATTACK"
             AiOperationType.NUKE_ATTACK -> "MUFORMATION_NUKE_ATTACK"
@@ -172,10 +171,10 @@ object AiOperationLogic {
         val operation = operations.newOperation(type, enemy)
         when {
             type.isCityAttack -> initCityAttack(civ, operation, target, muster)
-            type == AiOperationType.DESTROY_BARBARIAN_CAMP || type == AiOperationType.PILLAGE_ENEMY -> initEnemyTerritory(civ, operation)
+            type == AiOperationType.PILLAGE_ENEMY -> initEnemyTerritory(civ, operation)
             type.isNavalInvasion -> NavalOperationLogic.initNavalInvasion(civ, operation, target, muster)
             type == AiOperationType.PURE_NAVAL_CITY_ATTACK -> NavalOperationLogic.initPureNavalAttack(civ, operation, target, muster)
-            type == AiOperationType.NAVAL_BOMBARDMENT || type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.initFleet(civ, operation)
+            type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.initFleet(civ, operation)
             type == AiOperationType.NUKE_ATTACK -> NavalOperationLogic.initNuke(civ, operation)
             else -> initDefense(civ, operation)
         }
@@ -214,7 +213,7 @@ object AiOperationLogic {
         } else operation.state = OperationState.RECRUITING_UNITS
     }
 
-    /** CvAIEnemyTerritoryOperation::Init (barbarian camp, pillage) */
+    /** CvAIEnemyTerritoryOperation::Init (pillage) */
     private fun initEnemyTerritory(civ: Civilization, operation: AiOperation) {
         val operations = civ.ai.operations
         val army = operations.newArmy(operation, formationName(civ, operation.type))
@@ -249,7 +248,6 @@ object AiOperationLogic {
 
     /** The target of the operation types that look for one themselves (the FindBestTarget functions) */
     fun findBestTarget(civ: Civilization, operation: AiOperation): Tile? = when (operation.type) {
-        AiOperationType.DESTROY_BARBARIAN_CAMP -> findBarbarianCampTarget(civ, operation)
         AiOperationType.PILLAGE_ENEMY -> findPillageTarget(civ, operation)
         AiOperationType.CITY_CLOSE_DEFENSE, AiOperationType.RAPID_RESPONSE -> findDefenseTarget(civ, operation)
         else -> operation.targetTile?.let { tileAt(civ, it) }
@@ -261,44 +259,6 @@ object AiOperationLogic {
         val enemy = enemy(civ, operation) ?: return null
         val enemyCapital = enemy.getCapital() ?: return null
         return civ.cities.minByOrNull { it.getCenterTile().aerialDistanceTo(enemyCapital.getCenterTile()) }?.getCenterTile()
-    }
-
-    /**
-     *  CvAIOperationDestroyBarbarianCamp::FindBestTarget: a barbarian-held settler, worker or archaeologist that was ours (rescue) nearest
-     *  to the start city by step distance, else the nearest revealed barbarian camp.
-     */
-    private fun findBarbarianCampTarget(civ: Civilization, operation: AiOperation): Tile? {
-        operation.civilianRescue = false
-        val start = startCity(civ, operation)?.getCenterTile() ?: return null
-        val steps = civ.ai.military.steps
-        val barbarians = civ.gameInfo.civilizations.firstOrNull { it.isBarbarian }
-        val captives = (barbarians?.units?.getCivUnits() ?: emptySequence()).filter {
-            it.originalOwner == civ.civID && UnitAiTypes.current(it).let { type ->
-                type == UnitAiType.SETTLE || type == UnitAiType.WORKER || type == UnitAiType.ARCHAEOLOGIST
-            }
-        }.toList()
-        var best: Tile? = null
-        var bestDistance = Int.MAX_VALUE
-        if (captives.isNotEmpty()) {
-            val lengths = steps.distances(civ, null, start, captives.map { it.getTile() })
-            for ((index, captive) in captives.withIndex()) {
-                if (lengths[index] < 0 || lengths[index] >= bestDistance) continue
-                bestDistance = lengths[index]
-                best = captive.getTile()
-                operation.civilianRescue = true
-                operation.unitToRescue = captive.id
-            }
-        }
-        if (best != null) return best
-        val camps = civ.gameInfo.tileMap.tileList.filter { civ.hasExplored(it) && it.isBarbarianEncampment() }
-        if (camps.isEmpty()) return null
-        val lengths = steps.distances(civ, null, start, camps)
-        for ((index, camp) in camps.withIndex()) {
-            if (lengths[index] < 0 || lengths[index] >= bestDistance) continue
-            bestDistance = lengths[index]
-            best = camp
-        }
-        return best
     }
 
     /** CvAIOperationPillageEnemy::FindBestTarget: the enemy city on the start city's landmass with the most improved tiles per step */
@@ -626,13 +586,11 @@ object AiOperationLogic {
         val type = operation.type
         return when {
             type.isNavalInvasion -> NavalOperationLogic.navalInvasionInPosition(civ, operation, army)
-            type == AiOperationType.NAVAL_BOMBARDMENT -> NavalOperationLogic.bombardmentInPosition(civ, operation, army)
             type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.superiorityInPosition(civ, operation, army)
             type == AiOperationType.PURE_NAVAL_CITY_ATTACK -> NavalOperationLogic.pureNavalAttackInPosition(civ, operation, army)
             type == AiOperationType.NUKE_ATTACK -> NavalOperationLogic.nukeInPosition(civ, operation, army)
             type.isCityAttack -> cityAttackInPosition(civ, operation, army)
             type.isEscorted -> escortedInPosition(civ, operation, army)
-            type == AiOperationType.DESTROY_BARBARIAN_CAMP -> campInPosition(civ, operation, army)
             type == AiOperationType.PILLAGE_ENEMY -> {
                 if (operation.state == OperationState.MOVING_TO_TARGET) {
                     if (army.position == army.goalTile) operation.state = OperationState.SUCCESSFUL_FINISH
@@ -685,42 +643,6 @@ object AiOperationLogic {
                     enemy?.let { civ.ai.diplomacy.memoryOf(it).musteringForAttack = true }
                     // Notify tactical AI to focus on this area
                     if (target != null) civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.City)
-                    operation.state = OperationState.SUCCESSFUL_FINISH
-                }
-                return false
-            }
-            else -> return baseArmyInPosition(operation, army)
-        }
-    }
-
-    /** CvAIOperationDestroyBarbarianCamp::ArmyInPosition */
-    private fun campInPosition(civ: Civilization, operation: AiOperation, army: AiArmy): Boolean {
-        when (operation.state) {
-            OperationState.GATHERING_FORCES -> {
-                val changed = baseArmyInPosition(operation, army)
-                // Now revisit target
-                val better = findBestTarget(civ, operation)
-                if (better == null) abort(operation, OperationAbortReason.LOST_TARGET)
-                else if (better.position != operation.targetTile) {
-                    val position = tileAt(civ, army.position)
-                    if (position != null && position.getContinent() == better.getContinent()) {
-                        val deploy = civ.ai.military.steps.xPlotsFromEnd(civ, null, position, better,
-                            civ.gameInfo.ruleset.ai.define(AiDefine.AI_OPERATIONAL_BARBARIAN_CAMP_DEPLOY_RANGE))
-                        if (deploy != null) { army.goalTile = deploy.position; operation.targetTile = better.position }
-                    } else {
-                        // Coming in from the sea: just head to the camp
-                        army.goalTile = better.position
-                        operation.targetTile = better.position
-                    }
-                }
-                return changed
-            }
-            OperationState.MOVING_TO_TARGET -> {
-                val position = tileAt(civ, army.position)
-                val goal = tileAt(civ, army.goalTile)
-                val target = targetTile(civ, operation)
-                if (position != null && goal != null && position.aerialDistanceTo(goal) <= 1) {
-                    if (target != null) civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.BarbarianCamp)
                     operation.state = OperationState.SUCCESSFUL_FINISH
                 }
                 return false
@@ -826,35 +748,11 @@ object AiOperationLogic {
                 val target = targetTile(civ, operation)
                 if (target == null || target.getCity() == null || target.getOwner()?.civID != operation.enemyCivId) return true
             }
-            type == AiOperationType.DESTROY_BARBARIAN_CAMP -> return campShouldAbort(civ, operation)
             type == AiOperationType.PURE_NAVAL_CITY_ATTACK -> {
                 // See if our target city is still owned by our enemy: success, the city was captured or destroyed
                 if (targetTile(civ, operation)?.getOwner()?.civID != operation.enemyCivId) return true
             }
             type.isEscorted -> escortedShouldAbort(civ, operation)
-        }
-        return false
-    }
-
-    /** CvAIOperationDestroyBarbarianCamp::ShouldAbort */
-    private fun campShouldAbort(civ: Civilization, operation: AiOperation): Boolean {
-        val target = targetTile(civ, operation) ?: return true
-        if (!operation.civilianRescue) {
-            // The camp is gone: success
-            if (!target.isBarbarianEncampment()) return true
-        } else {
-            // Is the unit rescued?
-            val captive = civ.gameInfo.civilizations.firstOrNull { it.isBarbarian }?.units?.getUnitById(operation.unitToRescue) ?: return true
-            if (captive.originalOwner != civ.civID || UnitAiTypes.current(captive).let { it != UnitAiType.SETTLE && it != UnitAiType.WORKER }) return true
-        }
-        if (!operation.civilianRescue && operation.state != OperationState.RECRUITING_UNITS) {
-            // If down below the strength of the camp, abort
-            val army = operation.firstArmy
-            val defender = target.getUnits().filter { it.isMilitary() }.maxByOrNull { it.getAiPower() }
-            if (army != null && defender != null) {
-                val power = armyUnits(civ, army).sumOf { it.second.getAiPower() }
-                if (power < defender.getAiPower()) return true
-            }
         }
         return false
     }

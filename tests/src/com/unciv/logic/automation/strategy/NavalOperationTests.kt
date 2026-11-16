@@ -406,28 +406,56 @@ class NavalOperationTests {
         assertFalse("at peace", MilitaryOperations.shouldLaunchNuke(civ, enemy))
     }
 
+    /** CvMilitaryAI::DoNuke (Vox Populi): a war we will surely lose launches without a roll */
     @Test
-    fun `a war that is projected to end in destruction rolls for the nuke every turn, with the use nuke flavor`() {
+    fun `a nuke is launched without a roll when the enemy is immense or we are nearly defeated`() {
         atWarWithNukes()
-        civ.ai.diplomacy.memoryOf(enemy).warProjection = com.unciv.logic.automation.diplomacy.WarProjection.Destruction
         civ.ai.setPersonalityFlavor(Flavor.UseNuke, 0)
-        assertFalse("two rolls of 0..9 below 0", MilitaryOperations.shouldLaunchNuke(civ, enemy))
-        civ.ai.setPersonalityFlavor(Flavor.UseNuke, 10)
-        assertTrue("always below 10", MilitaryOperations.shouldLaunchNuke(civ, enemy))
+        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Immense
+        assertTrue(MilitaryOperations.shouldLaunchNuke(civ, enemy))
+        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Average
+        civ.ai.warStates.warStates[enemy.civID] = WarState.NearlyDefeated
+        assertTrue(MilitaryOperations.shouldLaunchNuke(civ, enemy))
     }
 
+    /** CvMilitaryAI::DoNuke (Vox Populi): the reasons to roll, each enough on its own; without one there is no launch */
     @Test
-    fun `a projection that got worse also rolls, a steady one does not`() {
+    fun `a war that goes badly, a hated enemy, a conquest or an enemy close to victory rolls for the nuke`() {
         atWarWithNukes()
-        civ.ai.setPersonalityFlavor(Flavor.UseNuke, 10)
-        val memory = civ.ai.diplomacy.memoryOf(enemy)
-        memory.lastWarProjection = com.unciv.logic.automation.diplomacy.WarProjection.Good
-        memory.warProjection = com.unciv.logic.automation.diplomacy.WarProjection.Good
-        assertFalse(MilitaryOperations.shouldLaunchNuke(civ, enemy))
-        memory.warProjection = com.unciv.logic.automation.diplomacy.WarProjection.Defeat
-        assertTrue(MilitaryOperations.shouldLaunchNuke(civ, enemy))
-        memory.lastWarProjection = com.unciv.logic.automation.diplomacy.WarProjection.Unknown
-        assertFalse("the last one is not known", MilitaryOperations.shouldLaunchNuke(civ, enemy))
+        civ.ai.setPersonalityFlavor(Flavor.UseNuke, 10) // 0..9 is always at most 10
+        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Strong
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Stalemate
+        civ.ai.diplomacy.setOpinion(enemy, com.unciv.logic.automation.diplomacy.MajorCivOpinion.Competitor)
+        assertFalse("no reason to roll", MilitaryOperations.shouldLaunchNuke(civ, enemy))
+
+        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Powerful
+        assertTrue("powerful enemy", MilitaryOperations.shouldLaunchNuke(civ, enemy))
+        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Strong
+
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Defensive
+        assertTrue("defensive war", MilitaryOperations.shouldLaunchNuke(civ, enemy))
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Stalemate
+
+        civ.ai.diplomacy.setOpinion(enemy, com.unciv.logic.automation.diplomacy.MajorCivOpinion.Enemy)
+        assertTrue("an enemy in our opinion", MilitaryOperations.shouldLaunchNuke(civ, enemy))
+        civ.ai.diplomacy.setOpinion(enemy, com.unciv.logic.automation.diplomacy.MajorCivOpinion.Competitor)
+
+        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        assertTrue("going for world conquest", MilitaryOperations.shouldLaunchNuke(civ, enemy))
+    }
+
+    /** CvFlavorManager::GetPersonalityFlavorForDiplomacy: the roll is won when 0..9 is at most the flavor, which is at least 1 */
+    @Test
+    fun `the roll uses the use nuke flavor on a scale of 1 to 10`() {
+        atWarWithNukes()
+        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Powerful
+        civ.ai.setPersonalityFlavor(Flavor.UseNuke, 0)
+        assertEquals(1, MilitaryOperations.useNukeFlavorForDiplomacy(civ))
+        civ.ai.setPersonalityFlavor(Flavor.UseNuke, 14)
+        assertEquals(10, MilitaryOperations.useNukeFlavorForDiplomacy(civ))
+        civ.ai.setPersonalityFlavor(Flavor.UseNuke, 0)
+        val launches = (1..200).count { game.gameInfo.turns = it; MilitaryOperations.shouldLaunchNuke(civ, enemy) }
+        assertTrue("about one turn in five rolls 0 or 1: $launches of 200", launches in 20..70)
     }
 
     @Test

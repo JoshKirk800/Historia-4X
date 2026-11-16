@@ -188,8 +188,8 @@ object NavalOperationMoves {
 
     /**
      *  CvTacticalAI::ExecuteNavalFormationMoves: the ships and the escorted units (land units and Great Admirals) of [units] take places around
-     *  [turnTarget] - ships first - within the gather range for the larger group, within 3 if that has too few places; if there are no
-     *  places for everyone the operation aborts (AI_ABORT_NO_ROOM_DEPLOY).
+     *  [turnTarget] - ships first - within the gather range for the larger group, within 3 if that has too few places. Too few places leave
+     *  units behind; as in Vox Populi the operation goes on (BNW aborted it with AI_ABORT_NO_ROOM_DEPLOY).
      */
     private fun formationMoves(civ: Civilization, operation: AiOperation, army: AiArmy, units: List<MapUnit>, turnTarget: Tile, cache: AutomationCache) {
         if (units.isEmpty()) return
@@ -199,11 +199,8 @@ object NavalOperationMoves {
         val range = AiOperationLogic.gatherRangeForXUnits(max(ships.size, escorted.size))
         var tiles = deploymentTiles(civ, operation, army, turnTarget, range, own)
         if (tiles.size < units.size) tiles = deploymentTiles(civ, operation, army, turnTarget, 3, own)
-        if (tiles.size < units.size) {
-            AiDecisionLog.log(civ) { "operation ${operation.type} #${operation.id}: no room to deploy ${units.size} units around ${turnTarget.position}" }
-            AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_ROOM_DEPLOY)
-            return
-        }
+        if (tiles.size < units.size)
+            AiDecisionLog.log(civ) { "operation ${operation.type} #${operation.id}: room for ${tiles.size} of ${units.size} units around ${turnTarget.position}" }
         val taken = HashSet<Tile>()
         for (group in listOf(ships, escorted)) {
             for (unit in group.sortedBy { it.getTile().aerialDistanceTo(turnTarget) }) {

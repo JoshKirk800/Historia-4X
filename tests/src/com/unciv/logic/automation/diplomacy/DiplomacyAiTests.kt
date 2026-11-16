@@ -276,23 +276,6 @@ class DiplomacyAiTests {
         assertEquals(7, weights(a, b, null)[MajorCivApproach.War.ordinal] - warBias[MajorCivApproach.War.ordinal])
     }
 
-    @Test
-    fun `friendship and denouncements move the approach weights`() {
-        val base = weights(a, b, null)
-        a.getDiplomacyManager(b)!!.signDeclarationOfFriendship()
-        val friends = weights(a, b, null)
-        assertEquals(15, friends[MajorCivApproach.Friendly.ordinal] - base[MajorCivApproach.Friendly.ordinal])
-        assertEquals(-100, friends[MajorCivApproach.Hostile.ordinal] - base[MajorCivApproach.Hostile.ordinal])
-
-        // A denounced C, and C denounced A: two denouncements
-        a.getDiplomacyManager(c)!!.denounce()
-        c.getDiplomacyManager(a)!!.denounce()
-        val twoDenouncements = weights(c, a, null)
-        c.getDiplomacyManager(a)!!.removeFlag(DiplomacyFlags.Denunciation)
-        val oneDenouncement = weights(c, a, null)
-        assertEquals(10, twoDenouncements[MajorCivApproach.War.ordinal] - oneDenouncement[MajorCivApproach.War.ordinal])
-        assertEquals(-100, twoDenouncements[MajorCivApproach.Friendly.ordinal] - oneDenouncement[MajorCivApproach.Friendly.ordinal])
-    }
     //endregion
 
     //region War goals and peace

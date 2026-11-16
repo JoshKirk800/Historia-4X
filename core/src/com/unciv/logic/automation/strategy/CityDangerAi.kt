@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.strategy
 
+import com.unciv.logic.automation.unit.tactical.TacticalDominance
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.unique.UniqueType
@@ -65,6 +66,75 @@ object CityDangerAi {
         for ((enemy, power) in enemyLand) enemyPower += if (enemy in enemyGenerals) power * 11 / 10 else power
         for ((enemy, power) in enemySea) enemyPower += if (enemy in enemyAdmirals) power * 11 / 10 else power
         return enemyPower > ownLand + ownSea + ownOther
+    }
+
+    /** CvCity::isUnderSiege: more than 5 damage taken last turn and a tile of the city blockaded (by Unciv's rule, as VP asks its own) */
+    fun isUnderSiege(city: City): Boolean = city.damageTakenLastTurn > 5 && city.getTiles().any { it.isBlockaded() }
+
+    /** What [comparativeDanger] finds: each side's danger score, whether either side has a city in serious danger, and the cities of
+     *  the enemy endangered by our side (more than barely) and by us alone */
+    class ComparativeDanger(
+        val ours: Int, val theirs: Int, val seriousUs: Boolean, val seriousThem: Boolean,
+        val theirCitiesEndangered: List<City>, val theirCitiesEndangeredByUs: List<City>,
+    )
+
+    /**
+     *  CvDiplomacyAI::GetComparativeDanger, [civ] at war with [other]: for each of our cities in danger from [theirAllies], 1, +1 for each
+     *  dominance zone of the city (land, water) the enemy dominates in our last tactical map, +1 under siege (+3 if also falling); a
+     *  falling or half-destroyed city we founded, or a capital, original capital, holy city of ours or theirs, or wonder city, is serious
+     *  danger; then x3 a capital, x2 an original capital or the holy city of ours or theirs, +1 another holy city or a national wonder
+     *  city. Their cities in danger from [ourAllies] alike, in their tactical map (no national wonder term), noting those endangered
+     *  more than barely and those in danger from us alone. VP's IsExposedToEnemy and IsPreferredAttackTarget terms (CvMilitaryAI) have
+     *  no input here.
+     */
+    fun comparativeDanger(civ: Civilization, other: Civilization, ourAllies: List<Civilization>, theirAllies: List<Civilization>): ComparativeDanger {
+        val ourReligion = civ.religionManager.religion?.takeIf { it.foundingCivName == civ.civName }?.name
+        val theirReligion = other.religionManager.religion?.takeIf { it.foundingCivName == other.civName }?.name
+        fun keyHolyCity(city: City) = (ourReligion != null && city.isHolyCityOf(ourReligion)) || (theirReligion != null && city.isHolyCityOf(theirReligion))
+        fun originalMajorCapital(city: City) = city.isOriginalCapital && city.foundingCivObject?.isMajorCiv == true
+        fun baseMod(city: City): Int {
+            var mod = 1
+            val map = city.civ.ai.tactical.lastMap
+            if (map?.zoneByCity(city, false)?.dominance == TacticalDominance.Enemy) mod++
+            if (map?.zoneByCity(city, true)?.dominance == TacticalDominance.Enemy) mod++
+            if (isUnderSiege(city)) mod += if (isInDangerOfFalling(city, extraCareful = true)) 3 else 1
+            return mod
+        }
+        fun badlyHurt(city: City) = isInDangerOfFalling(city, extraCareful = true) || city.health <= city.getMaxHealth() / 2
+        var ours = 0
+        var seriousUs = false
+        for (city in civ.cities) {
+            if (!isInDangerFromPlayers(city, theirAllies)) continue
+            var mod = baseMod(city)
+            if (badlyHurt(city) && (city.foundingCivObject == civ || city.isCapital() || originalMajorCapital(city) || keyHolyCity(city)
+                    || city.cityConstructions.getBuiltBuildings().any { it.isAnyWonder() })) seriousUs = true
+            mod = when {
+                city.isCapital() -> mod * 3
+                originalMajorCapital(city) || keyHolyCity(city) -> mod * 2
+                city.isHolyCity() || city.cityConstructions.getBuiltBuildings().any { it.isNationalWonder } -> mod + 1
+                else -> mod
+            }
+            ours += mod
+        }
+        var theirs = 0
+        var seriousThem = false
+        val endangered = ArrayList<City>()
+        val endangeredByUs = ArrayList<City>()
+        for (city in other.cities) {
+            if (!isInDangerFromPlayers(city, ourAllies)) continue
+            var mod = baseMod(city)
+            if (badlyHurt(city)) seriousThem = true
+            if (mod > 1) endangered.add(city)
+            if (isInDangerFromPlayers(city, listOf(civ))) endangeredByUs.add(city)
+            mod = when {
+                city.isCapital() -> mod * 3
+                originalMajorCapital(city) || keyHolyCity(city) -> mod * 2
+                city.isHolyCity() -> mod + 1
+                else -> mod
+            }
+            theirs += mod
+        }
+        return ComparativeDanger(ours, theirs, seriousUs, seriousThem, endangered, endangeredByUs)
     }
 
     /** CvDiplomacyAI::GetNumberOfThreatenedCities: at war with [other], our cities in danger from them and their war allies */

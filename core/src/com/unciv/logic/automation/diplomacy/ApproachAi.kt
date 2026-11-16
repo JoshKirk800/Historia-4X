@@ -477,6 +477,8 @@ object ApproachAi {
             if (civ.ai.isGoingForWorldConquest() || closeToConquest) w[WAR] += if (closeToConquest) 1000 else 100
         }
 
+        stage("Unique units and a cramped empire (part 7)")
+        ApproachAdditionalAi.addUniqueUnitAndCrampedWeights(civ, other, w, rules)
         stage("Difficulty and war bonuses (part 7)")
         addWarBonuses(civ, other, closeToConquest, w, rules)
 
@@ -877,12 +879,13 @@ object ApproachAi {
      *  Part 7 of Vox Populi's SelectBestApproachTowardsMajorCiv, the VOX POPULI CHANGES: the difficulty bonus and the war bonus.
      *  Difficulty: towards a player we view worse than neutral, AggressionIncrease of the game's difficulty less 2 per opinion step above
      *  unforgivable adds bias x that / 2 to war, hostile (and deceptive, when deception applies), and x that more to war and hostile with
-     *  an opportunity attack. War bonus: going for world conquest (VP: a conqueror pursuit or traits, not ported), Honor opened and
+     *  an opportunity attack. War bonus: going for world conquest (VP: a conqueror pursuit or traits, not ported), more with our unique
+     *  unit in the field (and more again going for or close to world conquest), Honor opened and
      *  finished, Exploration opened and finished (when we can cross the ocean from the Medieval era, have 2 coastal cities and they 1: the
      *  non-VP-balance rule, our Exploration being BNW's), Autocracy, each more with an opportunity attack; scaled by boldness (war),
      *  meanness (hostile), denounce willingness (deceptive, only when deception applies) x the difficulty's victory dispute or block
      *  percent / 500; twice for one going for or close to world conquest; deceptive left out when close to it.
-     *  Left out until their inputs exist: unique unit periods, temporary attack bonuses, victory dispute levels, easy and good targets.
+     *  Left out until their inputs exist: temporary attack bonuses, victory dispute levels, easy and good targets.
      */
     private fun addWarBonuses(civ: Civilization, other: Civilization, closeToConquest: Boolean, w: IntArray, rules: AiRuleset) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
@@ -918,7 +921,16 @@ object ApproachAi {
             deceptive += bias(MajorCivApproach.Deceptive) * factor * attack
         }
         val conqueror = civ.ai.isGoingForWorldConquest()
-        if (conqueror) add(2, 1)
+        if (conqueror) {
+            add(2, 1)
+            // Unique unit active? Slay them all!
+            if (ApproachAdditionalAi.hasUniqueUnitPeriod(civ, rules) && ApproachAdditionalAi.hasUniqueUnitTech(civ, rules) &&
+                ApproachAdditionalAi.hasUniqueUnitActive(civ, rules)) {
+                add(2, 1)
+                // VP: and going for or close to world conquest, which our conqueror (going for it) always is
+                add(4, 2)
+            }
+        }
         val policies = civ.policies
         if (policies.isAdopted("Honor")) add(3, 2)
         if (policies.isAdopted("Honor Complete")) add(3, 2)

@@ -5,11 +5,14 @@ import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.diplomacy.AiThreat
+import com.unciv.logic.automation.diplomacy.WarIntentAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.ArchaeologyFunctions
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.ai.MajorCivApproach
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -202,6 +205,70 @@ class EconomicAi : IsPartOfGameInfoSerialization {
         }
 
         const val LOSING_MONEY = "ECONOMICAISTRATEGY_LOSING_MONEY"
+
+        /**
+         *  CvEconomicAI::GetSoftSupplyCap (Vox Populi): the most land and sea combat units whose maintenance still leaves the minimum
+         *  income. The minimum is 2 gold in the Ancient era, 5 to the Medieval era and 10 later, 1 at war (an AI is at war if its
+         *  approach to a met major is WAR or it fights one in earnest, not a phony war; a human if it fights anyone), -5 when losing all
+         *  wars, which also allows 3 units over the supply. At least 2 units per city, at most the supply less the units that use it but
+         *  are not land or sea combat units. Those, the air units and the non-combat units count towards the maintenance, the
+         *  maintenance-free units do not.
+         *
+         *  Rules: the hard cap is our rule's unit supply ([com.unciv.logic.civilization.transients.CivInfoStatsForNextTurn.getUnitSupply]),
+         *  under which every unit uses supply. Revenue less the costs other than units is next turn's gold without the unit upkeep, with
+         *  the gold per turn of deals counting only as income (CalculateGrossGold takes the positive diplomacy gold, the costs leave out
+         *  what we pay).
+         */
+        fun softSupplyCap(civ: Civilization): Int {
+            var hardSupplyCap = civ.stats.getUnitSupply()
+            var war = civ.isAtWar()
+            if (!civ.isHuman()) {
+                war = civ.gameInfo.civilizations.any { other ->
+                    other != civ && other.isMajorCiv && civ.knows(other)
+                        && (civ.ai.diplomacy.approachTowards(other) == MajorCivApproach.War
+                            || civ.isAtWarWith(other) && !WarIntentAi.isPhonyWar(civ, other))
+                }
+            }
+
+            val rules = civ.gameInfo.ruleset.ai
+            var minDesiredGpt = 1
+            if (!war) {
+                val era = civ.getEraNumber()
+                minDesiredGpt = when {
+                    era == rules.define(AiDefine.ANCIENT_ERA) -> 2
+                    era <= rules.define(AiDefine.MEDIEVAL_ERA) -> 5
+                    else -> 10
+                }
+            } else if (WarStateAi.stateAllWars(civ) == StateAllWars.Losing) {
+                minDesiredGpt = -5
+                hardSupplyCap += 3
+            }
+
+            var revenueLessOtherCosts = 0f
+            for ((source, stats) in civ.stats.getStatMapForNextTurn()) when (source) {
+                "Unit upkeep" -> {}
+                "Trade" -> revenueLessOtherCosts += max(0f, stats.gold)
+                else -> revenueLessOtherCosts += stats.gold
+            }
+
+            val minUnits = civ.cities.size * 2
+            val maintenanceFreeUnits = civ.stats.unitMaintenanceFreeUnits()
+            var otherUnits = 0
+            for (unit in civ.units.getCivUnits()) {
+                val isCombat = unit.isMilitary()
+                if (!isCombat || unit.baseUnit.isAirUnit()) otherUnits++
+                if (!isCombat || !unit.baseUnit.isLandUnit && !unit.baseUnit.isWaterUnit) hardSupplyCap--
+            }
+
+            var softSupplyCap = min(minUnits, hardSupplyCap)
+            for (totalUnits in minUnits..hardSupplyCap) {
+                val paidUnits = totalUnits + otherUnits - maintenanceFreeUnits
+                val unitCost = if (paidUnits > 0) civ.stats.unitCost(paidUnits.toFloat()) else 0
+                if (revenueLessOtherCosts.toInt() - unitCost >= minDesiredGpt) softSupplyCap = totalUnits
+                else break
+            }
+            return softSupplyCap
+        }
 
         /** The recon weight of CvEconomicAI::DoReconState: start weight x tiles next to fog / (explorers + divisor)^2 / (int)sqrt(revealed) */
         fun reconWeight(civ: Civilization, withAdjacentFog: Int, revealed: Int, explorers: Int): Int {

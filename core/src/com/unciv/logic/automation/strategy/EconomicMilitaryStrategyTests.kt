@@ -420,12 +420,11 @@ object EconomicMilitaryStrategyTests {
 
     //region Military
 
-    /** IsTestStrategy_EnoughMilitaryUnits: land defense ENOUGH, unless going for conquest without losing money or a land army over 125% */
+    /** IsTestStrategy_EnoughMilitaryUnits (Vox Populi): land defense ENOUGH, never while going for conquest without losing money */
     fun enoughMilitaryUnits(civ: Civilization): Boolean {
-        val military = civ.ai.military
         val inDeficit = civ.ai.isEconomicStrategyActive(EconomicAi.LOSING_MONEY)
-        if (!inDeficit && civ.ai.isGoingForWorldConquest() && military.percentOfRecommendedMilitarySize() <= 125) return false
-        return military.landDefenseState == DefenseState.Enough
+        if (!inDeficit && civ.ai.isGoingForWorldConquest()) return false
+        return civ.ai.military.landDefenseState == DefenseState.Enough
     }
 
     /**

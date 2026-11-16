@@ -33,15 +33,19 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
     @Transient
     var statsForNextTurn = Stats()
 
+    /** The maintenance-free units: the ruleset's base plus the [UniqueType.FreeUnits] uniques */
     @Readonly
-    internal fun getUnitMaintenance(): Int {
-        val baseUnitCost = 0.5f
-        val constants = civInfo.gameInfo.ruleset.modOptions.constants
-        var freeUnits = constants.unitMaintenanceFreeUnits
+    fun unitMaintenanceFreeUnits(): Int {
+        var freeUnits = civInfo.gameInfo.ruleset.modOptions.constants.unitMaintenanceFreeUnits
         civInfo.forEachMatchingUnique(UniqueType.FreeUnits, civInfo.state) { unique ->
             freeUnits += unique.params[0].toInt()
         }
+        return freeUnits
+    }
 
+    @Readonly
+    internal fun getUnitMaintenance(): Int {
+        val freeUnits = unitMaintenanceFreeUnits()
         var unitsToPayFor = civInfo.units.getCivUnits()
         if (civInfo.hasUnique(UniqueType.UnitsInCitiesNoMaintenance))
             unitsToPayFor = unitsToPayFor.filterNot {
@@ -76,13 +80,20 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         }
 
         // If more free than units, everything is free
-        val numberOfUnitsToPayFor = max(0f, totalCost - freeCosts.sum())
+        return unitCost(max(0f, totalCost - freeCosts.sum()))
+    }
 
-        // as game progresses Maintenance cost rises (CvTreasury::CalculateUnitCost: (1 + multiplier x progress) inside, 1 + progress / divisor as the exponent)
+    /**
+     *  CvTreasury::CalculateUnitCost: the gold [numberOfUnitsToPayFor] paid units cost this turn. As the game progresses the cost rises:
+     *  (1 + multiplier x progress) inside, 1 + progress / divisor as the exponent; then the unit maintenance percentages and the handicap.
+     */
+    @Readonly
+    fun unitCost(numberOfUnitsToPayFor: Float): Int {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
         val turnLimit = civInfo.gameInfo.speed.numTotalTurns().toFloat()
         val gameProgress = min(civInfo.gameInfo.turns / turnLimit, 1f)
 
-        var cost = baseUnitCost * numberOfUnitsToPayFor * (1 + constants.unitMaintenanceGameMultiplier * gameProgress)
+        var cost = 0.5f * numberOfUnitsToPayFor * (1 + constants.unitMaintenanceGameMultiplier * gameProgress)
         cost = cost.pow(1 + gameProgress / constants.unitMaintenanceExponentDivisor)
 
         // CvTreasury.cpp:576-581: Standing Army Tax and the like are added up and applied to the total, after the exponent and before the handicap

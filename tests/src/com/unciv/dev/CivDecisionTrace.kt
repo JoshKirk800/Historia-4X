@@ -54,8 +54,9 @@ class CivDecisionTrace(private val game: GameInfo, private val civName: String, 
         writer.appendLine("== turn $turn  cities ${civ.cities.size} pop ${civ.cities.sumOf { it.population.population }}" +
             "  science ${stats.science.toInt()} gold ${civ.gold} (${"%+d".format(stats.gold.toInt())}) culture ${stats.culture.toInt()} " +
             "faith ${stats.faith.toInt()} happiness ${civ.getHappiness()}  techs ${civ.tech.techsResearched.size} -> ${civ.tech.currentTechnologyName()}" +
-            "  land military $landMilitary (reserve ${military.mandatoryReserveSize}, recommended ${military.recommendedMilitarySize}, " +
-            "${military.landDefenseState}) explorers ${count(UnitAiType.EXPLORE)} settlers ${count(UnitAiType.SETTLE)} " +
+            "  land military $landMilitary (reserve ${military.mandatoryReserveSize}, recommended ${military.recommendedLandArmySize}, " +
+            "${military.landDefenseState}) navy ${military.numNavalUnits} (recommended ${military.recommendedNavySize}, ${military.navalDefenseState}) " +
+            "explorers ${count(UnitAiType.EXPLORE)} settlers ${count(UnitAiType.SETTLE)} " +
             "workers ${count(UnitAiType.WORKER)} units ${units.size}  at war with ${civ.getCivsAtWarWith().filter { !it.isBarbarian }.joinToString { it.civName }.ifEmpty { "-" }}")
         // The majors whose best approach score is war but whose approach is not (WarTargetAi kept war from them), with the inputs it reads
         for (other in game.civilizations) {

@@ -903,6 +903,8 @@ enum class AiDefine(val default: Float) {
     AI_DEFENSIVE_PACT_LIMIT_SCALER(10f),
     // CvPlayer::cacheAvgGoldRate (Vox Populi): the turns of gold income averaged into the gold rate (WarStateAi.updateAverageGoldRate)
     HISTORY_NUM_TURNS_TO_AVERAGE(10f),
+    // CvMilitaryAI::SetRecommendedArmyNavySize (Vox Populi): an army's worth of offense weight per preferred attack target and for conquest (MilitaryAi)
+    BALANCE_BASIC_ATTACK_ARMY_SIZE(6f),
     // The index of the Ancient era (VP's GD_INT_GET(ANCIENT_ERA)): conquerors of capitals then draw the most war (ApproachWinningAi)
     ANCIENT_ERA(0f),
     // The index of the Classical era (VP's GD_INT_GET(CLASSICAL_ERA)): after it the biggest competitor weighs more (ApproachAi part 4)

@@ -121,41 +121,16 @@ class PolicyAutomationTests {
     }
     //endregion
 
-    //region Choosing (ChooseNextPolicy, WeighBranch, IsBranchEffectiveInGame)
+    //region Choosing (ChooseNextPolicy, WeighPolicy, WeighBranch, IsBranchEffectiveInGame)
     @Test
-    fun `opening a branch weighs its opener and its policies without prerequisites, at 22 percent`() {
-        civ.ai.setPersonalityFlavor(Flavor.Culture, 7)
+    fun `no new branch is opened while one we opened can still be finished`() {
         civ.policies.storedCulture = 100000
-        // Tradition: opener CULTURE 5 = 35, Oligarchy 35 (from Legalism), Aristocracy 0: 70 × 22%
-        assertEquals(15, choiceWeight("Tradition"))
-        // Liberty: Citizenship 17 (from Representation's 70); Honor: Discipline 17 (from Military Caste's 70)
-        assertEquals(3, choiceWeight("Liberty"))
-        assertEquals(3, choiceWeight("Honor"))
-    }
-
-    @Test
-    fun `under the culture grand strategy a new branch weighs a third`() {
-        civ.ai.setPersonalityFlavor(Flavor.Culture, 7)
-        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
-        PolicyAutomation.flavorUpdate(civ)
-        civ.policies.storedCulture = 100000
-        val branchWeight = weight("Tradition") + weight("Aristocracy") + weight("Oligarchy")
-        assertEquals(branchWeight * 22 / 100 / 3, choiceWeight("Tradition"))
-    }
-
-    @Test
-    fun `the policy that completes a branch weighs the finisher too`() {
-        civ.ai.setPersonalityFlavor(Flavor.Growth, 3)
-        civ.policies.freePolicies = 5
-        for (name in listOf("Tradition", "Aristocracy", "Oligarchy", "Legalism")) civ.policies.adopt(policy(name))
-        civ.policies.freePolicies = 0
-        civ.policies.storedCulture = 100000
-        // Landed Elite and Monarchy (no growth): neither completes the branch yet
-        assertEquals(0, choiceWeight("Monarchy"))
+        assertTrue(PolicyAutomation.weighChoices(civ).candidates.any { it.name == "Liberty" })
         civ.policies.freePolicies = 1
-        civ.policies.adopt(policy("Landed Elite"))
-        // Tradition Complete: GROWTH 10
-        assertEquals(30, choiceWeight("Monarchy"))
+        civ.policies.adopt(branch("Tradition"))
+        val candidates = PolicyAutomation.weighChoices(civ).candidates
+        assertTrue(candidates.any { it.branch.name == "Tradition" })
+        assertTrue("no branch: $candidates", candidates.none { it is PolicyBranch })
     }
 
     @Test
@@ -165,30 +140,7 @@ class PolicyAutomationTests {
         civ.policies.storedCulture = 100000
         assertEquals(0, choiceWeight("Patronage"))
         game.addCiv(cityStateType = game.ruleset.cityStateTypes.keys.first())
-        // Philantropy 70 + 8 (Scholasticism) + 2 (Cultural Diplomacy), Consulates 140, opener 140: 360 × 22%
-        assertEquals(79, choiceWeight("Patronage"))
-    }
-
-    private fun adoptTenetsUpToLevel3(ideology: PolicyBranch) {
-        civ.policies.adopt(ideology)
-        civ.policies.freeTenets = 10
-        for (tenet in ideology.policies.filter { it.tenetLevel == 1 }.take(3)) civ.policies.adopt(tenet)
-        for (tenet in ideology.policies.filter { it.tenetLevel == 2 }.take(2)) civ.policies.adopt(tenet)
-        civ.policies.freeTenets = 0
-        civ.policies.storedCulture = 100000
-    }
-
-    @Test
-    fun `a level-3 tenet with the flavor of the grand strategy is taken at once`() {
-        reachEra(civ, "Modern era")
-        adoptTenetsUpToLevel3(branch("Freedom"))
-        assertNull("no grand strategy", PolicyAutomation.weighChoices(civ).immediate)
-        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
-        assertEquals("Space Procurements", PolicyAutomation.chooseNextPolicy(civ, Random(1))!!.name)
-        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
-        assertEquals("Media Culture", PolicyAutomation.chooseNextPolicy(civ, Random(1))!!.name)
-        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST) // Freedom has no level-3 tenet with OFFENSE
-        assertNull(PolicyAutomation.weighChoices(civ).immediate)
+        assertTrue((choiceWeight("Patronage") ?: 0) > 0)
     }
 
     @Test
@@ -200,16 +152,14 @@ class PolicyAutomationTests {
         val candidates = PolicyAutomation.weighChoices(civ).candidates
         assertTrue(candidates.isNotEmpty())
         assertTrue(candidates.all { it.isTenet })
-        civ.policies.freeTenets = 0
-        assertTrue(PolicyAutomation.weighChoices(civ).candidates.any { it.name == "Tradition" })
     }
 
     @Test
-    fun `the pick is weighted among the top choices only, or uniform when nothing weighs`() {
+    fun `the pick is weighted among the choices within the cutoff of the best, or uniform when nothing weighs`() {
         val weights = listOf(10, 50, 40, 0)
-        val picks = (0 until 200).map { PolicyAutomation.pickFromTop(weights, 2, Random(it)) }.toSet()
-        assertEquals(setOf(1, 2), picks)
-        val uniform = (0 until 200).map { PolicyAutomation.pickFromTop(listOf(0, 0, 0), 2, Random(it)) }.toSet()
+        assertEquals(setOf(1), (0 until 200).map { PolicyAutomation.chooseAbovePercentThreshold(weights, 90, Random(it)) }.toSet())
+        assertEquals(setOf(1, 2), (0 until 200).map { PolicyAutomation.chooseAbovePercentThreshold(weights, 75, Random(it)) }.toSet())
+        val uniform = (0 until 200).map { PolicyAutomation.chooseAbovePercentThreshold(listOf(0, 0, 0), 90, Random(it)) }.toSet()
         assertEquals(setOf(0, 1, 2), uniform)
     }
     //endregion

@@ -107,5 +107,7 @@ internal class AiRulesetValidator(private val ruleset: Ruleset) {
             if (entry.name !in ruleset.difficulties) warn("handicap values for '${entry.name}', which is no difficulty")
         for (entry in ai.policyBranches)
             if (entry.name !in ruleset.policyBranches) warn("policy branch values for '${entry.name}', which is no policy branch")
+        for (entry in ai.policyAttributes)
+            if (entry.name !in ruleset.policies) warn("policy attributes for '${entry.name}', which is no policy")
     }
 }

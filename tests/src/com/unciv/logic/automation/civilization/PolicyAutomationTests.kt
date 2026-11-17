@@ -162,6 +162,16 @@ class PolicyAutomationTests {
         val uniform = (0 until 200).map { PolicyAutomation.chooseAbovePercentThreshold(listOf(0, 0, 0), 90, Random(it)) }.toSet()
         assertEquals(setOf(0, 1, 2), uniform)
     }
+
+    @Test
+    fun `a free Settler is worth less food with each city we have, a free Worker more`() {
+        fun food(name: String) = PolicyAttributeAi.weightPolicyAttributes(policy(name), PolicyAttributeAi.Inputs(civ))[PolicyAttributeAi.AttributeYield.Food.ordinal]
+        assertEquals("Collective Rule, 1 city", 45, food("Collective Rule"))
+        assertEquals("Citizenship, 1 city", 50, food("Citizenship"))
+        game.addCity(civ, game.tileMap[4, 0])
+        assertEquals("Collective Rule, 2 cities", 40, food("Collective Rule"))
+        assertEquals("Citizenship, 2 cities", 100, food("Citizenship"))
+    }
     //endregion
 
     //region Ideology (DoChooseIdeology)

@@ -182,6 +182,7 @@ object PolicyAutomation {
         val ruleset = civ.gameInfo.ruleset
         val tables = tablesOf(ruleset)
         val weights = policyWeights(civ)
+        val attributeInputs = PolicyAttributeAi.Inputs(civ)
         val manager = civ.policies
         val mustChooseTenet = manager.freeTenets > 0
 
@@ -192,7 +193,7 @@ object PolicyAutomation {
             if (mustChooseTenet && !policy.isTenet) continue
             if (!manager.canAdopt(policy)) continue
             candidates += policy
-            candidateWeights += weighPolicy(civ, policy, weights, tables)
+            candidateWeights += weighPolicy(civ, policy, weights, tables, attributeInputs)
         }
 
         val needToFinish = ruleset.policyBranches.values.any { branch ->
@@ -205,7 +206,7 @@ object PolicyAutomation {
             for (branch in ruleset.policyBranches.values) {
                 if (branch.isIdeology || !manager.canAdopt(branch)) continue
                 var weight = 0
-                if (isBranchEffectiveInGame(civ, branch)) weight = weighBranch(civ, branch, weights, tables) * (100 - dropPercent) / 100
+                if (isBranchEffectiveInGame(civ, branch)) weight = weighBranch(civ, branch, weights, tables, attributeInputs) * (100 - dropPercent) / 100
                 val branchEra = ruleset.eras[branch.era]?.eraNumber ?: 0
                 if (branchEra <= era) weight /= maxOf(1, (era - maxOf(0, branchEra)) * 2)
                 candidates += branch
@@ -243,9 +244,11 @@ object PolicyAutomation {
      *  x the trait multipliers / 10)%, and added in full for a focus (serious about that victory, the matching trait, or close to it),
      *  else half; the other flavors add their value. Tenets x (level + 1); x the policies we own in the branch, or, for a branch we
      *  never opened, / (era x 5 - the branch's era) when its era is past; Patronage 0 without city-states, / 5 without city-state
-     *  friends; plus the finisher's weight when it completes the branch. WeightPolicyAttributes' yields and corporations: none.
+     *  friends; plus the finisher's weight when it completes the branch. The yield weights of [PolicyAttributeAi.weightPolicyAttributes]
+     *  add to the weight, and before the scaling great general and admiral points to the conquest value, tourism to the culture value,
+     *  science to the science value, half the gold and half the production to the diplomacy value. Corporations: none.
      */
-    private fun weighPolicy(civ: Civilization, policy: Policy, weights: IntArray, tables: PolicyTables): Int {
+    private fun weighPolicy(civ: Civilization, policy: Policy, weights: IntArray, tables: PolicyTables, inputs: PolicyAttributeAi.Inputs): Int {
         val position = tables.positionOf(policy) ?: return 0
         var weight = weights[position]
         var conquestInterest = civ.ai.grandStrategyPriority(GrandStrategyAi.CONQUEST)
@@ -283,6 +286,13 @@ object PolicyAutomation {
                 else -> {}
             }
         }
+        val attributes = PolicyAttributeAi.weightPolicyAttributes(policy, inputs)
+        weight += attributes.sum()
+        conquestValue += attributes[PolicyAttributeAi.AttributeYield.GreatGeneralPoints.ordinal] +
+            attributes[PolicyAttributeAi.AttributeYield.GreatAdmiralPoints.ordinal]
+        cultureValue += attributes[PolicyAttributeAi.AttributeYield.Tourism.ordinal]
+        scienceValue += attributes[PolicyAttributeAi.AttributeYield.Science.ordinal]
+        diploValue += attributes[PolicyAttributeAi.AttributeYield.Gold.ordinal] / 2 + attributes[PolicyAttributeAi.AttributeYield.Production.ordinal] / 2
         conquestValue = conquestValue * (100 + conquestInterest / 10) / 100
         cultureValue = cultureValue * (100 + cultureInterest / 10) / 100
         diploValue = diploValue * (100 + diploInterest / 10) / 100
@@ -330,15 +340,15 @@ object PolicyAutomation {
      *  CvPolicyAI::WeighBranch (Vox Populi): [weighPolicy] of the branch's policies not adopted yet, of its opener and of its finisher.
      *  The branch's own buildings (VP's policy buildings): none in BNW.
      */
-    private fun weighBranch(civ: Civilization, branch: PolicyBranch, weights: IntArray, tables: PolicyTables): Int {
+    private fun weighBranch(civ: Civilization, branch: PolicyBranch, weights: IntArray, tables: PolicyTables, inputs: PolicyAttributeAi.Inputs): Int {
         var weight = 0
         var finisher: Policy? = null
         for (policy in branch.policies) {
             if (policy.policyBranchType == PolicyBranchType.BranchComplete) { finisher = policy; continue }
-            if (!civ.policies.isAdopted(policy.name)) weight += weighPolicy(civ, policy, weights, tables)
+            if (!civ.policies.isAdopted(policy.name)) weight += weighPolicy(civ, policy, weights, tables, inputs)
         }
-        weight += weighPolicy(civ, branch, weights, tables)
-        if (finisher != null) weight += weighPolicy(civ, finisher, weights, tables)
+        weight += weighPolicy(civ, branch, weights, tables, inputs)
+        if (finisher != null) weight += weighPolicy(civ, finisher, weights, tables, inputs)
         return maxOf(weight, 0)
     }
 
@@ -477,7 +487,8 @@ object PolicyAutomation {
         }
         val tables = tablesOf(civ.gameInfo.ruleset)
         val weights = policyWeights(civ)
-        for (i in 0..2) if (scores[i] != 0) scores[i] += weighBranch(civ, branches[i], weights, tables) / 25
+        val attributeInputs = PolicyAttributeAi.Inputs(civ)
+        for (i in 0..2) if (scores[i] != 0) scores[i] += weighBranch(civ, branches[i], weights, tables, attributeInputs) / 25
         return scores
     }
 

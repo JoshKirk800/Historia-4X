@@ -10168,6 +10168,1358 @@
       "secondAdopterFreePolicies": 1
     }
   ],
+  "policyAttributes": [
+    {
+      "name": "Liberty",
+      "values": {
+        "CulturePerCity": 1
+      }
+    },
+    {
+      "name": "Collective Rule",
+      "values": {
+        "CapitalSettlerProductionModifier": 50
+      },
+      "rows": [
+        {
+          "table": "FreeUnitClasses",
+          "key": "Settler",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Citizenship",
+      "values": {
+        "WorkerSpeedModifier": 25
+      },
+      "rows": [
+        {
+          "table": "FreeUnitClasses",
+          "key": "Worker",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Republic",
+      "values": {
+        "BuildingProductionModifier": 5
+      },
+      "rows": [
+        {
+          "table": "CityYieldChanges",
+          "yield": "Production",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Representation",
+      "values": {
+        "GoldenAgeTurns": 10,
+        "NumCitiesPolicyCostDiscount": -33
+      }
+    },
+    {
+      "name": "Meritocracy",
+      "values": {
+        "UnhappinessMod": -5,
+        "HappinessPerTradeRoute": 100
+      }
+    },
+    {
+      "name": "Tradition",
+      "values": {
+        "PlotCultureExponentModifier": -25
+      }
+    },
+    {
+      "name": "Aristocracy",
+      "values": {
+        "WonderProductionModifier": 15,
+        "HappinessPerXPopulation": 10
+      }
+    },
+    {
+      "name": "Oligarchy",
+      "values": {
+        "GarrisonedCityRangeStrikeModifier": 50,
+        "GarrisonFreeMaintenance": 1
+      }
+    },
+    {
+      "name": "Legalism",
+      "values": {
+        "NumCitiesFreeCultureBuilding": 4
+      }
+    },
+    {
+      "name": "Landed Elite",
+      "values": {
+        "CapitalGrowthMod": 10
+      },
+      "rows": [
+        {
+          "table": "CapitalYieldChanges",
+          "yield": "Food",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Monarchy",
+      "values": {
+        "CapitalUnhappinessMod": -50
+      },
+      "rows": [
+        {
+          "table": "CapitalYieldPerPopChanges",
+          "yield": "Gold",
+          "value": 50
+        }
+      ]
+    },
+    {
+      "name": "Honor",
+      "values": {
+        "CultureFromBarbarianKills": 100,
+        "BarbarianCombatBonus": 33,
+        "AlwaysSeeBarbCamps": 1
+      }
+    },
+    {
+      "name": "Warrior Code",
+      "values": {
+        "GreatGeneralRateModifier": 50
+      },
+      "rows": [
+        {
+          "table": "UnitCombatProductionModifiers",
+          "key": "UNITCOMBAT_MELEE",
+          "value": 15
+        },
+        {
+          "table": "FreeUnitClasses",
+          "key": "Great General",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Discipline",
+      "rows": [
+        {
+          "table": "FreePromotions",
+          "key": "PROMOTION_ADJACENT_BONUS",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Military Tradition",
+      "values": {
+        "ExpModifier": 50
+      }
+    },
+    {
+      "name": "Military Caste",
+      "values": {
+        "HappinessPerGarrisonedUnit": 1,
+        "CulturePerGarrisonedUnit": 2
+      }
+    },
+    {
+      "name": "Professional Army",
+      "values": {
+        "UnitUpgradeCostMod": -33
+      },
+      "rows": [
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_BARRACKS",
+          "value": 50
+        },
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_ARMORY",
+          "value": 50
+        },
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_MILITARY_ACADEMY",
+          "value": 50
+        }
+      ]
+    },
+    {
+      "name": "Piety",
+      "rows": [
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_SHRINE",
+          "value": 100
+        },
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_TEMPLE",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "name": "Organized Religion",
+      "rows": [
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_SHRINE",
+          "yield": "Faith",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_TEMPLE",
+          "yield": "Faith",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Mandate Of Heaven",
+      "values": {
+        "FaithCostModifier": -20
+      }
+    },
+    {
+      "name": "Theocracy",
+      "rows": [
+        {
+          "table": "BuildingClassYieldModifiers",
+          "key": "BUILDINGCLASS_TEMPLE",
+          "yield": "Gold",
+          "value": 25
+        },
+        {
+          "table": "ImprovementYieldChanges",
+          "key": "Holy site",
+          "yield": "Gold",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "Reformation",
+      "values": {
+        "AddReformationBelief": 1
+      }
+    },
+    {
+      "name": "Free Religion",
+      "values": {
+        "SecondReligionPantheon": 1
+      }
+    },
+    {
+      "name": "Patronage",
+      "values": {
+        "MinorFriendshipDecayMod": -25
+      }
+    },
+    {
+      "name": "Philantropy",
+      "values": {
+        "MinorGoldFriendshipMod": 25
+      }
+    },
+    {
+      "name": "Consulates",
+      "values": {
+        "MinorFriendshipMinimum": 20
+      }
+    },
+    {
+      "name": "Scholasticism",
+      "values": {
+        "MinorScienceAllies": 1
+      }
+    },
+    {
+      "name": "Cultural Diplomacy",
+      "values": {
+        "MinorResourceBonus": 1
+      }
+    },
+    {
+      "name": "Commerce",
+      "rows": [
+        {
+          "table": "CapitalYieldModifiers",
+          "yield": "Gold",
+          "value": 25
+        }
+      ]
+    },
+    {
+      "name": "Entrepreneurship",
+      "values": {
+        "EmbarkedExtraMoves": 1,
+        "GreatMerchantRateModifier": 25,
+        "TradeMissionGoldModifier": 100
+      }
+    },
+    {
+      "name": "Mercantilism",
+      "rows": [
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_MINT",
+          "yield": "Science",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_MARKET",
+          "yield": "Science",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_BANK",
+          "yield": "Science",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_STOCK_EXCHANGE",
+          "yield": "Science",
+          "value": 1
+        },
+        {
+          "table": "HurryModifiers",
+          "key": "HURRY_GOLD",
+          "value": -25
+        }
+      ]
+    },
+    {
+      "name": "Wagon Trains",
+      "values": {
+        "LandTradeRouteGoldChange": 200
+      }
+    },
+    {
+      "name": "Protectionism",
+      "values": {
+        "ExtraHappinessPerLuxury": 2
+      }
+    },
+    {
+      "name": "Rationalism",
+      "values": {
+        "HappinessToScience": 10
+      }
+    },
+    {
+      "name": "Secularism",
+      "rows": [
+        {
+          "table": "SpecialistExtraYields",
+          "yield": "Science",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Humanism",
+      "values": {
+        "GreatScientistRateModifier": 25
+      }
+    },
+    {
+      "name": "Free Thought",
+      "rows": [
+        {
+          "table": "BuildingClassYieldModifiers",
+          "key": "BUILDINGCLASS_UNIVERSITY",
+          "yield": "Science",
+          "value": 17
+        },
+        {
+          "table": "ImprovementYieldChanges",
+          "key": "Trading post",
+          "yield": "Science",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Sovereignty",
+      "rows": [
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_LIBRARY",
+          "yield": "Gold",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_UNIVERSITY",
+          "yield": "Gold",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_OBSERVATORY",
+          "yield": "Gold",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_LABORATORY",
+          "yield": "Gold",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_PUBLIC_SCHOOL",
+          "yield": "Gold",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Tradition Complete",
+      "values": {
+        "CityGrowthMod": 15,
+        "NumCitiesFreeFoodBuilding": 4
+      }
+    },
+    {
+      "name": "Liberty Complete",
+      "values": {
+        "NumFreeGreatPeople": 1
+      }
+    },
+    {
+      "name": "Honor Complete",
+      "values": {
+        "GoldFromKills": 100
+      }
+    },
+    {
+      "name": "Piety Complete",
+      "rows": [
+        {
+          "table": "FreeUnitClasses",
+          "key": "Great Prophet",
+          "value": 1
+        },
+        {
+          "table": "ImprovementCultureChanges",
+          "key": "Holy site",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "Patronage Complete",
+      "values": {
+        "MinorGreatPeopleAllies": 1
+      }
+    },
+    {
+      "name": "Commerce Complete",
+      "rows": [
+        {
+          "table": "ImprovementYieldChanges",
+          "key": "Trading post",
+          "yield": "Gold",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Rationalism Complete",
+      "values": {
+        "NumFreeTechs": 1
+      }
+    },
+    {
+      "name": "Aesthetics",
+      "values": {
+        "GreatWriterRateModifier": 25,
+        "GreatArtistRateModifier": 25,
+        "GreatMusicianRateModifier": 25
+      }
+    },
+    {
+      "name": "Cultural Centers",
+      "rows": [
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_MONUMENT",
+          "value": 50
+        },
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_AMPHITHEATER",
+          "value": 50
+        },
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_OPERA_HOUSE",
+          "value": 50
+        },
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_MUSEUM",
+          "value": 50
+        },
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_BROADCAST_TOWER",
+          "value": 50
+        }
+      ]
+    },
+    {
+      "name": "Fine Arts",
+      "values": {
+        "HappinessToCulture": 50
+      }
+    },
+    {
+      "name": "Flourishing of the Arts",
+      "values": {
+        "CultureWonderMultiplier": 33,
+        "GoldenAgeTurns": 10
+      }
+    },
+    {
+      "name": "Artistic Genius",
+      "rows": [
+        {
+          "table": "FreeUnitClasses",
+          "key": "Great Artist",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Cultural Exchange",
+      "values": {
+        "SharedReligionTourismModifier": 15,
+        "TradeRouteTourismModifier": 15,
+        "OpenBordersTourismModifier": 15
+      }
+    },
+    {
+      "name": "Aesthetics Complete",
+      "values": {
+        "ThemingBonusMultiplier": 100
+      }
+    },
+    {
+      "name": "Exploration",
+      "rows": [
+        {
+          "table": "FreePromotions",
+          "key": "PROMOTION_NAVAL_TRADITION",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Maritime Infrastructure",
+      "rows": [
+        {
+          "table": "CoastalCityYieldChanges",
+          "yield": "Production",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "Naval Tradition",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_HARBOR",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_SEAPORT",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_LIGHTHOUSE",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Merchant Navy",
+      "rows": [
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_HARBOR",
+          "yield": "Gold",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_SEAPORT",
+          "yield": "Gold",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_LIGHTHOUSE",
+          "yield": "Gold",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassYieldChanges",
+          "key": "BUILDINGCLASS_NATIONAL_TREASURY",
+          "yield": "Production",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "name": "Navigation School",
+      "values": {
+        "GreatAdmiralRateModifier": 50
+      },
+      "rows": [
+        {
+          "table": "FreeUnitClasses",
+          "key": "Great Admiral",
+          "value": 1
+        },
+        {
+          "table": "FreePromotions",
+          "key": "PROMOTION_FAST_ADMIRAL",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Treasure Fleets",
+      "values": {
+        "SeaTradeRouteGoldChange": 200
+      }
+    },
+    {
+      "name": "Avant Garde",
+      "values": {
+        "GreatPeopleRateModifier": 25
+      }
+    },
+    {
+      "name": "Creative Expression",
+      "rows": [
+        {
+          "table": "GreatWorkYieldChanges",
+          "yield": "Culture",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Civil Society",
+      "values": {
+        "HalfSpecialistFood": 1
+      }
+    },
+    {
+      "name": "Volunteer Army",
+      "values": {
+        "BaseFreeUnits": 6
+      },
+      "rows": [
+        {
+          "table": "FreeUnitClasses",
+          "key": "Foreign Legion",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "name": "Covert Action",
+      "values": {
+        "RiggingElectionModifier": 100
+      }
+    },
+    {
+      "name": "Urbanization",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_WATERMILL",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_HOSPITAL",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_MEDICAL_LAB",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Capitalism",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_MINT",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_BANK",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_STOCK_EXCHANGE",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Economic Union",
+      "values": {
+        "SharedIdeologyTradeGoldChange": 3
+      }
+    },
+    {
+      "name": "Their Finest Hour",
+      "values": {
+        "CityStrengthMod": 33
+      }
+    },
+    {
+      "name": "Universal Suffrage",
+      "values": {
+        "GoldenAgeDurationMod": 50,
+        "HalfSpecialistUnhappiness": 1
+      }
+    },
+    {
+      "name": "New Deal",
+      "rows": [
+        {
+          "table": "ImprovementCultureChanges",
+          "key": "Landmark",
+          "value": 4
+        },
+        {
+          "table": "ImprovementYieldChanges",
+          "key": "Academy",
+          "yield": "Science",
+          "value": 4
+        },
+        {
+          "table": "ImprovementYieldChanges",
+          "key": "Customs house",
+          "yield": "Gold",
+          "value": 4
+        },
+        {
+          "table": "ImprovementYieldChanges",
+          "key": "Manufactory",
+          "yield": "Production",
+          "value": 4
+        },
+        {
+          "table": "ImprovementYieldChanges",
+          "key": "Holy site",
+          "yield": "Faith",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "name": "Arsenal of Democracy",
+      "values": {
+        "MilitaryUnitGiftExtraInfluence": 15
+      }
+    },
+    {
+      "name": "Treaty Organization",
+      "values": {
+        "ProtectedMinorPerTurnInfluence": 400
+      }
+    },
+    {
+      "name": "Space Procurements",
+      "values": {
+        "EnablesSSPartPurchase": 1
+      }
+    },
+    {
+      "name": "Hero of the People",
+      "values": {
+        "GreatPeopleRateModifier": 25
+      }
+    },
+    {
+      "name": "Socialist Realism",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_MONUMENT",
+          "value": 2
+        },
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_MONUMENT",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "name": "Skyscrapers",
+      "values": {
+        "BuildingPurchaseCostModifier": -33
+      }
+    },
+    {
+      "name": "Patriotic War",
+      "rows": [
+        {
+          "table": "FreePromotions",
+          "key": "PROMOTION_NATIONALISM",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Double Agents",
+      "values": {
+        "CatchSpiesModifier": 100
+      }
+    },
+    {
+      "name": "Young Pioneers",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_WORKSHOP",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_FACTORY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_SOLAR_PLANT",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NUCLEAR_PLANT",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_HYDRO_PLANT",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Academy of Sciences",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_OBSERVATORY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_PUBLIC_SCHOOL",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_LABORATORY",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Party Leadership",
+      "rows": [
+        {
+          "table": "CityYieldChanges",
+          "yield": "Food",
+          "value": 1
+        },
+        {
+          "table": "CityYieldChanges",
+          "yield": "Production",
+          "value": 1
+        },
+        {
+          "table": "CityYieldChanges",
+          "yield": "Science",
+          "value": 1
+        },
+        {
+          "table": "CityYieldChanges",
+          "yield": "Gold",
+          "value": 1
+        },
+        {
+          "table": "CityYieldChanges",
+          "yield": "Culture",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Resettlement",
+      "values": {
+        "NewCityExtraPopulation": 3
+      }
+    },
+    {
+      "name": "Cultural Revolution",
+      "values": {
+        "SharedIdeologyTourismModifier": 34
+      }
+    },
+    {
+      "name": "Workers' Faculties",
+      "rows": [
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_FACTORY",
+          "value": 100
+        },
+        {
+          "table": "BuildingClassYieldModifiers",
+          "key": "BUILDINGCLASS_FACTORY",
+          "yield": "Science",
+          "value": 25
+        }
+      ]
+    },
+    {
+      "name": "Five-Year Plan",
+      "rows": [
+        {
+          "table": "ImprovementYieldChanges",
+          "key": "Mine",
+          "yield": "Production",
+          "value": 1
+        },
+        {
+          "table": "ImprovementYieldChanges",
+          "key": "Quarry",
+          "yield": "Production",
+          "value": 1
+        },
+        {
+          "table": "CityYieldChanges",
+          "yield": "Production",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Dictatorship of the Proletariat",
+      "values": {
+        "LessHappyTourismModifier": 34
+      }
+    },
+    {
+      "name": "Iron Curtain",
+      "values": {
+        "InternalTradeRouteYieldModifier": 50
+      }
+    },
+    {
+      "name": "Spaceflight Pioneers",
+      "values": {
+        "EnablesSSPartHurry": 1
+      },
+      "rows": [
+        {
+          "table": "FreeUnitClasses",
+          "key": "Great Engineer",
+          "value": 1
+        },
+        {
+          "table": "FreeUnitClasses",
+          "key": "Great Scientist",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Mobilization",
+      "values": {
+        "UnitPurchaseCostModifier": -33
+      }
+    },
+    {
+      "name": "United Front",
+      "values": {
+        "CityStateUnitFrequencyModifier": 100
+      }
+    },
+    {
+      "name": "Futurism",
+      "rows": [
+        {
+          "table": "TourismOnUnitCreation",
+          "key": "Great Writer",
+          "value": 250
+        },
+        {
+          "table": "TourismOnUnitCreation",
+          "key": "Great Artist",
+          "value": 250
+        },
+        {
+          "table": "TourismOnUnitCreation",
+          "key": "Great Musician",
+          "value": 250
+        }
+      ]
+    },
+    {
+      "name": "Industrial Espionage",
+      "values": {
+        "StealTechFasterModifier": 100
+      }
+    },
+    {
+      "name": "Militarism",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_BARRACKS",
+          "value": 2
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_ARMORY",
+          "value": 2
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_MILITARY_ACADEMY",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Fortified Borders",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_CASTLE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_ARSENAL",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_MILITARY_BASE",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Lightning Warfare",
+      "rows": [
+        {
+          "table": "FreePromotions",
+          "key": "PROMOTION_FAST_GENERAL",
+          "value": 1
+        },
+        {
+          "table": "FreePromotions",
+          "key": "PROMOTION_LIGHTNING_WARFARE",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Police State",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_COURTHOUSE",
+          "value": 3
+        },
+        {
+          "table": "BuildingClassProductionModifiers",
+          "key": "BUILDINGCLASS_COURTHOUSE",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "name": "Nationalism",
+      "values": {
+        "UnitGoldMaintenanceMod": -33
+      }
+    },
+    {
+      "name": "Third Alternative",
+      "values": {
+        "StrategicResourceMod": 200
+      },
+      "rows": [
+        {
+          "table": "CapitalYieldChanges",
+          "yield": "Food",
+          "value": 5
+        },
+        {
+          "table": "CapitalYieldChanges",
+          "yield": "Science",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "name": "Total War",
+      "values": {
+        "FreeExperience": 15
+      }
+    },
+    {
+      "name": "Cult of Personality",
+      "values": {
+        "CommonFoeTourismModifier": 50
+      }
+    },
+    {
+      "name": "Gunboat Diplomacy",
+      "values": {
+        "AfraidMinorPerTurnInfluence": 600,
+        "MinorBullyScoreModifier": 50
+      }
+    },
+    {
+      "name": "Clausewitz's Legacy",
+      "values": {
+        "AttackBonusTurns": 50
+      }
+    },
+    {
+      "name": "Universal Healthcare (Freedom)",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_PALACE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_HEROIC_EPIC",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NATIONAL_EPIC",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_CIRCUS_MAXIMUS",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NATIONAL_TREASURY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NATIONAL_COLLEGE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_IRONWORKS",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_OXFORD_UNIVERSITY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_HERMITAGE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_INTELLIGENCE_AGENCY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_GRAND_TEMPLE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_TOURIST_CENTER",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Universal Healthcare (Order)",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_PALACE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_HEROIC_EPIC",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NATIONAL_EPIC",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_CIRCUS_MAXIMUS",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NATIONAL_TREASURY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NATIONAL_COLLEGE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_IRONWORKS",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_OXFORD_UNIVERSITY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_HERMITAGE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_INTELLIGENCE_AGENCY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_GRAND_TEMPLE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_TOURIST_CENTER",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Universal Healthcare (Autocracy)",
+      "rows": [
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_PALACE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_HEROIC_EPIC",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NATIONAL_EPIC",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_CIRCUS_MAXIMUS",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NATIONAL_TREASURY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_NATIONAL_COLLEGE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_IRONWORKS",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_OXFORD_UNIVERSITY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_HERMITAGE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_INTELLIGENCE_AGENCY",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_GRAND_TEMPLE",
+          "value": 1
+        },
+        {
+          "table": "BuildingClassHappiness",
+          "key": "BUILDINGCLASS_TOURIST_CENTER",
+          "value": 1
+        }
+      ]
+    }
+  ],
   "techPrereqs": [
     {
       "name": "Pottery",
@@ -10795,27 +12147,33 @@
   "worldSizes": [
     {
       "name": "Duel",
-      "estimatedNumCities": 13
+      "estimatedNumCities": 13,
+      "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Tiny",
-      "estimatedNumCities": 26
+      "estimatedNumCities": 26,
+      "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Small",
-      "estimatedNumCities": 39
+      "estimatedNumCities": 39,
+      "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Medium",
-      "estimatedNumCities": 52
+      "estimatedNumCities": 52,
+      "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Large",
-      "estimatedNumCities": 80
+      "estimatedNumCities": 80,
+      "numCitiesUnhappinessPercent": 80
     },
     {
       "name": "Huge",
-      "estimatedNumCities": 132
+      "estimatedNumCities": 132,
+      "numCitiesUnhappinessPercent": 60
     }
   ],
   "multiUnitFormations": [

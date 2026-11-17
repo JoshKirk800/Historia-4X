@@ -38,8 +38,12 @@ object ExplorerAi {
      *  then by moves left, over Unciv's movement costs (an unrevealed plot costs 1); a move may start with any movement left (all of it
      *  is spent when it costs more), a turn ends where the unit can stop and the next starts there with full movement; never through the
      *  territory of a civilization at war with it. VP's MAXIMIZE_EXPLORE cost, which prefers paths through unexplored sight, is not ported.
+     *  The builders' flags (CvHomelandAI::ExecuteWorkerMoves: MOVEFLAG_AI_ABORT_IN_DANGER | MOVEFLAG_VISIBLE_ONLY):
+     *  [visibleOnly] lets the unit enter a plot we do not see only from one we see (CvAStar.cpp: PathValid, "run through one unseen tile at the time");
+     *  [abortInDanger] refuses a plot with danger where the unit ends one of its first two turns (CvAStar.cpp: PathCost: a civilian is not
+     *  exposed to a danger above half its health; Unciv's plot danger [PlotDanger.get] is the one measure, above 0 here).
      */
-    class Reach(private val unit: MapUnit) {
+    class Reach(private val unit: MapUnit, private val abortInDanger: Boolean = false, private val visibleOnly: Boolean = false) {
         private class Node(val tile: Tile, val turns: Int, val moves: Float)
 
         private val settled = LinkedHashMap<Tile, ReachablePlot>()
@@ -77,9 +81,18 @@ object ExplorerAi {
                 if (neighbor in settled || enemyTerritory.get(neighbor.zeroBasedIndex)) continue
                 val explored = unit.civ.hasExplored(neighbor)
                 if (explored && !unit.movement.canPassThrough(neighbor)) continue
+                if (visibleOnly && neighbor !in unit.civ.viewableTiles && tile !in unit.civ.viewableTiles) continue
                 val cost = if (!explored) 1f else MovementCost.getMovementCostBetweenAdjacentTiles(unit, tile, neighbor)
-                if (node.moves > Constants.minimumMovementEpsilon) push(Node(neighbor, node.turns, (node.moves - cost).coerceAtLeast(0f)))
-                else if (canStop) push(Node(neighbor, node.turns + 1, (fullMovement - cost).coerceAtLeast(0f)))
+                if (node.moves > Constants.minimumMovementEpsilon) {
+                    val left = (node.moves - cost).coerceAtLeast(0f)
+                    // Ending the turn here, within the first two turns
+                    if (abortInDanger && node.turns <= 2 && left <= Constants.minimumMovementEpsilon && unit.civ.ai.plotDanger.get(neighbor) > 0) continue
+                    push(Node(neighbor, node.turns, left))
+                } else if (canStop) {
+                    val left = (fullMovement - cost).coerceAtLeast(0f)
+                    if (abortInDanger && node.turns + 1 <= 2 && left <= Constants.minimumMovementEpsilon && unit.civ.ai.plotDanger.get(neighbor) > 0) continue
+                    push(Node(neighbor, node.turns + 1, left))
+                }
             }
         }
     }

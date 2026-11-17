@@ -5,7 +5,6 @@ import com.unciv.UncivGame
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActionModifiers
 import com.unciv.logic.map.tile.ImprovementBuildingProblem
@@ -17,17 +16,11 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import kotlin.math.min
 
-/** A [BuilderDirective] picked for one builder: [weight] is the original's directive weight (CvHomelandAI::GetDirectiveWeight) of the build time and the move time */
-class WeightedDirective(val directive: BuilderDirective, val weight: Int, val buildTurns: Int, val moveTurns: Int) {
-    val tile get() = directive.tile
-    val build get() = directive.build!!
-}
-
 /**
  *  CvBuilderTaskingAI (Vox Populi): what the builders (workers, and Great People that create an improvement) of [civ] should do. One
  *  instance per civilization and turn (held by [WorkerAutomation]); the constructor plans the turn ([update]): the planned routes [routes], then one
  *  civ-wide list of [BuilderDirective]s sorted by priority score ([directives]), improvements scored by [PlotBuildScorer.scorePlotBuild].
- *  A builder then takes the directive of the best weight for it ([evaluateBuilder], CvHomelandAI::GetWeightedDirectives for one unit).
+ *  [BuilderAssignment] then gives the builders their directives together (CvHomelandAI::ExecuteWorkerMoves).
  *
  *  What a turn plans, CvBuilderTaskingAI::GetImprovementDirectives for every plot of ours:
  *  - KEEP_IMPROVEMENT: an unpillaged improvement is scored as it stands, so that a build replaces it only when it scores more.
@@ -54,10 +47,11 @@ class WeightedDirective(val directive: BuilderDirective, val weight: Int, val bu
  *  - Routes are [routes]' ([PlannedRoutes]: the original's planned routes with three purposes): its route and repair directives join the improvement
  *    ones with the route value as their score. A builder weighs a route directive by the time to build the whole planned route through its plot
  *    (CvBuilderTaskingAI::GetTotalRouteBuildTime).
- *  - Builders keep their plot across turns as the original's MISSIONAI_BUILD does ([MapUnit.builderTarget]): another builder skips it until
- *    that one is sent elsewhere. A human's builder only counts while it is automated.
+ *  - Builders are sent to a plot by [BuilderAssignment] and the plot is taken for the turn: no claim is kept across turns (the original's later
+ *    versions no longer read the mission AI of the builders, CvPlayerAI::AI_plotTargetMissionAIs). What a builder was sent to do is its assigned
+ *    directive ([Civilization.assignedBuilderDirectives], CvBuilderTaskingAI::GetAssignedDirective), cleared when the turn is planned.
  *  - Time and distance: the build time is [turnsLeft] (Unciv's work rate; a repair takes the shorter of repairing and rebuilding, as the original's
- *    getBuildTime); the distance is the plot distance, the unit must be able to reach the plot.
+ *    getBuildTime); the distance is the turns the builder's path takes ([BuilderAssignment]).
  */
 class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = PlannedRoutes(civ)) {
     private val ruleset = civ.gameInfo.ruleset
@@ -72,15 +66,12 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
     /** m_directives: this turn's directives, the highest priority score first, ties in the order they were added */
     var directives: List<BuilderDirective> = emptyList()
         private set
-    private var directivesByTile: Map<Tile, List<BuilderDirective>> = emptyMap()
-    /** IsBestDirectiveForPlot of every directive, computed when asked */
-    private val bestForPlot = HashMap<BuilderDirective, Boolean>()
 
     init {
         update()
     }
 
-    /** CvBuilderTaskingAI::Update: the route plan ([routes], made once a turn), then the directives */
+    /** CvBuilderTaskingAI::Update: the route plan ([routes], made once a turn), then the directives; last turn's assigned directives are forgotten */
     fun update() = timeThis("AI.BuilderDirectives") {
         routes.ensurePlanned()
         updateImprovementPlots()
@@ -91,8 +82,7 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
     /** CvBuilderTaskingAI::UpdateImprovementPlots: the route and improvement directives, stably sorted by priority score */
     private fun updateImprovementPlots() {
         directives = (routes.directives + improvementDirectives()).sortedByDescending { it.priorityScore }
-        directivesByTile = directives.groupBy { it.tile }
-        bestForPlot.clear()
+        civ.assignedBuilderDirectives.clear()
     }
 
     /**
@@ -285,78 +275,18 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
     //region Selection
 
     /**
-     *  CvHomelandAI::GetWeightedDirectives for the one builder [unit]: the directive of the best weight (CvHomelandAI::GetDirectiveWeight of its
-     *  priority score, the turns [unit] needs to build and the plot distance), null if there is none it can do and reach.
-     *  A directive is considered when it can be built now, is the best one for its plot ([BuilderDirectives.isBestDirectiveForPlot]), [unit]
-     *  can do it ([BuilderBuilds.canPerform]) and the plot is one the builder may consider ([shouldBuilderConsiderPlot]). A directive that cannot
-     *  be better than the best found (its weight without time) is not looked at. Ties go to the earlier directive.
-     *  The "already building" bail-out of the original is the caller's ([WorkerAutomation.executeWorkerMove]).
+     *  CvBuilderTaskingAI::ShouldBuilderConsiderPlot, as CanUnitPerformDirective calls it: not impassable, in the builder's domain, on its landmass
+     *  unless it can embark, not a plot with fallout for a builder below half its health, and with no other civilian of ours on it (the
+     *  original's CanEndTurnAtPlot: another builder works there, or the plot is full). The danger of the plot is the assignment's
+     *  ([BuilderAssignment]), not this check's as the plan's earlier versions had it.
      */
-    fun evaluateBuilder(unit: MapUnit): WeightedDirective? = timeThis("AI.EvaluateBuilder") {
-        val builds = BuilderBuilds(unit)
-        val claimed = otherBuilderTargets(unit)
-        var best: WeightedDirective? = null
-        for (directive in directives) {
-            val build = directive.build ?: continue
-            if (!directive.canBuild) continue
-            val tile = directive.tile
-            if (best != null && BuilderDirectives.directiveWeight(directive, 0, 0) <= best.weight) continue
-            if (!shouldBuilderConsiderPlot(unit, tile, claimed)) continue
-            if (!isBestDirectiveForPlot(directive)) continue
-            if (!builds.canPerform(directive)) continue
-            // A route is built along its whole planned route: the time of all of it (GetTotalRouteBuildTime)
-            val buildTurns = (if (build.isRoute) routes.totalRouteBuildTime(unit, tile) else turnsLeft(unit, tile, build)) ?: continue
-            val moveTurns = findTurnsAway(unit, tile)
-            if (moveTurns < 0) continue
-            val weight = BuilderDirectives.directiveWeight(directive, buildTurns, moveTurns)
-            if (best != null && weight <= best.weight) continue
-            if (tile != unit.getTile() && !unit.movement.canReach(tile)) continue
-            best = WeightedDirective(directive, weight, buildTurns, moveTurns)
-        }
-        best
-    }
-
-    private fun isBestDirectiveForPlot(directive: BuilderDirective) =
-        bestForPlot.getOrPut(directive) { BuilderDirectives.isBestDirectiveForPlot(directive, directivesByTile.getValue(directive.tile)) }
-
-    /** Sends [unit] to [tile] (MISSIONAI_BUILD): no other builder considers it until [unit] gets another directive */
-    fun claim(unit: MapUnit, tile: Tile) {
-        unit.builderTarget = tile.position
-    }
-
-    /** The plots other builders of ours were sent to (CvPlayerAI::AI_plotTargetMissionAIs with MISSIONAI_BUILD) */
-    private fun otherBuilderTargets(unit: MapUnit): Set<HexCoord> {
-        val targets = HashSet<HexCoord>()
-        for (other in civ.units.getCivUnits()) {
-            if (other == unit) continue
-            val target = other.builderTarget ?: continue
-            if (civ.isHuman() && !other.isAutomated()) continue
-            targets.add(target)
-        }
-        return targets
-    }
-
-    /**
-     *  CvBuilderTaskingAI::ShouldBuilderConsiderPlot: not impassable, in the builder's domain, on its landmass unless it can embark, not the
-     *  target of another builder ([claimed]), without plot danger, and with no other civilian of ours on it.
-     */
-    private fun shouldBuilderConsiderPlot(unit: MapUnit, tile: Tile, claimed: Set<HexCoord>): Boolean {
+    fun shouldBuilderConsiderPlot(unit: MapUnit, tile: Tile): Boolean {
         if (tile.isImpassible() || tile.getBaseTerrain().impassable) return false
         val landUnit = unit.baseUnit.isLandUnit
         if (landUnit == tile.isWater) return false
         if (landUnit && tile.getContinent() != unit.getTile().getContinent() && !civ.tech.unitsCanEmbark) return false
-        val atPlot = tile == unit.getTile()
-        if (!atPlot && tile.position in claimed) return false
-        val otherCivilian = tile.civilianUnit
-        if (!atPlot && otherCivilian != null) return false  // another builder works here, or the plot is full (PLOT_UNIT_LIMIT)
-        if (civ.ai.plotDanger.get(tile) > 0) return false
-        return true
-    }
-
-    /** CvBuilderTaskingAI::FindTurnsAway: the plot distance, -1 for another landmass a land unit cannot reach */
-    private fun findTurnsAway(unit: MapUnit, tile: Tile): Int {
-        if (unit.baseUnit.isLandUnit && tile.getContinent() != unit.getTile().getContinent() && !civ.tech.unitsCanEmbark) return -1
-        return unit.getTile().aerialDistanceTo(tile)
+        if (unit.health < MAX_HEALTH / 2 && tile.terrainFeatures.any { ruleset.terrains[it]?.hasUnique(UniqueType.NullifyYields) == true }) return false
+        return tile == unit.getTile() || tile.civilianUnit == null
     }
 
     /**
@@ -401,10 +331,12 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
 
         /**
          *  CvBuilderTaskingAI::CanUnitPerformDirective: [unit] can do the build of [directive] now (without the plot checks of
-         *  [shouldBuilderConsiderPlot]): its improvement on the plot, after the removal of the feature when the build comes with one.
+         *  [shouldBuilderConsiderPlot]): its improvement on the plot, after the removal of the feature when the build comes with one. With [testEra]
+         *  (CvUnit::canBuild's bTestEra) a build that is not possible yet ([BuilderDirective.canBuild]: its tech is one era ahead) counts for a worker.
          */
-        fun canPerform(directive: BuilderDirective): Boolean {
+        fun canPerform(directive: BuilderDirective, testEra: Boolean = false): Boolean {
             val build = directive.build ?: return false
+            if (!directive.canBuild) return testEra && instantImprovements == null && unit.cache.hasUniqueToBuildImprovements
             val tile = directive.tile
             return when {
                 directive.type == BuilderDirective.Type.RemoveRoad -> canBuildOn(build.improvement, tile)
@@ -434,5 +366,6 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
 
     companion object {
         private const val FOREST = "Forest"
+        private const val MAX_HEALTH = 100
     }
 }

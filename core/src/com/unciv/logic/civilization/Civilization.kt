@@ -5,6 +5,7 @@ import com.unciv.UncivGame
 import com.unciv.json.LastSeenImprovement
 import com.unciv.logic.*
 import com.unciv.logic.automation.strategy.CivAi
+import com.unciv.logic.automation.unit.AssignedBuilderDirective
 import com.unciv.logic.automation.unit.WorkerAutomation
 import com.unciv.logic.city.City
 import com.unciv.logic.city.managers.CityFounder
@@ -71,6 +72,11 @@ class Civilization : IsPartOfGameInfoSerialization {
             workerAutomationCache = WorkerAutomation(this, currentTurn)
         return workerAutomationCache!!
     }
+
+    /** AI: CvBuilderTaskingAI::m_assignedDirectives, by unit id: what each builder was sent to do this turn, kept until the next turn's directives are planned
+     *  ([com.unciv.logic.automation.unit.BuilderTaskingAi.update]); not saved, as in the original */
+    @Transient
+    val assignedBuilderDirectives = HashMap<Int, AssignedBuilderDirective>()
 
     @Transient
     lateinit var gameInfo: GameInfo

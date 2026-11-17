@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.unit
 
+import com.unciv.logic.map.HexCoord
 import com.unciv.Constants
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
@@ -20,6 +21,13 @@ class Build(val improvement: TileImprovement, val removeFirst: TileImprovement? 
     /** The original's CvBuildInfo::getImprovement: the improvement the build creates; none for a repair, a removal and a route */
     val createdImprovement: TileImprovement? get() = if (isRepair || isRemoval || isRoute) null else improvement
 }
+
+/**
+ *  CvBuilderTaskingAI::m_assignedDirectives (GetAssignedDirective/SetAssignedDirective): the directive a builder was sent to execute, of which
+ *  CvUnit::DoFinishBuildIfSafe compares the plot and the build ([improvement] is the improvement the build creates, a route's road). Kept per
+ *  builder in [com.unciv.logic.civilization.Civilization.assignedBuilderDirectives] until the next turn's directives are planned.
+ */
+class AssignedBuilderDirective(val position: HexCoord, val improvement: String)
 
 /**
  *  CvBuilderTaskingAI's PlotBuildScore: what a build on a tile is worth. [score] the base score, [potentialScore] what it may give in the
@@ -68,7 +76,10 @@ class BuilderDirective(
 
     val priorityScore get() = plotBuildScore.priorityScore
 
-    fun withPenalty(penalty: Int) = BuilderDirective(type, build, tile, isGreatPerson, canBuild, plotBuildScore.copy(scorePenalty = penalty), scrubsFallout)
+    fun withPenalty(penalty: Int) = withScore(plotBuildScore.copy(scorePenalty = penalty))
+
+    /** The same directive with another score (the assignment pass re-scores directives for what it has planned) */
+    fun withScore(score: PlotBuildScore) = BuilderDirective(type, build, tile, isGreatPerson, canBuild, score, scrubsFallout)
 }
 
 /** Selection and filters of the per-turn directive list (CvHomelandAI's directive weight, CvBuilderTaskingAI's filters) */

@@ -27,38 +27,45 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Civ V's pointy-hex grid, 128 x 80 and wrapping in x, laid on Unciv's hex coordinates so that every plot has the same six neighbours:
+ * Civ V's pointy-hex grid of any size, wrapping in x, laid on Unciv's hex coordinates so that every plot has the same six neighbours:
  * a Civ V plot (x, y) is the hex-space point (q, r) = (x - y / 2, y), and Unciv's (x, y) = (q + r, r), shifted to the centre of the map.
  * The neighbours of a Civ V plot are (q ± 1, r), (q, r ± 1), (q + 1, r - 1) and (q - 1, r + 1); those of an Unciv tile (x ± 1, y),
- * (x, y ± 1) and ±(1, 1), which is what the map of a Civ V game needs. The world wraps by (128, 0) ([TileMap.wrapVector]).
+ * (x, y ± 1) and ±(1, 1), which is what the map of a Civ V game needs. The world wraps by (width, 0) ([TileMap.wrapVector]).
+ *
+ * The leftmost tile gets x = -[xOffset], chosen so that the tile matrix is as wide as the check of TileMap.setTransients wants
+ * (2 * xOffset to 2 * xOffset + 3 columns): 83 for 128 x 80, 42 for 66 x 42.
  */
-object BnwMapGrid {
-    const val WIDTH = 128
-    const val HEIGHT = 80
-    private const val X_OFFSET = 83   // the leftmost tile gets x = -83 so that the tile matrix is as wide as the check of TileMap.setTransients wants
-    private const val Y_OFFSET = 40
+class CivVMapGrid(val width: Int, val height: Int) {
+    private val xOffset = (width + height / 2 - 2) / 2
+    private val yOffset = height / 2
 
-    fun hexOf(x: Int, y: Int) = HexCoord.of(x + (y + 1) / 2 - X_OFFSET, y - Y_OFFSET)
+    fun hexOf(x: Int, y: Int) = HexCoord.of(x + (y + 1) / 2 - xOffset, y - yOffset)
 
     /** The Civ V plot (x, y) of a tile */
     fun civVOf(position: HexCoord): Pair<Int, Int> {
-        val y = position.y + Y_OFFSET
-        return Math.floorMod(position.x - (y + 1) / 2 + X_OFFSET, WIDTH) to y
+        val y = position.y + yOffset
+        return Math.floorMod(position.x - (y + 1) / 2 + xOffset, width) to y
     }
 
     /** The plot next to (x, y) in the hex-space direction (dq, dr), wrapped in x, or null off the map's top or bottom */
     fun neighborOf(x: Int, y: Int, dq: Int, dr: Int): Pair<Int, Int>? {
         val newY = y + dr
-        if (newY !in 0 until HEIGHT) return null
+        if (newY !in 0 until height) return null
         val q = x - (y shr 1) + dq
-        return Math.floorMod(q + (newY shr 1), WIDTH) to newY
+        return Math.floorMod(q + (newY shr 1), width) to newY
+    }
+
+    companion object {
+        /** The grid of a map built by [BnwMapClone] */
+        fun of(mapSize: MapSize) = CivVMapGrid(mapSize.width, mapSize.height)
     }
 }
 
 /**
- * Builds the Unciv map of a Brave New World game from the dump of its first turn (`tools/extract_bnw_map.py`, `map.json`): the terrain,
+ * Builds the Unciv map of a Civ V game (Brave New World, or Community Patch) of any map size from the dump of its first turn (`tools/extract_bnw_map.py`, `map.json`): the terrain,
  * features, resources with their amounts, rivers, lakes, natural wonders, ancient ruins, and the start of every civilization and city-state,
- * on [BnwMapGrid]. Skipped unless BNW_CLONE_OUT is set. Environment: BNW_CLONE_JSON = the dump, BNW_CLONE_OUT = the map file to write.
+ * on [CivVMapGrid]. Skipped unless BNW_CLONE_OUT is set. Environment: BNW_CLONE_JSON = the dump, BNW_CLONE_OUT = the map file to write,
+ * BNW_CLONE_NAME = the name of the map (default "BNW clone").
  *
  * A hill is Unciv's Hill feature on the terrain the dump gives for the plot, a mountain plot is Unciv's Mountain. What the dump does not hold:
  * the personalities of the city-states.
@@ -111,6 +118,8 @@ class BnwMapClone {
             "CIVILIZATION_ROME" to "Rome", "CIVILIZATION_INDONESIA" to "Indonesia", "CIVILIZATION_AUSTRIA" to "Austria",
             "CIVILIZATION_SPAIN" to "Spain", "CIVILIZATION_JAPAN" to "Japan", "CIVILIZATION_OTTOMAN" to "The Ottomans",
             "CIVILIZATION_KOREA" to "Korea", "CIVILIZATION_ETHIOPIA" to "Ethiopia", "CIVILIZATION_PERSIA" to "Persia",
+            "CIVILIZATION_SONGHAI" to "Songhai", "CIVILIZATION_ASSYRIA" to "Assyria", "CIVILIZATION_ENGLAND" to "England",
+            "CIVILIZATION_ZULU" to "Zulus", "CIVILIZATION_HUNS" to "The Huns", "CIVILIZATION_POLAND" to "Poland",
         )
         val cityStateNames = mapOf("MINOR_CIV_MBANZA_KONGO" to "M'Banza-Kongo")
 
@@ -128,7 +137,8 @@ class BnwMapClone {
     fun build() {
         val root = JsonReader().parse(Gdx.files.absolute(System.getenv("BNW_CLONE_JSON") ?: error("Set BNW_CLONE_JSON")))
         val ruleset = RulesetCache[BaseRuleset.Civ_V_BNW.fullName]!!
-        require(root.getInt("width") == BnwMapGrid.WIDTH && root.getInt("height") == BnwMapGrid.HEIGHT && root.getBoolean("wrapX")) { "not a 128x80 map wrapping in x" }
+        require(root.getBoolean("wrapX") && !root.getBoolean("wrapY")) { "not a map wrapping in x only" }
+        val grid = CivVMapGrid(root.getInt("width"), root.getInt("height"))
         val fields = root.get("fields").map { it.asString() }
         val terrainTypes = types(root, "terrain")
         val featureTypes = types(root, "feature")
@@ -136,30 +146,30 @@ class BnwMapClone {
         val improvementTypes = types(root, "improvement")
         fun at(row: JsonValue, field: String) = row.getInt(fields.indexOf(field))
 
-        val plots = ArrayList<Plot>(BnwMapGrid.WIDTH * BnwMapGrid.HEIGHT)
+        val plots = ArrayList<Plot>(grid.width * grid.height)
         for (row in root.get("plots")) plots.add(Plot(
             at(row, "plotType"), terrainTypes[at(row, "terrain")]!!, featureTypes[at(row, "feature")], resourceTypes[at(row, "resource")],
             improvementTypes[at(row, "improvement")], at(row, "riverMask"), at(row, "lake") != 0, at(row, "resourceQty")))
-        require(plots.size == BnwMapGrid.WIDTH * BnwMapGrid.HEIGHT) { "plots: ${plots.size}" }
-        fun plot(x: Int, y: Int) = plots[y * BnwMapGrid.WIDTH + x]
+        require(plots.size == grid.width * grid.height) { "plots: ${plots.size}" }
+        fun plot(x: Int, y: Int) = plots[y * grid.width + x]
 
         val map = TileMap(plots.size)
         map.mapParameters = MapParameters().apply {
-            name = "BNW clone"
+            name = System.getenv("BNW_CLONE_NAME") ?: "BNW clone"
             type = MapType.continentsLikeCivV
             shape = MapShape.rectangular
-            mapSize = MapSize(BnwMapGrid.WIDTH, BnwMapGrid.HEIGHT)
+            mapSize = MapSize(grid.width, grid.height)
             worldWrap = true
             civVGridWrap = true
             baseRuleset = ruleset.name
             noRuins = false
         }
-        for (y in 0 until BnwMapGrid.HEIGHT) for (x in 0 until BnwMapGrid.WIDTH)
-            map.tileList.add(Tile().apply { position = BnwMapGrid.hexOf(x, y); baseTerrain = "Plains" })
+        for (y in 0 until grid.height) for (x in 0 until grid.width)
+            map.tileList.add(Tile().apply { position = grid.hexOf(x, y); baseTerrain = "Plains" })
         map.setTransients(ruleset)
-        fun tile(x: Int, y: Int) = map[BnwMapGrid.hexOf(x, y)]
+        fun tile(x: Int, y: Int) = map[grid.hexOf(x, y)]
 
-        for (y in 0 until BnwMapGrid.HEIGHT) for (x in 0 until BnwMapGrid.WIDTH) {
+        for (y in 0 until grid.height) for (x in 0 until grid.width) {
             val plot = plot(x, y)
             val tile = tile(x, y)
             val baseName = when {
@@ -175,21 +185,21 @@ class BnwMapClone {
             tile.setTerrainTransients()
         }
 
-        verifyGeometry(map)
+        verifyGeometry(map, grid)
 
         // Rivers: a plot's river flags are the edges to its south-west (NE of river), east (W of river) and south-east (NW of river) neighbours
         var rivers = 0
-        for (y in 0 until BnwMapGrid.HEIGHT) for (x in 0 until BnwMapGrid.WIDTH) {
+        for (y in 0 until grid.height) for (x in 0 until grid.width) {
             val mask = plot(x, y).riverMask
             for ((bit, direction) in listOf(1 to (0 to -1), 2 to (1 to 0), 4 to (1 to -1))) {
                 if (mask and bit == 0) continue
-                val (nx, ny) = BnwMapGrid.neighborOf(x, y, direction.first, direction.second) ?: continue
+                val (nx, ny) = grid.neighborOf(x, y, direction.first, direction.second) ?: continue
                 if (tile(x, y).setConnectedByRiver(tile(nx, ny), true)) rivers++
             }
         }
 
         var ruins = 0
-        for (y in 0 until BnwMapGrid.HEIGHT) for (x in 0 until BnwMapGrid.WIDTH) {
+        for (y in 0 until grid.height) for (x in 0 until grid.width) {
             val plot = plot(x, y)
             val tile = tile(x, y)
             plot.resource?.let {
@@ -221,7 +231,7 @@ class BnwMapClone {
             val nation = if (player[0] == "CIVILIZATION_MINOR") cityStateName(player[1]).also { cityStates++ }
                 else (nations[player[0]] ?: error("nation ${player[0]}")).also { civilizations++ }
             require(nation in ruleset.nations) { "no nation $nation" }
-            map.startingLocations.add(TileMap.StartingLocation(BnwMapGrid.hexOf(start.getInt(0), start.getInt(1)), nation, TileMap.StartingLocation.Usage.Player))
+            map.startingLocations.add(TileMap.StartingLocation(grid.hexOf(start.getInt(0), start.getInt(1)), nation, TileMap.StartingLocation.Usage.Player))
         }
 
         FileConversions.writeJson(Gdx.files.absolute(System.getenv("BNW_CLONE_OUT")), map, zip = false)
@@ -229,24 +239,25 @@ class BnwMapClone {
     }
 
     /** Every tile has exactly the neighbours its Civ V plot has (the wrap included), and the distance of Unciv is the number of steps between them */
-    private fun verifyGeometry(map: TileMap) {
+    private fun verifyGeometry(map: TileMap, grid: CivVMapGrid) {
         val directions = listOf(1 to 0, -1 to 0, 0 to 1, -1 to 1, 0 to -1, 1 to -1)
         val expected = HashMap<Tile, List<Tile>>()
-        for (y in 0 until BnwMapGrid.HEIGHT) for (x in 0 until BnwMapGrid.WIDTH) {
-            val tile = map[BnwMapGrid.hexOf(x, y)]
-            val neighbors = directions.mapNotNull { (dq, dr) -> BnwMapGrid.neighborOf(x, y, dq, dr)?.let { map[BnwMapGrid.hexOf(it.first, it.second)] } }
-            require(tile.neighbors.toSet() == neighbors.toSet()) { "neighbours of ($x, $y): ${tile.neighbors.map { BnwMapGrid.civVOf(it.position) }} not ${neighbors.map { BnwMapGrid.civVOf(it.position) }}" }
+        for (y in 0 until grid.height) for (x in 0 until grid.width) {
+            val tile = map[grid.hexOf(x, y)]
+            val neighbors = directions.mapNotNull { (dq, dr) -> grid.neighborOf(x, y, dq, dr)?.let { map[grid.hexOf(it.first, it.second)] } }
+            require(tile.neighbors.toSet() == neighbors.toSet()) { "neighbours of ($x, $y): ${tile.neighbors.map { grid.civVOf(it.position) }} not ${neighbors.map { grid.civVOf(it.position) }}" }
             expected[tile] = neighbors
         }
-        for (source in listOf(0 to 0, 127 to 0, 0 to 79, 64 to 40, 5 to 17, 120 to 60, 63 to 79)) {
-            val start = map[BnwMapGrid.hexOf(source.first, source.second)]
+        val (w, h) = grid.width to grid.height
+        for (source in listOf(0 to 0, w - 1 to 0, 0 to h - 1, w / 2 to h / 2, w * 5 / 128 to h * 17 / 80, w * 120 / 128 to h * 60 / 80, w / 2 - 1 to h - 1)) {
+            val start = map[grid.hexOf(source.first, source.second)]
             val steps = HashMap<Tile, Int>().apply { put(start, 0) }
             val queue = ArrayDeque(listOf(start))
             while (queue.isNotEmpty()) {
                 val tile = queue.removeFirst()
                 for (neighbor in expected[tile]!!) if (steps.putIfAbsent(neighbor, steps[tile]!! + 1) == null) queue.addLast(neighbor)
             }
-            for (tile in map.tileList) require(start.aerialDistanceTo(tile) == steps[tile]) { "distance from $source to ${BnwMapGrid.civVOf(tile.position)}: ${start.aerialDistanceTo(tile)}, steps ${steps[tile]}" }
+            for (tile in map.tileList) require(start.aerialDistanceTo(tile) == steps[tile]) { "distance from $source to ${grid.civVOf(tile.position)}: ${start.aerialDistanceTo(tile)}, steps ${steps[tile]}" }
         }
     }
 

@@ -16,6 +16,7 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import kotlin.math.max
 import kotlin.math.min
@@ -35,9 +36,9 @@ import kotlin.math.min
  *  gold maintenance, the war penalty, the era (+200 per era since the building's technology), buildings that need this one, unique
  *  buildings.
  *
- *  None, because the helper values come in later branches: GetBuildingBasicValue, GetBuildingGrandStrategyValue (x (era + 1)),
- *  GetBuildingPolicyValue, GetBuildingReligionValue, the yield loop (GetBuildingYieldValue, GetBuildingTraitValue and the median
- *  reductions) all count as 0.
+ *  The values of [BuildingValueAi] (GetBuildingBasicValue, GetBuildingGrandStrategyValue (x (era + 1)), GetBuildingPolicyValue and
+ *  GetBuildingReligionValue) are added where the original adds them. None, because they come in a later branch: the yield loop
+ *  (GetBuildingYieldValue, GetBuildingTraitValue and the median reductions) counts as 0.
  *
  *  None, because VP's input is not in BNW: the free resources of a wonder (trait), the defense per wonder, accomplishments, the happiness
  *  of the VP rules (unhappiness, happiness per war, median modifiers, isolation: so no building is "good for gold per turn"), the empire's
@@ -86,6 +87,18 @@ object BuildingProductionAi {
 
     /** CvBuildingEntry::GetEra: the era of the technology the building needs, -1 without one */
     fun era(ruleset: Ruleset, building: Building): Int = ruleset.technologies[building.requiredTech]?.era(ruleset)?.eraNumber ?: -1
+
+    /**
+     *  CvBuildingEntry::GetExtraMissionarySpreads and GetExtraMissionarySpreadsGlobal: units trained get a promotion that lets them spread
+     *  the religion more often ([com.unciv.models.ruleset.unique.UniqueType.UnitStartingPromotions] of such a promotion; the global twin is
+     *  the unique that does not apply to this city only)
+     */
+    fun extraMissionarySpreads(ruleset: Ruleset, building: Building): List<Unique> =
+        building.getMatchingUniques(UniqueType.UnitStartingPromotions, GameContext.IgnoreConditionals).filter { unique ->
+            ruleset.unitPromotions[unique.params[2]]?.uniqueObjects?.any {
+                it.type == UniqueType.CanSpreadReligion && it.getModifiers(UniqueType.UnitActionExtraLimitedTimes).isNotEmpty()
+            } == true
+        }.toList()
 
     private fun bestWonderCity(civ: Civilization, wonder: Building): City? {
         //is this a unique wonder that we can't build? Ignore it.
@@ -141,7 +154,9 @@ object BuildingProductionAi {
             courthouse()
             unlocks()
             militaryExperience()
+            valueTerms()
             maintenance()?.let { return it }
+            bonus += BuildingValueAi.religionValue(city, building)
             warPenalty()
             eraTerms()
             if (bonus < 1) return SR_UNKNOWN
@@ -201,18 +216,19 @@ object BuildingProductionAi {
                 else if (unit.hasUnique(UniqueType.CanSpreadReligion) || unit.hasUnique(UniqueType.CanRemoveHeresy)) return SR_STRATEGY
             }
             // None of this is useful if we don't have a religion.
-            if (!spawnsProphet && (building.hasUnique(UniqueType.SpreadReligionStrength, GameContext.IgnoreConditionals) || givesExtraSpreads()))
+            if (!spawnsProphet && (building.hasUnique(UniqueType.SpreadReligionStrength, GameContext.IgnoreConditionals) ||
+                    extraMissionarySpreads(ruleset, building).isNotEmpty()))
                 return SR_USELESS
             return null
         }
 
-        /** CvBuildingEntry::GetExtraMissionarySpreads: units trained in the city get a promotion that lets them spread the religion more often */
-        private fun givesExtraSpreads(): Boolean =
-            building.getMatchingUniques(UniqueType.UnitStartingPromotions, GameContext.IgnoreConditionals).any { unique ->
-                ruleset.unitPromotions[unique.params[2]]?.uniqueObjects?.any {
-                    it.type == UniqueType.CanSpreadReligion && it.getModifiers(UniqueType.UnitActionExtraLimitedTimes).isNotEmpty()
-                } == true
-            }
+        /** The base, grand strategy and policy values (the yield loop comes between the policy value and the maintenance in the original) */
+        private fun valueTerms() {
+            bonus += BuildingValueAi.basicValue(city, building)
+            //Acts as modifier for value.
+            bonus += BuildingValueAi.grandStrategyValue(city, building) * (civ.getEraNumber() + 1)
+            bonus += BuildingValueAi.policyValue(city, building)
+        }
 
         private fun quests() {
             if (ignoreSituational || !civ.isMajorCiv) return

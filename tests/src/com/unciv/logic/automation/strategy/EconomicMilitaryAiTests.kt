@@ -110,17 +110,16 @@ class EconomicMilitaryAiTests {
     }
 
     @Test
-    fun `the plot score needed drops as the treasury approaches the halving balance`() {
+    fun `the plot score needed drops as the balance approaches the halving balance`() {
         val civ = neutralCiv()
-        civ.addGold(50)
-        // no purchase unless the gold exceeds the cost
-        assertNull(UseGoldAutomation.minimumPlotBuyScore(civ, 50))
-        civ.addGold(475)
-        // discount 50 x (525 - 50) / (1000 - 50) = 25%: 275 - 68
-        assertEquals(207, UseGoldAutomation.minimumPlotBuyScore(civ, 50))
+        // Vox Populi: the cost x the game's era (at least 2) must be below the balance
+        assertNull(UseGoldAutomation.minimumPlotBuyScore(civ, 50, 100))
+        // discount 50 x (101 - 50) / (1000 - 50) = 2%: AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE 150 - 3
+        assertEquals(147, UseGoldAutomation.minimumPlotBuyScore(civ, 50, 101))
+        // discount 50 x (525 - 50) / (1000 - 50) = 25%: 150 - 37
+        assertEquals(113, UseGoldAutomation.minimumPlotBuyScore(civ, 50, 525))
         // a cost at or above AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM: no purchase
-        civ.addGold(1000)
-        assertNull(UseGoldAutomation.minimumPlotBuyScore(civ, 1000))
+        assertNull(UseGoldAutomation.minimumPlotBuyScore(civ, 1000, 5000))
     }
 
     @Test

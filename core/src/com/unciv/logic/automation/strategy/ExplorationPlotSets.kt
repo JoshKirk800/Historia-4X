@@ -2,6 +2,7 @@ package com.unciv.logic.automation.strategy
 
 import com.unciv.Constants
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
@@ -20,6 +21,14 @@ class ExplorationPlotSet {
         val entry = values.getOrPut(plotIndex) { IntArray(3) }
         entry[range - 1] += change
         if (entry[0] == 0 && entry[1] == 0 && entry[2] == 0) values.remove(plotIndex)
+    }
+
+    /** GetValue: the values of the ranges up to [range] (at most 3) */
+    fun getValue(plotIndex: Int, range: Int): Int {
+        val entry = values[plotIndex] ?: return 0
+        var value = 0
+        for (r in 1..range.coerceAtMost(3)) value += entry[r - 1]
+        return value
     }
 }
 
@@ -43,6 +52,19 @@ class ExplorationPlotSets private constructor() {
         ExplorationDomain.Ocean -> ocean
     }
 
+    /**
+     *  The value of [tile] at [range] in CvEconomicAI::GetExplorationPlots([unit]): the land plots for a land unit, the coast plots for a
+     *  ship or a unit that can embark now, the ocean plots for a unit that may stay in the ocean ([canStayInOcean]); 0 for the others
+     */
+    fun valueFor(unit: MapUnit, tile: Tile, range: Int): Int {
+        val included = when (domainOf(tile)) {
+            ExplorationDomain.Land -> unit.baseUnit.isLandUnit
+            ExplorationDomain.Coast -> !unit.baseUnit.isLandUnit || unit.civ.tech.unitsCanEmbark && !unit.cache.cannotEmbark
+            ExplorationDomain.Ocean -> canStayInOcean(unit)
+        }
+        return if (included) of(domainOf(tile)).getValue(tile.zeroBasedIndex, range) else 0
+    }
+
     companion object {
         /** The set a plot is kept in: land; shallow water (CvPlot::isShallowWater, Coast and Lakes); deep water */
         fun domainOf(tile: Tile): ExplorationDomain = when {
@@ -57,6 +79,28 @@ class ExplorationPlotSets private constructor() {
             tile.terrainFeatures.contains(Constants.ice) -> 0
             !tile.isOcean -> rules.define(AiDefine.COAST_EXPLORE_TILE_VALUE)
             else -> rules.define(AiDefine.OCEAN_EXPLORE_TILE_VALUE)
+        }
+
+        /** CvUnit::CanStayInOcean: no ocean-impassable rule, and a land unit only when embarked units may enter the ocean */
+        fun canStayInOcean(unit: MapUnit): Boolean =
+            !unit.cache.cannotEnterOceanTiles && (!unit.baseUnit.isLandUnit || unit.civ.tech.embarkedUnitsCanEnterOcean)
+
+        /**
+         *  EconomicAIHelpers::GetExtraExploreValue: for [range] 2 or 3, UNKNOWN_EXPLORE_TILE_VALUE for each plot at distance 2 to [range]
+         *  that is not revealed, has no revealed neighbour and is in the line of sight of [tile] (CanMaybeSeePlot). VP means to average the
+         *  multipliers of its neighbours with a revealed neighbour, but its loop covers only the plot itself, which has none.
+         */
+        fun extraExploreValue(civ: Civilization, tile: Tile, range: Int): Int {
+            if (range < 2) return 0
+            val maxRange = range.coerceAtMost(3)
+            val tileMap = civ.gameInfo.tileMap
+            val unknownValue = civ.gameInfo.ruleset.ai.define(AiDefine.UNKNOWN_EXPLORE_TILE_VALUE)
+            val lineOfSight by lazy { tileMap.getViewableTiles(tile.position, maxRange).toHashSet() }
+            var value = 0
+            for (distance in 2..maxRange) tileMap.forEachTileAtDistance(tile.position, distance) { nearby ->
+                if (!civ.hasExplored(nearby) && nearby.neighbors.none { civ.hasExplored(it) } && nearby in lineOfSight) value += unknownValue
+            }
+            return value
         }
 
         /** The sets of [civ]: from each plot not revealed that has a revealed neighbour, the revealed plots within 3 that count it */

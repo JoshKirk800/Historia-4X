@@ -28,8 +28,7 @@ enum class ReconState { Enough, Neutral, Needed }
  *
  *  Not ported, with the reason: DoHurry (its gold branch is commented out in the original, and the population branch needs
  *  HURRY_POPULATION access that no Brave New World policy or building grants - Unciv has no population rushing either);
- *  DisbandExtraArchaeologists and DoSwapGreatWorks (culture port). The exploration plots are [ExplorationPlotSets]; the goody-hut
- *  assignments of BNW's UpdatePlots are in [ExplorationAi]/[ExplorationPlots].
+ *  DisbandExtraArchaeologists and DoSwapGreatWorks (culture port). The exploration plots are [ExplorationPlotSets].
  */
 class EconomicAi : IsPartOfGameInfoSerialization {
     /** CvEconomicAI::m_iLastTurnWorkerDisbanded, -1 if never */
@@ -41,10 +40,23 @@ class EconomicAi : IsPartOfGameInfoSerialization {
     @Transient var reconState: ReconState? = null
     /** CvEconomicAI::m_eNavalReconState */
     @Transient var navalReconState: ReconState? = null
-    /** CvEconomicAI::m_vPlotsToExploreLand/Coast/Ocean as of the last [doReconState] (null before it) */
+    /** CvEconomicAI::m_vPlotsToExploreLand/Coast/Ocean as of the last [refreshExplorationPlots] (null before) */
     @Transient var explorationPlots: ExplorationPlotSets? = null
+    /** How many plots were revealed when [explorationPlots] were built (revealed plots only add up, so the same count is the same plots) */
+    @Transient private var explorationPlotsRevealed = -1
     /** CvEconomicAI::m_iExplorersNeeded, set by [doReconState]; read by [MilitaryAi]'s recommended explorers */
     @Transient var explorersNeeded = 0
+
+    /**
+     *  The exploration plots as the plots revealed now make them: rebuilt when more plots are revealed (VP updates its sets whenever a
+     *  plot is revealed or a line of sight changes; a changed line of sight alone is not followed here)
+     */
+    fun refreshExplorationPlots(civ: Civilization): ExplorationPlotSets {
+        val revealed = civ.gameInfo.tileMap.values.count { civ.hasExplored(it) }
+        explorationPlots?.let { if (revealed == explorationPlotsRevealed) return it }
+        explorationPlotsRevealed = revealed
+        return ExplorationPlotSets.build(civ).also { explorationPlots = it }
+    }
 
     fun clone(): EconomicAi {
         val toReturn = EconomicAi()
@@ -92,8 +104,7 @@ class EconomicAi : IsPartOfGameInfoSerialization {
             explorersNeeded = 0
             return
         }
-        val plots = ExplorationPlotSets.build(civ)
-        explorationPlots = plots
+        val plots = refreshExplorationPlots(civ)
         val rules = civ.gameInfo.ruleset.ai
         val war = civ.ai.isMilitaryStrategyActive(MilitaryAi.AT_WAR)
         val oceanFarer = civ.tech.embarkedUnitsCanEnterOcean
@@ -153,7 +164,7 @@ class EconomicAi : IsPartOfGameInfoSerialization {
                 continue
             }
             if (!isPotentialLandExplorer(unit.baseUnit)) continue
-            if (oceanFarer && !canStayInOcean(unit)) continue
+            if (oceanFarer && !ExplorationPlotSets.canStayInOcean(unit)) continue
             if (civ.gameInfo.turns - unit.turnCreated <= 3) continue
             if (!canUseForAiOperation(unit)) continue
             val distance = cityDistanceInPlots(civ, unit.getTile())
@@ -192,7 +203,7 @@ class EconomicAi : IsPartOfGameInfoSerialization {
                 && !(unit.baseUnit.isRanged() && !unit.hasUnique(UniqueType.Invisible))
                 && civ.gameInfo.turns - unit.turnCreated > 3
                 && canUseForAiOperation(unit)
-                && !(oceanFarer && !canStayInOcean(unit))
+                && !(oceanFarer && !ExplorationPlotSets.canStayInOcean(unit))
         }.sortedBy { cityDistanceInPlots(civ, it.getTile()) }.lastOrNull() ?: return
         UnitAiTypes.set(explorer, UnitAiType.EXPLORE_SEA)
     }
@@ -225,10 +236,6 @@ class EconomicAi : IsPartOfGameInfoSerialization {
 
     private fun needsGarrison(city: City): Boolean = CityDangerAi.isUnderSiege(city) ||
         !city.civ.ai.isEconomicStrategyActive(EconomicMilitaryStrategyTests.EARLY_EXPANSION) && city.civ.ai.military.isExposedToEnemy(city.civ, city, null)
-
-    /** CvUnit::CanStayInOcean: no ocean-impassable rule, and a land unit only when embarked units may enter the ocean */
-    private fun canStayInOcean(unit: MapUnit): Boolean =
-        !unit.cache.cannotEnterOceanTiles && (!unit.baseUnit.isLandUnit || unit.civ.tech.embarkedUnitsCanEnterOcean)
 
     /** CvEconomicAI::DoAntiquitySites: antiquity sites (hidden ones included) on tiles the civilization has revealed */
     fun doAntiquitySites(civ: Civilization) {

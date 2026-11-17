@@ -39,7 +39,26 @@ class Difficulty : RulesetObject() {
     var aiWonderCostModifier: Float = 1f
     var aiBuildingMaintenanceModifier: Float = 1f
     var aiUnitMaintenanceModifier: Float = 1f
-    var aiUnitSupplyModifier: Float = 0f
+
+    /**
+     *  The unit supply of an AI major civilization, from the difficulty the game is played at, not from its own player settings
+     *  ([unitSupplyBase], [unitSupplyPerCity]): the Community Patch's AIUnitSupplyBase, AIUnitSupplyPerCity, AIUnitSupplyPopulationPercent
+     *  and AIUnitSupplyBonusPercent of the chosen difficulty (CvPlayer::GetNumUnitsSuppliedByHandicap, ...ByCities, ...ByPopulation and
+     *  GetUnitSupplyBreakdown). The supply is (base + perCity x cities + populationPercent % of the citizens) x (100 + bonusPercent) / 100.
+     *  The defaults are the values the Community Patch gives every level but for the bonus.
+     */
+    var aiUnitSupplyBase: Int = 7
+    var aiUnitSupplyPerCity: Int = 3
+    var aiUnitSupplyPopulationPercent: Int = 50
+    var aiUnitSupplyBonusPercent: Int = 0
+
+    /** The same four values for a city-state civilization (CityStateUnitSupplyBase, ...PerCity, ...PopulationPercent, ...BonusPercent, which
+     *  CvPlayer::GetUnitSupplyBreakdown reads from the difficulty the game is played at for a minor civilization). */
+    var cityStateUnitSupplyBase: Int = 7
+    var cityStateUnitSupplyPerCity: Int = 3
+    var cityStateUnitSupplyPopulationPercent: Int = 50
+    var cityStateUnitSupplyBonusPercent: Int = 0
+
     var aiFreeTechs = ArrayList<String>()
     var aiMajorCivBonusStartingUnits = ArrayList<String>()
     var aiCityStateBonusStartingUnits = ArrayList<String>()

@@ -1,12 +1,12 @@
 package com.unciv.logic.automation.city
 
 import com.unciv.Constants
-import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityFocus
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
+import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
@@ -156,65 +156,56 @@ class CitizenAutomationTests {
     }
 
     @Test
-    fun `culture grand strategy sets culture focus every third turn without automatic specialists`() {
+    fun `a money deficit takes gold focus, with growth while food is the most deficient yield`() {
         addCapital()
         val city = city(HexCoord(6, 0), Constants.grassland, true, 6)
-        city.cityConstructions.addBuilding("Writers' Guild")
-        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
-
-        game.gameInfo.turns = 3
+        civ.ai.economicStrategies["ECONOMICAISTRATEGY_LOSING_MONEY"] = 0
         CitizenAutomation.doTurn(city)
-        assertEquals(CityFocus.CultureFocus, city.getCityFocus())
-        assertTrue(city.manualSpecialists)
-        assertEquals(0, writers(city))
+        assertEquals(CityFocus.GoldFocus, city.getCityFocus())
+        city.ai.mostDeficientYield = Stat.Production
+        CitizenAutomation.doTurn(city)
+        assertEquals(CityFocus.GoldFocus, city.getCityFocus())
+        city.ai.mostDeficientYield = Stat.Food
+        CitizenAutomation.doTurn(city)
+        assertEquals(CityFocus.GoldGrowthFocus, city.getCityFocus())
+    }
 
-        game.gameInfo.turns = 4
+    @Test
+    fun `a city of more than 3 citizens building a world wonder takes production focus`() {
+        addCapital()
+        val city = city(HexCoord(6, 0), Constants.grassland, true, 6)
+        city.cityConstructions.setCurrentConstruction(game.createWonder().name)
+        CitizenAutomation.doTurn(city)
+        assertEquals(CityFocus.ProductionFocus, city.getCityFocus())
+        city.population.setPopulation(3)
+        CitizenAutomation.doTurn(city)
+        assertEquals("a city of 3 builds without the focus", CityFocus.NoFocus, city.getCityFocus())
+    }
+
+    @Test
+    fun `the specialization's yield chooses the focus, food shortage adds growth, the default specialization none`() {
+        addCapital()
+        val city = city(HexCoord(6, 0), Constants.grassland, true, 6)
+        city.ai.changeSpecialization("CITYSPECIALIZATION_PRODUCTION_WONDER")
+        CitizenAutomation.doTurn(city)
+        assertEquals(CityFocus.ProductionFocus, city.getCityFocus())
+        city.ai.mostDeficientYield = Stat.Food
+        CitizenAutomation.doTurn(city)
+        assertEquals(CityFocus.ProductionGrowthFocus, city.getCityFocus())
+        city.ai.defaultSpecialization = "CITYSPECIALIZATION_PRODUCTION_WONDER"
         CitizenAutomation.doTurn(city)
         assertEquals(CityFocus.NoFocus, city.getCityFocus())
-        assertFalse(city.manualSpecialists)
-        assertEquals(2, writers(city))
     }
 
     @Test
-    fun `culture focus needs a surplus of 2 food and gives way to a money deficit`() {
+    fun `a puppet we may annex takes no focus and may grow`() {
         addCapital()
-        val hungry = city(HexCoord(6, 0), Constants.desert, false, 6)
-        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
-        game.gameInfo.turns = 3
-        CitizenAutomation.doTurn(hungry)
-        assertEquals(CityFocus.NoFocus, hungry.getCityFocus())
-
-        val fed = city(HexCoord(0, 6), Constants.grassland, true, 6)
-        civ.ai.economicStrategies["ECONOMICAISTRATEGY_LOSING_MONEY"] = 0
-        CitizenAutomation.doTurn(fed)
-        assertEquals(CityFocus.GoldGrowthFocus, fed.getCityFocus())
-    }
-
-    @Test
-    fun `capital short of food takes food focus and the wonder city production focus`() {
-        val capital = city(HexCoord(-6, 0), Constants.desert, false, 3)
-        game.gameInfo.turns = 1
-        CitizenAutomation.doTurn(capital)
-        assertEquals(CityFocus.FoodFocus, capital.getCityFocus())
-
-        val wonderCity = city(HexCoord(6, 0), Constants.grassland, true, 6)
-        wonderCity.ai.changeSpecialization("CITYSPECIALIZATION_PRODUCTION_WONDER")
-        CitizenAutomation.doTurn(wonderCity)
-        assertEquals(CityFocus.ProductionFocus, wonderCity.getCityFocus())
-    }
-
-    @Test
-    fun `a puppet takes gold focus unless it starves`() {
-        addCapital()
-        val fed = city(HexCoord(6, 0), Constants.grassland, true, 6)
-        fed.isPuppet = true
-        game.gameInfo.turns = 1
-        CitizenAutomation.doTurn(fed)
-        assertEquals(CityFocus.GoldFocus, fed.getCityFocus())
-
-        val starving = city(HexCoord(0, 6), Constants.desert, false, 6)
-        starving.isPuppet = true
-        CitizenAutomation.doTurn(starving)
-        assertEquals(CityFocus.NoFocus, starving.getCityFocus())
+        val puppet = city(HexCoord(6, 0), Constants.grassland, true, 6)
+        puppet.isPuppet = true
+        puppet.setCityFocus(CityFocus.GoldFocus)
+        puppet.avoidGrowth = true
+        CitizenAutomation.doTurn(puppet)
+        assertEquals(CityFocus.NoFocus, puppet.getCityFocus())
+        assertFalse(puppet.avoidGrowth)
     }
 }

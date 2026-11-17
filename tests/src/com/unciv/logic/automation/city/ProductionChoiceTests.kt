@@ -12,6 +12,7 @@ import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.stats.Stat
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -160,6 +161,17 @@ class ProductionChoiceTests {
         game.addUnit("Warrior", civ, game.tileMap[0, 1])
         game.addUnit("Warrior", civ, game.tileMap[1, 1])
         assertEquals(ProductionSanityAi.normalise(1000), ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
+    }
+
+    @Test
+    fun `a process making the city's most deficient yield gets 150 percent more`() {
+        for (tile in listOf(game.tileMap[1, 0], game.tileMap[0, 1], game.tileMap[1, 1])) game.addUnit("Warrior", civ, tile)
+        val normal = ProductionSanityAi.normalise(1000)
+        city.ai.mostDeficientYield = Stat.Gold
+        assertEquals(normal * 250 / 100, ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
+        assertEquals(normal, ProductionSanityAi.processSanity(city, PerpetualConstruction.Science, 1000))
+        city.ai.mostDeficientYield = null
+        assertEquals(normal, ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
     }
 
     @Test

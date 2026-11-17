@@ -6,6 +6,7 @@ import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.tile.ResourceType
+import com.unciv.models.stats.Stat
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -93,6 +94,14 @@ class PlotBorderChoiceTests {
         val farm = game.createTileImprovement()
         tile(2, 0).setImprovement(farm.name)
         assertEquals(198 - 5, city.expansion.plotInfluenceScore(tile(2, 0), 2))
+    }
+
+    @Test
+    fun `the city's most deficient yield counts three times in the score`() {
+        city.ai.mostDeficientYield = Stat.Production
+        assertEquals("grassland has no production", 198, city.expansion.plotInfluenceScore(tile(2, 0), 2))
+        city.ai.mostDeficientYield = Stat.Food
+        assertEquals(200 - 2 * 3, city.expansion.plotInfluenceScore(tile(2, 0), 2))
     }
 
     @Test

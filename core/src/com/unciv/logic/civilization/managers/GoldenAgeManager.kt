@@ -17,7 +17,9 @@ class GoldenAgeManager : IsPartOfGameInfoSerialization {
     lateinit var civInfo: Civilization
 
     var storedHappiness = 0
-    private var numberOfGoldenAges = 0
+    /** Golden ages entered by filling the happiness meter (CvPlayer::GetNumGoldenAges counts those of every source) */
+    var numberOfGoldenAges = 0
+        private set
     var turnsLeftForCurrentGoldenAge = 0
 
     fun clone(): GoldenAgeManager {

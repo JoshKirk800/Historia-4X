@@ -192,6 +192,25 @@ class PolicyBranchAiDef : INamed {
     var secondAdopterFreePolicies = 0
 }
 
+/**
+ *  The CvPolicyEntry inputs of Vox Populi's CvPolicyAI::WeightPolicyAttributes for a policy, by Unciv policy name: [values] the Policies
+ *  columns it sets (by column name, booleans as 1) and [rows] its rows of the Policy_* tables read there.
+ */
+class PolicyAttributesDef : INamed {
+    override var name = ""
+    var values = LinkedHashMap<String, Int>()
+    var rows = ArrayList<PolicyAttributeRow>()
+}
+
+/** One Policy_* row of a [PolicyAttributesDef]: [table] without the `Policy_` prefix; [key] the row's class, improvement or unit (an
+ *  Unciv unit for a unit class: its default unit), "" for the per-yield tables; [yield] a [com.unciv.models.stats.Stat] name or "" */
+class PolicyAttributeRow {
+    var table = ""
+    var key = ""
+    var yield = ""
+    var value = 0
+}
+
 /** Eras.DiploEmphasisReligion / DiploEmphasisLatePolicies, by Unciv era name (religion and ideology opinion of CvDiplomacyAI) */
 class EraDiplomacyDef : INamed {
     override var name = ""
@@ -206,10 +225,12 @@ class GameSpeedDiplomacyDef : INamed {
     var opinionDurationPercent = 100
 }
 
-/** Worlds.EstimatedNumCities, by Unciv map size name (CvDiplomacyAIHelpers::GetWarmongerOffset) */
+/** Worlds.EstimatedNumCities (CvDiplomacyAIHelpers::GetWarmongerOffset) and NumCitiesUnhappinessPercent (CvPolicyAI::WeightPolicyAttributes),
+ *  by Unciv map size name */
 class WorldSizeDef : INamed {
     override var name = ""
     var estimatedNumCities = 52
+    var numCitiesUnhappinessPercent = 100
 }
 
 /** MultiUnitPositionTypes (CvTacticalAI.h): where a unit of a formation stands relative to the others while the army moves */

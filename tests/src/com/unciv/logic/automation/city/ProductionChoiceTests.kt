@@ -89,30 +89,43 @@ class ProductionChoiceTests {
     }
 
     @Test
-    fun `the pick is a weighted roll among the top two on Prince`() {
+    fun `the pick is a weighted roll among the choices within 90 percent of the best`() {
         val automation = ConstructionAutomation(city.cityConstructions)
         val counts = HashMap<String, Int>()
         for (turn in 1..300) {
             game.gameInfo.turns = turn
             val candidates = listOf(
-                ConstructionAutomation.Buildable(PerpetualConstruction.Culture, 100, 1),
+                ConstructionAutomation.Buildable(PerpetualConstruction.Culture, 260, 1),
                 ConstructionAutomation.Buildable(PerpetualConstruction.Gold, 300, 1),
-                ConstructionAutomation.Buildable(PerpetualConstruction.Science, 200, 1),
+                ConstructionAutomation.Buildable(PerpetualConstruction.Science, 280, 1),
             )
-            val chosen = automation.pickFromTopChoices(candidates)!!.construction.name
+            val chosen = automation.choose(candidates)!!.construction.name
             counts[chosen] = (counts[chosen] ?: 0) + 1
         }
+        // 260 is below 90% of 300; 300 : 280, both happen
         assertEquals(null, counts[PerpetualConstruction.Culture.name])
         val gold = counts[PerpetualConstruction.Gold.name] ?: 0
         val science = counts[PerpetualConstruction.Science.name] ?: 0
-        // 300 : 200 - both happen, the heavier more often
-        assertTrue("gold $gold science $science", science > 60 && gold > science)
+        assertTrue("gold $gold science $science", science > 60 && gold > 60)
     }
 
     @Test
-    fun `the time penalty can reorder the top choices`() {
+    fun `the current build goes on while it weighs at least half the best`() {
         val automation = ConstructionAutomation(city.cityConstructions)
-        // 1000 over 40 turns is 62, 100 over 1 turn stays 100: only the quick item and the 80 are in the top two
+        val monument = game.ruleset.buildings["Monument"]!!
+        city.cityConstructions.setCurrentConstruction(monument.name)
+        fun choice(monumentWeight: Int) = automation.choose(listOf(
+            ConstructionAutomation.Buildable(PerpetualConstruction.Gold, 300, 1),
+            ConstructionAutomation.Buildable(monument, monumentWeight, 1),
+        ))!!.construction
+        assertEquals(monument, choice(150))
+        assertEquals(PerpetualConstruction.Gold, choice(149))
+    }
+
+    @Test
+    fun `the time penalty can reorder the choices`() {
+        val automation = ConstructionAutomation(city.cityConstructions)
+        // 1000 over 40 turns is 62, 100 over 1 turn stays 100: only the quick item is within 90% of the best
         val candidates = listOf(
             ConstructionAutomation.Buildable(PerpetualConstruction.Culture, 1000, 40),
             ConstructionAutomation.Buildable(PerpetualConstruction.Gold, 100, 1),
@@ -120,8 +133,8 @@ class ProductionChoiceTests {
         )
         for (turn in 1..50) {
             game.gameInfo.turns = turn
-            val chosen = automation.pickFromTopChoices(candidates.map { ConstructionAutomation.Buildable(it.construction, it.weight, it.turns) })!!
-            assertTrue(chosen.construction != PerpetualConstruction.Culture)
+            val chosen = automation.choose(candidates.map { ConstructionAutomation.Buildable(it.construction, it.weight, it.turns) })!!
+            assertEquals(PerpetualConstruction.Gold, chosen.construction)
         }
     }
 

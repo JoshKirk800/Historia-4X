@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.logic.automation.WeightedChoice
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.automation.diplomacy.VictoryPursuitAi
@@ -160,13 +161,13 @@ object PolicyAutomation {
     /**
      *  CvPolicyAI::ChooseNextPolicy (Vox Populi): the policy or branch to adopt next, null if none can be adopted: a weighted pick among
      *  the [weighChoices] candidates whose weight is at least the difficulty's PolicyChoiceCutoffThreshold % of the best
-     *  ([chooseAbovePercentThreshold]).
+     *  ([WeightedChoice.chooseAbovePercentThreshold]).
      */
     fun chooseNextPolicy(civ: Civilization, random: Random): Policy? {
         val choices = weighChoices(civ)
         if (choices.candidates.isEmpty()) return null
         val cutoff = civ.gameInfo.ruleset.ai.handicapValue(civ.gameInfo.getDifficulty().name, POLICY_CUTOFF) ?: DEFAULT_POLICY_CUTOFF
-        return choices.candidates[chooseAbovePercentThreshold(choices.weights, cutoff, random)]
+        return choices.candidates[WeightedChoice.chooseAbovePercentThreshold(choices.weights, cutoff, random)]
     }
 
     /**
@@ -214,23 +215,6 @@ object PolicyAutomation {
             }
         }
         return PolicyChoices(candidates, candidateWeights)
-    }
-
-    /**
-     *  CvWeightedVector::ChooseAbovePercentThreshold: a weighted pick among the [weights] at least [percent]% of the highest; a uniform
-     *  pick when none is positive, a weighted pick among all at 0%. Returns the index.
-     */
-    fun chooseAbovePercentThreshold(weights: List<Int>, percent: Int, random: Random): Int {
-        val highest = weights.maxOrNull() ?: 0
-        if (highest <= 0) return random.nextInt(weights.size)
-        val cutoff = highest * percent.coerceIn(0, 100) / 100
-        val eligible = weights.indices.filter { weights[it] >= cutoff }
-        var roll = random.nextInt(eligible.sumOf { maxOf(0, weights[it]) }.coerceAtLeast(1))
-        for (index in eligible) {
-            roll -= maxOf(0, weights[index])
-            if (roll < 0) return index
-        }
-        return eligible.last()
     }
 
     /** CvPlayerPolicies::WillFinishBranchIfAdopted: every other member of the branch (not its opener or finisher) is adopted */

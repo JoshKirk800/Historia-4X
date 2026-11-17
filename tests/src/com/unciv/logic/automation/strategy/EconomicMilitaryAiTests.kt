@@ -177,14 +177,14 @@ class EconomicMilitaryAiTests {
         val military = civ.ai.military
         military.updateBaseData(civ)
         val cap = EconomicAi.softSupplyCap(civ)
-        // land 10 x (3 + 2 cities) = 50, naval 7 x 2 coastal cities = 14, both x 100: land truncated, sea rounded
+        // land 10 x (3 + 2 cities) = 50, naval 7 x 2 coastal cities = 14, both x 100, both rounded
         val sizes = "cap $cap, land ${military.recommendedLandArmySize}, navy ${military.recommendedNavySize}"
-        assertEquals(sizes, cap * 50 / 64, military.recommendedLandArmySize)
+        assertEquals(sizes, (cap * 50 / 64f + 0.5f).toInt(), military.recommendedLandArmySize)
         assertEquals(sizes, (cap * 14 / 64f + 0.5f).toInt(), military.recommendedNavySize)
         // a scout's share comes off the top
         game.addUnit("Scout", civ, tile(-1, 0))
         military.updateBaseData(civ)
-        assertEquals(sizes, (cap - 1) * 50 / 64, military.recommendedLandArmySize)
+        assertEquals(sizes, ((cap - 1) * 50 / 64f + 0.5f).toInt(), military.recommendedLandArmySize)
     }
 
     @Test

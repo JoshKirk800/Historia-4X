@@ -37,7 +37,8 @@ class WeightedDirective(val directive: BuilderDirective, val weight: Int, val bu
  *  - FilterOnlyBestImprovements and UpdateGreatPersonDirectives ([BuilderDirectives]).
  *
  *  Unciv mapping and deviations:
- *  - The original loops over all plots of the map; plots we do not own score -1 (no improvement of the rules takes land), so only the plots of our
+ *  - The original loops over all plots of the map; plots we do not own score -1 (no improvement of the rules takes land; the return comes before
+ *    the defense and culture bomb terms, so the original plans no Fort or Citadel outside our borders either), so only the plots of our
  *    cities are walked. The builds a unit can do are its own at selection time ([BuilderBuilds.canPerform]); the plan considers an improvement
  *    possible when the civilization may build it (WrongCiv, Replaced, Unbuildable, Obsolete, conditionals) and, if it is built instantly, a unit of
  *    ours creates it.

@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.city
 
 import com.unciv.logic.automation.strategy.ProductionAi
+import com.unciv.logic.automation.strategy.ProductionSanityAi
 import com.unciv.logic.automation.strategy.WonderProductionAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -88,6 +89,8 @@ class ProductionChoiceTests {
         assertEquals(work * 100 + 1, ProductionAi.turnsLeft(city, building))
     }
 
+    private fun building(name: String) = game.ruleset.buildings[name]!!
+
     @Test
     fun `the pick is a weighted roll among the choices within 90 percent of the best`() {
         val automation = ConstructionAutomation(city.cityConstructions)
@@ -95,47 +98,58 @@ class ProductionChoiceTests {
         for (turn in 1..300) {
             game.gameInfo.turns = turn
             val candidates = listOf(
-                ConstructionAutomation.Buildable(PerpetualConstruction.Culture, 260, 1),
-                ConstructionAutomation.Buildable(PerpetualConstruction.Gold, 300, 1),
-                ConstructionAutomation.Buildable(PerpetualConstruction.Science, 280, 1),
+                ConstructionAutomation.Buildable(building("Monument"), 2000, 1),
+                ConstructionAutomation.Buildable(building("Library"), 3000, 1),
+                ConstructionAutomation.Buildable(building("Granary"), 2800, 1),
             )
             val chosen = automation.choose(candidates)!!.construction.name
             counts[chosen] = (counts[chosen] ?: 0) + 1
         }
-        // 260 is below 90% of 300; 300 : 280, both happen
-        assertEquals(null, counts[PerpetualConstruction.Culture.name])
-        val gold = counts[PerpetualConstruction.Gold.name] ?: 0
-        val science = counts[PerpetualConstruction.Science.name] ?: 0
-        assertTrue("gold $gold science $science", science > 60 && gold > 60)
+        // normalised to sqrt(10 x weight): 141, 173, 167; 141 is below 90% of 173, 173 : 167 both happen
+        assertEquals(null, counts["Monument"])
+        val library = counts["Library"] ?: 0
+        val granary = counts["Granary"] ?: 0
+        assertTrue("library $library granary $granary", library > 60 && granary > 60)
     }
 
     @Test
     fun `the current build goes on while it weighs at least half the best`() {
         val automation = ConstructionAutomation(city.cityConstructions)
-        val monument = game.ruleset.buildings["Monument"]!!
+        val monument = building("Monument")
         city.cityConstructions.setCurrentConstruction(monument.name)
         fun choice(monumentWeight: Int) = automation.choose(listOf(
-            ConstructionAutomation.Buildable(PerpetualConstruction.Gold, 300, 1),
+            ConstructionAutomation.Buildable(building("Library"), 3000, 1),
             ConstructionAutomation.Buildable(monument, monumentWeight, 1),
         ))!!.construction
-        assertEquals(monument, choice(150))
-        assertEquals(PerpetualConstruction.Gold, choice(149))
+        // half of sqrt(30000) = 173 is 86: sqrt(7400) is 86, sqrt(7390) 85
+        assertEquals(monument, choice(740))
+        assertEquals(building("Library"), choice(739))
     }
 
     @Test
     fun `the time penalty can reorder the choices`() {
         val automation = ConstructionAutomation(city.cityConstructions)
-        // 1000 over 40 turns is 62, 100 over 1 turn stays 100: only the quick item is within 90% of the best
+        // normalised 100 over 40 turns is 6, 31 and 24 over 1 turn stay: only the quick 31 is within 90% of the best
         val candidates = listOf(
-            ConstructionAutomation.Buildable(PerpetualConstruction.Culture, 1000, 40),
-            ConstructionAutomation.Buildable(PerpetualConstruction.Gold, 100, 1),
-            ConstructionAutomation.Buildable(PerpetualConstruction.Science, 80, 1),
+            ConstructionAutomation.Buildable(building("Monument"), 1000, 40),
+            ConstructionAutomation.Buildable(building("Library"), 100, 1),
+            ConstructionAutomation.Buildable(building("Granary"), 60, 1),
         )
         for (turn in 1..50) {
             game.gameInfo.turns = turn
-            val chosen = automation.choose(candidates.map { ConstructionAutomation.Buildable(it.construction, it.weight, it.turns) })!!
-            assertEquals(PerpetualConstruction.Gold, chosen.construction)
+            val chosen = automation.choose(candidates)!!
+            assertEquals(building("Library"), chosen.construction)
         }
+    }
+
+    @Test
+    fun `a process is worth next to nothing while the army is tiny`() {
+        // no military unit: at most 2 per city, -100%; the weight stays at least 1
+        assertEquals(1, ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
+        game.addUnit("Warrior", civ, game.tileMap[1, 0])
+        game.addUnit("Warrior", civ, game.tileMap[0, 1])
+        game.addUnit("Warrior", civ, game.tileMap[1, 1])
+        assertEquals(ProductionSanityAi.normalise(1000), ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
     }
 
     private fun makeWonderCity() = game.createWonder().apply { cost = 100 }.also { wonder ->

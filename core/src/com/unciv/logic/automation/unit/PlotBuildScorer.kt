@@ -3,6 +3,8 @@ package com.unciv.logic.automation.unit
 import com.unciv.Constants
 import com.unciv.logic.automation.civilization.CityStateAi
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
+import com.unciv.logic.automation.diplomacy.TheftAi
+import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.tile.RoadStatus
@@ -74,15 +76,16 @@ class SBuilderState(changed: Map<Tile, TileImprovement?> = emptyMap(), extra: Ma
  *  - A culture bomb that is built (a Citadel) loses 2000 if it is a Great Person's and adds for every plot it would take from somebody within its
  *    radius: 10, + 50 for a luxury or strategic resource we see (+ 50 more when somebody owns the plot), and for a plot of somebody + the
  *    defensive bonus of its improvement, + 50 for a Great Person's, + the plot's yields; × 3 for a city-state, else × 8 / 4 / 1 by our opinion of
- *    the owner (worse than neutral / neutral / better), × 10. A builder that is a city-state gets -10000 for taking from its friend, protector or ally.
+ *    the owner (worse than neutral / neutral / better), × 10. A major civilization's builder gets -10000 for taking from a bad target
+ *    ([TheftAi.isBadTheftTarget], culture bomb); a city-state's for taking from its friend, protector or ally.
  *  - The unused yield: when the plot's simplified yield value is not better than the worst worked plot of every city that can work it, the
  *    yield score goes to [PlotBuildScore.unusedYieldScore].
  *
  *  Not ported (none-inputs, the rules BNW lacks or later branches): the tile claim (NewOwner), BlockTileSteal (a theft bonus for an improvement
  *  that blocks tile theft), Great Person rate (GreatPersonRateModifier), domain production and experience, the planned features of
  *  [SBuilderState] (mChangedPlotFeatures), the adjacency yields of Vox Populi's own rules (YieldPerXAdjacentImprovement/Terrain, AdjacentTerrain/Feature/ResourceYieldChanges), WLTKD and
- *  golden age improvement yields, resource monopolies, the canal term (MakesPassable), CvDiplomacyAI::IsBadTheftTarget (nobody is one: the -10000
- *  of a major's culture bomb and of an embassy never applies), CvPlot::IsChokePoint, CvPlot::IsStealBlockedByImprovement and embassy improvements,
+ *  golden age improvement yields, resource monopolies, the canal term (MakesPassable), CvPlot::IsChokePoint, CvPlot::IsStealBlockedByImprovement
+ *  and embassy improvements,
  *  improvement maintenance (0 in the rules), spawned resources, IMPROVEMENTS_EXTENSIONS and the vanilla Celts block (inactive in Vox Populi).
  *  The culture bomb walks the plots in Unciv's order (the original's ring table decides which plots come before the first plot of somebody else,
  *  from which on a plot nobody owns counts), and skips city centers and the plots the improvement's filter does not take (Unciv's take-over).
@@ -333,8 +336,8 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
      *  For each plot it takes that is not ours, passable and not a city center: 10, + 50 for a luxury or strategic resource we see (+ 50 more
      *  when somebody owns it), and when somebody owns it (then the bomb steals enemy land): + the plot improvement's defensive bonus, + 50 for a Great Person's,
      *  + the plot's yields; × 3 for a city-state, else × 8 / 4 / 1 by our opinion of the owner (worse than neutral / neutral / better), × 10. A plot
-     *  nobody owns adds that only after a plot of somebody has been seen. A plot that a city-state's friend, protector or ally owns makes the whole term
-     *  -10000 when [civ] is a city-state.
+     *  nobody owns adds that only after a plot of somebody has been seen. A plot whose owner is a bad target of a major [civ]'s culture bomb
+     *  ([TheftAi.isBadTheftTarget]), or that a city-state's friend, protector or ally owns when [civ] is a city-state, makes the whole term -10000.
      */
     private fun cultureBombScore(tile: Tile, improvement: TileImprovement, radius: Int): Int {
         var secondaryScore = 0
@@ -349,7 +352,10 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
             if (owner == civ) continue
             if (adjacent.isCityCenter() || bombs.none { ring <= it.params[1].toInt() && adjacent.matchesFilter(it.params[0]) }) continue
 
-            if (civ.isCityState && owner != null) {
+            if (civ.isMajorCiv && owner != null && TheftAi.isBadTheftTarget(civ, owner, TheftType.CultureBomb)) {
+                stealScore = -10000
+                break
+            } else if (civ.isCityState && owner != null) {
                 if (CityStateAi.isFriends(civ, owner) || CityStateAi.isProtectedBy(civ, owner) || civ.allyCiv == owner) {
                     stealScore = -10000
                     break

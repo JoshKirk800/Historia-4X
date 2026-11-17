@@ -316,7 +316,7 @@ class PlannedRoutesTests {
         val onScore = UseGoldAutomation.individualPlotScore(city, onRoute)
         val offScore = UseGoldAutomation.individualPlotScore(city, offRoute)
         val baseCost = UseGoldAutomation.baseTileCost(city)
-        // 50 more value, scaled by the base cost over the tile's cost, rounded down
+        // AI_PLOT_VALUE_STRATEGIC_RESOURCE (Vox Populi's 80) more value, scaled by the base cost over the tile's cost, rounded down
         val bonus = game.ruleset.ai.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE) * baseCost / cost
         assertTrue("$onScore - $offScore against $bonus", onScore > offScore && onScore - offScore in (bonus - 1)..(bonus + 1))
     }

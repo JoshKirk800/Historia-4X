@@ -1,6 +1,5 @@
 package com.unciv.models.ruleset.unit
 
-import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.Constants
 import com.unciv.logic.GameInfo
 import com.unciv.logic.MultiFilter
@@ -401,8 +400,9 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
             unit.currentMovement = 0f
 
         addConstructionBonuses(unit, cityConstructions)
-        // CvCity::CreateUnit: a unit trained for an operation joins it, any other may be sent exploring
-        if (!(useToSatisfyOperation && civInfo.ai.operations.finishedBuilding(unit, cityConstructions.city))) EconomicAi.onUnitTrained(unit)
+        // CvCity::CreateUnit: a unit trained for an operation joins it. Vox Populi's explorer assignment there applies to city-states
+        // only (CannotMinorCiv on NEED_RECON), which do not explore here; majors' explorers come from EconomicAi.doReconState
+        if (useToSatisfyOperation) civInfo.ai.operations.finishedBuilding(unit, cityConstructions.city)
 
         return unit
     }

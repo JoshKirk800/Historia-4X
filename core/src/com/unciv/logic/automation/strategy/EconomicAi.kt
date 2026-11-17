@@ -4,17 +4,20 @@ import com.unciv.logic.GameInfo
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.automation.civilization.UseGoldAutomation
-import com.unciv.logic.automation.diplomacy.AiThreat
 import com.unciv.logic.automation.diplomacy.WarIntentAi
+import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.ArchaeologyFunctions
+import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.ruleset.unit.BaseUnit
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sqrt
 
 /** CvEconomicAI ReconState */
 enum class ReconState { Enough, Neutral, Needed }
@@ -25,32 +28,35 @@ enum class ReconState { Enough, Neutral, Needed }
  *
  *  Not ported, with the reason: DoHurry (its gold branch is commented out in the original, and the population branch needs
  *  HURRY_POPULATION access that no Brave New World policy or building grants - Unciv has no population rushing either);
- *  DisbandExtraArchaeologists and DoSwapGreatWorks (culture port). The exploration plots and the goody-hut assignments (UpdatePlots) are in [ExplorationAi]/[ExplorationPlots].
+ *  DisbandExtraArchaeologists and DoSwapGreatWorks (culture port). The exploration plots are [ExplorationPlotSets]; the goody-hut
+ *  assignments of BNW's UpdatePlots are in [ExplorationAi]/[ExplorationPlots].
  */
 class EconomicAi : IsPartOfGameInfoSerialization {
     /** CvEconomicAI::m_iLastTurnWorkerDisbanded, -1 if never */
     var lastTurnWorkerDisbanded = -1
     /** CvEconomicAI::m_iVisibleAntiquitySites, updated by [doAntiquitySites] */
     var visibleAntiquitySites = 0
-    /** CvEconomicAI::m_iExplorersDisbanded: land explorers [com.unciv.logic.automation.unit.HomelandAi] disbanded for finding no way home; they count as explorers in [doReconState] for good */
-    var explorersDisbanded = 0
 
     /** CvEconomicAI::m_eReconState, recomputed each turn before the strategy loop (null before the first computation) */
     @Transient var reconState: ReconState? = null
     /** CvEconomicAI::m_eNavalReconState */
     @Transient var navalReconState: ReconState? = null
+    /** CvEconomicAI::m_vPlotsToExploreLand/Coast/Ocean as of the last [doReconState] (null before it) */
+    @Transient var explorationPlots: ExplorationPlotSets? = null
+    /** CvEconomicAI::m_iExplorersNeeded, set by [doReconState]; read by [MilitaryAi]'s recommended explorers */
+    @Transient var explorersNeeded = 0
 
     fun clone(): EconomicAi {
         val toReturn = EconomicAi()
         toReturn.lastTurnWorkerDisbanded = lastTurnWorkerDisbanded
         toReturn.visibleAntiquitySites = visibleAntiquitySites
-        toReturn.explorersDisbanded = explorersDisbanded
         return toReturn
     }
 
     /** What CvEconomicAI::DoTurn does before its strategy loop: DoReconState and DoAntiquitySites, in one pass over the map */
     fun doTurnBeforeStrategies(civ: Civilization) {
         doReconState(civ)
+        doAntiquitySites(civ)
     }
 
     /** What CvEconomicAI::DoTurn does after its strategy loop for AI players: DoPlotPurchases, DisbandExtraWorkers */
@@ -60,84 +66,171 @@ class EconomicAi : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  CvEconomicAI::DoReconState (and DoAntiquitySites, counted in the same pass). Over the tiles the civilization has explored, counts revealed land and revealed coastal water (deep water
-     *  too once embarked units may enter the ocean), and the revealed tiles with an unrevealed neighbor (the first such neighbor decides
-     *  whether it counts as land or as water fog). The land state compares [reconWeight] of the land counts and the land explorers
-     *  (UNITAI_EXPLORE, being trained included, plus [explorersDisbanded]) with 110 - 10 x RECON flavor (at most 100); the naval state, with a coastal city, does
-     *  the same for the water counts, the sea explorers and NAVAL_RECON. At ENOUGH the explorers that can attack go back to the attack
-     *  role (one land explorer is kept before turn 100).
+     *  CvEconomicAI::DoReconState (Vox Populi). City-states: ENOUGH for both (VP leaves their states alone, no recon strategy applies to
+     *  them). Without cities: NEUTRAL. Losing all wars: ENOUGH, no explorer wanted. Else, from the [explorationPlots] ([ExplorationPlotSets.build]):
+     *  - land: the land plots, + a quarter of the coast plots once units can embark, + a quarter of the ocean plots for an ocean farer
+     *    (embarked units may enter the ocean; Team::CanBuildOceanCrossingUnit needs a CanCrossOceans promotion, which BNW has not);
+     *    explorers wanted x 100 = 50 + plots x 100 / (MAX_PLOTS_PER_EXPLORER - RECON flavor), halved at war (AT_WAR), at least 100 with any
+     *    plot ([explorersNeeded]: / 100). Explorers (UNITAI_EXPLORE, those being trained included) more than half a unit short: NEEDED,
+     *    and [promoteLandExplorer]; more than half a unit over: ENOUGH, and [retireLandExplorer]; else NEUTRAL;
+     *  - naval, with a coastal city (else ENOUGH): the coast plots, + the ocean plots for an ocean farer, the NAVAL_RECON flavor and the
+     *    sea explorers (UNITAI_EXPLORE_SEA) likewise, with [promoteNavalExplorer] and [retireNavalExplorer].
      */
     fun doReconState(civ: Civilization) {
+        UnitAiTypes.pruneOverrides(civ)
         if (civ.isCityState) {
             reconState = ReconState.Enough
             navalReconState = ReconState.Enough
-            doAntiquitySites(civ)
             return
         }
-        val constants = civ.gameInfo.ruleset.modOptions.constants
-        val siteResource = constants.archaeologySiteResource
-        val hiddenSiteResource = constants.archaeologyHiddenSiteResource
-        var antiquitySites = 0
-        val rules = civ.gameInfo.ruleset.ai
-        val deepWaterToo = civ.tech.embarkedUnitsCanEnterOcean
-        UnitAiTypes.pruneOverrides(civ)
-        var landRevealed = 1
-        var landWithAdjacentFog = 1
-        var coastalRevealed = 1
-        var coastalWithAdjacentFog = 1
-        for (tile in civ.gameInfo.tileMap.values) {
-            if (!civ.hasExplored(tile)) continue
-            val resource = tile.resource
-            if (resource != null && (resource == siteResource || resource == hiddenSiteResource) && civ.canSeeResource(tile.tileResource))
-                antiquitySites++
-            if (!tile.isWater) landRevealed++
-            else if (!tile.isOcean || deepWaterToo) coastalRevealed++
-            for (neighbor in tile.neighbors) {
-                if (neighbor.isWater) {
-                    if ((deepWaterToo || !neighbor.isOcean) && !civ.hasExplored(neighbor)) {
-                        coastalWithAdjacentFog++
-                        break
-                    }
-                } else if (!civ.hasExplored(neighbor)) {
-                    landWithAdjacentFog++
-                    break
-                }
-            }
+        reconState = ReconState.Neutral
+        navalReconState = ReconState.Neutral
+        if (civ.cities.isEmpty()) return
+        if (WarStateAi.stateAllWars(civ) == StateAllWars.Losing) {
+            reconState = ReconState.Enough
+            navalReconState = ReconState.Enough
+            explorersNeeded = 0
+            return
         }
+        val plots = ExplorationPlotSets.build(civ)
+        explorationPlots = plots
+        val rules = civ.gameInfo.ruleset.ai
+        val war = civ.ai.isMilitaryStrategyActive(MilitaryAi.AT_WAR)
+        val oceanFarer = civ.tech.embarkedUnitsCanEnterOcean
 
-        visibleAntiquitySites = antiquitySites
-
-        val landExplorers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.EXPLORE, includeBeingTrained = true, includeWater = false) + explorersDisbanded
-        val landWeight = reconWeight(civ, landWithAdjacentFog, landRevealed, landExplorers)
-        val landState = reconState(landWeight, reconThreshold(civ, Flavor.Recon))
-        reconState = landState
-        if (landState == ReconState.Enough) {
-            // Keep at least one explorer through turn 100
-            var skipFirst = civ.gameInfo.turns < 100
-            for (unit in civ.units.getCivUnits()) {
-                if (UnitAiTypes.current(unit) != UnitAiType.EXPLORE || !UnitAiTypes.canHave(unit.baseUnit, UnitAiType.ATTACK, rules)) continue
-                if (skipFirst) skipFirst = false
-                else UnitAiTypes.set(unit, UnitAiType.ATTACK)
-            }
+        var plotsToExplore = plots.land.size
+        if (civ.tech.unitsCanEmbark) plotsToExplore += plots.coast.size / 4
+        if (oceanFarer) plotsToExplore += plots.ocean.size / 4
+        val landNeeded = explorersNeededTimes100(civ, plotsToExplore, Flavor.Recon, war)
+        explorersNeeded = landNeeded / 100
+        val landExplorers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.EXPLORE, includeBeingTrained = true)
+        reconState = when {
+            landExplorers * 100 < landNeeded - 50 -> ReconState.Needed.also { promoteLandExplorer(civ, oceanFarer) }
+            landExplorers * 100 > landNeeded + 50 -> ReconState.Enough.also { retireLandExplorer(civ) }
+            else -> ReconState.Neutral
         }
 
         if (civ.cities.none { WaterBodies.isCoastal(it) }) {
             navalReconState = ReconState.Enough
             return
         }
+        var waterToExplore = plots.coast.size
+        if (oceanFarer) waterToExplore += plots.ocean.size
+        val navalNeeded = explorersNeededTimes100(civ, waterToExplore, Flavor.NavalRecon, war)
         val seaExplorers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.EXPLORE_SEA, includeBeingTrained = true, includeWater = true)
-        val navalWeight = reconWeight(civ, coastalWithAdjacentFog, coastalRevealed, seaExplorers)
-        val navalState = reconState(navalWeight, reconThreshold(civ, Flavor.NavalRecon))
-        navalReconState = navalState
-        if (navalState == ReconState.Enough) {
-            // The original keeps one only when NEUTRAL, which cannot be the case here: all go back
-            for (unit in civ.units.getCivUnits())
-                if (UnitAiTypes.current(unit) == UnitAiType.EXPLORE_SEA && UnitAiTypes.canHave(unit.baseUnit, UnitAiType.ATTACK_SEA, rules))
-                    UnitAiTypes.set(unit, UnitAiType.ATTACK_SEA)
+        navalReconState = when {
+            seaExplorers * 100 < navalNeeded - 50 -> ReconState.Needed.also { promoteNavalExplorer(civ, oceanFarer, rules) }
+            seaExplorers * 100 > navalNeeded + 50 -> ReconState.Enough.also { retireNavalExplorer(civ, rules) }
+            else -> ReconState.Neutral
         }
     }
 
-    /** CvEconomicAI::DoAntiquitySites: antiquity sites (hidden ones included) on tiles the civilization has revealed ([doReconState] counts them for majors) */
+    /** 50 + [plots] x 100 / (MAX_PLOTS_PER_EXPLORER - [flavor] (personality and grand strategy)), halved at [war], at least 100 with any plot */
+    private fun explorersNeededTimes100(civ: Civilization, plots: Int, flavor: Flavor, war: Boolean): Int {
+        val plotsPerExplorer = civ.gameInfo.ruleset.ai.define(AiDefine.MAX_PLOTS_PER_EXPLORER) - civ.ai.personalityAndGrandStrategy(flavor)
+        var needed = 50 + plots * 100 / max(1, plotsPerExplorer)
+        if (war) needed /= 2
+        if (needed < 100 && plots > 0) needed = 100
+        return needed
+    }
+
+    /**
+     *  The NEEDED step of DoReconState for land: among our units that do not explore, potential land explorers ([isPotentialLandExplorer];
+     *  for an ocean farer only those that may stay in the ocean) more than 3 turns old that are free for operations ([canUseForAiOperation]),
+     *  the one farthest from our cities, units made to explore first (+2000), becomes an explorer: if such a unit is among them, or if
+     *  fewer than half of the other units that could explore already do. Units that gain XP from scouting (+1000): none in BNW.
+     */
+    private fun promoteLandExplorer(civ: Civilization, oceanFarer: Boolean) {
+        val rules = civ.gameInfo.ruleset.ai
+        var availableNonNative = 0
+        var nativeAvailable = false
+        var exploringNonNative = 0
+        val candidates = ArrayList<Pair<Int, MapUnit>>()
+        for (unit in civ.units.getCivUnits()) {
+            val native = UnitAiTypes.defaultOf(unit.baseUnit, rules) == UnitAiType.EXPLORE
+            if (UnitAiTypes.current(unit) == UnitAiType.EXPLORE) {
+                if (!native) exploringNonNative++
+                continue
+            }
+            if (!isPotentialLandExplorer(unit.baseUnit)) continue
+            if (oceanFarer && !canStayInOcean(unit)) continue
+            if (civ.gameInfo.turns - unit.turnCreated <= 3) continue
+            if (!canUseForAiOperation(unit)) continue
+            val distance = cityDistanceInPlots(civ, unit.getTile())
+            if (native) {
+                candidates += distance + 2000 to unit
+                nativeAvailable = true
+            } else {
+                candidates += distance to unit
+                availableNonNative++
+            }
+        }
+        val lessThanHalfExploring = exploringNonNative * 2 < exploringNonNative + availableNonNative
+        if (nativeAvailable || availableNonNative > 0 && lessThanHalfExploring)
+            UnitAiTypes.set(candidates.sortedBy { it.first }.last().second, UnitAiType.EXPLORE)
+    }
+
+    /** The ENOUGH step for land: the explorer nearest to our cities (units made to explore last, +2000) goes back to its own unit AI, a unit made to explore to FAST_ATTACK */
+    private fun retireLandExplorer(civ: Civilization) {
+        val rules = civ.gameInfo.ruleset.ai
+        val explorer = civ.units.getCivUnits().filter { UnitAiTypes.current(it) == UnitAiType.EXPLORE }
+            .minByOrNull { cityDistanceInPlots(civ, it.getTile()) + if (UnitAiTypes.defaultOf(it.baseUnit, rules) == UnitAiType.EXPLORE) 2000 else 0 }
+            ?: return
+        val default = UnitAiTypes.defaultOf(explorer.baseUnit, rules)
+        UnitAiTypes.set(explorer, if (default != UnitAiType.EXPLORE) default else UnitAiType.FAST_ATTACK)
+    }
+
+    /**
+     *  The NEEDED step for the sea: among our ships that do not explore the sea, potential naval explorers ([isPotentialNavalExplorer])
+     *  that are not ranged and visible (ranged ships stay), more than 3 turns old, free for operations, for an ocean farer only those that
+     *  may stay in the ocean, the one farthest from our cities explores the sea.
+     */
+    private fun promoteNavalExplorer(civ: Civilization, oceanFarer: Boolean, rules: AiRuleset) {
+        val explorer = civ.units.getCivUnits().filter { unit ->
+            UnitAiTypes.current(unit) != UnitAiType.EXPLORE_SEA
+                && isPotentialNavalExplorer(UnitAiTypes.defaultOf(unit.baseUnit, rules))
+                && !(unit.baseUnit.isRanged() && !unit.hasUnique(UniqueType.Invisible))
+                && civ.gameInfo.turns - unit.turnCreated > 3
+                && canUseForAiOperation(unit)
+                && !(oceanFarer && !canStayInOcean(unit))
+        }.sortedBy { cityDistanceInPlots(civ, it.getTile()) }.lastOrNull() ?: return
+        UnitAiTypes.set(explorer, UnitAiType.EXPLORE_SEA)
+    }
+
+    /** The ENOUGH step for the sea: the sea explorer nearest to our cities whose own unit AI is another goes back to it */
+    private fun retireNavalExplorer(civ: Civilization, rules: AiRuleset) {
+        val explorer = civ.units.getCivUnits().filter {
+            UnitAiTypes.current(it) == UnitAiType.EXPLORE_SEA && UnitAiTypes.defaultOf(it.baseUnit, rules) != UnitAiType.EXPLORE_SEA
+        }.minByOrNull { cityDistanceInPlots(civ, it.getTile()) } ?: return
+        UnitAiTypes.set(explorer, UnitAiTypes.defaultOf(explorer.baseUnit, rules))
+    }
+
+    /** CvPlayer::GetCityDistanceInPlots: the distance from [tile] to our nearest city */
+    private fun cityDistanceInPlots(civ: Civilization, tile: Tile): Int = civ.cities.minOf { it.getCenterTile().aerialDistanceTo(tile) }
+
+    /**
+     *  CvUnit::canUseForAIOperation: not in an army; a civilian always; not the garrison of a city that needs one (under siege, or exposed
+     *  to an enemy outside the early expansion phase, CvCity::NeedsGarrison); no enemy unit within 3 tiles. The tactical zone's dominance
+     *  and the citadel near a contested border are not ported.
+     */
+    private fun canUseForAiOperation(unit: MapUnit): Boolean {
+        val civ = unit.civ
+        if (civ.ai.operations.armyOf(unit) != null) return false
+        if (unit.isCivilian()) return true
+        val tile = unit.getTile()
+        val city = tile.getCity()
+        if (tile.isCityCenter() && city != null && city.civ == civ && needsGarrison(city)) return false
+        return tile.getTilesInDistance(3).none { nearby -> nearby.getUnits().any { it.isMilitary() && it.civ.isAtWarWith(civ) } }
+    }
+
+    private fun needsGarrison(city: City): Boolean = CityDangerAi.isUnderSiege(city) ||
+        !city.civ.ai.isEconomicStrategyActive(EconomicMilitaryStrategyTests.EARLY_EXPANSION) && city.civ.ai.military.isExposedToEnemy(city.civ, city, null)
+
+    /** CvUnit::CanStayInOcean: no ocean-impassable rule, and a land unit only when embarked units may enter the ocean */
+    private fun canStayInOcean(unit: MapUnit): Boolean =
+        !unit.cache.cannotEnterOceanTiles && (!unit.baseUnit.isLandUnit || unit.civ.tech.embarkedUnitsCanEnterOcean)
+
+    /** CvEconomicAI::DoAntiquitySites: antiquity sites (hidden ones included) on tiles the civilization has revealed */
     fun doAntiquitySites(civ: Civilization) {
         visibleAntiquitySites = ArchaeologyFunctions.getVisibleSites(civ).size
     }
@@ -183,28 +276,15 @@ class EconomicAi : IsPartOfGameInfoSerialization {
     }
 
     companion object {
-        /**
-         *  The recon part of CvCity::CreateUnit, for units AI majors train: under NEED_RECON a unit that can explore (Unit_AITypes) becomes
-         *  an explorer unless the threat (total threat weight + barbarian threat) reaches the CRITICAL threat weight; under NEED_RECON_SEA or
-         *  REALLY_NEED_RECON_SEA a unit that can explore the sea becomes a sea explorer.
-         */
-        fun onUnitTrained(unit: MapUnit) {
-            val civ = unit.civ
-            if (civ.isHuman() || civ.isCityState || civ.isBarbarian) return
-            val rules = civ.gameInfo.ruleset.ai
-            if (civ.ai.isEconomicStrategyActive(EconomicMilitaryStrategyTests.NEED_RECON)
-                && UnitAiTypes.canHave(unit.baseUnit, UnitAiType.EXPLORE, rules) && UnitAiTypes.current(unit) != UnitAiType.EXPLORE) {
-                val military = civ.ai.military
-                val threat = military.totalThreatWeight + military.barbarianThreatTotal(civ)
-                if (threat < military.threatWeight(civ, AiThreat.Critical)) UnitAiTypes.set(unit, UnitAiType.EXPLORE)
-            }
-            if ((civ.ai.isEconomicStrategyActive(EconomicMilitaryStrategyTests.NEED_RECON_SEA)
-                    || civ.ai.isEconomicStrategyActive(EconomicMilitaryStrategyTests.REALLY_NEED_RECON_SEA))
-                && UnitAiTypes.canHave(unit.baseUnit, UnitAiType.EXPLORE_SEA, rules))
-                UnitAiTypes.set(unit, UnitAiType.EXPLORE_SEA)
-        }
-
         const val LOSING_MONEY = "ECONOMICAISTRATEGY_LOSING_MONEY"
+
+        /** EconomicAIHelpers::IsPotentialLandExplorer: a land combat unit, not a ranged one with at most 2 moves */
+        fun isPotentialLandExplorer(unit: BaseUnit): Boolean =
+            unit.isLandUnit && unit.strength > 0 && !(unit.rangedStrength > 0 && unit.movement <= 2)
+
+        /** EconomicAIHelpers::IsPotentialNavalExplorer: ATTACK_SEA, RESERVE_SEA or ASSAULT_SEA (SUBMARINE needs MOD_AI_UNIT_PRODUCTION, off in VP) */
+        fun isPotentialNavalExplorer(defaultAi: UnitAiType): Boolean =
+            defaultAi == UnitAiType.ATTACK_SEA || defaultAi == UnitAiType.RESERVE_SEA || defaultAi == UnitAiType.ASSAULT_SEA
 
         /**
          *  CvEconomicAI::GetSoftSupplyCap (Vox Populi): the most land and sea combat units whose maintenance still leaves the minimum
@@ -268,26 +348,6 @@ class EconomicAi : IsPartOfGameInfoSerialization {
                 else break
             }
             return softSupplyCap
-        }
-
-        /** The recon weight of CvEconomicAI::DoReconState: start weight x tiles next to fog / (explorers + divisor)^2 / (int)sqrt(revealed) */
-        fun reconWeight(civ: Civilization, withAdjacentFog: Int, revealed: Int, explorers: Int): Int {
-            val rules = civ.gameInfo.ruleset.ai
-            var weight = rules.define(AiDefine.AI_STRATEGY_EARLY_EXPLORATION_STARTING_WEIGHT) * withAdjacentFog
-            val divisor = explorers + rules.define(AiDefine.AI_STRATEGY_EARLY_EXPLORATION_EXPLORERS_WEIGHT_DIVISOR)
-            weight /= divisor * divisor
-            weight /= sqrt(revealed.toDouble()).toInt()
-            return weight
-        }
-
-        /** The threshold of CvEconomicAI::DoReconState: 110 - flavor (personality and grand strategy) x 10, at most 100 */
-        fun reconThreshold(civ: Civilization, flavor: Flavor): Int =
-            min(100, 110 - civ.ai.personalityAndGrandStrategy(flavor) * civ.gameInfo.ruleset.ai.define(AiDefine.AI_STRATEGY_EARLY_EXPLORATION_WEIGHT_PER_FLAVOR))
-
-        private fun reconState(weight: Int, threshold: Int) = when {
-            weight > threshold -> ReconState.Needed
-            weight > threshold / 4 -> ReconState.Neutral
-            else -> ReconState.Enough
         }
 
         /** CvGame::getHandicapInfo().GetID(): the index of the game's difficulty (Settler = 0 ... Deity = 7) */

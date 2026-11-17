@@ -289,11 +289,9 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
      *  7 x effective coastal cities x UNITS_PER_CITY + 10 per city exposed by sea (a combined exposure counts for both), offense 10 x
      *  BALANCE_BASIC_ATTACK_ARMY_SIZE per major with a preferred attack target and once more under conquest; the naval share of offense
      *  is effective coastal cities x NAVAL (personality) x 7 / cities. Defense x (100 + 2 x DEFENSE), offense x (100 + boldness + OFFENSE)
-     *  (personality and grand strategy). Explorers (units whose default unit AI is EXPLORE) take their own share first: at most a
-     *  quarter of the cap, no more than the supply leaves room for. Land is truncated, sea rounded, as in the original; a share our units
-     *  already exceed grows to them at the other's expense.
-     *
-     *  Missing input, counted as none: the explorers needed of Vox Populi's CvEconomicAI::DoReconState.
+     *  (personality and grand strategy). Explorers (units whose default unit AI is EXPLORE) take their own share first: the explorers
+     *  [EconomicAi.doReconState] wants, at most a quarter of the cap, no more than the supply leaves room for. Land is truncated, sea
+     *  rounded, as in the original; a share our units already exceed grows to them at the other's expense.
      */
     private fun setRecommendedArmyNavySize(civ: Civilization) {
         var maxPossibleUnits = EconomicAi.softSupplyCap(civ)
@@ -337,7 +335,7 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         val numExplorers = UnitAiTypes.numUnitsWithDefaultUnitAi(civ, UnitAiType.EXPLORE, includeBeingTrained = false)
         val numUnitsToSupply = civ.units.getCivUnitsSize()
         val numUnitsSupplied = civ.stats.getUnitSupply()
-        var explorersNeeded = min(maxPossibleUnits / 4, 0)
+        var explorersNeeded = min(maxPossibleUnits / 4, civ.ai.economic.explorersNeeded)
         if (numUnitsToSupply - numExplorers + explorersNeeded > numUnitsSupplied)
             explorersNeeded = numExplorers + numUnitsSupplied - numUnitsToSupply
         recommendedExplorers = explorersNeeded

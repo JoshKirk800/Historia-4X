@@ -9745,7 +9745,8 @@
         "WonderDisputePercent": 50,
         "MinorCivDisputePercent": 50,
         "HumanOpinionChange": -10,
-        "AIOpinionChange": 0
+        "AIOpinionChange": 0,
+        "PolicyChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9790,7 +9791,8 @@
         "WonderDisputePercent": 60,
         "MinorCivDisputePercent": 60,
         "HumanOpinionChange": -5,
-        "AIOpinionChange": 0
+        "AIOpinionChange": 0,
+        "PolicyChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9835,7 +9837,8 @@
         "WonderDisputePercent": 70,
         "MinorCivDisputePercent": 70,
         "HumanOpinionChange": 0,
-        "AIOpinionChange": 0
+        "AIOpinionChange": 0,
+        "PolicyChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9880,7 +9883,8 @@
         "WonderDisputePercent": 80,
         "MinorCivDisputePercent": 80,
         "HumanOpinionChange": 0,
-        "AIOpinionChange": 0
+        "AIOpinionChange": 0,
+        "PolicyChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9925,7 +9929,8 @@
         "WonderDisputePercent": 90,
         "MinorCivDisputePercent": 90,
         "HumanOpinionChange": 0,
-        "AIOpinionChange": 0
+        "AIOpinionChange": 0,
+        "PolicyChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9970,7 +9975,8 @@
         "WonderDisputePercent": 100,
         "MinorCivDisputePercent": 100,
         "HumanOpinionChange": 0,
-        "AIOpinionChange": 0
+        "AIOpinionChange": 0,
+        "PolicyChoiceCutoffThreshold": 90
       }
     },
     {
@@ -10015,7 +10021,8 @@
         "WonderDisputePercent": 115,
         "MinorCivDisputePercent": 115,
         "HumanOpinionChange": 0,
-        "AIOpinionChange": 0
+        "AIOpinionChange": 0,
+        "PolicyChoiceCutoffThreshold": 90
       }
     },
     {
@@ -10060,7 +10067,8 @@
         "WonderDisputePercent": 125,
         "MinorCivDisputePercent": 125,
         "HumanOpinionChange": 0,
-        "AIOpinionChange": 0
+        "AIOpinionChange": 0,
+        "PolicyChoiceCutoffThreshold": 90
       }
     },
     {
@@ -10105,7 +10113,8 @@
         "WonderDisputePercent": 100,
         "MinorCivDisputePercent": 100,
         "HumanOpinionChange": 0,
-        "AIOpinionChange": 0
+        "AIOpinionChange": 0,
+        "PolicyChoiceCutoffThreshold": 90
       }
     }
   ],

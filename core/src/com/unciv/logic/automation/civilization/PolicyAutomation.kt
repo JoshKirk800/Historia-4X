@@ -1,6 +1,8 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
+import com.unciv.logic.automation.diplomacy.VictoryPursuitAi
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.civilization.CivFlags
 import com.unciv.logic.civilization.Civilization
@@ -11,6 +13,8 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.MinorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 import kotlin.random.Random
 
 /**
@@ -20,17 +24,23 @@ import kotlin.random.Random
  */
 object PolicyAutomation {
     private const val LOSING_MONEY = "ECONOMICAISTRATEGY_LOSING_MONEY"
-    private const val POLICY_NUM_OPTIONS = "PolicyNumOptionsConsidered"
-    /** HandicapInfos.PolicyNumOptionsConsidered from Prince up, for a ruleset without the handicap table */
-    private const val DEFAULT_POLICY_NUM_OPTIONS = 2
+    private const val POLICY_CUTOFF = "PolicyChoiceCutoffThreshold"
+    /** HandicapInfos.PolicyChoiceCutoffThreshold of Vox Populi (every difficulty), for a ruleset without the column */
+    private const val DEFAULT_POLICY_CUTOFF = 90
+    private const val PATRONAGE = "Patronage"
 
-    /** The flavor of the active grand strategy that makes a level-3 tenet an immediate pick (CvPolicyAI::ChooseNextPolicy) */
-    private val grandStrategyTenetFlavor = mapOf(
-        GrandStrategyAi.CONQUEST to Flavor.Offense,
-        GrandStrategyAi.SPACESHIP to Flavor.Spaceship,
-        GrandStrategyAi.UNITED_NATIONS to Flavor.Diplomacy,
-        GrandStrategyAi.CULTURE to Flavor.Culture,
-    )
+    /** The flavors whose Policy_Flavors values count for the conquest value of a policy (CvPolicyAI::WeighPolicy) */
+    private val conquestFlavors = setOf(Flavor.Offense, Flavor.Defense, Flavor.CityDefense, Flavor.MilitaryTraining, Flavor.Mobile,
+        Flavor.Ranged, Flavor.Air, Flavor.Antiair, Flavor.AirCarrier, Flavor.Airlift, Flavor.Naval, Flavor.NavalRecon, Flavor.Recon,
+        Flavor.Nuke, Flavor.UseNuke)
+    /** ... for the diplomacy value (FLAVOR_DIPLOMACY is handled apart) */
+    private val diplomacyFlavors = setOf(Flavor.Gold, Flavor.I_LandTradeRoute, Flavor.I_SeaTradeRoute, Flavor.WaterConnection,
+        Flavor.I_TradeDestination, Flavor.Espionage)
+    private val cultureFlavors = setOf(Flavor.GreatPeople, Flavor.Wonder, Flavor.Archaeology)
+    private val scienceFlavors = setOf(Flavor.Science, Flavor.Spaceship)
+    /** ... that add their value to the weight directly */
+    private val directFlavors = setOf(Flavor.Expansion, Flavor.Production, Flavor.Growth, Flavor.Happiness, Flavor.Infrastructure,
+        Flavor.Religion, Flavor.TileImprovement)
 
     //region Ruleset tables
 
@@ -144,29 +154,28 @@ object PolicyAutomation {
         }
     }
 
-    /** The pool of CvPolicyAI::ChooseNextPolicy: the candidates with their weights, and the level-3 tenet taken at once if there is one */
-    class PolicyChoices(val candidates: List<Policy>, val weights: List<Int>, val immediate: Policy?)
+    /** The pool of CvPolicyAI::ChooseNextPolicy: the candidates with their weights */
+    class PolicyChoices(val candidates: List<Policy>, val weights: List<Int>)
 
     /**
-     *  CvPolicyAI::ChooseNextPolicy: the policy or branch to adopt next, null if none can be adopted: the [weighChoices] tenet taken at once, else
-     *  a weighted pick among the top HandicapInfos.PolicyNumOptionsConsidered of the game's difficulty ([pickFromTop]).
+     *  CvPolicyAI::ChooseNextPolicy (Vox Populi): the policy or branch to adopt next, null if none can be adopted: a weighted pick among
+     *  the [weighChoices] candidates whose weight is at least the difficulty's PolicyChoiceCutoffThreshold % of the best
+     *  ([chooseAbovePercentThreshold]).
      */
     fun chooseNextPolicy(civ: Civilization, random: Random): Policy? {
         val choices = weighChoices(civ)
-        if (choices.immediate != null) return choices.immediate
         if (choices.candidates.isEmpty()) return null
-        val numOptions = civ.gameInfo.ruleset.ai.handicapValue(civ.gameInfo.getDifficulty().name, POLICY_NUM_OPTIONS) ?: DEFAULT_POLICY_NUM_OPTIONS
-        return choices.candidates[pickFromTop(choices.weights, numOptions, random)]
+        val cutoff = civ.gameInfo.ruleset.ai.handicapValue(civ.gameInfo.getDifficulty().name, POLICY_CUTOFF) ?: DEFAULT_POLICY_CUTOFF
+        return choices.candidates[chooseAbovePercentThreshold(choices.weights, cutoff, random)]
     }
 
     /**
-     *  The pool of CvPolicyAI::ChooseNextPolicy:
-     *  - Every adoptable policy (only tenets while free tenets remain) weighs its weight, plus the weight of the branch's finisher if it completes the branch.
-     *  - Every branch that can be opened (none while free tenets remain; not ideologies, which are chosen by [chooseIdeology]) weighs, if it is effective
-     *    in this game ([isBranchEffectiveInGame]), [weighBranch] × (100 − POLICY_WEIGHT_PERCENT_DROP_NEW_BRANCH)%, a third of that under the culture
-     *    grand strategy; 0 otherwise.
-     *  - An adoptable level-3 tenet with a flavor of the active grand strategy (Conquest: Offense, Spaceship: Spaceship, United Nations: Diplomacy,
-     *    Culture: Culture) is the one taken at once, the first in the ruleset's order.
+     *  The pool of CvPolicyAI::ChooseNextPolicy (Vox Populi):
+     *  - every adoptable policy (only tenets while free tenets remain), weighed by [weighPolicy];
+     *  - unless free tenets remain or a branch we opened has its finisher still due while one of its policies is in the pool
+     *    (CanContinuePolicyBranch), every branch that can be opened (not ideologies, chosen by [chooseIdeology]): [weighBranch] x
+     *    (100 - POLICY_WEIGHT_PERCENT_DROP_NEW_BRANCH)% if it is effective in this game ([isBranchEffectiveInGame]), else 0; divided by
+     *    twice the eras we are past the branch's era.
      *  Mutually exclusive branches are excluded by the rules themselves (Unciv's "Only available" uniques), as the original skips them.
      */
     fun weighChoices(civ: Civilization): PolicyChoices {
@@ -175,71 +184,162 @@ object PolicyAutomation {
         val weights = policyWeights(civ)
         val manager = civ.policies
         val mustChooseTenet = manager.freeTenets > 0
-        val tenetFlavor = civ.ai.grandStrategy?.let { grandStrategyTenetFlavor[it] }
 
         val candidates = ArrayList<Policy>()
         val candidateWeights = ArrayList<Int>()
-        var immediate: Policy? = null
-        for ((i, policy) in tables.policies.withIndex()) {
+        for (policy in tables.policies) {
             if (policy is PolicyBranch) continue // opening a branch is weighed below; the original's opener policies have no branch, so cannot be adopted directly
             if (mustChooseTenet && !policy.isTenet) continue
             if (!manager.canAdopt(policy)) continue
-            var weight = weights[i]
-            if (willFinishBranchIfAdopted(civ, policy)) {
-                val finisher = policy.branch.policies.lastOrNull { it.policyBranchType == PolicyBranchType.BranchComplete }
-                if (finisher != null) weight += tables.weightOf(weights, finisher)
-            }
             candidates += policy
-            candidateWeights += weight
-            if (immediate == null && tenetFlavor != null && policy.tenetLevel == 3 && tables.flavors[i][tenetFlavor.ordinal] > 0) immediate = policy
+            candidateWeights += weighPolicy(civ, policy, weights, tables)
         }
 
-        if (!mustChooseTenet) {
+        val needToFinish = ruleset.policyBranches.values.any { branch ->
+            manager.isAdopted(branch.name) && branch.policies.any { it.policyBranchType == PolicyBranchType.BranchComplete && !manager.isAdopted(it.name) } &&
+                candidates.any { it.branch == branch }
+        }
+        if (!mustChooseTenet && !needToFinish) {
             val dropPercent = ruleset.ai.define(AiDefine.POLICY_WEIGHT_PERCENT_DROP_NEW_BRANCH)
-            val cultureStrategy = civ.ai.grandStrategy == GrandStrategyAi.CULTURE
+            val era = civ.getEraNumber()
             for (branch in ruleset.policyBranches.values) {
                 if (branch.isIdeology || !manager.canAdopt(branch)) continue
                 var weight = 0
-                if (isBranchEffectiveInGame(civ, branch)) {
-                    weight = weighBranch(civ, branch, weights, tables) * (100 - dropPercent) / 100
-                    if (cultureStrategy) weight /= 3
-                }
+                if (isBranchEffectiveInGame(civ, branch)) weight = weighBranch(civ, branch, weights, tables) * (100 - dropPercent) / 100
+                val branchEra = ruleset.eras[branch.era]?.eraNumber ?: 0
+                if (branchEra <= era) weight /= maxOf(1, (era - maxOf(0, branchEra)) * 2)
                 candidates += branch
                 candidateWeights += weight
             }
         }
-        return PolicyChoices(candidates, candidateWeights, immediate)
+        return PolicyChoices(candidates, candidateWeights)
     }
 
     /**
-     *  CvWeightedVector::SortItems then ChooseFromTopChoices: the index of a weighted pick among the [numOptions] highest [weights] (ties in list order),
-     *  or, if no weight is positive, ChooseAtRandom: a uniform pick
+     *  CvWeightedVector::ChooseAbovePercentThreshold: a weighted pick among the [weights] at least [percent]% of the highest; a uniform
+     *  pick when none is positive, a weighted pick among all at 0%. Returns the index.
      */
-    fun pickFromTop(weights: List<Int>, numOptions: Int, random: Random): Int {
-        val order = weights.indices.sortedByDescending { weights[it] }
-        if (weights.sum() <= 0) return order[random.nextInt(order.size)]
-        val top = order.take(numOptions.coerceAtLeast(1))
-        var roll = random.nextInt(top.sumOf { weights[it] }.coerceAtLeast(1))
-        for (index in top) {
-            roll -= weights[index]
+    fun chooseAbovePercentThreshold(weights: List<Int>, percent: Int, random: Random): Int {
+        val highest = weights.maxOrNull() ?: 0
+        if (highest <= 0) return random.nextInt(weights.size)
+        val cutoff = highest * percent.coerceIn(0, 100) / 100
+        val eligible = weights.indices.filter { weights[it] >= cutoff }
+        var roll = random.nextInt(eligible.sumOf { maxOf(0, weights[it]) }.coerceAtLeast(1))
+        for (index in eligible) {
+            roll -= maxOf(0, weights[index])
             if (roll < 0) return index
         }
-        return top.last()
+        return eligible.last()
     }
 
     /** CvPlayerPolicies::WillFinishBranchIfAdopted: every other member of the branch (not its opener or finisher) is adopted */
     private fun willFinishBranchIfAdopted(civ: Civilization, policy: Policy): Boolean =
         policy.branch.policies.all { it.name == policy.name || it.policyBranchType == PolicyBranchType.BranchComplete || civ.policies.isAdopted(it.name) }
 
-    /** CvPolicyAI::WeighBranch: the weights of the branch's policies without prerequisites that are not adopted yet, plus its opener's */
+    /**
+     *  CvPolicyAI::WeighPolicy (Vox Populi): the policy weight, plus for each positive Policy_Flavors flavor our personality and grand
+     *  strategy flavor; the flavor values grouped into conquest, diplomacy (the diplomacy flavor's value goes when any living
+     *  city-state is not our conquest target), culture and science values, each scaled by (100 + the matching grand strategy priority
+     *  x the trait multipliers / 10)%, and added in full for a focus (serious about that victory, the matching trait, or close to it),
+     *  else half; the other flavors add their value. Tenets x (level + 1); x the policies we own in the branch, or, for a branch we
+     *  never opened, / (era x 5 - the branch's era) when its era is past; Patronage 0 without city-states, / 5 without city-state
+     *  friends; plus the finisher's weight when it completes the branch. WeightPolicyAttributes' yields and corporations: none.
+     */
+    private fun weighPolicy(civ: Civilization, policy: Policy, weights: IntArray, tables: PolicyTables): Int {
+        val position = tables.positionOf(policy) ?: return 0
+        var weight = weights[position]
+        var conquestInterest = civ.ai.grandStrategyPriority(GrandStrategyAi.CONQUEST)
+        var cultureInterest = civ.ai.grandStrategyPriority(GrandStrategyAi.CULTURE)
+        var diploInterest = civ.ai.grandStrategyPriority(GrandStrategyAi.UNITED_NATIONS)
+        var scienceInterest = civ.ai.grandStrategyPriority(GrandStrategyAi.SPACESHIP)
+        val ai = civ.ai
+        if (ai.hasTraitCategory(TraitCategory.Warmonger)) { conquestInterest *= 3; scienceInterest *= 2 }
+        if (ai.hasTraitCategory(TraitCategory.Expansionist)) { conquestInterest *= 2; cultureInterest *= 3 }
+        if (ai.hasTraitCategory(TraitCategory.Nerd)) { cultureInterest *= 2; scienceInterest *= 3 }
+        if (ai.hasTraitCategory(TraitCategory.Diplomat)) { conquestInterest *= 2; diploInterest *= 3 }
+        if (ai.hasTraitCategory(TraitCategory.Smaller)) { cultureInterest *= 2; scienceInterest *= 3 }
+        if (ai.hasTraitCategory(TraitCategory.Tourism)) { cultureInterest *= 3; diploInterest *= 2 }
+        if (ai.hasTraitCategory(TraitCategory.Religious)) { cultureInterest *= 2; diploInterest *= 3 }
+
+        var conquestValue = 0
+        var diploValue = 0
+        var cultureValue = 0
+        var scienceValue = 0
+        for (flavor in Flavor.entries) {
+            val value = tables.flavors[position][flavor.ordinal]
+            if (value <= 0) continue
+            weight += ai.personalityAndGrandStrategy(flavor)
+            when (flavor) {
+                Flavor.Diplomacy -> {
+                    diploValue += value
+                    if (civ.gameInfo.civilizations.any { it.isCityState && it.isAlive() && ai.minorCivApproaches[it.civID] != MinorCivApproach.Conquest })
+                        diploValue -= value
+                }
+                in conquestFlavors -> conquestValue += value
+                in diplomacyFlavors -> diploValue += value
+                in cultureFlavors -> cultureValue += value
+                in scienceFlavors -> scienceValue += value
+                in directFlavors -> weight += value
+                else -> {}
+            }
+        }
+        conquestValue = conquestValue * (100 + conquestInterest / 10) / 100
+        cultureValue = cultureValue * (100 + cultureInterest / 10) / 100
+        diploValue = diploValue * (100 + diploInterest / 10) / 100
+        scienceValue = scienceValue * (100 + scienceInterest / 10) / 100
+
+        val rules = civ.gameInfo.ruleset.ai
+        val serious = VictoryPursuitAi.isSeriousAboutVictory(civ)
+        val conquestFocus = (serious && ai.isGoingForWorldConquest()) || ai.hasTraitCategory(TraitCategory.Warmonger) ||
+            VictoryProgressAi.isCloseToWorldConquest(civ, rules)
+        val diploFocus = (serious && ai.isGoingForDiploVictory()) || ai.hasTraitCategory(TraitCategory.Diplomat) ||
+            VictoryProgressAi.diplomaticVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)
+        val scienceFocus = (serious && ai.isGoingForSpaceshipVictory()) || ai.hasTraitCategory(TraitCategory.Nerd) ||
+            VictoryProgressAi.scienceVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
+        val cultureFocus = (serious && ai.isGoingForCultureVictory()) || ai.hasTraitCategory(TraitCategory.Tourism) ||
+            VictoryProgressAi.cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD)
+        weight += if (conquestFocus) conquestValue else conquestValue / 2
+        weight += if (diploFocus) diploValue else diploValue / 2
+        weight += if (scienceFocus) scienceValue else scienceValue / 2
+        weight += if (cultureFocus) cultureValue else cultureValue / 2
+
+        if (policy.tenetLevel > 0) weight *= policy.tenetLevel + 1
+        if (policy !is PolicyBranch) {
+            val branch = policy.branch
+            val owned = branch.policies.count { civ.policies.isAdopted(it.name) }
+            if (owned > 0 || civ.policies.isAdopted(branch.name)) weight *= maxOf(1, owned)
+            else {
+                val branchEra = civ.gameInfo.ruleset.eras[branch.era]?.eraNumber ?: 0
+                val era = civ.getEraNumber()
+                if (branchEra < era && era > 0) weight /= maxOf(2, era * 5 - branchEra)
+            }
+            if (branch.name == PATRONAGE) {
+                val cityStates = civ.gameInfo.civilizations.filter { it.isCityState && it.isAlive() }
+                if (cityStates.isEmpty()) weight = 0
+                else if (cityStates.none { CityStateAi.isFriends(it, civ) }) weight /= 5
+            }
+            if (willFinishBranchIfAdopted(civ, policy)) {
+                val finisher = branch.policies.lastOrNull { it.policyBranchType == PolicyBranchType.BranchComplete }
+                if (finisher != null) weight += tables.weightOf(weights, finisher)
+            }
+        }
+        return maxOf(weight, 0)
+    }
+
+    /**
+     *  CvPolicyAI::WeighBranch (Vox Populi): [weighPolicy] of the branch's policies not adopted yet, of its opener and of its finisher.
+     *  The branch's own buildings (VP's policy buildings): none in BNW.
+     */
     private fun weighBranch(civ: Civilization, branch: PolicyBranch, weights: IntArray, tables: PolicyTables): Int {
         var weight = 0
+        var finisher: Policy? = null
         for (policy in branch.policies) {
-            if (policy.policyBranchType == PolicyBranchType.BranchComplete || civ.policies.isAdopted(policy.name)) continue
-            val position = tables.positionOf(policy) ?: continue
-            if (tables.prereqs[position].isEmpty()) weight += weights[position]
+            if (policy.policyBranchType == PolicyBranchType.BranchComplete) { finisher = policy; continue }
+            if (!civ.policies.isAdopted(policy.name)) weight += weighPolicy(civ, policy, weights, tables)
         }
-        return weight + tables.weightOf(weights, branch)
+        weight += weighPolicy(civ, branch, weights, tables)
+        if (finisher != null) weight += weighPolicy(civ, finisher, weights, tables)
+        return maxOf(weight, 0)
     }
 
     /**

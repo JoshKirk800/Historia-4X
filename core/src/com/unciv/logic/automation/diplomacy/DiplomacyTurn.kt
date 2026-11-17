@@ -78,7 +78,7 @@ object DiplomacyTurn {
     fun opinionDurationPercent(civ: Civilization): Int = civ.gameInfo.ruleset.ai.gameSpeedDiplomacy(civ.gameInfo.speed.name).opinionDurationPercent
 
     /** CvGame::getCurrentEra: the average era of the living civilizations (city-states and the barbarians included, as the original's teams) */
-    fun gameEraName(civ: Civilization): String {
+    fun gameEraNumber(civ: Civilization): Int {
         var sum = 0
         var count = 0
         for (other in civ.gameInfo.civilizations) {
@@ -86,7 +86,12 @@ object DiplomacyTurn {
             sum += other.getAiEraNumber()
             count++
         }
-        val eraNumber = if (count == 0) 0 else sum / count
+        return if (count == 0) 0 else sum / count
+    }
+
+    /** The name of the era [gameEraNumber] */
+    fun gameEraName(civ: Civilization): String {
+        val eraNumber = gameEraNumber(civ)
         return civ.gameInfo.ruleset.eras.values.firstOrNull { it.eraNumber == eraNumber }?.name ?: ""
     }
 

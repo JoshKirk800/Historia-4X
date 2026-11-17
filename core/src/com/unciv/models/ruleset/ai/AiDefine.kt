@@ -167,10 +167,11 @@ enum class AiDefine(val default: Float) {
 
     // CvEconomicAI, CvMilitaryAI, CvCity plot buying, CvHomelandAI upgrades (EconomicAi, MilitaryAi, UseGoldAutomation)
     AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM(1000f),
-    AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE(275f),
+    AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE(150f), // Vox Populi's value (tools/gen_ai_data.py VP_DEFINES); BNW's is 275
     AI_GOLD_PRIORITY_UNIT(500f),
     AI_GOLD_PRIORITY_UPGRADE_BASE(150f),
     AI_GOLD_PRIORITY_UPGRADE_PER_FLAVOR_POINT(25f),
+    AI_GOLD_TREASURY_BUFFER(50f), // Vox Populi's cushion of DoPlotPurchases and DoHurry (UseGoldAutomation.treasuryBuffer); BNW has none
     AI_MILITARY_BARBARIANS_FOR_MINOR_THREAT(2f),
     AI_MILITARY_THREAT_WEIGHT_CRITICAL(10f),
     AI_MILITARY_THREAT_WEIGHT_MAJOR(3f),

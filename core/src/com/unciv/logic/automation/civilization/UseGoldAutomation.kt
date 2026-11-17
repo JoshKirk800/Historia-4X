@@ -1,12 +1,15 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.AiDecisionLog
+import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.DisputeLevel
 import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.logic.automation.strategy.ProductionAi
 import com.unciv.logic.automation.strategy.PurchaseType
+import com.unciv.logic.automation.strategy.StateAllWars
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
+import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.models.ruleset.Building
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -20,6 +23,7 @@ import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  *  Where the AI spends gold, by the rules of the original: plot purchases (CvEconomicAI::DoPlotPurchases), unit upgrades
@@ -112,60 +116,75 @@ object UseGoldAutomation {
     }
 
     /**
-     *  CvEconomicAI::DoPlotPurchases: not for city-states, not while AT_WAR. With more gold than the base tile cost (and that below
-     *  AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM), the score a tile needs starts at AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE and drops by
-     *  50% x (gold - cost) / (balance to halve - cost). The best tile of all cities ([buyPlotScore]) above it is bought, at most one per
-     *  turn, if the purchase savings let its cost go at its score as priority.
+     *  CvEconomicAI::DoPlotPurchases (Vox Populi): not for city-states, not while at war and losing all wars, not below the treasury cushion
+     *  ([treasuryBuffer] + 200). With the balance (gold less the cushion) beyond [currentCost] x the game's era (at least 2) and the cost below
+     *  AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM, the score a tile needs ([minimumPlotBuyScore]) is beaten by the best tile of each city
+     *  ([buyPlotScore]) whose cost the purchase savings let go at its score as priority; the best of those is bought, one per turn.
+     *  A city's best tile that the savings do not let go starts saving for it at priority 2.
      */
     fun doPlotPurchases(civ: Civilization) {
         if (civ.isCityState) return
-        if (civ.ai.isMilitaryStrategyActive(AT_WAR)) return
+        if (civ.ai.isMilitaryStrategyActive(AT_WAR) && WarStateAi.stateAllWars(civ) == StateAllWars.Losing) return
+        val buffer = treasuryBuffer(civ) + 200
+        if (civ.gold < buffer) return
         val currentCost = civ.cities.minOfOrNull { baseTileCost(it) } ?: return
-        var bestScore = minimumPlotBuyScore(civ, currentCost) ?: return
+        var bestScore = minimumPlotBuyScore(civ, currentCost, civ.gold - buffer) ?: return
 
         val waterAreas = waterAreasOf(civ)
         var bestCity: City? = null
         var bestTile: Tile? = null
         for (city in civ.cities) {
             val (score, tile) = buyPlotScore(city, waterAreas) ?: continue
-            if (score > bestScore) {
-                bestCity = city
-                bestTile = tile
-                bestScore = score
-            }
+            val cost = city.expansion.getGoldCostOfTile(tile)
+            if (civ.ai.purchaseSavings.canWithdrawMoneyForPurchase(civ, PurchaseType.Tile, cost, score)) {
+                if (score > bestScore) {
+                    bestCity = city
+                    bestTile = tile
+                    bestScore = score
+                }
+            } else civ.ai.purchaseSavings.startSaveForPurchase(PurchaseType.Tile, cost, 2)
         }
-        if (bestCity == null || bestTile == null) return
-        val cost = bestCity.expansion.getGoldCostOfTile(bestTile)
-        if (civ.gold < cost) return
-        if (civ.ai.purchaseSavings.canWithdrawMoneyForPurchase(civ, PurchaseType.Tile, cost, bestScore))
-            bestCity.expansion.buyTile(bestTile)
+        if (bestCity != null && bestTile != null) bestCity.expansion.buyTile(bestTile)
     }
 
     /**
-     *  The score a tile must beat in [doPlotPurchases]: AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE, lowered by 50% x (gold - cost) /
-     *  (AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM - cost); null (no purchase) unless the gold exceeds [currentCost] and the cost is below
-     *  that balance.
+     *  The cushion CvEconomicAI::DoPlotPurchases and DoHurry keep in the treasury (Vox Populi): AI_GOLD_TREASURY_BUFFER x the game speed's
+     *  gold percent x the civilization's era; in debt, 10 x the (negative) income more is taken off; else the income is subtracted (not below 0).
+     *  The income is the civilization's gold per turn.
      */
-    fun minimumPlotBuyScore(civ: Civilization, currentCost: Int): Int? {
+    fun treasuryBuffer(civ: Civilization): Int {
+        var buffer = civ.gameInfo.ruleset.ai.define(AiDefine.AI_GOLD_TREASURY_BUFFER)
+        buffer = buffer * (civ.gameInfo.speed.goldCostModifier * 100).roundToInt() / 100
+        buffer *= civ.getAiEraNumber()
+        val goldPerTurn = civ.stats.statsForNextTurn.gold.toInt()
+        return if (goldPerTurn < 0) buffer + 10 * goldPerTurn else max(0, buffer - goldPerTurn)
+    }
+
+    /**
+     *  The score a tile must beat in [doPlotPurchases]: AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE (150), lowered by 50% x (balance - cost) /
+     *  (AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM - cost); null (no purchase) unless the cost times the game's era (at least 2) is below the
+     *  [balance] and the cost below that gold amount.
+     */
+    fun minimumPlotBuyScore(civ: Civilization, currentCost: Int, balance: Int): Int? {
         val rules = civ.gameInfo.ruleset.ai
         val goldForHalfCost = rules.define(AiDefine.AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM)
-        val balance = civ.gold
-        if (currentCost >= balance || goldForHalfCost <= currentCost) return null
+        val multiplier = max(2, DiplomacyTurn.gameEraNumber(civ))
+        if (currentCost * multiplier >= balance || goldForHalfCost <= currentCost) return null
         val minimum = rules.define(AiDefine.AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE)
         val discountPercent = 50 * (balance - currentCost) / (goldForHalfCost - currentCost)
         return minimum - minimum * discountPercent / 100
     }
 
-    /** CvCity::GetBuyPlotScore: the best tile the city can buy and its [individualPlotScore]; null if it can buy none (CanBuyAnyPlot) */
+    /**
+     *  CvCity::GetBuyPlotScore (Vox Populi): the best tile the city may buy and its [individualPlotScore], -1 for none ([buyPlotScore] returns null).
+     *  The tiles are those of CvCity::CanBuyPlot(bIgnoreCost = true): what the civilization can afford is for [doPlotPurchases] to judge.
+     */
     fun buyPlotScore(city: City, waterAreas: Lazy<PlotShape.WaterAreas> = waterAreasOf(city.civ)): Pair<Int, Tile>? {
         var bestScore = -1
         var bestTile: Tile? = null
         var scoring: PlotScoring? = null
-        val likeCivV = city.civ.gameInfo.ruleset.modOptions.constants.plotAcquisitionLikeCivV
         for (tile in city.tilesInRange) {
             if (!city.expansion.canBuyTile(tile)) continue
-            // CvCity::CanBuyPlot without bIgnoreCost: only a tile the civilization can pay for counts
-            if (likeCivV && city.expansion.getGoldCostOfTile(tile) > city.civ.gold) continue
             val plotScoring = scoring ?: PlotScoring(city, waterAreas).also { scoring = it }
             val score = plotScoring.score(tile)
             if (score > bestScore) {

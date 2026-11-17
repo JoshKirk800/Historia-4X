@@ -181,8 +181,8 @@ object CityStrategyAi {
         return featured >= 25 / 2
     }
 
-    /** CvPlayer::countCitiesFeatureSurrounded, once per turn */
-    private fun countCitiesFeatureSurrounded(civ: Civilization): Int = turnCache(civ).run {
+    /** CvPlayer::countCitiesFeatureSurrounded (getCitiesNeedingTerrainImprovements), once per turn */
+    fun countCitiesFeatureSurrounded(civ: Civilization): Int = turnCache(civ).run {
         if (featureSurrounded < 0) {
             val ruleset = civ.gameInfo.ruleset
             val removable = synchronized(removableFeatures) {

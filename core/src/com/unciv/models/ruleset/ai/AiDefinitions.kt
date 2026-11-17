@@ -83,7 +83,6 @@ class CitySpecializationDef : INamed {
     var isDefault = false
     var isWonder = false
     var mustBeCoastal = false
-    var isOperationUnitProvider = false
     var flavors = LinkedHashMap<String, Int>()
     /** By Unciv Stat name */
     var targetYields = LinkedHashMap<String, Int>()

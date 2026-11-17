@@ -123,7 +123,7 @@ object EconomicMilitaryStrategyTests {
     private val GUILDS = listOf("Writers' Guild", "Artists' Guild", "Musicians' Guild")
 
     /** CvPlayer::IsEmpireUnhappy */
-    private fun isEmpireUnhappy(civ: Civilization) = civ.getHappiness() < 0
+    internal fun isEmpireUnhappy(civ: Civilization) = civ.getHappiness() < 0
 
     private fun minimumSettleFertility(civ: Civilization) = civ.gameInfo.ruleset.ai.define(AiDefine.AI_STRATEGY_MINIMUM_SETTLE_FERTILITY)
 

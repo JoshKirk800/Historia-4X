@@ -14,11 +14,16 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.unit.BaseUnit
 import kotlin.math.max
 import kotlin.math.min
 
 /** CvMilitaryAI DefenseState, best to worst (the original compares them by this order) */
 enum class DefenseState { Enough, Neutral, Needed, Critical }
+
+/** CvMilitaryAI WarTypes (WARTYPE_UNDEFINED, WARTYPE_LAND, WARTYPE_SEA): the kind of war a player fights against another */
+enum class WarFocus { Undefined, Land, Sea }
 
 /** CvMilitaryAI ArmyType: what kind of army the cities are asked to supply units for */
 enum class ArmyType { Land, NavalInvasion }
@@ -42,6 +47,10 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     var totalThreatWeight = 1
     /** CvMilitaryAI::m_iNumberOfTimesOpsBuildSkippedOver: how often a city was offered a unit for an operation and chose another item; it raises that unit's weight */
     var numberOfTimesOpsBuildSkippedOver = 0
+    /** CvMilitaryAI::m_iNumberOfTimesSettlerBuildSkippedOver: how often a city chose another item while a settler was among its choices; the settler sanity adds 10 per skip */
+    var numberOfTimesSettlerBuildSkippedOver = 0
+    /** CvMilitaryAI::m_aiWarFocus: by civID, the [WarFocus] name (missing = undefined) */
+    var warFocus = HashMap<String, String>()
     /** CvMilitaryAI::m_eArmyTypeBeingBuilt: set when an attack was requested that the units at hand cannot form, never reset in the original */
     var armyTypeBeingBuilt: ArmyType? = null
     /** CvMilitaryAI::m_iNumLandAttacksRequested / m_iNumNavalAttacksRequested: the attacks that could not start for lack of units */
@@ -89,6 +98,8 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         toReturn.lastTurnMilitaryThreats.putAll(lastTurnMilitaryThreats)
         toReturn.totalThreatWeight = totalThreatWeight
         toReturn.numberOfTimesOpsBuildSkippedOver = numberOfTimesOpsBuildSkippedOver
+        toReturn.numberOfTimesSettlerBuildSkippedOver = numberOfTimesSettlerBuildSkippedOver
+        toReturn.warFocus.putAll(warFocus)
         toReturn.armyTypeBeingBuilt = armyTypeBeingBuilt
         toReturn.numLandAttacksRequested = numLandAttacksRequested
         toReturn.numNavalAttacksRequested = numNavalAttacksRequested
@@ -102,8 +113,9 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  What CvMilitaryAI::DoTurn does before its strategy loop: ScanForBarbarians, UpdateThreats, UpdateBaseData, UpdateDefenseState. The
-     *  attack targets are worked out first when there are none yet (the original keeps the last turn's in the save).
+     *  What CvMilitaryAI::DoTurn does before its strategy loop: ScanForBarbarians, UpdateThreats, UpdateBaseData, UpdateDefenseState, and
+     *  UpdateWarType (the original runs it after the strategies, nothing between reads it). The attack targets are worked out first when
+     *  there are none yet (the original keeps the last turn's in the save).
      */
     fun doTurnBeforeStrategies(civ: Civilization) {
         if (attackTargetsTurn < 0) updateAttackTargets(civ)
@@ -111,7 +123,93 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         updateThreats(civ)
         updateBaseData(civ)
         updateDefenseState(civ)
+        updateWarType(civ)
         dataTurn = civ.gameInfo.turns
+    }
+
+    /** CvMilitaryAI::GetWarType(player): the kind of war we fight against [other] */
+    fun warType(other: Civilization): WarFocus = warFocus[other.civID]?.let { WarFocus.valueOf(it) } ?: WarFocus.Undefined
+
+    /** CvMilitaryAI::GetWarType(NO_PLAYER): the majority over the living majors, land on a tie */
+    fun overallWarType(civ: Civilization): WarFocus {
+        var land = 0
+        var sea = 0
+        for (other in civ.gameInfo.civilizations) {
+            if (!other.isMajorCiv || other == civ || !other.isAlive()) continue
+            when (warType(other)) {
+                WarFocus.Land -> land++
+                WarFocus.Sea -> sea++
+                WarFocus.Undefined -> {}
+            }
+        }
+        return if (land >= sea) WarFocus.Land else WarFocus.Sea
+    }
+
+    /**
+     *  CvMilitaryAI::UpdateWarType, literally: the strengths of our land and sea combat units (ranged strength where a unit attacks at
+     *  range), 50 per city of ours (a coastal one counts as sea) for each living major that is at war with us or whose approach towards
+     *  us is war, and 50 more when it is in danger from that major; of that major's units twice their strength while we see their tile;
+     *  50 per city of its (the same 50 more for those in danger from us, counted as ours). A strength side without units counts a tenth
+     *  of its cities. Then, for every living major, the focus towards it becomes sea when its water side beats its land side and our
+     *  sea side and the focus was not sea already, land when its land side is not behind its water side, beats ours and the focus was
+     *  not land already, else undefined. The sums run on over the majors, as in the original (they are not reset between players).
+     */
+    fun updateWarType(civ: Civilization) {
+        var enemyWater = 0
+        var enemyLand = 0
+        var enemyWaterCities = 0
+        var enemyLandCities = 0
+        var friendlyLand = 0
+        var friendlySea = 0
+        var friendlyLandCities = 0
+        var friendlySeaCities = 0
+        fun strengthOf(unit: BaseUnit) = if (unit.isRanged()) unit.rangedStrength else unit.strength
+
+        for (unit in civ.units.getCivUnits()) {
+            val base = unit.baseUnit
+            if (!UnitProductionAi.isCombat(base)) continue
+            if (base.isWaterUnit) friendlySea += strengthOf(base) else if (base.isLandUnit) friendlyLand += strengthOf(base)
+        }
+
+        val majors = civ.gameInfo.civilizations.filter { it.isMajorCiv && it != civ && it.isAlive() }
+        fun isHostile(other: Civilization) = civ.isAtWarWith(other) || civ.ai.diplomacy.approachTowards(other) == MajorCivApproach.War
+        for (city in civ.cities) {
+            for (other in majors) {
+                if (!isHostile(other)) continue
+                if (city.isCoastal()) friendlySeaCities += 50 else friendlyLandCities += 50
+                if (CityDangerAi.isInDangerFromPlayers(city, listOf(other))) {
+                    if (city.isCoastal()) friendlySeaCities += 50 else friendlyLandCities += 50
+                }
+            }
+        }
+
+        for (other in majors) {
+            if (isHostile(other)) {
+                for (unit in other.units.getCivUnits()) {
+                    val base = unit.baseUnit
+                    if (!UnitProductionAi.isCombat(base)) continue
+                    val strength = strengthOf(base) * if (unit.getTile() in civ.viewableTiles) 2 else 1
+                    if (base.isWaterUnit) enemyWater += strength else if (base.isLandUnit) enemyLand += strength
+                }
+                for (city in other.cities) {
+                    if (CityDangerAi.isInDangerFromPlayers(city, listOf(civ))) {
+                        if (city.isCoastal()) friendlySeaCities += 50 else friendlyLandCities += 50
+                    }
+                    if (city.isCoastal()) enemyWaterCities += 50 else enemyLandCities += 50
+                }
+            }
+            enemyWater += if (enemyWater > 0) enemyWaterCities else enemyWaterCities / 10
+            enemyLand += if (enemyLand > 0) enemyLandCities else enemyLandCities / 10
+            friendlySea += if (friendlySea > 0) friendlySeaCities else friendlySeaCities / 10
+            friendlyLand += if (friendlyLand > 0) friendlyLandCities else friendlyLandCities / 10
+
+            val before = warType(other)
+            warFocus[other.civID] = when {
+                enemyWater > enemyLand && enemyWater > friendlySea && before != WarFocus.Sea -> WarFocus.Sea
+                enemyLand >= enemyWater && enemyLand > friendlyLand && enemyLand != 0 && before != WarFocus.Land -> WarFocus.Land
+                else -> WarFocus.Undefined
+            }.name
+        }
     }
 
     /** CvMilitaryAI::UpdateAttackTargets, after the strategy loop for every player (the AI relies on the data of humans too) */

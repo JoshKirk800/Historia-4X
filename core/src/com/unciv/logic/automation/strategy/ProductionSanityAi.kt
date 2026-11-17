@@ -19,13 +19,14 @@ import kotlin.math.sqrt
  *  CheckProcessBuildSanity, CvProjectProductionAI::CheckProjectBuildSanity). Each brings the flavor weight down to sqrti(10 x weight)
  *  ([normalise]) and then adds its own terms; a result of 0 or less refuses the candidate (VP's SanityResult codes, [SR_IMPOSSIBLE] ...).
  *
- *  Not ported yet: the bonuses of the unit and building sanity (their refusals that are ported: [UnitProductionAi.isRefused]); VP's most
- *  deficient yield of a city (CvCityStrategyAI::PrecalcYieldStats, which VP's citizens and builders read too), so no process gets its +150.
+ *  Not ported yet: the bonuses of the building sanity; VP's most deficient yield of a city (CvCityStrategyAI::PrecalcYieldStats, which VP's
+ *  citizens and builders read too), so no process gets its +150. The unit sanity is [UnitProductionAi.checkUnitBuildSanity].
  *  VP-only inputs, none in BNW: the process conversion modifiers of buildings (GetYieldFromProcessModifier), the needs (poverty, boredom,
  *  illiteracy, distress, famine), the city happiness delta, the projects' events, supply, spy security, production and conquest yields,
  *  happiness and resources, defense processes, the Utopia project.
  */
 object ProductionSanityAi {
+    const val SR_UNKNOWN = 0
     const val SR_IMPOSSIBLE = -1
     const val SR_UNITSUPPLY = -2
     const val SR_MAINTENANCE = -3
@@ -42,12 +43,9 @@ object ProductionSanityAi {
     /** sqrti(10 x weight): "this seems to work well to bring the raw flavor weight into a sensible range [0 ... 200]" */
     fun normalise(weight: Int): Int = sqrt(10.0 * weight).toInt()
 
-    /** CheckUnitBuildSanity as far as ported: no weight, or a refusal ([UnitProductionAi.isRefused]), refuses; else [normalise] */
-    fun unitSanity(city: City, unit: BaseUnit, weight: Int, forOperation: Boolean): Int {
-        if (weight < 1) return SR_IMPOSSIBLE
-        if (UnitProductionAi.isRefused(city, unit, forOperation)) return SR_STRATEGY
-        return normalise(weight)
-    }
+    /** CvUnitProductionAI::CheckUnitBuildSanity: [UnitProductionAi.checkUnitBuildSanity] (a weight below 1 refuses; the weight [normalise]d plus the unit's bonuses) */
+    fun unitSanity(city: City, unit: BaseUnit, weight: Int, forOperation: Boolean): Int =
+        UnitProductionAi.checkUnitBuildSanity(city, unit, weight, forOperation)
 
     /** CheckBuildingBuildSanity as far as ported: no weight refuses; else [normalise] */
     fun buildingSanity(weight: Int): Int = if (weight < 1) SR_IMPOSSIBLE else normalise(weight)

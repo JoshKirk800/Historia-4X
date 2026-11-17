@@ -1779,7 +1779,6 @@
       "name": "CITYSPECIALIZATION_MILITARY_TRAINING",
       "yieldType": "Production",
       "subtype": "PRODUCTION_SPECIALIZATION_MILITARY_TRAINING",
-      "isOperationUnitProvider": true,
       "flavors": {
         "Offense": 20,
         "Defense": 20,
@@ -1803,7 +1802,6 @@
       "name": "CITYSPECIALIZATION_EMERGENCY_UNITS",
       "yieldType": "Production",
       "subtype": "PRODUCTION_SPECIALIZATION_EMERGENCY_UNITS",
-      "isOperationUnitProvider": true,
       "flavors": {
         "Defense": 200,
         "MilitaryTraining": -4,

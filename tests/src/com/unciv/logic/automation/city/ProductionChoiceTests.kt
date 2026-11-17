@@ -2,6 +2,7 @@ package com.unciv.logic.automation.city
 
 import com.unciv.logic.automation.strategy.ProductionAi
 import com.unciv.logic.automation.strategy.ProductionSanityAi
+import com.unciv.logic.automation.strategy.SpaceshipProductionAi
 import com.unciv.logic.automation.strategy.WonderProductionAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -150,6 +151,19 @@ class ProductionChoiceTests {
         game.addUnit("Warrior", civ, game.tileMap[0, 1])
         game.addUnit("Warrior", civ, game.tileMap[1, 1])
         assertEquals(ProductionSanityAi.normalise(1000), ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
+    }
+
+    @Test
+    fun `with the Apollo Program the parts still needed that a known technology allows go to the planner's best cities`() {
+        game.gameInfo.gameParameters.victoryTypes = ArrayList(game.ruleset.victories.keys)
+        civ.tech.addTechnology("Advanced Ballistics")
+        assertEquals("no Apollo Program yet", 0, SpaceshipProductionAi.numPartsBuildableNow(civ))
+        city.cityConstructions.addBuilding("Apollo Program")
+        // the three SS Boosters of the six parts are what Advanced Ballistics allows
+        assertEquals(3, SpaceshipProductionAi.numPartsBuildableNow(civ))
+        assertEquals(listOf(city), SpaceshipProductionAi.bestCitiesForParts(civ))
+        civ.victoryManager.currentsSpaceshipParts.add("SS Booster", 3)
+        assertEquals("the boosters are all built", 0, SpaceshipProductionAi.numPartsBuildableNow(civ))
     }
 
     private fun makeWonderCity() = game.createWonder().apply { cost = 100 }.also { wonder ->

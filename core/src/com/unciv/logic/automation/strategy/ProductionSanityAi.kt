@@ -19,8 +19,9 @@ import kotlin.math.sqrt
  *  CheckProcessBuildSanity, CvProjectProductionAI::CheckProjectBuildSanity). Each brings the flavor weight down to sqrti(10 x weight)
  *  ([normalise]) and then adds its own terms; a result of 0 or less refuses the candidate (VP's SanityResult codes, [SR_IMPOSSIBLE] ...).
  *
- *  Not ported yet: the bonuses of the building sanity; VP's most deficient yield of a city (CvCityStrategyAI::PrecalcYieldStats, which VP's
- *  citizens and builders read too), so no process gets its +150. The unit sanity is [UnitProductionAi.checkUnitBuildSanity].
+ *  Not ported yet: the helper values and the yield loop of the building sanity ([BuildingProductionAi]); VP's most deficient yield of a
+ *  city (CvCityStrategyAI::PrecalcYieldStats, which VP's citizens and builders read too), so no process gets its +150. The unit sanity is
+ *  [UnitProductionAi.checkUnitBuildSanity].
  *  VP-only inputs, none in BNW: the process conversion modifiers of buildings (GetYieldFromProcessModifier), the needs (poverty, boredom,
  *  illiteracy, distress, famine), the city happiness delta, the projects' events, supply, spy security, production and conquest yields,
  *  happiness and resources, defense processes, the Utopia project.
@@ -47,8 +48,12 @@ object ProductionSanityAi {
     fun unitSanity(city: City, unit: BaseUnit, weight: Int, forOperation: Boolean): Int =
         UnitProductionAi.checkUnitBuildSanity(city, unit, weight, forOperation)
 
-    /** CheckBuildingBuildSanity as far as ported: no weight refuses; else [normalise] */
-    fun buildingSanity(weight: Int): Int = if (weight < 1) SR_IMPOSSIBLE else normalise(weight)
+    /**
+     *  CvBuildingProductionAI::CheckBuildingBuildSanity, see [BuildingProductionAi.checkBuildingBuildSanity]: the weight brought to
+     *  [normalise] plus the bonuses of the city and the building, or a refusal.
+     */
+    fun buildingSanity(city: City, building: Building, weight: Int): Int =
+        BuildingProductionAi.checkBuildingBuildSanity(city, building, weight)
 
     /**
      *  CvProcessProductionAI::CheckProcessBuildSanity: for a city-state half the normalised weight. Else a modifier: -100 with a tiny army
@@ -133,7 +138,10 @@ object ProductionSanityAi {
                     val unit = civ.gameInfo.ruleset.units[unique.params[0]]?.let { civ.getEquivalentUnit(it) }
                     if (unit != null && capital != null) modifier += maxOf(0, unitSanity(capital, unit, 1500, forOperation = false))
                 }
-                UniqueType.GainFreeBuildings -> if (capital != null) modifier += maxOf(0, buildingSanity(2000))
+                UniqueType.GainFreeBuildings -> if (capital != null) {
+                    val free = civ.gameInfo.ruleset.buildings[unique.params[0]]?.let { civ.getEquivalentBuilding(it) }
+                    if (free != null) modifier += maxOf(0, buildingSanity(capital, free, 2000))
+                }
                 else -> {}
             }
         }

@@ -13,14 +13,14 @@ import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
-import com.unciv.models.stats.Stats
 import com.unciv.logic.automation.unit.tactical.CityThreat
 import java.util.WeakHashMap
-import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  *  The city strategy tests (CvCityStrategyAI.cpp: CityStrategyAIHelpers::IsTestCityStrategy_*) and the helpers of CvCityStrategyAI that
- *  other ports read (IsYieldDeficient). ReweightByTurnsLeft is [WonderProductionAi.reweightByTurnsLeft], GetNumUnitsWithUnitAI [UnitAiTypes].
+ *  other ports read (PrecalcYieldStats). ReweightByTurnsLeft is [WonderProductionAi.reweightByTurnsLeft], GetNumUnitsWithUnitAI [UnitAiTypes].
  *
  *  Not registered here: the trade and espionage city strategies (registered by their own port). AICITYSTRATEGY_CAPITAL_UNDER_THREAT
  *  reads CvCity::getThreatValue, the danger map's [com.unciv.logic.automation.unit.PlotDanger.cityThreat] ([CityThreat]).
@@ -37,7 +37,7 @@ object CityStrategyAi {
 
     /**
      *  Per civilization and turn: the counts and lists the tests of all its cities share (CvPlayer::GetNumUnitsWithUnitAI,
-     *  countCitiesFeatureSurrounded, ...), and each city's deficient yield. Rebuilt on a new turn and by [clearTurnCache].
+     *  countCitiesFeatureSurrounded, ...). Rebuilt on a new turn and by [clearTurnCache].
      */
     private class TurnCache(val turn: Int) {
         var landWorkers = -1
@@ -46,7 +46,6 @@ object CityStrategyAi {
         var allSettlers = -1
         var featureSurrounded = -1
         var enemyNavalTiles: List<Tile>? = null
-        val deficientYields = HashMap<String, Stat?>()
     }
     private val turnCaches = WeakHashMap<Civilization, TurnCache>()
 
@@ -78,57 +77,43 @@ object CityStrategyAi {
         }
     }
 
-    /** CvCityStrategyAI::GetYieldAverage for every yield at once: the yields of the tiles the city works (its center included) and their count */
-    private fun workedTileYields(city: City): Pair<Stats, Int> {
-        val sum = Stats()
-        var tiles = 0
-        for (tile in city.getWorkedTiles() + sequenceOf(city.getCenterTile())) {
-            tiles++
-            val stats = tile.stats.getTileStats(city, city.civ)
-            for ((stat, value) in stats) sum[stat] += value.toInt().toFloat()
-        }
-        return Pair(sum, tiles)
-    }
+    /** The yields of CvCityStrategyAI::PrecalcYieldStats, in the original's YieldTypes order, with their define of the expected yield per citizen */
+    private val EXPECTED_YIELDS = listOf(
+        Stat.Food to AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_FOOD,
+        Stat.Production to AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_PRODUCTION,
+        Stat.Gold to AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_GOLD,
+        Stat.Science to AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_SCIENCE,
+        Stat.Culture to AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_CULTURE,
+        Stat.Faith to AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_FAITH)
 
-    private fun isDeficient(rules: AiRuleset, stat: Stat, yields: Pair<Stats, Int>): Boolean {
-        val desired = deficientYieldValue(rules, stat) ?: return false
-        val average = if (yields.second == 0) 0.0 else yields.first[stat].toDouble() / yields.second
-        return roundTimes100(average) < roundTimes100(desired.toDouble())
-    }
-
-    /** CvCityStrategyAI::GetDeficientYieldValue: the desired average yield, null for the yields the original never finds deficient */
-    private fun deficientYieldValue(rules: AiRuleset, stat: Stat): Float? = when (stat) {
-        Stat.Food -> rules.defineFloat(AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_FOOD)
-        Stat.Production -> rules.defineFloat(AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_PRODUCTION)
-        Stat.Science -> rules.defineFloat(AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_SCIENCE)
-        Stat.Gold -> rules.defineFloat(AiDefine.AI_CITYSTRATEGY_YIELD_DEFICIENT_GOLD)
-        else -> null
-    }
-
-    private fun roundTimes100(value: Double): Int = floor(value * 100 + 0.5).toInt()
-
-    /** CvCityStrategyAI::IsYieldDeficient: the city's average worked-tile [stat] is below the desired value (compared ×100, rounded) */
-    fun isYieldDeficient(city: City, stat: Stat): Boolean = isDeficient(city.civ.gameInfo.ruleset.ai, stat, workedTileYields(city))
-
-    /** CvCityStrategyAI::GetDeficientYield: food first, then production, then the other yields in order; null if none */
-    fun deficientYield(city: City): Stat? {
+    /**
+     *  CvCityStrategyAI::PrecalcYieldStats (run at the start of the city's strategy turn, [CityAi.doTurn]): for each of food, production,
+     *  gold, science, culture and faith, the city's yield per turn x 100 per citizen (population, at least 1; whole hundredths) minus the
+     *  expected yield per citizen x 100 (AI_CITYSTRATEGY_YIELD_DEFICIENT_*: VP's 0.5 food - it is the surplus after consumption -, 1 production,
+     *  1.5 gold, 2.5 science, culture and faith). The yield with the greatest surplus is [CityAi.mostAbundantYield] if that surplus is above 0;
+     *  the one with the greatest shortfall is [CityAi.mostDeficientYield] if it is below 0. A tie goes to the earlier yield for the abundant
+     *  one and the later for the deficient one (the original's stable descending sort takes the front and back).
+     *
+     *  The city's yield is [com.unciv.logic.city.CityStats.currentCityStats] (CvCity::getYieldRateTimes100, the cached value), the gold without
+     *  building maintenance as the original's gold has none. The original's remaining yields (tourism, golden age points, ...) only fill
+     *  m_aiYieldModifier, which nothing reads, so it is not kept.
+     */
+    fun precalcYieldStats(city: City) {
         val rules = city.civ.gameInfo.ruleset.ai
-        val yields = workedTileYields(city)
-        if (isDeficient(rules, Stat.Food, yields)) return Stat.Food
-        if (isDeficient(rules, Stat.Production, yields)) return Stat.Production
-        return Stat.entries.firstOrNull { isDeficient(rules, it, yields) }
+        val stats = city.cityStats
+        val population = max(1, city.population.population)
+        val scores = EXPECTED_YIELDS.map { (stat, define) ->
+            var amount = stats.currentCityStats[stat]
+            if (stat == Stat.Gold) amount -= stats.finalStatList["Maintenance"]?.gold ?: 0f
+            val perPopulation100 = (amount * 100).roundToInt() / population
+            stat to perPopulation100 - (100 * rules.defineFloat(define)).toInt()
+        }.sortedByDescending { it.second }
+        city.ai.mostAbundantYield = scores.first().takeIf { it.second > 0 }?.first
+        city.ai.mostDeficientYield = scores.last().takeIf { it.second < 0 }?.first
     }
 
-    /** [deficientYield], once per city and turn for its two strategies */
-    private fun deficientYieldThisTurn(city: City): Stat? {
-        val cache = turnCache(city.civ)
-        synchronized(cache) {
-            if (city.id in cache.deficientYields) return cache.deficientYields[city.id]
-        }
-        val result = deficientYield(city)
-        synchronized(cache) { cache.deficientYields[city.id] = result }
-        return result
-    }
+    /** CityStrategyAIHelpers::IsTestCityStrategy_NeedImprovement: [stat] is the city's most deficient yield */
+    private fun isNeedImprovement(city: City, stat: Stat) = city.ai.mostDeficientYield == stat
 
     /** The stats of the city's buildings (the "Buildings" branch of its base stats) */
     private fun buildingYield(city: City, stat: Stat): Float = city.cityStats.baseStatTree.children["Buildings"]?.totalStats?.get(stat) ?: 0f
@@ -465,8 +450,8 @@ object CityStrategyAi {
         }
         tests.registerCity(NEED_NAVAL_TILE_IMPROVEMENT) { city, _ -> needNavalTileImprovement(city) }
         tests.registerCity("AICITYSTRATEGY_ENOUGH_NAVAL_TILE_IMPROVEMENT") { city, _ -> !city.ai.isCityStrategyActive(NEED_NAVAL_TILE_IMPROVEMENT) }
-        tests.registerCity("AICITYSTRATEGY_NEED_IMPROVEMENT_FOOD") { city, _ -> deficientYieldThisTurn(city) == Stat.Food }
-        tests.registerCity("AICITYSTRATEGY_NEED_IMPROVEMENT_PRODUCTION") { city, _ -> deficientYieldThisTurn(city) == Stat.Production }
+        tests.registerCity("AICITYSTRATEGY_NEED_IMPROVEMENT_FOOD") { city, _ -> isNeedImprovement(city, Stat.Food) }
+        tests.registerCity("AICITYSTRATEGY_NEED_IMPROVEMENT_PRODUCTION") { city, _ -> isNeedImprovement(city, Stat.Production) }
         tests.registerCity("AICITYSTRATEGY_HAVE_TRAINING_FACILITY") { city, _ -> landFreeExperience(city) > 0 }
         tests.registerCity("AICITYSTRATEGY_CAPITAL_NEED_SETTLER") { city, def ->
             isCapitalNeedSettler(city, def.weightThreshold + city.civ.ai.weightThresholdModifier(def))

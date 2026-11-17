@@ -2,7 +2,6 @@ package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.diplomacy.DisputeLevel
-import com.unciv.logic.automation.strategy.CityStrategyAi
 import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.logic.automation.strategy.ProductionAi
 import com.unciv.logic.automation.strategy.PurchaseType
@@ -177,7 +176,8 @@ object UseGoldAutomation {
 
     /**
      *  CvCity::GetIndividualPlotScore: a revealed strategic resource 50, a luxury 40 (x2 if the civilization has none of it); each yield
-     *  x10 (x20 if it is the city specialization's yield), x5 if the city is deficient in it; for every major we have a land dispute with
+     *  x10 (x20 if it is the city specialization's yield), x5 if it is the city's most deficient yield (CvCityStrategyAI::GetMostDeficientYield);
+     *  for every major we have a land dispute with
      *  whose nearest city on the tile's landmass is within 10 tiles, (10 - distance) x 6 / 4 / 2 (fierce / strong / weak);
      *  all x base tile cost / this tile's cost.
      */
@@ -194,7 +194,7 @@ object UseGoldAutomation {
             for ((index, stat) in YIELDS.withIndex()) {
                 var multiplier = if (stat.name == specializationYield) rules.define(AiDefine.AI_PLOT_VALUE_SPECIALIZATION_MULTIPLIER)
                     else rules.define(AiDefine.AI_PLOT_VALUE_YIELD_MULTIPLIER)
-                if (CityStrategyAi.isYieldDeficient(city, stat)) multiplier *= rules.define(AiDefine.AI_PLOT_VALUE_DEFICIENT_YIELD_MULTIPLIER)
+                if (city.ai.mostDeficientYield == stat) multiplier *= rules.define(AiDefine.AI_PLOT_VALUE_DEFICIENT_YIELD_MULTIPLIER)
                 multipliers[index] = multiplier
             }
         }

@@ -302,7 +302,8 @@ class EconomicAi : IsPartOfGameInfoSerialization {
          *  maintenance-free units do not.
          *
          *  Rules: the hard cap is our rule's unit supply ([com.unciv.logic.civilization.transients.CivInfoStatsForNextTurn.getUnitSupply]),
-         *  under which every unit uses supply. Revenue less the costs other than units is next turn's gold without the unit upkeep, with
+         *  which only the units with [com.unciv.logic.map.mapunit.MapUnit.usesUnitSupply] use (the MilitarySupport units, not the
+         *  workers or settlers). Revenue less the costs other than units is next turn's gold without the unit upkeep, with
          *  the gold per turn of deals counting only as income (CalculateGrossGold takes the positive diplomacy gold, the costs leave out
          *  what we pay).
          */
@@ -344,7 +345,7 @@ class EconomicAi : IsPartOfGameInfoSerialization {
             for (unit in civ.units.getCivUnits()) {
                 val isCombat = unit.isMilitary()
                 if (!isCombat || unit.baseUnit.isAirUnit()) otherUnits++
-                if (!isCombat || !unit.baseUnit.isLandUnit && !unit.baseUnit.isWaterUnit) hardSupplyCap--
+                if (unit.usesUnitSupply() && (!isCombat || !unit.baseUnit.isLandUnit && !unit.baseUnit.isWaterUnit)) hardSupplyCap--
             }
 
             var softSupplyCap = min(minUnits, hardSupplyCap)

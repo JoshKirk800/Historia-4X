@@ -1108,6 +1108,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Units in cities cost no Maintenance"
 	Applicable to: Global
 
+??? example  "Uses unit supply"
+	Marks a non-military unit as one that counts against the civilization's unit supply, as the original's MilitarySupport does for the Caravan, the Cargo Ship and the Work Boat. Units with a combat strength use supply without it; the other civilians never do.
+
+	Applicable to: Unit
+
 ??? example  "Enables embarkation for land units"
 	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
 

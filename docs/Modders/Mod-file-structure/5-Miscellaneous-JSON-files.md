@@ -413,6 +413,7 @@ Legend:
     unitSupplyPerPopulation \* amountOfPopulationInAllCities
     unitSupplyBase and unitSupplyPerCity can be found in difficulties.json
     unitSupplyBase, unitSupplyPerCity and unitSupplyPerPopulation can also be increased through uniques
+    Only the units that use supply count against it: those with a combat strength, and those with the unique "Uses unit supply" (the Caravan, Cargo Ship and Work Boat of the Civ V rulesets). Workers, settlers, Great People and religious units do not.
 - [^U]: Formula for the gold maintenance of units (0.5 gold per unit that is not free):
     cost = (paidUnits \* 0.5 \* (1 + unitMaintenanceGameMultiplier \* progress)) ^ (1 + progress / unitMaintenanceExponentDivisor)
     progress is the turn divided by the number of turns of the game speed, paidUnits is the number of units minus unitMaintenanceFreeUnits and the units made free by uniques.

@@ -1,12 +1,15 @@
 package com.unciv.logic.automation.unit
 
 import com.unciv.Constants
+import com.unciv.logic.automation.civilization.CityStateAi
+import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
@@ -17,10 +20,16 @@ import kotlin.math.min
 
 /**
  *  CvHomelandAI's SBuilderState: what the assignment pass has planned so far (builds, features and extra resources of plots), which the
- *  scoring takes into account. Empty until the assignment pass plans for several builders at once ([BuilderTaskingAi] plans one turn's directives
- *  and every builder picks on its own).
+ *  scoring takes into account. [changedPlotImprovements] is mChangedPlotImprovements: the improvement planned for a plot (null: none, the
+ *  improvement the plot has counts). Empty until the assignment pass plans for several builders at once ([BuilderTaskingAi] plans one turn's
+ *  directives and every builder picks on its own).
  */
-class SBuilderState private constructor() {
+class SBuilderState(val changedPlotImprovements: Map<Tile, TileImprovement?> = emptyMap()) {
+    /** CvBuilderTaskingAI.cpp: GetPlannedImprovementInPlot: the improvement planned for [tile], else the one it has unless it is pillaged */
+    fun plannedImprovement(tile: Tile): TileImprovement? =
+        if (tile in changedPlotImprovements) changedPlotImprovements[tile]
+        else if (tile.improvementIsPillaged) null else tile.tileImprovement
+
     companion object {
         val Default = SBuilderState()
     }
@@ -32,28 +41,41 @@ class SBuilderState private constructor() {
  *
  *  Ported terms of ScorePlotBuild, in the original's order:
  *  - Not building (a KEEP directive) has an inherent value of 100. A plot of a city that is being razed scores -1, so does a plot we do not
- *    own (the original scores building outside our borders as worth nothing unless the improvement takes the tiles: NewOwner is none).
+ *    own (the original scores building outside our borders as worth nothing unless the improvement takes the tiles: NewOwner is none; that
+ *    return comes before the defense and culture bomb terms, so a Fort or a Citadel outside our borders is never worth building).
+ *  - A Great Person's improvement that is not a culture bomb loses 1000, 500, 100 or 40 by how likely a neighbour is to take the plot
+ *    ([PlotDefense.theftLikelihood]; none for Impossible).
  *  - A chop that helps a rush adds the feature's production × the production price / 50.
  *  - The yield loop: for each yield of the tile (food, production, gold, science, culture, faith) the yield the plot has with the build (what it
  *    has now without one), ×100, price per yield (BUILDER_TASKING_BASELINE_ADDS_*) and the city's puppet modifier. The yields that techs and
  *    policies will add to the improvement ([FutureYields], CvBuilderTaskingAI::GetFutureYields) go the same way into the potential score. Gold
  *    is smoothed for golden ages (the tile stats already add 1 gold of a golden age on a tile with gold): +40 when no golden age is on, -60 in
- *    one. Only for a plot that
- *    one of our cities can work.
+ *    one. Only for a plot that one of our cities can work.
  *  - Connecting a resource: its [resourceWeight] to the base score, ⅔ of it (⅓ with exactly one available) moved to the potential score when
  *    the resource is already available more than once (once); resources the old improvement connects do not count as available.
  *  - A plot on a planned shortcut or capital connection route ([PlannedRoutes.bestRouteTypeAndValue], [PlannedRoutes.isRoutePlanned]) costs the
  *    improvement 100 (a Great Person's 1000 to build; none to keep or repair), the road taking its place: the original's penalty for an improvement
  *    that gains nothing from roads, which is all of ours (its village improvements are none).
  *  - Not on an antiquity site except the dig.
+ *  - An improvement with a defensive bonus or that hurts adjacent enemy units adds [PlotDefense.defenseBuildValue] where a neighbour threatens;
+ *    a Fort where none does has its yield score halved (it looks ugly when spammed).
+ *  - The nation's combat bonus improvement (Polynesia's Moai, [PlotDefense.combatBonusImprovement]) adds twice its bonus for each plot of ours
+ *    within its range that no improvement of that kind within range covers yet (counted in [SBuilderState.plannedImprovement]).
+ *  - A culture bomb that is built (a Citadel) loses 2000 if it is a Great Person's and adds for every plot it would take from somebody within its
+ *    radius: 10, + 50 for a luxury or strategic resource we see (+ 50 more when somebody owns the plot), and for a plot of somebody + the
+ *    defensive bonus of its improvement, + 50 for a Great Person's, + the plot's yields; × 3 for a city-state, else × 8 / 4 / 1 by our opinion of
+ *    the owner (worse than neutral / neutral / better), × 10. A builder that is a city-state gets -10000 for taking from its friend, protector or ally.
  *  - The unused yield: when the plot's simplified yield value is not better than the worst worked plot of every city that can work it, the
  *    yield score goes to [PlotBuildScore.unusedYieldScore].
  *
- *  Not ported (none-inputs, the rules BNW lacks or later branches): the tile claim and the culture bomb (NewOwner), tile theft and
- *  BlockTileSteal, Great Person rate (GreatPersonRateModifier), domain production and
- *  experience, the planned state of other builds ([SBuilderState]) and potential adjacent improvements (YieldPerXAdjacent*, adjacency yields),
- *  WLTKD and golden age improvement yields, resource monopolies, defense, combat bonus and canal terms,
+ *  Not ported (none-inputs, the rules BNW lacks or later branches): the tile claim (NewOwner), BlockTileSteal (a theft bonus for an improvement
+ *  that blocks tile theft), Great Person rate (GreatPersonRateModifier), domain production and experience, the plans of other builds in
+ *  [SBuilderState] other than the planned improvements (the assignment pass fills them) and potential adjacent improvements (YieldPerXAdjacent*, adjacency yields), WLTKD and
+ *  golden age improvement yields, resource monopolies, the canal term (MakesPassable), CvDiplomacyAI::IsBadTheftTarget (nobody is one: the -10000
+ *  of a major's culture bomb and of an embassy never applies), CvPlot::IsChokePoint, CvPlot::IsStealBlockedByImprovement and embassy improvements,
  *  improvement maintenance (0 in the rules), spawned resources, IMPROVEMENTS_EXTENSIONS and the vanilla Celts block (inactive in Vox Populi).
+ *  The culture bomb walks the plots in Unciv's order (the original's ring table decides which plots come before the first plot of somebody else,
+ *  from which on a plot nobody owns counts), and skips city centers and the plots the improvement's filter does not take (Unciv's take-over).
  *
  *  Unciv mapping: plot yields are Unciv tile stats truncated to integers (a copy of the tile with the build applied gives the projected
  *  yields); the effective owning city is the tile's city; a razing city is [City.isBeingRazed]; a plot in work range is in [City.tilesInRange] of one of
@@ -72,9 +94,15 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
     private val withoutFeatureCache = HashMap<Tile, Tile>()
     /** m_worstCityPlotValues: the simplified yield value of the worst plot each city works */
     private val worstCityPlotValues = HashMap<City, Int>()
+    /** What an improvement's uniques say about culture bomb and defense, read once per improvement */
+    private val cultureBombRadiusCache = HashMap<TileImprovement, Int>()
+    private val defensiveCache = HashMap<TileImprovement, Boolean>()
 
     /** m_futureYieldBonuses, filled by [BuilderTaskingAi] every turn (empty: no future yields) */
     val futureYields = FutureYields(civ)
+
+    /** CvPlayerTraits' combat bonus improvement (Polynesia's Moai), null for a nation without one */
+    private val combatBonusImprovement = PlotDefense.combatBonusImprovement(civ)
 
     /** GetYieldBaseModifierTimes100: the price of one point of [stat] (the original's yields beyond culture are zero in the rules) */
     fun yieldBaseModifierTimes100(stat: Stat): Int = when (stat) {
@@ -107,7 +135,6 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
      *  build or null for "keep what is there". A plot we cannot or should not build on scores -1; callers drop a directive whose
      *  [PlotBuildScore.maxScore] is not above 0.
      */
-    @Suppress("UNUSED_PARAMETER")
     fun scorePlotBuild(tile: Tile, improvement: TileImprovement?, build: Build?, sState: SBuilderState = SBuilderState.Default): PlotBuildScore {
         var plotImprovement = improvement
         val isBuild = build != null
@@ -127,6 +154,17 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
         if (owningCity != null && owningCity.isBeingRazed) return PlotBuildScore(-1)
         // Assume building outside our borders is not worth it
         if (tile.getOwner() != civ) return PlotBuildScore(-1)
+
+        // A Great Person's improvement that is not a culture bomb is worth less where a neighbour is likely to steal the plot
+        val cultureBombRadius = plotImprovement?.let { cultureBombRadiusCache.getOrPut(it) { PlotDefense.cultureBombRadius(it) } } ?: 0
+        if (plotImprovement?.isGreatImprovement() == true && cultureBombRadius == 0)
+            secondaryScore -= when (PlotDefense.theftLikelihood(civ, tile)) {
+                TheftLikelihood.Certain -> 1000
+                TheftLikelihood.Likely -> 500
+                TheftLikelihood.Possible -> 100
+                TheftLikelihood.Unlikely -> 40
+                TheftLikelihood.Impossible -> 0
+            }
 
         val isWithinWorkRange = isWithinWorkRange(tile)
 
@@ -200,6 +238,20 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
         // Don't build on antiquity sites
         if (resource != null && build != null && blockedByAntiquitySite(tile, resource.name, build)) return PlotBuildScore(-1)
 
+        // Is this a good spot for a defensive building?
+        if (plotImprovement != null && defensiveCache.getOrPut(plotImprovement) { PlotDefense.isDefensive(plotImprovement) }) {
+            val defenseBuildValue = PlotDefense.defenseBuildValue(civ, tile, build, plotImprovement, sState)
+            if (defenseBuildValue > 0) secondaryScore += defenseBuildValue
+            // De-emphasize yields for forts if we're not close to the border (they look ugly when spammed)
+            else if (plotImprovement.name == FORT) yieldScore /= 2
+        }
+
+        // How many tiles will be covered by an encampment bonus (or similar)
+        val combatBonus = combatBonusImprovement
+        if (combatBonus != null && combatBonus.improvement == plotImprovement) secondaryScore += combatBonusScore(tile, combatBonus, sState)
+
+        if (plotImprovement != null && cultureBombRadius > 0 && isBuild) secondaryScore += cultureBombScore(tile, plotImprovement, cultureBombRadius)
+
         var yieldUnused = false
         if (build != null && isWithinWorkRange && owningCity != null) {
             val simplifiedYieldValue = plotYieldValueSimplified(tile, build)
@@ -213,6 +265,95 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
         }
 
         return PlotBuildScore(yieldScore + secondaryScore, potentialScore, if (yieldUnused) yieldScore else 0)
+    }
+
+    /**
+     *  The combat bonus term of ScorePlotBuild: every plot of ours within the bonus range of [tile] that no improvement of the kind (planned or
+     *  built, on a plot of ours) within the range of that plot covers yet is worth twice the [CombatBonusImprovement.bonus] (20 bonus on the 18 plots
+     *  of two rings gives 720).
+     */
+    private fun combatBonusScore(tile: Tile, combatBonus: CombatBonusImprovement, sState: SBuilderState): Int {
+        var score = 0
+        for (covered in tile.getTilesInDistance(combatBonus.range)) {
+            if (covered.getOwner() != civ) continue
+            // Check if any adjacent tile covers this one already
+            val alreadyCovered = covered.getTilesInDistance(combatBonus.range).any {
+                it.getOwner() == civ && sState.plannedImprovement(it) == combatBonus.improvement
+            }
+            if (!alreadyCovered) score += combatBonus.bonus * 2
+        }
+        return score
+    }
+
+    /**
+     *  The culture bomb term of ScorePlotBuild: what [improvement] (a culture bomb of [radius]) built on [tile] is worth by what it takes from
+     *  others, to add to the secondary score. A Great Person's improvement starts at -2000 ("culture bombs need to be quite good to be worth it").
+     *  For each plot it takes that is not ours, passable and not a city center: 10, + 50 for a luxury or strategic resource we see (+ 50 more
+     *  when somebody owns it), and when somebody owns it (then the bomb steals enemy land): + the plot improvement's defensive bonus, + 50 for a Great Person's,
+     *  + the plot's yields; × 3 for a city-state, else × 8 / 4 / 1 by our opinion of the owner (worse than neutral / neutral / better), × 10. A plot
+     *  nobody owns adds that only after a plot of somebody has been seen. A plot that a city-state's friend, protector or ally owns makes the whole term
+     *  -10000 when [civ] is a city-state.
+     */
+    private fun cultureBombScore(tile: Tile, improvement: TileImprovement, radius: Int): Int {
+        var secondaryScore = 0
+        var stealScore = 0
+        var stealsEnemyLand = false
+        val bombs = improvement.getMatchingUniques(UniqueType.OneTimeTakeOverTilesInRadius).toList()
+
+        if (improvement.isGreatImprovement()) secondaryScore -= 2000
+
+        for (ring in 0..radius) for (adjacent in tile.getTilesAtDistance(ring)) {
+            val owner = adjacent.getOwner()
+            if (owner == civ) continue
+            if (adjacent.isCityCenter() || bombs.none { ring <= it.params[1].toInt() && adjacent.matchesFilter(it.params[0]) }) continue
+
+            if (civ.isCityState && owner != null) {
+                if (CityStateAi.isFriends(civ, owner) || CityStateAi.isProtectedBy(civ, owner) || civ.allyCiv == owner) {
+                    stealScore = -10000
+                    break
+                }
+            }
+            if (adjacent.isImpassible()) continue
+
+            var multiplier = 1
+            var tempScore = 10
+
+            // There's a resource on the plot
+            val resourceType = visibleResource(adjacent)?.resourceType
+            if (resourceType == ResourceType.Strategic || resourceType == ResourceType.Luxury) {
+                tempScore += 50
+                if (owner != null) tempScore += 50
+            }
+
+            // These only apply when we're stealing from other players
+            if (owner != null) {
+                stealsEnemyLand = true
+
+                // For major civs (and barbarians), it depends on how much we hate them
+                if (owner.isCityState) multiplier = 3
+                else {
+                    val opinion = civ.ai.diplomacy.opinionOf(owner)
+                    if (opinion < MajorCivOpinion.Neutral) multiplier = 8
+                    else if (opinion == MajorCivOpinion.Neutral) multiplier = 4
+                }
+
+                // We're stealing a defensive plot or Great Person improvement
+                val adjacentImprovement = adjacent.tileImprovement
+                if (adjacentImprovement != null) {
+                    if (adjacentImprovement.isGreatImprovement()) tempScore += 50
+                    tempScore += PlotDefense.defenseModifier(adjacentImprovement)
+                }
+
+                // Finally we tie break with yields (only a rough count)
+                val stats = adjacent.stats.getTileStats(null)
+                for (stat in YIELDS) tempScore += stats[stat].toInt()
+            }
+
+            if (tempScore != 0 && multiplier != 0 && stealsEnemyLand) stealScore += tempScore * multiplier * 10
+        }
+
+        if (stealScore != 0) secondaryScore += stealScore
+        return secondaryScore
     }
 
     /** The tile has an antiquity site we can dig, and [build] is not the dig */
@@ -338,5 +479,8 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
         /** The score an improvement loses on a plot of a planned route (ScorePlotBuild, MOD_BALANCE_VP): 100, a Great Person's improvement 1000 to build */
         private const val ROAD_PENALTY = 100
         private const val GREAT_IMPROVEMENT_ROAD_PENALTY = 1000
+
+        /** The improvement whose yields ScorePlotBuild halves where it defends nothing (the original: a type starting with IMPROVEMENT_FORT) */
+        private const val FORT = "Fort"
     }
 }

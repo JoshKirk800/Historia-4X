@@ -9,6 +9,7 @@ import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WonderProductionAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.PublicOpinion
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.mapunit.MapUnit
@@ -233,7 +234,7 @@ class GreatPersonAutomationTests {
     //region General
 
     @Test
-    fun `a citadel goes next to a major only when we show it hostility, or neutrality over a strong land dispute`() {
+    fun `a citadel goes next to a major only when we show it guarded or worse, or covet its land`() {
         val other = neutralCiv()
         game.addCity(other, tile(3, 0))
         civ.diplomacyFunctions.makeCivilizationsMeet(other)
@@ -243,16 +244,54 @@ class GreatPersonAutomationTests {
 
         memory.approach = MajorCivApproach.Neutral
         assertNull("neutral, no dispute", target())
+        memory.landDispute = DisputeLevel.Weak
+        assertNull("neutral, a weak dispute", target())
         memory.landDispute = DisputeLevel.Strong
         assertEquals(other, target()!!.neighbors.firstNotNullOf { it.getOwner()?.takeIf { owner -> owner != civ } })
         memory.approach = MajorCivApproach.Friendly
-        assertNull("friendly despite the dispute", target())
+        assertNotNull("friendly, but a strong land dispute", target())
         memory.landDispute = DisputeLevel.None
+        assertNull("friendly", target())
+        memory.approach = MajorCivApproach.Guarded
+        assertNotNull("guarded", target())
+        memory.approach = MajorCivApproach.Hostile
+        assertNotNull("hostile", target())
         memory.approach = MajorCivApproach.War
         memory.warFace = WarFace.Hostile
         assertNotNull("the war face shown is hostile", target())
         memory.warFace = WarFace.Friendly
         assertNull("the war face shown is friendly", target())
+    }
+
+    @Test
+    fun `a citadel is not planted next to a friend`() {
+        val other = neutralCiv()
+        game.addCity(other, tile(3, 0))
+        civ.diplomacyFunctions.makeCivilizationsMeet(other)
+        val general = greatPerson("Great General")
+        civ.ai.diplomacy.memoryOf(other).approach = MajorCivApproach.Hostile
+        assertNotNull(GreatPersonAutomation.findBestArtistTargetPlot(general))
+        civ.getDiplomacyManager(other)!!.setFlag(DiplomacyFlags.DeclarationOfFriendship, 20)
+        assertNull("a friend, whatever our approach", GreatPersonAutomation.findBestArtistTargetPlot(general))
+    }
+
+    @Test
+    fun `a citadel goes next to a city-state unless we approach it as friendly or are its ally`() {
+        val cityState = game.addCiv(cityStateType = "Cultured")
+        game.addCity(cityState, tile(3, 0))
+        civ.diplomacyFunctions.makeCivilizationsMeet(cityState)
+        val general = greatPerson("Great General")
+        fun target() = GreatPersonAutomation.findBestArtistTargetPlot(general)
+
+        for (approach in listOf(MinorCivApproach.Ignore, MinorCivApproach.Conquest, MinorCivApproach.Bully)) {
+            civ.ai.minorCivApproaches[cityState.civID] = approach
+            assertNotNull("$approach", target())
+        }
+        civ.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Friendly
+        assertNull("friendly", target())
+        civ.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Ignore
+        cityState.allyCiv = civ
+        assertNull("its ally", target())
     }
     //endregion
 

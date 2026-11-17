@@ -257,7 +257,7 @@ class BuilderDirectiveTests {
         val camp = directivesOn(ai, jungle).singleOrNull { it.build?.improvement?.name == "Brazilwood Camp" }
         assertNotNull("the camp is planned", camp)
         assertTrue(camp!!.canBuild)
-        assertEquals(camp, ai.evaluateBuilder(worker)?.directive)
+        assertEquals(camp, ai.pickFor(worker)?.directive)
     }
 
     @Test
@@ -280,13 +280,13 @@ class BuilderDirectiveTests {
         val worker = game.addUnit("Worker", civ, tile(1, 0))
         val ai = BuilderTaskingAi(civ)
         assertTrue(directivesOn(ai, tile(1, 0)).isNotEmpty() && directivesOn(ai, tile(-1, 0)).isNotEmpty())
-        val picked = ai.evaluateBuilder(worker)!!
+        val picked = ai.pickFor(worker)!!
         assertEquals(tile(1, 0), picked.tile)
         assertEquals(0, picked.moveTurns)
         // The same plots, the worker on the other side
         worker.removeFromTile()
         worker.putInTile(tile(-1, 0))
-        assertEquals(tile(-1, 0), BuilderTaskingAi(civ).evaluateBuilder(worker)!!.tile)
+        assertEquals(tile(-1, 0), BuilderTaskingAi(civ).pickFor(worker)!!.tile)
     }
 
     @Test
@@ -295,7 +295,7 @@ class BuilderDirectiveTests {
         val capital = game.addCity(civ, tile(0, 0))
         val scientist = game.addUnit("Great Scientist", civ, capital.getCenterTile())
         val ai = BuilderTaskingAi(civ)
-        val picked = ai.evaluateBuilder(scientist)
+        val picked = ai.pickFor(scientist)
         assertNotNull(picked)
         picked!!
         assertEquals("Academy", picked.build.improvement.name)
@@ -303,7 +303,7 @@ class BuilderDirectiveTests {
         assertEquals(100 * (picked.directive.priorityScore - 100 * picked.moveTurns), picked.weight)
         // A worker never takes it
         val worker = game.addUnit("Worker", civ, tile(0, 1))
-        assertTrue(ai.evaluateBuilder(worker)?.directive?.isGreatPerson != true)
+        assertTrue(ai.pickFor(worker)?.directive?.isGreatPerson != true)
         assertTrue(civ.getWorkerAutomation().executeWorkerMove(scientist))
     }
 

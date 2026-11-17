@@ -385,12 +385,12 @@ class BuilderAssignment(private val civ: Civilization, private val ai: BuilderTa
     }
 
     /**
-     *  CvHomelandAI::ExecuteWorkerMoves, the leftover builders: a builder that has no directive (and is no combat unit) goes to the city with the fewest builders
-     *  assigned so far, the closest of them to it.
+     *  CvHomelandAI::ExecuteWorkerMoves, the leftover builders: a builder (a work boat too) that has no directive (and is no combat unit) goes to
+     *  the city with the fewest builders assigned so far, the closest of them to it.
      */
     private fun sendLeftoversToCities(units: List<MapUnit>) {
         for (unit in units) {
-            if (unit.isMilitary() || !unit.hasUnique(UniqueType.BuildImprovements)) continue
+            if (unit.isMilitary() || !(unit.hasUnique(UniqueType.BuildImprovements) || unit.cache.hasUniqueToCreateWaterImprovements)) continue
             var leastAssigned = Int.MAX_VALUE
             var closest = Int.MAX_VALUE
             var best: City? = null

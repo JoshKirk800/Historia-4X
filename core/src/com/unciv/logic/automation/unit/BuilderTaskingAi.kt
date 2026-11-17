@@ -306,7 +306,7 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
 
     //endregion
 
-    /** The builds [unit] can do: a worker's improvements, or the improvements a Great Person creates instantly */
+    /** The builds [unit] can do: a worker's improvements, the water improvements a work boat creates, or the improvements a Great Person creates instantly */
     inner class BuilderBuilds(private val unit: MapUnit) {
         /** The improvements [unit] creates instantly (a Great Person's), null for a worker */
         val instantImprovements: List<TileImprovement>? =
@@ -321,9 +321,22 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
                     }
                 }
 
+        /** A work boat's builds (UNITAI_WORKER_SEA: the water improvements of its list): it creates the improvement the plot's resource takes now */
+        private val createsWaterImprovements = unit.cache.hasUniqueToCreateWaterImprovements
+
+        /** The improvement a work boat creates on [tile]: the one of the plot's resource that can be built there now (its action's, [UnitActionsFromUniques]) */
+        private fun waterImprovement(tile: Tile): TileImprovement? =
+            if (!createsWaterImprovements || !tile.isWater) null
+            else tile.tileResource?.getImprovingImprovement(tile, GameContext(civ, unit = unit, tile = tile))
+
+        /** [improvement] is one a work boat would create on the water plot [tile] for its resource, a tech one era ahead included */
+        private fun improvesWaterResource(improvement: TileImprovement, tile: Tile): Boolean =
+            createsWaterImprovements && tile.isWater && scorer.visibleResource(tile)?.isImprovedBy(improvement.name) == true
+
         private fun canBuildOn(improvement: TileImprovement, tile: Tile): Boolean {
             if (instantImprovements != null)
                 return improvement in instantImprovements && tile.improvementFunctions.canBuildImprovement(improvement, GameContext(civ, unit = unit, tile = tile))
+            if (createsWaterImprovements && tile.isWater) return waterImprovement(tile) == improvement
             if (improvement.hasUnique(UniqueType.OneTimeExcavation) && !unit.hasUnique(UniqueType.CanExcavate)) return false
             return unit.canBuildImprovement(improvement, tile) &&
                 tile.improvementFunctions.canBuildImprovement(improvement, GameContext(civ, unit = unit, tile = tile))
@@ -336,7 +349,8 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
          */
         fun canPerform(directive: BuilderDirective, testEra: Boolean = false): Boolean {
             val build = directive.build ?: return false
-            if (!directive.canBuild) return testEra && instantImprovements == null && unit.cache.hasUniqueToBuildImprovements
+            if (!directive.canBuild) return testEra && instantImprovements == null
+                && (unit.cache.hasUniqueToBuildImprovements || improvesWaterResource(build.improvement, directive.tile))
             val tile = directive.tile
             return when {
                 directive.type == BuilderDirective.Type.RemoveRoad -> canBuildOn(build.improvement, tile)

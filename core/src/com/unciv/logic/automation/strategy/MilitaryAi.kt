@@ -388,7 +388,9 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
      *  BALANCE_BASIC_ATTACK_ARMY_SIZE per major with a preferred attack target and once more under conquest; the naval share of offense
      *  is effective coastal cities x NAVAL (personality) x 7 / cities. Defense x (100 + 2 x DEFENSE), offense x (100 + boldness + OFFENSE)
      *  (personality and grand strategy). Explorers (units whose default unit AI is EXPLORE) take their own share first: the explorers
-     *  [EconomicAi.doReconState] wants, at most a quarter of the cap, no more than the supply leaves room for. Land and sea are rounded
+     *  [EconomicAi.doReconState] wants, at most a quarter of the cap, no more than the supply leaves room for. Deviation: one explorer
+     *  when there is none and any is wanted (Vox Populi's civilizations start with a free Recon explorer, EraChanges.sql; ours with
+     *  none, and a cap under 4 units rounds the quarter down to 0). Land and sea are rounded
      *  (CvMilitaryAI.cpp 1821-1822); a share our units already exceed grows to them at the other's expense.
      */
     private fun setRecommendedArmyNavySize(civ: Civilization) {
@@ -436,6 +438,7 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         var explorersNeeded = min(maxPossibleUnits / 4, civ.ai.economic.explorersNeeded)
         if (numUnitsToSupply - numExplorers + explorersNeeded > numUnitsSupplied)
             explorersNeeded = numExplorers + numUnitsSupplied - numUnitsToSupply
+        if (numExplorers == 0 && civ.ai.economic.explorersNeeded > 0) explorersNeeded = max(explorersNeeded, 1)
         recommendedExplorers = explorersNeeded
         maxPossibleUnits -= max(explorersNeeded, numExplorers)
 

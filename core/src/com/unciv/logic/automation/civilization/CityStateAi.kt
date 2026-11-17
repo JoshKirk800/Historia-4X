@@ -245,14 +245,14 @@ object CityStateAi {
             }
         }
         // DIPLO GRAND STRATEGY
-        val closeToDiplo = VictoryProgressAi.diplomaticVictoryProgress(civ) >= civ.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)
+        val closeToDiplo = VictoryProgressAi.isCloseToDiploVictory(civ, rules)
         if (ai.isGoingForDiploVictory() || closeToDiplo || has(TraitCategory.Diplomat)) {
             w[friendly] += bias[friendly] * 6
             checkIfGoodWarTarget = false
             friendshipBonus = true
         }
         // CULTURE GRAND STRATEGY
-        val closeToCulture = VictoryProgressAi.cultureVictoryProgress(civ, rules) >= civ.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD)
+        val closeToCulture = VictoryProgressAi.isCloseToCultureVictory(civ, rules)
         if (ai.isGoingForCultureVictory() || closeToCulture || has(TraitCategory.Tourism) || has(TraitCategory.Smaller)) {
             when (trait) {
                 CULTURED, MARITIME -> { w[friendly] += bias[friendly] * 2; checkIfGoodWarTarget = false }
@@ -261,7 +261,7 @@ object CityStateAi {
             }
         }
         // SCIENCE GRAND STRATEGY
-        val closeToScience = VictoryProgressAi.scienceVictoryProgress(civ) >= civ.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
+        val closeToScience = VictoryProgressAi.isCloseToSpaceshipVictory(civ, rules)
         if (ai.isGoingForSpaceshipVictory() || closeToScience || has(TraitCategory.Nerd) || has(TraitCategory.Smaller)) {
             when (trait) {
                 MARITIME, MILITARISTIC -> { w[friendly] += bias[friendly] * 2; checkIfGoodWarTarget = false }

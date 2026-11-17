@@ -54,7 +54,12 @@ class BeliefAiProfile private constructor() {
     val buildingHappiness = LinkedHashMap<Building, Int>()
     val cityYield = Stats()
     val tradeRouteYield = Stats()
+    /** All yields a belief gives specialists, named or of any kind: [namedSpecialistYields] and [anySpecialistYield] together */
     val specialistYield = Stats()
+    /** Specialist name -> yields of Belief_SpecialistYieldChanges */
+    val namedSpecialistYields = LinkedHashMap<String, Stats>()
+    /** Belief_YieldChangeAnySpecialist: the yields a city with specialists gets (the unique's `<in cities with at least [1] [Specialists]>`) */
+    val anySpecialistYield = Stats()
     /** Building class (as the civilization's building) -> yields (Belief_BuildingClassYieldChanges) */
     val buildingYields = LinkedHashMap<Building, Stats>()
     val worldWonderYield = Stats()
@@ -164,10 +169,12 @@ class BeliefAiProfile private constructor() {
                 UniqueType.StatsFromObject -> addStatsFromObject(unique.params[1], unique.stats)
                 UniqueType.StatsFromTilesWithout ->
                     profile.tileWithoutYields.add(Triple(unique.params[1], unique.params[2], unique.stats.yieldSum()))
-                UniqueType.StatsFromNamedSpecialist -> profile.specialistYield.addYields(unique.stats)
+                UniqueType.StatsFromNamedSpecialist -> addSpecialistYield(unique.params[1], unique.stats)
                 UniqueType.StatsPerCity ->
-                    if (bySpecialist) profile.specialistYield.addYields(unique.stats)
-                    else {
+                    if (bySpecialist) {
+                        profile.specialistYield.addYields(unique.stats)
+                        profile.anySpecialistYield.addYields(unique.stats)
+                    } else {
                         profile.happinessPerCity += unique.stats.happiness.toInt()
                         profile.cityYield.addYields(unique.stats)
                     }
@@ -254,11 +261,16 @@ class BeliefAiProfile private constructor() {
             profile.faithUnitPurchaseEras = purchaseEras.size
         }
 
+        fun addSpecialistYield(specialist: String, stats: Stats) {
+            profile.specialistYield.addYields(stats)
+            profile.namedSpecialistYields.getOrPut(specialist) { Stats() }.addYields(stats)
+        }
+
         /** "[stats] from every [object]": world wonders, specialists, improvements, terrain/feature/resource, buildings - in that order */
         fun addStatsFromObject(filter: String, stats: Stats) {
             when {
                 filter in worldWonderFilters -> profile.worldWonderYield.addYields(stats)
-                ruleset.specialists.containsKey(filter) -> profile.specialistYield.addYields(stats)
+                ruleset.specialists.containsKey(filter) -> addSpecialistYield(filter, stats)
                 ruleset.terrains.containsKey(filter) || ruleset.tileResources.containsKey(filter) ->
                     profile.tileYields.add(filter to stats.yieldSum())
                 else -> {

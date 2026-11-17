@@ -49,15 +49,27 @@ object VictoryProgressAi {
     fun isCloseToWorldConquest(civ: Civilization, rules: AiRuleset): Boolean =
         dominationVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DOMINATION_VICTORY_THRESHOLD)
 
+    /** CvDiplomacyAI::IsCloseToDiploVictory: progress at or above CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD */
+    fun isCloseToDiploVictory(civ: Civilization, rules: AiRuleset): Boolean =
+        diplomaticVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)
+
+    /** CvDiplomacyAI::IsCloseToSpaceshipVictory: progress at or above CLOSE_TO_SCIENCE_VICTORY_THRESHOLD */
+    @Readonly
+    fun isCloseToSpaceshipVictory(civ: Civilization, rules: AiRuleset): Boolean =
+        scienceVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
+
+    /** CvDiplomacyAI::IsCloseToCultureVictory: progress at or above CLOSE_TO_CULTURE_VICTORY_THRESHOLD */
+    @Readonly
+    fun isCloseToCultureVictory(civ: Civilization, rules: AiRuleset): Boolean =
+        cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD)
+
     /**
      *  CvDiplomacyAI::IsCloseToAnyVictoryCondition: nobody has won yet and [civ] is close to a victory: world conquest, or a diplomatic,
      *  science or culture victory at or above their VP thresholds (55, 80, 60).
      */
     fun isCloseToAnyVictoryCondition(civ: Civilization, rules: AiRuleset): Boolean = civ.gameInfo.victoryData == null && (
         isCloseToWorldConquest(civ, rules)
-            || diplomaticVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)
-            || scienceVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
-            || cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD))
+            || isCloseToDiploVictory(civ, rules) || isCloseToSpaceshipVictory(civ, rules) || isCloseToCultureVictory(civ, rules))
 
     /**
      *  CvDiplomacyAI::GetDiplomaticVictoryProgress: our delegates as a percentage of those a World Leader vote needs, at most 59 before the

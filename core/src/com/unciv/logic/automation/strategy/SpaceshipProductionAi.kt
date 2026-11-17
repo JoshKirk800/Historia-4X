@@ -35,9 +35,9 @@ object SpaceshipProductionAi {
     /** RESOURCE_ALUMINUM, the resource Vox Populi keeps for the spaceship */
     const val ALUMINUM = "Aluminum"
 
-    /** CvDiplomacyAI::IsGoingForSpaceshipVictory || IsCloseToSpaceshipVictory (science victory progress at least CLOSE_TO_SCIENCE_VICTORY_THRESHOLD) */
+    /** CvDiplomacyAI::IsGoingForSpaceshipVictory || IsCloseToSpaceshipVictory */
     fun plansSpaceship(civ: Civilization): Boolean = civ.ai.isGoingForSpaceshipVictory() ||
-        VictoryProgressAi.scienceVictoryProgress(civ) >= civ.gameInfo.ruleset.ai.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
+        VictoryProgressAi.isCloseToSpaceshipVictory(civ, civ.gameInfo.ruleset.ai)
 
     /**
      *  CvPlayer::DoUpdateCoreCitiesForSpaceshipProduction, computed when asked (VP keeps the list, updated each turn and on a city's loss):

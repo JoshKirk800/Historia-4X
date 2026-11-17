@@ -109,6 +109,11 @@ class CivAi : IsPartOfGameInfoSerialization {
 
     /** CvPlayer::m_bCramped, updated each turn by [updateCramped] */
     var isCramped = false
+    /**
+     *  CvPlayer::m_iCitiesNeedingTerrainImprovements: the cities whose [CityAi.terrainImprovementNeed] was above 0 at the start of this turn
+     *  (CvPlayer::UpdateNumCitiesNeedingTerrainImprovements, run first in [doTurn] from the needs the cities computed last turn)
+     */
+    var citiesNeedingTerrainImprovements = 0
     /** Aggression of other majors this player has seen, by civID */
     var aggressionMemory = HashMap<String, AggressionMemory>()
     /** CvCitySpecializationAI state, see [CitySpecializationAi] */
@@ -180,6 +185,7 @@ class CivAi : IsPartOfGameInfoSerialization {
         toReturn.economicStrategies.putAll(economicStrategies)
         toReturn.militaryStrategies.putAll(militaryStrategies)
         toReturn.isCramped = isCramped
+        toReturn.citiesNeedingTerrainImprovements = citiesNeedingTerrainImprovements
         for ((civId, memory) in aggressionMemory) toReturn.aggressionMemory[civId] = memory.clone()
         toReturn.citySpecialization = citySpecialization.clone()
         toReturn.minorCivApproaches.putAll(minorCivApproaches)
@@ -521,6 +527,7 @@ class CivAi : IsPartOfGameInfoSerialization {
     fun doTurn() {
         if (civ.isBarbarian || civ.isSpectator || civ.isDefeated()) return
         ensureInitialized()
+        citiesNeedingTerrainImprovements = civ.cities.count { it.ai.terrainImprovementNeed > 0 }
         timeThis("AI.Cramped") { updateCramped() }
         if (civ.isMajorCiv || civ.isCityState) com.unciv.logic.automation.diplomacy.WarDamageAi.doTurn(civ)
         if (civ.isMajorCiv) timeThis("AI.GrandStrategy") { GrandStrategyAi.doTurn(civ) }

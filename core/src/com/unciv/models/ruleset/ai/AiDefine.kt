@@ -155,7 +155,7 @@ enum class AiDefine(val default: Float) {
     AI_CITYSTRATEGY_MEDIUM_CITY_POP_THRESHOLD(5f),
     AI_CITYSTRATEGY_NEED_TILE_IMPROVERS_DESPERATE_TURN(30f),
     AI_CITYSTRATEGY_SMALL_CITY_POP_THRESHOLD(2f),
-    AI_CITYSTRATEGY_WANT_TILE_IMPROVERS_MINIMUM_SIZE(2f),
+    AI_CITYSTRATEGY_WANT_TILE_IMPROVERS_MINIMUM_SIZE(4f), // Vox Populi's value (tools/gen_ai_data.py VP_DEFINES); BNW's is 2
     // Vox Populi's expected yield per citizen (CityStrategyAi.precalcYieldStats; tools/gen_ai_data.py VP_DEFINES); BNW's average worked-tile
     // values were 2 food, 0.8 production, 0 gold, 0 science, and it had no culture or faith
     AI_CITYSTRATEGY_YIELD_DEFICIENT_FOOD(0.5f),

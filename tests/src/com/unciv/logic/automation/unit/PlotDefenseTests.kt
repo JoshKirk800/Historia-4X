@@ -3,6 +3,7 @@ package com.unciv.logic.automation.unit
 import com.unciv.logic.automation.civilization.CityStateAi
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.WarFace
+import com.unciv.logic.automation.diplomacy.DisputeLevel
 import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -309,9 +310,13 @@ class PlotDefenseTests {
     private fun citadelScore(builder: Civilization = civ): Int =
         PlotBuildScorer(builder).scorePlotBuild(p, improvement("Citadel"), Build(improvement("Citadel"))).score
 
+    /** We covet the neighbour's land (a strong land dispute), so a friendly approach does not make it a bad target of the culture bomb */
+    private fun covetTheirLand() { civ.ai.diplomacy.memoryOf(neighbour).landDispute = DisputeLevel.Strong }
+
     @Test
     fun `a citadel starts at minus 2000 and takes no theft penalty`() {
         stance(MajorCivApproach.Friendly, StrengthLevel.Average)  // the defense of the plot is not under test
+        covetTheirLand()
         claim(ours, listOf(p) + ring(1))
         showToUs(MajorCivApproach.Hostile)
         assertEquals(-2000, citadelScore())
@@ -322,6 +327,7 @@ class PlotDefenseTests {
     @Test
     fun `a plot of somebody else is worth more the less we like the owner`() {
         stance(MajorCivApproach.Friendly, StrengthLevel.Average)
+        covetTheirLand()
         claim(ours, listOf(p) + ring(1))
         val enemy = ring(1)[0]
         claim(theirs, listOf(enemy))
@@ -336,6 +342,7 @@ class PlotDefenseTests {
     @Test
     fun `the resource and the improvement of the plot add to what it is worth`() {
         stance(MajorCivApproach.Friendly, StrengthLevel.Average)
+        covetTheirLand()
         claim(ours, listOf(p) + ring(1))
         val enemy = ring(1)[0]
         claim(theirs, listOf(enemy))
@@ -351,6 +358,7 @@ class PlotDefenseTests {
     @Test
     fun `a plot nobody owns counts only after a plot of somebody else, in the order of the walk`() {
         stance(MajorCivApproach.Friendly, StrengthLevel.Average)
+        covetTheirLand()
         claim(ours, listOf(p) + ring(1).drop(3))
         val first = ring(1)
         claim(theirs, listOf(first[2]))
@@ -360,6 +368,16 @@ class PlotDefenseTests {
         theirs.expansion.relinquishOwnership(first[2])
         claim(theirs, listOf(first[0]))
         assertEquals(-2000 + (10 + roughYields(first[0])) * 4 * 10 + 2 * 10 * 10, citadelScore())
+    }
+
+    @Test
+    fun `a major civilization does not take from a bad target of its culture bomb`() {
+        stance(MajorCivApproach.Friendly, StrengthLevel.Average)
+        claim(ours, listOf(p) + ring(1))
+        claim(theirs, listOf(ring(1)[0]))
+        assertEquals("a friendly face, no land we covet: -10000", -2000 - 10000, citadelScore())
+        covetTheirLand()
+        assertEquals("a strong land dispute: the plot is worth stealing", -2000 + (10 + roughYields(ring(1)[0])) * 4 * 10, citadelScore())
     }
 
     @Test

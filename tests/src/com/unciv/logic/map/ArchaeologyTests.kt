@@ -507,6 +507,25 @@ class ArchaeologyTests {
     }
 
     @Test
+    fun `no site in the lands of a civilization whose borders are closed to us`() {
+        val foreign = other.cities.first().getCenterTile().neighbors.first { it.getOwner() == other && it.isLand && !it.isImpassible() }
+        siteTile(foreign.position.x, foreign.position.y)
+        recordOn(foreign)
+        startDigging()
+        val ours = civ.getDiplomacyManager(other)!!
+        ours.hasOpenBorders = true // the unit cannot be put into foreign land otherwise
+        val unit = game.addUnit("Archaeologist", civ, foreign)
+        ours.hasOpenBorders = false
+        civ.cache.updateViewableTiles()
+        assertFalse(ArchaeologistAutomation.automate(unit))
+        assertEquals(null, foreign.improvementInProgress)
+        civ.getDiplomacyManager(other)!!.hasOpenBorders = true
+        game.gameInfo.turns++
+        assertTrue(ArchaeologistAutomation.automate(unit))
+        assertEquals(dig.name, foreign.improvementInProgress)
+    }
+
+    @Test
     fun `archaeologists above half the sites plus one are disbanded one per turn`() {
         siteTile(0, -3)
         siteTile(2, -3)

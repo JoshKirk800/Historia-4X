@@ -26,6 +26,13 @@ enum class AiThreat { None, Minor, Major, Severe, Critical }
 /** DisputeLevelTypes (land, wonder, minor civ, victory) */
 enum class DisputeLevel { None, Weak, Strong, Fierce }
 
+/**
+ *  TheftTypes of [TheftAi.isBadTheftTarget]: what we would take from a player. Vox Populi's other types (trade route plunder, tile theft
+ *  of the American unique, an embassy) need rules BNW does not have: no trade route can be plundered, no plot is stolen outside a
+ *  culture bomb, and Unciv's BNW has no embassy improvement.
+ */
+enum class TheftType { CultureBomb, Conversion, Artifact, Spy }
+
 /** AggressivePostureTypes (expansion, plot buying, military) */
 enum class AggressivePosture { None, Low, Medium, High, Incredible }
 

@@ -6,6 +6,8 @@ import com.unciv.logic.automation.civilization.LeagueAutomation
 import com.unciv.logic.automation.civilization.MinorCivHelpers
 import com.unciv.logic.automation.civilization.TechAutomation
 import com.unciv.logic.automation.diplomacy.OpinionAi
+import com.unciv.logic.automation.diplomacy.TheftAi
+import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.automation.diplomacy.WarGoal
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.diplomacy.CityStatePersonality
@@ -285,13 +287,17 @@ class EspionageAutomation(private val civInfo: Civilization) {
         }.sortedByDescending { it.second }.map { it.first }
     }
 
-    /** CvEspionageAI::BuildOffenseCityList: the revealed cities of the other major civilizations, by [offenseScore], lowest first */
+    /**
+     *  CvEspionageAI::BuildOffenseCityList: the revealed cities of the other major civilizations, by [offenseScore], lowest first; not
+     *  those of a civilization it is a bad idea to spy on ([TheftAi.isBadTheftTarget], spying: a friend, a promise we made)
+     */
     fun buildOffenseCityList(): List<City> {
         val maxTechCost = maxResearchableTechCostTimes100()
         val maxStealCost = HashMap<Civilization, Int>()
         val scored = ArrayList<Pair<City, Long>>()
         for (other in gameInfo.civilizations) {
             if (other == civInfo || !other.isMajorCiv) continue
+            if (TheftAi.isBadTheftTarget(civInfo, other, TheftType.Spy)) continue
             for (city in other.cities) {
                 if (!city.getCenterTile().isExplored(civInfo)) continue
                 val cost = maxStealCost.getOrPut(other) { maxStealableTechCostTimes100(other) }.takeIf { it > 0 } ?: maxTechCost

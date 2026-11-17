@@ -120,6 +120,21 @@ class EspionageAutomationTests {
         hidden.getCenterTile().setExplored(a, false)
         assertEquals(listOf(bCapital), ai.buildOffenseCityList())
     }
+
+    @Test
+    fun `offense list leaves out a friend and one we promised not to spy on`() {
+        val ours = a.getDiplomacyManager(b)!!
+        ours.setFlag(DiplomacyFlags.DeclarationOfFriendship, 10)
+        assertEquals(emptyList<City>(), ai.buildOffenseCityList())
+        ours.removeFlag(DiplomacyFlags.DeclarationOfFriendship)
+        b.getDiplomacyManager(a)!!.setFlag(DiplomacyFlags.AgreedToNotSendSpies, 10)
+        assertEquals(emptyList<City>(), ai.buildOffenseCityList())
+        b.getDiplomacyManager(a)!!.removeFlag(DiplomacyFlags.AgreedToNotSendSpies)
+        assertEquals(listOf(bCapital), ai.buildOffenseCityList())
+        ours.declareWar()
+        b.getDiplomacyManager(a)!!.setFlag(DiplomacyFlags.AgreedToNotSendSpies, 10)
+        assertEquals("at war, no promise holds", listOf(bCapital), ai.buildOffenseCityList())
+    }
     // endregion
 
     // region defensive placement

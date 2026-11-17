@@ -5,6 +5,8 @@ import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.civilization.UseGoldAutomation
+import com.unciv.logic.automation.diplomacy.TheftAi
+import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.ExplorationPlotSets
 import com.unciv.logic.automation.strategy.ReconState
@@ -14,7 +16,6 @@ import com.unciv.logic.automation.unit.tactical.TacticalDominance
 import com.unciv.logic.automation.unit.tactical.TacticalSafety
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActionsExoticGoods
 import com.unciv.logic.map.tile.RoadStatus
@@ -291,8 +292,8 @@ object HomelandAi {
         if (resource != site && resource != hiddenSite) return false
         if (!civ.canSeeResource(tile.tileResource)) return false
         val owner = tile.getOwner()
-        // CvDiplomacyAI::IsPlayerMadeNoDiggingPromise
-        return !(owner != null && owner != civ && owner.getDiplomacyManager(civ)?.hasFlag(DiplomacyFlags.AgreedToNotDigInOurLands) == true)
+        // CvDiplomacyAI::IsBadTheftTarget (artifact): a friend, a promise not to dig, closed borders
+        return owner == null || !TheftAi.isBadTheftTarget(civ, owner, TheftType.Artifact)
     }
 
     /** CvPlot::isAdjacentTeam(team, landOnly) */

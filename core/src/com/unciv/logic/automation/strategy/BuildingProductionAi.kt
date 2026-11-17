@@ -44,7 +44,10 @@ import kotlin.math.min
  *  of the VP rules (unhappiness, happiness per war, median modifiers, isolation), the empire's
  *  VP happiness levels (BNW's: excess happiness below 0, at most VERY_UNHAPPY_THRESHOLD, at most SUPER_UNHAPPY_THRESHOLD), the building
  *  columns of VP (supply, ranged strike range and indirect fire, border obstacles of water and land, damage reduction, air and
- *  industrial routes, fresh water, units trainable, great work experience, corporations, marriages, themes, claimed plots, investments),
+ *  industrial routes, fresh water, units trainable, great work experience, corporations, marriages, themes, investments), the plots a
+ *  building claims (VP's Building_ResourceClaim: BNW has no such building, so the claimed plots' terms and the refusal to take a major's
+ *  plots that [com.unciv.logic.automation.diplomacy.TheftAi.isBadTheftTarget] (culture bomb) gives are not reached; a ruleset with such
+ *  buildings reads that function there),
  *  and the trade priorities of cities (VP's
  *  CvTradeAI::GetPrioritizedTradeRoutes stores them: counted as 0, so a building for land or sea trade is penalised -50 as in a city with
  *  no route; the potential sea routes are asked of the trade routes of the civilization).

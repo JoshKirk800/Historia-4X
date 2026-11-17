@@ -4,6 +4,7 @@ import com.unciv.logic.automation.civilization.ReligionAutomation.FaithPurchase
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.ReligionManager
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.tile.Tile
@@ -375,5 +376,30 @@ class ReligionAiTests {
         small.getCenterTile().setExplored(civ, false)
         assertEquals(0, ReligionAutomation.scoreCityForMissionary(civ, small, missionary, religion))
         assertEquals(own, ReligionAutomation.chooseMissionaryTargetCity(civ, missionary))
+    }
+
+    @Test
+    fun `missionaries leave a friend with a religion of its own, and a civilization we promised, alone`() {
+        val (civ, religion) = foundedCiv()
+        val missionary = game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(0, 1))
+        missionary.religion = religion.name
+        val other = game.addCiv()
+        val city = game.addCity(other, tile(3, 0))
+        city.getCenterTile().setExplored(civ, true)
+        civ.diplomacyFunctions.makeCivilizationsMeet(other)
+        val ours = civ.getDiplomacyManager(other)!!
+        fun score() = ReligionAutomation.scoreCityForMissionary(civ, city, missionary, religion)
+
+        ours.setFlag(DiplomacyFlags.DeclarationOfFriendship, 20)
+        assertTrue("a friend without a religion: nothing asked", score() > 0)
+        foundReligion(other)
+        assertEquals("a friend with a religion", 0, score())
+        ours.removeFlag(DiplomacyFlags.DeclarationOfFriendship)
+        assertTrue("a stranger", score() > 0)
+        other.getDiplomacyManager(civ)!!.setFlag(DiplomacyFlags.AgreedToNotSpreadReligion, 20)
+        assertEquals("our promise to them", 0, score())
+        other.getDiplomacyManager(civ)!!.removeFlag(DiplomacyFlags.AgreedToNotSpreadReligion)
+        ours.setFlag(DiplomacyFlags.AgreedToNotSpreadReligion, 20)
+        assertTrue("their promise to us does not bind us", score() > 0)
     }
 }

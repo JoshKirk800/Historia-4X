@@ -16,11 +16,11 @@ import com.unciv.models.ruleset.unique.UniqueType
  * The trade AI: CvTradeAI (CvTradeClasses.cpp) and CvHomelandAI::ExecuteTradeUnitMoves.
  *
  * Once per turn the civilization lists every connection its cities could start (GetAvailableTR, connections that already carry a route included),
- * scores them (ScoreInternationalTR, ScoreFoodTR, ScoreProductionTR) and orders them (PrioritizeTradeRoutes); each idle trade unit then takes
+ * scores them (ScoreInternationalTR, ScoreFoodTR, ScoreProductionTR) and orders them; each idle trade unit then takes
  * the first entry of its domain it can start (ChooseTradeUnitTargetPlot).
  *
- * As in the shipped DLL, PrioritizeTradeRoutes sorts each kind ascending (its comparator is `a < b`), so the lowest positive score comes first;
- * the plan is to decide as the shipped game does, so this is kept.
+ * Ordering follows Vox Populi Release-5.4.8's CvTradeAI::GetPrioritizedTradeRoutes: one positive-score list, highest first;
+ * stable ties prefer production, then food, then international routes. Scores and internal target selection remain BNW's.
  *
  * Inputs: plot danger [PlotDanger]; route yields [com.unciv.logic.civilization.managers.TradeRouteManager.preview]; religious pressure
  * [com.unciv.logic.city.managers.CityReligionManager.wouldExertTradeRoutePressureToward]; the wonder city [WonderProductionAi.wonderBuildCity].
@@ -71,7 +71,7 @@ object TradeRouteAutomation {
         return duplicates
     }
 
-    /** CvTradeAI::PrioritizeTradeRoutes, kept for the turn */
+    /** CvTradeAI::GetPrioritizedTradeRoutes, kept for the turn */
     fun getPrioritizedRoutes(civ: Civilization): List<TradeRouteCandidate> {
         val manager = civ.tradeRoutes
         if (manager.aiRoutesTurn != civ.gameInfo.turns) {
@@ -81,35 +81,37 @@ object TradeRouteAutomation {
         return manager.aiPrioritizedRoutes
     }
 
-    /** CvTradeAI::PrioritizeTradeRoutes: international #1 and #2, the first food, the first production, the other internationals */
+    /** Vox Populi's CvTradeAI::GetPrioritizedTradeRoutes: stable highest-first ordering across all route kinds */
     fun prioritizeTradeRoutes(civ: Civilization): List<TradeRouteCandidate> {
         val available = getAvailableRoutes(civ)
         if (available.isEmpty()) return available
         val danger = PlotDanger(civ)
 
-        var food: List<TradeRouteCandidate> = emptyList()
+        val scored = ArrayList<Pair<TradeRouteCandidate, Int>>(available.size)
+        val productionTargets = productionTargetCities(civ)
+        if (productionTargets.isNotEmpty())
+            addScoredRoutes(scored, available) { scoreProduction(civ, it, productionTargets, danger) }
+
         if (civ.getHappiness() >= 0) {
             val smallest = smallestCity(civ)
-            if (smallest != null) food = sortAscending(available) { scoreFood(civ, it, smallest, danger) }
+            if (smallest != null) addScoredRoutes(scored, available) { scoreFood(civ, it, smallest, danger) }
         }
+        addScoredRoutes(scored, available) { scoreInternational(civ, it, danger) }
 
-        val productionTargets = productionTargetCities(civ)
-        val production = if (productionTargets.isEmpty()) emptyList()
-            else sortAscending(available) { scoreProduction(civ, it, productionTargets, danger) }
-
-        val gold = sortAscending(available) { scoreInternational(civ, it, danger) }
-
-        val result = ArrayList<TradeRouteCandidate>()
-        result.addAll(gold.take(INTERNATIONAL_ROUTES_FIRST))
-        food.firstOrNull()?.let { result.add(it) }
-        production.firstOrNull()?.let { result.add(it) }
-        result.addAll(gold.drop(INTERNATIONAL_ROUTES_FIRST))
-        return result
+        scored.sortByDescending { it.second }
+        return scored.map { it.first }
     }
 
-    /** The positive-scoring candidates, stable-sorted with the shipped `a < b` comparator */
-    private inline fun sortAscending(candidates: List<TradeRouteCandidate>, score: (TradeRouteCandidate) -> Int): List<TradeRouteCandidate> =
-        candidates.map { it to score(it) }.filter { it.second > 0 }.sortedBy { it.second }.map { it.first }
+    private inline fun addScoredRoutes(
+        result: MutableList<Pair<TradeRouteCandidate, Int>>,
+        candidates: List<TradeRouteCandidate>,
+        score: (TradeRouteCandidate) -> Int
+    ) {
+        for (candidate in candidates) {
+            val value = score(candidate)
+            if (value > 0) result.add(candidate to value)
+        }
+    }
 
     /** CvTradeAI::GetAvailableTR: from each of our cities to every city, by destination, land before sea, with a valid path */
     fun getAvailableRoutes(civ: Civilization): List<TradeRouteCandidate> {
@@ -240,8 +242,6 @@ object TradeRouteAutomation {
         civ.tradeRoutes.routes.any { it.getDestinationCiv() == other } || other.tradeRoutes.routes.any { it.getDestinationCiv() == civ }
     //endregion
 
-    /** PrioritizeTradeRoutes: uiNumInternationalTradesToAdd */
-    private const val INTERNATIONAL_ROUTES_FIRST = 2
     /** ScoreFoodTR / ScoreProductionTR: iMaxDistance */
     private const val MAX_DISTANCE = 60
 }

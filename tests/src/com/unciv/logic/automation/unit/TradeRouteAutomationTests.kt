@@ -4,6 +4,7 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.TradeRouteManager
 import com.unciv.models.TradeRouteKind
+import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
@@ -25,7 +26,7 @@ class TradeRouteAutomationTests {
 
     @Before
     fun setUp() {
-        game = TestGame()
+        game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
         game.makeHexagonalMap(16)
         civA = game.addCiv("[+4] Trade Route slots")
         civB = game.addCiv()
@@ -102,28 +103,49 @@ class TradeRouteAutomationTests {
     }
 
     @Test
-    fun `international candidates are ordered with the lowest score first as in the shipped comparator`() {
-        // City-states: a route that gives us less than nothing still scores 1, so every path is a candidate
-        for (y in listOf(5, 7, 9)) {
-            val cityState = game.addCiv(cityStateType = "Maritime")
-            civA.diplomacyFunctions.makeCivilizationsMeet(cityState)
-            cityOf(cityState, y)
-        }
+    fun `a trade unit takes the higher scoring international connection`() {
+        val low = cityOf(civB, 6)
+        val high = cityOf(civB, -6)
+        giveCivBTechs()
+        high.cityConstructions.addBuilding(game.createBuilding("[+10] Gold on incoming [International] trade routes for their origin <in this city>"))
         val danger = PlotDanger(civA)
-        val ordered = TradeRouteAutomation.prioritizeTradeRoutes(civA).filter { it.destination.kind == TradeRouteKind.International }
-        val scores = ordered.map { TradeRouteAutomation.scoreInternational(civA, it, danger) }
-        assertTrue("$scores", scores.size >= 3)
-        assertTrue("$scores", scores.all { it > 0 })
-        assertEquals(scores.sorted(), scores)
+        val lowScore = TradeRouteAutomation.scoreInternational(civA, candidateTo(low), danger)
+        val highScore = TradeRouteAutomation.scoreInternational(civA, candidateTo(high), danger)
+        assertTrue(lowScore > 0 && highScore > lowScore)
+        val unit = game.addUnit(caravan.name, civA, origin.getCenterTile())
+
+        TradeRouteAutomation.automateTradeUnit(unit)
+
+        assertEquals(high.location, civA.tradeRoutes.routes.single().destination)
     }
 
     @Test
-    fun `a trade unit waiting in its origin city takes the first connection of its domain`() {
-        val near = cityOf(civB, 6)
-        giveCivBTechs()
+    fun `a better food connection is not displaced by an international quota`() {
+        val foreign = cityOf(civB, 6)
+        val domestic = cityOf(civA, -5)
+        origin.population.addPopulation(1)
+        origin.cityConstructions.removeBuilding("Palace")
+        foreign.cityConstructions.removeBuilding("Palace")
+        origin.cityConstructions.addBuilding(game.createBuilding("Allows [Food] trade routes between your cities"))
+        foreign.cityConstructions.addBuilding(game.createBuilding("[+1] Gold on incoming [International] trade routes for their origin <in this city>"))
+        civB.tech.addTechnology(game.ruleset.technologies.keys.first { !civB.tech.isResearched(it) })
+        origin.cityStats.update()
+        foreign.cityStats.update()
+        val danger = PlotDanger(civA)
+        val available = TradeRouteAutomation.getAvailableRoutes(civA)
+        val food = available.first { it.origin == origin && it.destination.city == domestic && it.destination.kind == TradeRouteKind.Food }
+        val gold = available.first { it.origin == origin && it.destination.city == foreign && it.destination.kind == TradeRouteKind.International }
+        val goldScore = TradeRouteAutomation.scoreInternational(civA, gold, danger)
+        val foodScore = TradeRouteAutomation.scoreFood(civA, food, domestic, danger)
+        assertTrue(civA.getHappiness() >= 0)
+        assertTrue("food=$foodScore, gold=$goldScore", goldScore > 0 && foodScore > goldScore)
         val unit = game.addUnit(caravan.name, civA, origin.getCenterTile())
+
         TradeRouteAutomation.automateTradeUnit(unit)
+
         val route = civA.tradeRoutes.routes.single()
-        assertEquals(near.location, route.destination)
+        assertEquals(domestic.location, route.destination)
+        assertEquals(TradeRouteKind.Food, route.kind)
     }
+
 }

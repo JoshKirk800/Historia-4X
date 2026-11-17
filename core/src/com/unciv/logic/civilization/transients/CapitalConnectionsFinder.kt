@@ -110,20 +110,33 @@ class CapitalConnectionsFinder(private val civInfo: Civilization) {
         if (cityToConnectFrom.wasPreviouslyReached(transportType, overridingTransportType))
             return
 
-        val bfs = BFS(cityToConnectFrom.getCenterTile()) {
-              val owner = it.getOwner()
-              (it.isCityCenter() || tileFilter(it)) && (owner == null || canEnterBordersOf(owner))
-        }
-        bfs.stepToEnd()
-        val reachedCities = openBordersCivCities.filter {
-            bfs.hasReachedTile(it.getCenterTile()) && cityFilter(it)
-        }
+        val reachedCities = reachedCities(cityToConnectFrom, tileFilter, cityFilter)
         for (reachedCity in reachedCities) {
             addCityIfFirstEncountered(reachedCity)
             if (reachedCity == cityToConnectFrom) continue
             if (!reachedCity.wasPreviouslyReached(transportType, overridingTransportType))
                 reachedCity.addMedium(transportType)
         }
+    }
+
+    /** The cities in [openBordersCivCities] that a search from [from] over the tiles that pass [tileFilter] (and the city centers) reaches and that pass [cityFilter] */
+    private fun reachedCities(from: City, tileFilter: (Tile) -> Boolean, cityFilter: (City) -> Boolean): List<City> {
+        val bfs = BFS(from.getCenterTile()) {
+            val owner = it.getOwner()
+            (it.isCityCenter() || tileFilter(it)) && (owner == null || canEnterBordersOf(owner))
+        }
+        bfs.stepToEnd()
+        return openBordersCivCities.filter { bfs.hasReachedTile(it.getCenterTile()) && cityFilter(it) }.toList()
+    }
+
+    /**
+     *  The cities that the harbor city [from] of [civInfo] reaches over water, the ones [checkHarbor] connects from it: our cities with a harbor
+     *  that are not blockaded, other than [from]; none when [from] has no harbor. The builder AI's route planning path-finds through these links
+     *  (CvAStar.cpp: AddCityConnectionHarborConnections).
+     */
+    fun harborNeighbors(from: City): List<City> {
+        if (!from.containsHarbor()) return emptyList()
+        return reachedCities(from, { it.isWater }) { city -> city.civ == civInfo && city.containsHarbor() && !city.isBlockaded() }.filter { it != from }
     }
 
     private fun addCityIfFirstEncountered(reachedCity: City) {

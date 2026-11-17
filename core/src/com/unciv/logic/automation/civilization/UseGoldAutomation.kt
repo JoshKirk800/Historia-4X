@@ -177,9 +177,9 @@ object UseGoldAutomation {
     /**
      *  CvCity::GetIndividualPlotScore: a revealed strategic resource 50, a luxury 40 (x2 if the civilization has none of it); each yield
      *  x10 (x20 if it is the city specialization's yield), x5 if it is the city's most deficient yield (CvCityStrategyAI::GetMostDeficientYield);
-     *  for every major we have a land dispute with
-     *  whose nearest city on the tile's landmass is within 10 tiles, (10 - distance) x 6 / 4 / 2 (fierce / strong / weak);
-     *  all x base tile cost / this tile's cost.
+     *  50 more for a plot on a route the builders plan ([com.unciv.logic.automation.unit.PlannedRoutes.bestRouteTypeAndValue]); for every major
+     *  we have a land dispute with whose nearest city on the tile's landmass is within 10 tiles, (10 - distance) x 6 / 4 / 2
+     *  (fierce / strong / weak); all x base tile cost / this tile's cost.
      */
     fun individualPlotScore(city: City, tile: Tile): Int = PlotScoring(city).score(tile)
 
@@ -188,6 +188,8 @@ object UseGoldAutomation {
         val civ = city.civ
         val rules = civ.gameInfo.ruleset.ai
         val baseCost = baseTileCost(city)
+        /** This turn's route plan (the builder AI's [com.unciv.logic.automation.unit.PlannedRoutes]), planned when a plot is first scored */
+        val plannedRoutes by lazy { civ.getWorkerAutomation().plannedRoutes }
         /** Multiplier per yield, by index in [YIELDS] */
         val yieldMultipliers = IntArray(YIELDS.size).also { multipliers ->
             val specializationYield = city.ai.specializationDef()?.yieldType
@@ -226,6 +228,9 @@ object UseGoldAutomation {
             }
             val natureYields = tile.stats.getTileStats(null, civ)
             for ((index, stat) in YIELDS.withIndex()) value += natureYields[stat].toInt() * yieldMultipliers[index]
+
+            // A plot on a planned route (CvCity::GetIndividualPlotScore adds AI_PLOT_VALUE_STRATEGIC_RESOURCE; Vox Populi's 80 is 50 in ours, as for resources)
+            if (plannedRoutes.bestRouteTypeAndValue(tile) != null) value += rules.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE)
 
             for ((multiplier, cities) in disputes) {
                 var nearest = Int.MAX_VALUE

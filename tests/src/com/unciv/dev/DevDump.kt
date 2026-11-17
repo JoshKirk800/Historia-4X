@@ -13,6 +13,7 @@ import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.MilitaryTargets
 import com.unciv.logic.automation.strategy.NavalOperationLogic
 import com.unciv.logic.automation.strategy.OperationAbortReason
+import com.unciv.logic.automation.unit.BuilderDirective
 import com.unciv.logic.automation.unit.BuilderDirectives
 import com.unciv.logic.automation.unit.BuilderTaskingAi
 import com.unciv.logic.files.UncivFiles
@@ -156,6 +157,11 @@ class DevDump {
             val ai = BuilderTaskingAi(civ)
             out.append("\n${civ.civName}: ${ai.directives.size} directives, ${builders.size} builders, " +
                 "improved tiles ${civ.cities.sumOf { city -> city.getTiles().count { it.improvement != null } }} of ${civ.cities.sumOf { it.getTiles().count() }}\n")
+            val routes = ai.routes.plannedRoutes()
+            out.append("  planned routes: ${routes.size} (${routes.groupingBy { it.route }.eachCount()}), ${routes.sumOf { ai.routes.plotsOf(it).size }} plots, " +
+                "${ai.directives.count { it.build?.isRoute == true }} build directives, ${ai.directives.count { it.type == BuilderDirective.Type.RepairRoute }} repairs\n")
+            for (route in routes.take(limit)) out.append("    ${route.route} ${route.first.position} - ${route.second.position}: ${ai.routes.purposesOf(route)}, " +
+                "additive ${ai.routes.additiveValueOf(route)}, non-additive ${ai.routes.nonAdditiveValueOf(route)}, ${ai.routes.plotsOf(route).size} plots\n")
             for (directive in ai.directives.take(limit)) {
                 val score = directive.plotBuildScore
                 out.append("  ${directive.type} ${directive.build?.improvement?.name ?: "-"}${directive.build?.removeFirst?.let { " after ${it.name}" } ?: ""} " +

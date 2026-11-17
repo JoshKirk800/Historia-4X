@@ -3,6 +3,7 @@ package com.unciv.logic.automation.unit
 import com.unciv.Constants
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.ai.AiDefine
@@ -39,12 +40,15 @@ class SBuilderState private constructor() {
  *    one of our cities can work.
  *  - Connecting a resource: its [resourceWeight] to the base score, ⅔ of it (⅓ with exactly one available) moved to the potential score when
  *    the resource is already available more than once (once); resources the old improvement connects do not count as available.
+ *  - A plot on a planned shortcut or capital connection route ([PlannedRoutes.bestRouteTypeAndValue], [PlannedRoutes.isRoutePlanned]) costs the
+ *    improvement 100 (a Great Person's 1000 to build; none to keep or repair), the road taking its place: the original's penalty for an improvement
+ *    that gains nothing from roads, which is all of ours (its village improvements are none).
  *  - Not on an antiquity site except the dig.
  *  - The unused yield: when the plot's simplified yield value is not better than the worst worked plot of every city that can work it, the
  *    yield score goes to [PlotBuildScore.unusedYieldScore].
  *
  *  Not ported (none-inputs, the rules BNW lacks or later branches): the tile claim and the culture bomb (NewOwner), tile theft and
- *  BlockTileSteal, Great Person rate (GreatPersonRateModifier), the planned route penalty (needs the route plan), domain production and
+ *  BlockTileSteal, Great Person rate (GreatPersonRateModifier), domain production and
  *  experience, the planned state of other builds ([SBuilderState]) and potential adjacent improvements (YieldPerXAdjacent*, adjacency yields),
  *  WLTKD and golden age improvement yields, future yields from techs and policies, resource monopolies, defense, combat bonus and canal terms,
  *  improvement maintenance (0 in the rules), spawned resources, IMPROVEMENTS_EXTENSIONS and the vanilla Celts block (inactive in Vox Populi).
@@ -54,7 +58,7 @@ class SBuilderState private constructor() {
  *  our cities; the puppet modifier is [com.unciv.logic.city.CityStats.getStatPercentBonusesFromPuppetCity] (the original's 30% puppet
  *  multiplier is Vox Populi's own: ours is 100%).
  */
-class PlotBuildScorer(val civ: Civilization) {
+class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = PlannedRoutes(civ)) {
     private val ruleset = civ.gameInfo.ruleset
     private val rules = ruleset.ai
 
@@ -168,6 +172,19 @@ class PlotBuildScorer(val civ: Civilization) {
                 secondaryScore -= downPriority
                 potentialScore += downPriority
             }
+        }
+
+        // Do we have or will we build a road here? Not for a plot that is only on a strategic route
+        val routeNeeded = routes.bestRouteTypeAndValue(tile)?.first ?: RoadStatus.None
+        val forceCityConnection =
+            if (routeNeeded != RoadStatus.None && (routes.isRoutePlanned(tile, routeNeeded, RoutePurpose.Shortcut)
+                    || routes.isRoutePlanned(tile, routeNeeded, RoutePurpose.ConnectCapital))) routeNeeded
+            else RoadStatus.None
+        if (forceCityConnection != RoadStatus.None) {
+            // Improvements gain nothing from a road here (no improvement of the rules does): the road takes the plot's place. No penalty for
+            // keeping or repairing a Great Person's improvement, a heavy one for building it
+            secondaryScore -= if (plotImprovement?.isGreatImprovement() == true) (if (!isBuild || build.isRepair) 0 else GREAT_IMPROVEMENT_ROAD_PENALTY)
+                else ROAD_PENALTY
         }
 
         // Don't build on antiquity sites
@@ -307,5 +324,9 @@ class PlotBuildScorer(val civ: Civilization) {
         /** The original's Yields.GoldenAgeYieldThreshold and GoldenAgeYield of gold (the other yields have none); ours is TileStatFunctions' golden age +1 gold */
         private const val GOLDEN_AGE_GOLD_THRESHOLD = 1
         private const val GOLDEN_AGE_GOLD_YIELD = 1
+
+        /** The score an improvement loses on a plot of a planned route (ScorePlotBuild, MOD_BALANCE_VP): 100, a Great Person's improvement 1000 to build */
+        private const val ROAD_PENALTY = 100
+        private const val GREAT_IMPROVEMENT_ROAD_PENALTY = 1000
     }
 }

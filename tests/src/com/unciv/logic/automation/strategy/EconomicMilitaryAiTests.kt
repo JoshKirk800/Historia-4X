@@ -156,8 +156,10 @@ class EconomicMilitaryAiTests {
         val supply = civ.stats.getUnitSupply()
         assertTrue("supply $supply", supply > 5)
         assertEquals(supply, EconomicAi.softSupplyCap(civ))
-        // a unit that uses supply but is no land or sea combat unit leaves one less
+        // a Worker uses no supply (CvUnit::IsMilitarySupport is false), so the cap stays; a Caravan uses it but is no combat unit: one less
         game.addUnit("Worker", civ, tile(1, 1))
+        assertEquals(supply, EconomicAi.softSupplyCap(civ))
+        game.addUnit("Caravan", civ, tile(1, 2))
         assertEquals(supply - 1, EconomicAi.softSupplyCap(civ))
         // an income that pays for no unit: the floor of 2 per city
         addGoldIncome(capital, -2000f)

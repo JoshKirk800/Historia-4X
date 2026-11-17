@@ -126,7 +126,7 @@ class DevDump {
             military.updateAttackTargets(civ)
             military.updateBaseData(civ)
             military.updateDefenseState(civ)
-            out.append("${civ.civName}: cities ${civ.cities.size}, units ${civ.units.getCivUnitsSize()} of supply ${civ.stats.getUnitSupply()}, " +
+            out.append("${civ.civName}: cities ${civ.cities.size}, units ${civ.units.getCivUnitsSize()} (${civ.units.getNumUnitsToSupply()} use supply) of supply ${civ.stats.getUnitSupply()}, " +
                 "soft cap ${EconomicAi.softSupplyCap(civ)}; land ${military.numLandUnits} of ${military.recommendedLandArmySize} (${military.landDefenseState}), " +
                 "navy ${military.numNavalUnits} of ${military.recommendedNavySize} (${military.navalDefenseState}), air ${military.numAirUnits}, " +
                 "explorers ${military.recommendedExplorers}; gold ${civ.gold} (${"%+d".format(civ.stats.statsForNextTurn.gold.toInt())}), " +

@@ -431,7 +431,7 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         val totalWeight = totalOffenseWeight + landDefenseWeight + navalDefenseWeight
 
         val numExplorers = UnitAiTypes.numUnitsWithDefaultUnitAi(civ, UnitAiType.EXPLORE, includeBeingTrained = false)
-        val numUnitsToSupply = civ.units.getCivUnitsSize()
+        val numUnitsToSupply = civ.units.getNumUnitsToSupply()
         val numUnitsSupplied = civ.stats.getUnitSupply()
         var explorersNeeded = min(maxPossibleUnits / 4, civ.ai.economic.explorersNeeded)
         if (numUnitsToSupply - numExplorers + explorersNeeded > numUnitsSupplied)

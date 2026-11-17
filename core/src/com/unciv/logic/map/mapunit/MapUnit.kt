@@ -295,6 +295,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
     @Readonly fun isMilitary() = baseUnit.isMilitary
     @Readonly fun isCivilian() = baseUnit.isCivilian()
+    @Readonly fun usesUnitSupply() = baseUnit.usesUnitSupply
 
     @Readonly fun isActionUntilHealed() = action?.endsWith("until healed") == true
 

@@ -40,6 +40,7 @@ class ModConstants {
     //          unitSupplyPerPopulation * amountOfPopulationInAllCities
     // unitSupplyBase and unitSupplyPerCity can be found in difficulties.json
     // unitSupplyBase, unitSupplyPerCity and unitSupplyPerPopulation can also be increased through uniques
+    // Only the units that use supply count against it: those with a combat strength and those with the "Uses unit supply" unique.
     var unitSupplyPerPopulation = 0.5
 
     // Gold maintenance of units (CvTreasury::CalculateUnitCost), with 0.5 gold per unit that is not free:

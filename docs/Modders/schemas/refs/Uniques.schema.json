@@ -105,6 +105,7 @@
       "[amount] Unit Supply per city",
       "[amount] units cost no maintenance",
       "Units in cities cost no Maintenance",
+      "Uses unit supply",
       "Enables embarkation for land units",
       "Enables [mapUnitFilter] units to enter ocean tiles",
       "Land units may cross [terrainName] tiles after the first [baseUnitFilter] is earned",

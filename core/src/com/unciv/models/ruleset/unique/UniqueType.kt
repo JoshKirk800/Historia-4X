@@ -281,6 +281,9 @@ enum class UniqueType(
     UnitSupplyPerCity("[amount] Unit Supply per city", UniqueTarget.Global),
     FreeUnits("[amount] units cost no maintenance", UniqueTarget.Global),
     UnitsInCitiesNoMaintenance("Units in cities cost no Maintenance", UniqueTarget.Global),
+    UsesUnitSupply("Uses unit supply", UniqueTarget.Unit,
+        docDescription = "Marks a non-military unit as one that counts against the civilization's unit supply, as the original's MilitarySupport does for " +
+            "the Caravan, the Cargo Ship and the Work Boat. Units with a combat strength use supply without it; the other civilians never do."),
 
     // Units entering Tiles
     // ToDo: make per unit and use unit filters? "Enables embarkation <for [land] units>"

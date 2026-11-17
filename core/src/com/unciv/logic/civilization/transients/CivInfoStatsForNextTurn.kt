@@ -190,9 +190,18 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         }
         return totalSupply.toInt()
     }
-    @Readonly fun getUnitSupplyDeficit(): Int = max(0,civInfo.units.getCivUnitsSize() - getUnitSupply())
 
-    /** Per each supply missing, a player gets -10% production. Capped at -70%. */
+    /**
+     *  CvPlayer::GetNumUnitsOutOfSupply: the units that use supply ([com.unciv.logic.civilization.managers.UnitManager.getNumUnitsToSupply]:
+     *  combat units, ships, the Caravan, the Cargo Ship and the Work Boat, not workers, settlers, Great People or religious units)
+     *  less the [getUnitSupply], at least 0.
+     */
+    @Readonly fun getUnitSupplyDeficit(): Int = max(0, civInfo.units.getNumUnitsToSupply() - getUnitSupply())
+
+    /**
+     *  CvPlayer::calculateUnitProductionMaintenanceMod (Community Patch): per unit out of supply a player gets -10% production,
+     *  at most -70%.
+     */
     @Readonly fun getUnitSupplyProductionPenalty(): Float = -min(getUnitSupplyDeficit() * 10f, 70f)
 
     @Readonly

@@ -109,8 +109,8 @@ class OperationTests {
         assertEquals(UnitAiType.DEFENSE, candidate.slotOffer!!.unitAi)
         assertEquals(2, candidate.slotOffer!!.slot.slotId)
         val warrior = game.ruleset.units["Warrior"]!!
-        // 1500 + 250 x (OFFENSE 4 + 0 skipped over) + the unit's own weight
-        assertEquals(1500 + 250 * 4 + ProductionAi.unitWeight(city, warrior), candidate.weight)
+        // 5000 (Vox Populi's AI_CITYSTRATEGY_OPERATION_UNIT_BASE_WEIGHT) + 250 x (OFFENSE 4 + 0 skipped over) + the unit's own weight
+        assertEquals(5000 + 250 * 4 + ProductionAi.unitWeight(city, warrior), candidate.weight)
     }
 
     @Test
@@ -125,38 +125,43 @@ class OperationTests {
     }
 
     @Test
-    fun `units for an attack army weigh 750 plus the offense flavor multiplier`() {
+    fun `units for an attack army weigh 750 plus the offense flavor multiplier, without their own weight`() {
         civ.ai.setPersonalityFlavor(Flavor.Offense, 4)
         developCity()
         civ.ai.military.requestArmy(bySea = false)
         civ.tech.addTechnology("Archery")
         val unit = MilitaryOperations.unitForArmy(city)!!
         assertEquals("Archer", unit.name)
-        val difficultyIndex = game.gameInfo.ruleset.difficulties.keys.indexOf(game.gameInfo.difficulty).coerceAtLeast(0)
         val buildables = ConstructionAutomation(city.cityConstructions).getBuildables()
         val army = buildables.first { it.construction.name == "Archer" && it.slotOffer == null }
-        assertEquals(750 + 250 * 4 * maxOf(1, difficultyIndex - 5) + ProductionAi.unitWeight(city, unit), army.weight)
+        assertEquals(750 + 250 * 4, army.weight)
     }
 
     @Test
-    fun `a committed city takes its slot off the list, and gives it back when it builds something else`() {
-        val other = game.addCity(civ, game.getTile(HexCoord(4, 0)))
+    fun `only the muster city offers a slot, takes it off the list, and gives it back when it builds something else`() {
+        val second = game.addCity(civ, game.getTile(HexCoord(4, 0)))
         val operation = closeDefense()
         assertEquals(2, operation.slotsToBuild.size)
-        val offer = ops.nextUnitForOperationSlot(city)!!
-        city.cityConstructions.setCurrentConstruction("Warrior")
-        ops.commitToBuild(city, offer, 3)
-        assertTrue(ops.isBuildingUnitForOperation(city))
+        val musterCity = game.getTile(operation.musterTile!!).getCity()!!
+        val other = if (musterCity == city) second else city
+        // CvCityStrategyAI::ChooseProduction and CvCity::GetUnitForOperation: bCitySameAsMuster
+        assertNull(ops.nextUnitForOperationSlot(other))
+        assertFalse(ops.isNextSlotMusteredIn(other))
+        assertTrue(ops.isNextSlotMusteredIn(musterCity))
+        val offer = ops.nextUnitForOperationSlot(musterCity)!!
+        musterCity.cityConstructions.setCurrentConstruction("Warrior")
+        ops.commitToBuild(musterCity, offer, 3)
+        assertTrue(ops.isBuildingUnitForOperation(musterCity))
         assertEquals(1, operation.slotsToBuild.size)
-        // The other city is offered the other slot, not the same one
-        assertTrue(ops.nextUnitForOperationSlot(other)!!.slot != offer.slot)
+        // The muster city is offered the other slot, not the same one
+        assertTrue(ops.nextUnitForOperationSlot(musterCity)!!.slot != offer.slot)
         // The estimated arrival of the unit: the turns plus half the distance from the city to the army's rally point
         val army = operation.firstArmy!!
         val rally = game.gameInfo.tileMap[army.position!!]
-        assertEquals(game.gameInfo.turns + 3 + city.getCenterTile().aerialDistanceTo(rally) / 2, army.slots[offer.slot.slotId].estimatedTurn)
-        city.cityConstructions.setCurrentConstruction("Monument")
+        assertEquals(game.gameInfo.turns + 3 + musterCity.getCenterTile().aerialDistanceTo(rally) / 2, army.slots[offer.slot.slotId].estimatedTurn)
+        musterCity.cityConstructions.setCurrentConstruction("Monument")
         ops.refreshCommitments()
-        assertFalse(ops.isBuildingUnitForOperation(city))
+        assertFalse(ops.isBuildingUnitForOperation(musterCity))
         assertEquals(2, operation.slotsToBuild.size)
     }
 

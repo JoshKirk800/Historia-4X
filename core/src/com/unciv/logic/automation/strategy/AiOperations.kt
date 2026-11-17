@@ -412,10 +412,22 @@ class AiOperations : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  CvCity::GetUnitForOperation: for the next open slot on [city]'s landmass the unit CvUnitProductionAI::RecommendUnit picks for the slot's
-     *  primary unit AI, else its secondary one; null if no slot waits or the city can train neither.
+     *  Its bCitySameAsMuster: the operation of the next open slot on [city]'s landmass musters on a tile [city] owns (the rule that
+     *  only the muster city trains units for an operation, CvCity::GetUnitForOperation and CvCityStrategyAI::ChooseProduction).
+     */
+    fun isNextSlotMusteredIn(city: City): Boolean {
+        val slot = peekAtNextUnitToBuild(city.getCenterTile().getContinent()) ?: return false
+        val muster = operationById(slot.operationId)?.musterTile?.let { civ.gameInfo.tileMap.getOrNull(it.x, it.y) } ?: return false
+        return muster.getCity() == city
+    }
+
+    /**
+     *  CvCity::GetUnitForOperation: for the next open slot on [city]'s landmass, when [city] is the muster city ([isNextSlotMusteredIn]), the
+     *  unit CvUnitProductionAI::RecommendUnit picks for the slot's primary unit AI, else its secondary one; null if no slot waits or the
+     *  city can train neither.
      */
     fun nextUnitForOperationSlot(city: City): SlotOffer? {
+        if (!isNextSlotMusteredIn(city)) return null
         val slot = peekAtNextUnitToBuild(city.getCenterTile().getContinent()) ?: return null
         val army = operationById(slot.operationId)?.armyById(slot.armyId) ?: return null
         val entry = formationDef(army.formation)?.slots?.getOrNull(slot.slotId) ?: return null

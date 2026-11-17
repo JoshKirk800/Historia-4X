@@ -143,7 +143,7 @@ enum class AiDefine(val default: Float) {
     AI_PRODUCTION_WEIGHT_MOD_PER_TURN_LEFT(0.015f),
 
     // CvCityStrategyAI::ChooseProduction: units for operations (ConstructionAutomation)
-    AI_CITYSTRATEGY_OPERATION_UNIT_BASE_WEIGHT(1500f),
+    AI_CITYSTRATEGY_OPERATION_UNIT_BASE_WEIGHT(5000f), // Vox Populi's value (tools/gen_ai_data.py VP_DEFINES); BNW's is 1500
     AI_CITYSTRATEGY_OPERATION_UNIT_FLAVOR_MULTIPLIER(250f),
     AI_CITYSTRATEGY_ARMY_UNIT_BASE_WEIGHT(750f),
 

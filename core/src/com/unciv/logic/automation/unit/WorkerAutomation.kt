@@ -69,13 +69,6 @@ class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
         return true
     }
 
-    /** CvUnit::getBuildType != NO_BUILD: the builder stands on a plot with work in progress it can do */
-    private fun isBuilding(unit: MapUnit): Boolean {
-        val tile = unit.getTile()
-        if (!unit.cache.hasUniqueToBuildImprovements || tile.isMarkedForCreatesOneImprovement()) return false
-        val inProgress = tile.getTileImprovementInProgress() ?: return false
-        return inProgress.name == Constants.repair || unit.canBuildImprovement(inProgress, tile)
-    }
 
     private fun startBuild(unit: MapUnit, build: Build) {
         val tile = unit.getTile()
@@ -139,5 +132,31 @@ class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
     companion object {
         /** Stands for the original's plot danger, which outweighs the territory bonus but not a city's defense */
         private const val DANGER_PENALTY = 1000
+
+        /** CvUnit::getBuildType != NO_BUILD: the builder stands on a plot with work in progress it can do */
+        fun isBuilding(unit: MapUnit): Boolean {
+            val tile = unit.getTile()
+            if (!unit.cache.hasUniqueToBuildImprovements || tile.isMarkedForCreatesOneImprovement()) return false
+            val inProgress = tile.getTileImprovementInProgress() ?: return false
+            return inProgress.name == Constants.repair || unit.canBuildImprovement(inProgress, tile)
+        }
+
+        /**
+         *  CvUnit::DoFinishBuildIfSafe, at the start of the unit's turn (CvUnit::doTurn): a road or railroad with at most one turn of work left is
+         *  finished now, with the builder's moves still unspent, so that it can be used at once. Not for a human's builder that is not automated,
+         *  and only when the builder can move, the plot is not in danger, and the builder was sent here (the original compares the assigned
+         *  directive with the plot and the build; ours is the claim of [BuilderTaskingAi.claim], which names the plot, and the build is the one in
+         *  progress, which only the builder's own order starts).
+         */
+        fun finishBuildIfSafe(unit: MapUnit) {
+            val civ = unit.civ
+            if (civ.isHuman() && !unit.isAutomated()) return
+            if (!isBuilding(unit)) return
+            val tile = unit.getTile()
+            val build = tile.getTileImprovementInProgress() ?: return
+            if (tile.turnsToImprovement > 1 || !unit.hasMovement() || civ.ai.plotDanger.get(tile) > 0) return
+            if (unit.builderTarget != tile.position || !build.isRoad()) return
+            if (tile.doWorkerTurn(unit)) tile.getCity()?.shouldReassignPopulation = true
+        }
     }
 }

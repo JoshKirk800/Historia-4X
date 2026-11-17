@@ -61,6 +61,8 @@ class BuilderDirective(
         RepairRoute,
         /** REMOVE_FEATURE: a chop ahead of a build that is not possible yet, or the scrub of fallout */
         RemoveFeature,
+        /** REMOVE_ROAD: a road or railroad we pay maintenance for where no route is planned */
+        RemoveRoad,
         KeepImprovement
     }
 

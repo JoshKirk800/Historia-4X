@@ -1,6 +1,7 @@
 package com.unciv.logic.map.mapunit
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.unit.WorkerAutomation
 import com.unciv.logic.civilization.*
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
@@ -200,5 +201,7 @@ class UnitTurnManager(val unit: MapUnit) {
             if (status.turnsLeft <= 0) unit.removeStatus(status.name)
         }
         unit.updateUniques()
+        // CvUnit::doTurn: DoFinishBuildIfSafe
+        WorkerAutomation.finishBuildIfSafe(unit)
     }
 }

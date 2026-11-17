@@ -98,6 +98,7 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
      */
     private fun improvementDirectives(): List<BuilderDirective> {
         val possible = possibleImprovements()
+        scorer.futureYields.update(possible)
         if (possible.isEmpty()) return emptyList()
         scorer.updateAllCityWorstPlots()
 

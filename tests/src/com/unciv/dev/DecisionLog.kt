@@ -3,6 +3,7 @@ package com.unciv.dev
 import com.unciv.logic.GameInfo
 import com.unciv.logic.automation.diplomacy.FriendshipPlanningAi
 import com.unciv.logic.automation.diplomacy.OpinionAi
+import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.logic.civilization.Proximity
 import java.io.File
 
@@ -22,6 +23,9 @@ import java.io.File
  * Appended columns of AI_PAIR: proximity (the original's PlayerProximityTypes: 0 Distant, 1 Far, 2 Close, 3 Neighbors, -1 none) and
  * minCityDistance (tiles between the nearest cities of the two, -1 without cities). AI_CITY rows every 5 turns:
  *     AI_CITY turn  name  column  row  population  isCapital
+ * AI_ECON rows every 5 turns, what sets the army size (CvEconomicAI::GetSoftSupplyCap, CvMilitaryAI::SetRecommendedArmyNavySize):
+ *     AI_ECON turn  name  gold  goldPerTurn  softSupplyCap  unitSupply  unitsToSupply  recommendedLand  recommendedNavy  numLandUnits  numNavalUnits  goldBySource
+ * goldBySource is `source:gold` for every source of next turn's gold that is not 0, comma-separated.
  * Written once per turn after the turn has been played, so a row for turn N is the state the original's observer sees at the start of turn N+1.
  */
 class DecisionLog(private val game: GameInfo, private val file: File) {
@@ -29,7 +33,8 @@ class DecisionLog(private val game: GameInfo, private val file: File) {
         file.writeText(
             "# AI_CIV\tturn\tname\tcities\tmilitaryMight\tmilitaryUnits\n" +
                 "# AI_PAIR\tturn\tname\tother\tatWar\tmajorCivApproach\tlandDispute\tvictoryDispute\twarmongerThreat\tnumWarsFought\tdoF\topinion\twantsDoF\ttooEarly\tproximity\tminCityDistance\n" +
-                "# AI_CITY\tturn\tname\tcolumn\trow\tpopulation\tisCapital\n"
+                "# AI_CITY\tturn\tname\tcolumn\trow\tpopulation\tisCapital\n" +
+                "# AI_ECON\tturn\tname\tgold\tgoldPerTurn\tsoftSupplyCap\tunitSupply\tunitsToSupply\trecommendedLand\trecommendedNavy\tnumLandUnits\tnumNavalUnits\tgoldBySource\n"
         )
     }
 
@@ -68,6 +73,17 @@ class DecisionLog(private val game: GameInfo, private val file: File) {
                 // on a copy of a Civ V map (CivVMapGrid) the plot's x and y, else the column and the row of Unciv's flat hexes
                 val (column, row) = if (game.tileMap.mapParameters.civVGridWrap) CivVMapGrid.of(game.tileMap.mapParameters.mapSize).civVOf(tile.position) else tile.getColumn() to tile.getRow()
                 text.append("AI_CITY\t$turn\t${civ.civName}\t$column\t$row\t${city.population.population}\t${if (city.isCapital()) 1 else 0}\n")
+            }
+            if (turn % 5 == 0) {
+                val military = civ.ai.military
+                val sources = civ.stats.getStatMapForNextTurn().entries.filter { it.value.gold != 0f }
+                    .joinToString(",") { "${it.key}:${it.value.gold.toInt()}" }
+                text.append("AI_ECON\t$turn\t${civ.civName}\t${civ.gold}\t${civ.stats.statsForNextTurn.gold.toInt()}\t")
+                    .append(EconomicAi.softSupplyCap(civ)).append('\t').append(civ.stats.getUnitSupply()).append('\t')
+                    .append(civ.units.getNumUnitsToSupply()).append('\t')
+                    .append(military.recommendedLandArmySize).append('\t').append(military.recommendedNavySize).append('\t')
+                    .append(military.numLandUnits).append('\t').append(military.numNavalUnits).append('\t')
+                    .append(sources).append('\n')
             }
         }
         file.appendText(text.toString())

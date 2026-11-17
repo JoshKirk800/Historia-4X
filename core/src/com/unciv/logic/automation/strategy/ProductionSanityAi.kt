@@ -19,8 +19,7 @@ import kotlin.math.sqrt
  *  CheckProcessBuildSanity, CvProjectProductionAI::CheckProjectBuildSanity). Each brings the flavor weight down to sqrti(10 x weight)
  *  ([normalise]) and then adds its own terms; a result of 0 or less refuses the candidate (VP's SanityResult codes, [SR_IMPOSSIBLE] ...).
  *
- *  Not ported yet: the helper values and the yield loop of the building sanity ([BuildingProductionAi]); VP's most deficient yield of a
- *  city (CvCityStrategyAI::PrecalcYieldStats, which VP's citizens and builders read too), so no process gets its +150. The unit sanity is
+ *  Not ported yet: the helper values and the yield loop of the building sanity ([BuildingProductionAi]). The unit sanity is
  *  [UnitProductionAi.checkUnitBuildSanity].
  *  VP-only inputs, none in BNW: the process conversion modifiers of buildings (GetYieldFromProcessModifier), the needs (poverty, boredom,
  *  illiteracy, distress, famine), the city happiness delta, the projects' events, supply, spy security, production and conquest yields,
@@ -60,6 +59,7 @@ object ProductionSanityAi {
      *  (military units at most 2 per city, or no garrison in a border city, [isBorderCity]); at war, unless a puppet we may annex, -5 per
      *  major we fight, - the city's threat, -25 in a border city, -25 under siege; -50 while LOSING_WARS. By the yield the process makes:
      *  gold +50 while LOSING_MONEY; culture +30 under GS_CULTURE; science refused with every technology known, +30 in the key science city;
+     *  +150 for the yield that is the city's most deficient one ([CityAi.mostDeficientYield]);
      *  food refused while avoiding growth, +30 with a food deficit, +20 each for NEED_IMPROVEMENT_FOOD and NEED_NAVAL_GROWTH. A World
      *  Congress project ([leagueProjectModifier]) adds the modifier to the weight, the others take weight x (100 + modifier)%; at least 1.
      */
@@ -84,7 +84,9 @@ object ProductionSanityAi {
         }
         if (civ.ai.isMilitaryStrategyActive(LOSING_WARS)) modifier -= 50
 
-        when ((process as? PerpetualConstruction.StatConversion)?.stat) {
+        val processStat = (process as? PerpetualConstruction.StatConversion)?.stat
+        if (processStat != null && city.ai.mostDeficientYield == processStat) modifier += 150
+        when (processStat) {
             Stat.Gold -> if (civ.ai.isEconomicStrategyActive(EconomicAi.LOSING_MONEY)) modifier += 50
             Stat.Culture -> if (civ.ai.isEconomicStrategyActive(GS_CULTURE)) modifier += 30
             Stat.Science -> {

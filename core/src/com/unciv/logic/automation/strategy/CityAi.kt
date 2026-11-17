@@ -5,6 +5,7 @@ import com.unciv.logic.city.City
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.CitySpecializationDef
 import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.stats.Stat
 import kotlin.math.max
 
 /**
@@ -21,6 +22,13 @@ class CityAi : IsPartOfGameInfoSerialization {
     var defaultSpecialization: String? = null
     /** Whether [defaultSpecialization] has been set since the city was founded or acquired (null is a valid default) */
     var defaultSpecializationAssigned = false
+    /**
+     *  CvCityStrategyAI::m_eMostDeficientYield and m_eMostAbundantYield: the yield furthest below, and the one furthest above, VP's
+     *  expected yield per citizen, as of the last [CityStrategyAi.precalcYieldStats] (the start of the owner's city strategy turn); null =
+     *  NO_YIELD. VP recomputes them when a city is loaded; they are saved here so a reloaded game plays as the continued one does.
+     */
+    var mostDeficientYield: Stat? = null
+    var mostAbundantYield: Stat? = null
 
     @Transient lateinit var city: City
     @Transient private var flavorVector: IntArray? = null
@@ -33,6 +41,8 @@ class CityAi : IsPartOfGameInfoSerialization {
         toReturn.specialization = specialization
         toReturn.defaultSpecialization = defaultSpecialization
         toReturn.defaultSpecializationAssigned = defaultSpecializationAssigned
+        toReturn.mostDeficientYield = mostDeficientYield
+        toReturn.mostAbundantYield = mostAbundantYield
         return toReturn
     }
 
@@ -47,6 +57,8 @@ class CityAi : IsPartOfGameInfoSerialization {
         specialization = null
         defaultSpecialization = null
         defaultSpecializationAssigned = false
+        mostDeficientYield = null
+        mostAbundantYield = null
         flavorVector = null
     }
 
@@ -91,9 +103,10 @@ class CityAi : IsPartOfGameInfoSerialization {
         flavorVector = null
     }
 
-    /** CvCityStrategyAI::DoTurn: the city strategy loop (see [runStrategyLoop]; city strategies have no FirstTurnExecuted) */
+    /** CvCityStrategyAI::DoTurn: [CityStrategyAi.precalcYieldStats], then the city strategy loop (see [runStrategyLoop]; city strategies have no FirstTurnExecuted) */
     fun doTurn() {
         val civ = city.civ
+        CityStrategyAi.precalcYieldStats(city)
         if (runStrategyLoop(civ.gameInfo.ruleset.ai.cityStrategies, cityStrategies, civ, checkFirstTurn = false) { StrategyTests.test(city, it) })
             flavorVector = null
     }

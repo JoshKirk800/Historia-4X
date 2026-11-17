@@ -93,7 +93,10 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     // Memories feeding opinion
     var recentTradeValue = 0
     var commonFoeValue = 0
-    /** CvCityAI::AI_GetNumPlotsAcquiredByOtherPlayer summed over our cities: tiles they bought within 3 tiles of our cities */
+    /**
+     *  CvCityAI::AI_GetNumPlotsAcquiredByOtherPlayer summed over our cities: the weight (1 to 3) of the tiles they bought within 3 tiles of our
+     *  cities, see [DiplomacyEvents.onPlotBought]; reset when they refuse to stop ([PromiseAi.onDemandRefused])
+     */
     var numPlotsBoughtNearUs = 0
     var recentAssistValue = 0
     var numCiviliansReturned = 0

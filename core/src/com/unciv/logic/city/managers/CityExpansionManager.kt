@@ -121,11 +121,8 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
         city.civ.addGold(-goldCost)
         city.civ.plotsBought++ // CvCity::BuyPlot: CvPlayer::ChangeNumPlotsBought
         acquireTile(tile)
-        // CvCity::BuyPlot: every foreign city within city radius of the tile notes it (AI_ChangeNumPlotsAcquiredByOtherPlayer)
-        for (nearbyTile in tile.getTilesInDistance(3)) {
-            val nearbyCity = nearbyTile.getCity() ?: continue
-            if (nearbyTile.isCityCenter() && nearbyCity.civ != city.civ) DiplomacyEvents.onPlotBoughtNear(nearbyCity.civ, city.civ, 1)
-        }
+        // CvCity::BuyPlot: only a tile that cost gold is noted by the foreign cities near it
+        if (goldCost > 0) DiplomacyEvents.onPlotBought(city.civ, tile)
 
         // Reapply worked tiles optimization (aka CityFocus) - doing it here means AI profits too
         city.reassignPopulationDeferred()

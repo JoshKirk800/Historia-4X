@@ -175,11 +175,14 @@ object UseGoldAutomation {
     }
 
     /**
-     *  CvCity::GetIndividualPlotScore: a revealed strategic resource 50, a luxury 40 (x2 if the civilization has none of it); each yield
-     *  x10 (x20 if it is the city specialization's yield), x5 if it is the city's most deficient yield (CvCityStrategyAI::GetMostDeficientYield);
-     *  50 more for a plot on a route the builders plan ([com.unciv.logic.automation.unit.PlannedRoutes.bestRouteTypeAndValue]); for every major
+     *  CvCity::GetIndividualPlotScore: a revealed strategic resource AI_PLOT_VALUE_STRATEGIC_RESOURCE (80, Vox Populi's; BNW's is 50), a luxury 40
+     *  (x2 if the civilization has none of it); each yield x10 (x20 if it is the city specialization's yield), x5 if it is the city's most
+     *  deficient yield (CvCityStrategyAI::GetMostDeficientYield); AI_PLOT_VALUE_STRATEGIC_RESOURCE more for a plot on a route the builders plan
+     *  ([com.unciv.logic.automation.unit.PlannedRoutes.bestRouteTypeAndValue], Vox Populi's GetBestRouteTypeAndValue term); for every major
      *  we have a land dispute with whose nearest city on the tile's landmass is within 10 tiles, (10 - distance) x 6 / 4 / 2
-     *  (fierce / strong / weak); all x base tile cost / this tile's cost.
+     *  (fierce / strong / weak); all x base tile cost / this tile's cost. The rest of Vox Populi's version is not ported: its x3 on the resource
+     *  values (240 strategic, 120 luxury), the choke point and water area separator terms (AI_PLOT_VALUE_STRATEGIC_RESOURCE each), the trait
+     *  yield of a purchased terrain and the manifest destiny multipliers of a plot owned by a dispute partner.
      */
     fun individualPlotScore(city: City, tile: Tile): Int = PlotScoring(city).score(tile)
 
@@ -229,7 +232,7 @@ object UseGoldAutomation {
             val natureYields = tile.stats.getTileStats(null, civ)
             for ((index, stat) in YIELDS.withIndex()) value += natureYields[stat].toInt() * yieldMultipliers[index]
 
-            // A plot on a planned route (CvCity::GetIndividualPlotScore adds AI_PLOT_VALUE_STRATEGIC_RESOURCE; Vox Populi's 80 is 50 in ours, as for resources)
+            // CvCity::GetIndividualPlotScore (Vox Populi): a plot on a route the builders plan adds AI_PLOT_VALUE_STRATEGIC_RESOURCE
             if (plannedRoutes.bestRouteTypeAndValue(tile) != null) value += rules.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE)
 
             for ((multiplier, cities) in disputes) {

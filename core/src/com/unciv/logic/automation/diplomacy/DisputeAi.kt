@@ -255,18 +255,35 @@ object DisputeAi {
         civ.ai.diplomacy.memoryOf(other).expansionPosture = most
     }
 
-    /** CvDiplomacyAI::DoUpdatePlotBuyingAggressivePosture: tiles they bought within 3 tiles of our cities */
+    /**
+     *  CvDiplomacyAI::DoUpdatePlotBuyingAggressivePostures (Vox Populi): nothing for a human's shadow AI. For every valid major civilization, the
+     *  plots they bought near our cities, weighed as [DiplomacyEvents.onPlotBought] notes them ([MajorCivMemory.numPlotsBoughtNearUs]), against
+     *  PLOT_BUYING_POSTURE_LOW / MEDIUM / HIGH / INCREDIBLE_THRESHOLD (3, 5, 9, 12; BNW's 2, 4, 7, 10 counted tiles). Everyone else (city-states,
+     *  civilizations we have not met or that are gone) has none.
+     *
+     *  The original sums a count it keeps per city of ours; the port's is per civilization and also holds the tiles bought near cities we have
+     *  lost since, so those still count. A posture that rose makes the original call DoReevaluatePlayers for that civilization at once: that is
+     *  not ported (nothing else calls it): its opinion, approach and peace willingness updates run for everyone later in [DiplomacyTurn.doTurn]
+     *  anyway, and the exchange wishes it cancels (friendship, defensive pact, research agreement) are planned again every turn.
+     */
     fun updatePlotBuyingPostures(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
+        if (civ.isHuman()) return
+        val ai = civ.ai.diplomacy
+        val valid = HashSet<String>()
         for (other in others) {
-            val memory = civ.ai.diplomacy.memoryOf(other)
+            if (!other.isMajorCiv) continue
+            valid.add(other.civID)
+            val memory = ai.memoryOf(other)
             val score = memory.numPlotsBoughtNearUs
-            memory.plotBuyingPosture = when {
+            val posture = when {
                 score >= rules.define(AiDefine.PLOT_BUYING_POSTURE_INCREDIBLE_THRESHOLD) -> AggressivePosture.Incredible
                 score >= rules.define(AiDefine.PLOT_BUYING_POSTURE_HIGH_THRESHOLD) -> AggressivePosture.High
                 score >= rules.define(AiDefine.PLOT_BUYING_POSTURE_MEDIUM_THRESHOLD) -> AggressivePosture.Medium
                 score >= rules.define(AiDefine.PLOT_BUYING_POSTURE_LOW_THRESHOLD) -> AggressivePosture.Low
                 else -> AggressivePosture.None
             }
+            memory.plotBuyingPosture = posture
         }
+        for ((civID, memory) in ai.memories) if (civID !in valid) memory.plotBuyingPosture = AggressivePosture.None
     }
 }

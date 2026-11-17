@@ -7,6 +7,7 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
+import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MinorCivApproach
@@ -500,9 +501,36 @@ object DiplomacyEvents {
         memory.stoleArtifactTurn = owner.gameInfo.turns
     }
 
-    /** CvCity::BuyPlot: [buyer] bought a tile within 3 tiles of one of [owner]'s cities (AI_ChangeNumPlotsAcquiredByOtherPlayer) */
-    fun onPlotBoughtNear(owner: Civilization, buyer: Civilization, count: Int) {
-        if (owner.isMajorCiv && owner != buyer) owner.ai.diplomacy.memoryOf(buyer).numPlotsBoughtNearUs += count
+    /**
+     *  CvCity::BuyPlot (Vox Populi), for a tile [buyer] paid gold for: the first city, ring by ring up to 3 tiles from the tile, of a civilization
+     *  that is neither the buyer nor a city-state and to which the purchase means something notes it (AI_ChangeNumPlotsAcquiredByOtherPlayer):
+     *  1 for a tile with a resource that civilization can see, 3 for a natural wonder, else 2 if more of the tile's neighbours are that
+     *  civilization's than the buyer's, 1 if any are, and nothing (the search goes on) otherwise. A major civilization that the buyer promised
+     *  not to buy land near it has the promise broken ([PromiseAi.onPlotBoughtNear]). BNW noted every foreign city within 3 tiles, 1 each.
+     *  The original keeps the count per city; here it is per civilization, over the cities it has had ([MajorCivMemory.numPlotsBoughtNearUs]).
+     *  The order of the tiles within a ring is Unciv's, not the original's: it decides only between two foreign cities at the same distance.
+     */
+    fun onPlotBought(buyer: Civilization, tile: Tile) {
+        for (nearby in tile.getTilesInDistance(3)) {
+            if (!nearby.isCityCenter()) continue
+            val owner = nearby.getCity()?.civ ?: continue
+            if (owner == buyer || owner.isCityState) continue
+            val value = when {
+                tile.resource != null && owner.canSeeResource(tile.tileResource) -> 1
+                tile.isNaturalWonder() -> 3
+                else -> {
+                    val theirs = tile.neighbors.count { it.getOwner() == owner }
+                    val ours = tile.neighbors.count { it.getOwner() == buyer }
+                    if (theirs > ours) 2 else if (theirs > 0) 1 else 0
+                }
+            }
+            if (value == 0) continue
+            if (owner.isMajorCiv) {
+                owner.ai.diplomacy.memoryOf(buyer).numPlotsBoughtNearUs += value
+                PromiseAi.onPlotBoughtNear(owner, buyer)
+            }
+            return
+        }
     }
     //endregion
 }

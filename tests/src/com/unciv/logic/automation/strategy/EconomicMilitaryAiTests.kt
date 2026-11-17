@@ -13,6 +13,7 @@ import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.TileMap
 import com.unciv.models.metadata.BaseRuleset
+import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
@@ -136,6 +137,20 @@ class EconomicMilitaryAiTests {
         val difference = UseGoldAutomation.individualPlotScore(city, withLuxury) - UseGoldAutomation.individualPlotScore(city, plain)
         // AI_PLOT_VALUE_LUXURY_RESOURCE 40, doubled when the civilization has none of it; same distance, so same cost
         assertEquals(80, difference)
+    }
+
+    @Test
+    fun `plot score values a strategic resource and a planned route at Vox Populi's 80, not BNW's 50`() {
+        game.ruleset.modOptions.constants.plotAcquisitionLikeCivV = false
+        assertEquals(80, game.ruleset.ai.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE))
+        val civ = neutralCiv()
+        val city = game.addCity(civ, tile(0, 0))
+        val plain = tile(2, 0)
+        val withStrategic = tile(-2, 0)
+        val strategic = game.createResource().apply { resourceType = ResourceType.Strategic }
+        withStrategic.setTileResource(strategic.name)
+        // same distance, so same cost
+        assertEquals(80, UseGoldAutomation.individualPlotScore(city, withStrategic) - UseGoldAutomation.individualPlotScore(city, plain))
     }
     //endregion
 

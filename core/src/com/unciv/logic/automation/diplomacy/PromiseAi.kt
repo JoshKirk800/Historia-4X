@@ -191,13 +191,28 @@ object PromiseAi {
         }
     }
 
-    /** Whether [other]'s promise of [demand] to [civ] broke now: the promise stands, its posture at the promise is known and has been exceeded */
+    /** Whether the promise [other] made to [civ] of [demand] broke now: the promise stands, its posture at the promise is known and has been exceeded */
     private fun testPosturePromise(civ: Civilization, other: Civilization, demand: Demand, promised: AggressivePosture?,
-                                   current: AggressivePosture, broken: Boolean): Boolean {
+                                   current: AggressivePosture, broken: Boolean): Boolean =
+        promised != null && current > promised && raiseViolation(civ, other, demand, promised, broken)
+
+    /** Raises the violation of [demand] for the promise [other] made to [civ] that has not been noted as broken yet; whether there was one */
+    private fun raiseViolation(civ: Civilization, other: Civilization, demand: Demand, promised: AggressivePosture?, broken: Boolean): Boolean {
         val diplomacy = civ.getDiplomacyManager(other) ?: return false
-        if (promised == null || !diplomacy.hasFlag(demand.agreedToDemand) || current <= promised || broken) return false
+        if (promised == null || !diplomacy.hasFlag(demand.agreedToDemand) || broken) return false
         diplomacy.setFlag(demand.violationOccurred, 2)
         return true
+    }
+
+    /**
+     *  CvCity::BuyPlot (Vox Populi): [buyer] bought a tile that [owner] noted ([DiplomacyEvents.onPlotBought]). A border promise a human buyer made to
+     *  the AI [owner] breaks at once, as [testPromises] raises it when the plot buying posture has risen (CvDiplomacyAI::DoExpansionBickering).
+     */
+    fun onPlotBoughtNear(owner: Civilization, buyer: Civilization) {
+        if (owner.isHuman() || !buyer.isHuman()) return
+        val memory = owner.ai.diplomacy.memoryOf(buyer)
+        if (raiseViolation(owner, buyer, Demand.DoNotBuyLandNearUs, memory.borderPromisePosture, memory.brokenBorderPromise))
+            memory.borderPromisePosture = null
     }
 
     //region Demands (Unciv's request flow) -> the original's promise memories
@@ -225,10 +240,15 @@ object PromiseAi {
         }
     }
 
-    /** [recipient] refused: the demander remembers the ignored promise (VP's PROMISE_STATE_IGNORED, replacing a broken one), stamped with the turn */
+    /**
+     *  [recipient] refused: the demander remembers the ignored promise (VP's PROMISE_STATE_IGNORED, replacing a broken one), stamped with the turn.
+     *  Refusing to stop buying land also resets the tiles they bought near the demander, so that the warning cannot fire again at once
+     *  (CvDiplomacyAI::DoFromUIDiploEvent, FROM_UI_DIPLO_EVENT_PLOT_BUYING_WARNING_RESPONSE, Vox Populi).
+     */
     fun onDemandRefused(demander: Civilization, recipient: Civilization, demand: Demand) {
         val memory = demander.ai.diplomacy.memoryOf(recipient)
         val kind = kindOf(demand)
+        if (kind == PromiseKind.Border) memory.numPlotsBoughtNearUs = 0
         // VP's state setter only stamps a change of state
         if (state(memory, kind).second) return
         clear(memory, kind)

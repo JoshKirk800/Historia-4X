@@ -9,6 +9,7 @@ import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActionModifiers
 import com.unciv.logic.map.tile.ImprovementBuildingProblem
+import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.tile.TileImprovement
@@ -34,6 +35,7 @@ class WeightedDirective(val directive: BuilderDirective, val weight: Int, val bu
  *    a tech whose era is at most ours + 1), as a directive that cannot be built yet; if its feature has to go first and that can be removed
  *    now, a REMOVE_FEATURE directive for the chop (a third of the score, the rest as potential). A build scoring 0 or less is dropped.
  *  - AddScrubFalloutDirectives (20000, always first) and AddRepairImprovementDirective.
+ *  - AddRemoveRouteDirective (REMOVE_ROAD): the weight is the maintenance of the road we pay for where no route is planned ([addRemoveRouteDirective]).
  *  - FilterOnlyBestImprovements and UpdateGreatPersonDirectives ([BuilderDirectives]).
  *
  *  Unciv mapping and deviations:
@@ -104,6 +106,7 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
         scorer.updateAllCityWorstPlots()
 
         val out = ArrayList<BuilderDirective>()
+        val netGoldTimes100 = (civ.stats.statsForNextTurn.gold * 100).toInt()
         for (city in civ.cities) for (tile in city.getTiles()) {
             if (!BuilderDirectives.shouldAnyBuilderConsiderPlot(civ, tile)) continue
 
@@ -118,6 +121,12 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
             addImprovingPlotsDirective(out, tile, owningCity, possible)
             addScrubFalloutDirectives(out, tile, owningCity)
             addRepairImprovementDirective(out, tile, owningCity)
+            addRemoveRouteDirective(out, tile, netGoldTimes100)
+        }
+        // The roads we built on land nobody owns (the original's loop reaches them as plots without an owner)
+        for (position in civ.neutralRoads) {
+            val tile = civ.gameInfo.tileMap[position]
+            if (BuilderDirectives.shouldAnyBuilderConsiderPlot(civ, tile)) addRemoveRouteDirective(out, tile, netGoldTimes100)
         }
         return BuilderDirectives.filterOnlyBestImprovements(BuilderDirectives.updateGreatPersonDirectives(out))
     }
@@ -240,6 +249,36 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
         val repair = Build(ruleset.tileImprovements[Constants.repair] ?: return)
         val score = scorer.scorePlotBuild(tile, existing, repair)
         if (score.maxScore > 0) out.add(BuilderDirective(BuilderDirective.Type.RepairImprovement, repair, tile, false, true, score))
+    }
+
+    /**
+     *  CvBuilderTaskingAI::AddRemoveRouteDirective: a directive to remove the road or railroad of [tile] where no route is planned (or the one
+     *  planned has no value), if we pay for it. The weight is the route's maintenance (GetGoldMaintenance × (100 + GetImprovementGoldMaintenanceMod)),
+     *  tenfold when the treasury loses more than 10 gold a turn ([netGoldTimes100]).
+     *  Not for a city-state, a human who keeps what automation might replace (PLAYEROPTION_SAFE_AUTOMATION), a city, a pillaged route
+     *  (nothing to pay for), a route somebody else pays for (the owner of the plot; on unowned land the one who built it), or a plot away from our
+     *  land (neither ours nor next to ours). The nation's free road in forests and jungles counts as a planned route.
+     */
+    private fun addRemoveRouteDirective(out: MutableList<BuilderDirective>, tile: Tile, netGoldTimes100: Int) {
+        if (civ.isCityState) return
+        val existing = tile.roadStatus
+        if (existing == RoadStatus.None || tile.isCityCenter() || tile.roadIsPillaged) return
+        val removal = existing.removeAction?.let { ruleset.tileImprovements[it] } ?: return
+        if (!tile.improvementFunctions.canBuildImprovement(removal, GameContext(civ, tile = tile))) return
+        if (civ.isHuman() && !UncivGame.Current.settings.automatedWorkersReplaceImprovements) return
+
+        val owner = tile.getOwner()
+        if ((owner ?: tile.getRoadOwner()) != civ) return
+        if (owner != civ && tile.neighbors.none { it.getOwner() == civ }) return
+
+        val planned = routes.bestRouteTypeAndValue(tile)
+        var needed = planned?.first ?: RoadStatus.None
+        if (routes.sameRouteBenefitFromTrait(tile, needed)) needed = RoadStatus.None
+        if (needed != RoadStatus.None && (planned?.second ?: -1) >= 0) return
+
+        var weight = routes.routeMaintenanceTimes100(existing)
+        if (netGoldTimes100 < -1000) weight *= 10
+        out.add(BuilderDirective(BuilderDirective.Type.RemoveRoad, Build(removal), tile, false, true, PlotBuildScore(weight)))
     }
 
     //endregion
@@ -368,6 +407,7 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
             val build = directive.build ?: return false
             val tile = directive.tile
             return when {
+                directive.type == BuilderDirective.Type.RemoveRoad -> canBuildOn(build.improvement, tile)
                 build.isRepair -> repair(tile) != null
                 build.removeFirst != null -> removal(tile) == build.removeFirst && canBuildOn(build.improvement, scorer.withoutFeature(tile))
                 build.isRemoval -> removal(tile) == build.improvement

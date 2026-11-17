@@ -718,8 +718,8 @@ class PlannedRoutes(val civ: Civilization) {
         return total
     }
 
-    /** The maintenance of a plot of [route] in hundredths of gold: the route's upkeep × (100 + the policies' modifier) */
-    private fun routeMaintenanceTimes100(route: RoadStatus) = route.upkeep * maintenancePercent
+    /** The maintenance of a plot of [route] in hundredths of gold: the route's upkeep × (100 + the policies' modifier) (GetGoldMaintenance × (100 + GetImprovementGoldMaintenanceMod)) */
+    fun routeMaintenanceTimes100(route: RoadStatus) = route.upkeep * maintenancePercent
 
     /**
      *  CvBuilderTaskingAI::AddRouteOrRepairDirective: records [route] and the score as what ScorePlotBuild reads for [tile]; a plot with no

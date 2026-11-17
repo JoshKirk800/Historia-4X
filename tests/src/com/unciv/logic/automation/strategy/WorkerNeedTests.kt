@@ -340,6 +340,98 @@ class WorkerNeedTests {
 
     //endregion
 
+    //region DisbandExtraWorkboats
+
+    /** [cities] cities of ours (turn 40) and [boats] work boats on coast plots of their own, away from the cities' water with resources */
+    private fun fleet(cities: Int, boats: Int) {
+        for ((x, y) in listOf(0 to 0, 4 to 0, 0 to 4, -4 to 0).take(cities)) city(x, y)
+        repeat(boats) {
+            val water = tile(6, -it)
+            game.setTileTerrain(water.position, Constants.coast)
+            game.addUnit("Work Boats", civ, water)
+        }
+        game.gameInfo.turns = 40
+    }
+
+    private fun boats() = civ.units.getCivUnits().count { it.name == "Work Boats" }
+
+    /** A coast plot of the city at (0,0) with Fish that the civilization owns, unimproved */
+    private fun fishPlot(x: Int, y: Int): Tile {
+        game.setTileTerrain(HexCoord(x, y), Constants.coast)
+        tile(x, y).setTileResource("Fish")
+        assertEquals(civ, tile(x, y).getOwner())
+        return tile(x, y)
+    }
+
+    @Test
+    fun `more boats than unimproved water resources scraps one and sets the lock-out`() {
+        fleet(4, 2)
+        fishPlot(1, 0)
+        civ.ai.economic.disbandExtraWorkboats(civ)
+        assertEquals(1, boats())
+        assertEquals(40, civ.ai.economic.lastTurnWorkerDisbanded)
+    }
+
+    @Test
+    fun `as many boats as unimproved water resources keeps them all`() {
+        fleet(4, 2)
+        fishPlot(1, 0)
+        fishPlot(0, 1)
+        civ.ai.economic.disbandExtraWorkboats(civ)
+        assertEquals(2, boats())
+        assertEquals(-1, civ.ai.economic.lastTurnWorkerDisbanded)
+    }
+
+    @Test
+    fun `an improved water resource is not counted`() {
+        fleet(4, 1)
+        fishPlot(1, 0).setImprovement("Fishing Boats")
+        civ.ai.economic.disbandExtraWorkboats(civ)
+        assertEquals(0, boats())
+    }
+
+    @Test
+    fun `no boat goes while as many cities need naval tile improvement as there are boats`() {
+        fleet(4, 2)
+        for (city in civ.cities.take(2)) city.ai.cityStrategies["AICITYSTRATEGY_NEED_NAVAL_TILE_IMPROVEMENT"] = 1
+        civ.ai.economic.disbandExtraWorkboats(civ)
+        assertEquals(2, boats())
+        civ.cities.first().ai.cityStrategies.remove("AICITYSTRATEGY_NEED_NAVAL_TILE_IMPROVEMENT")
+        civ.ai.economic.disbandExtraWorkboats(civ)
+        assertEquals(1, boats())
+    }
+
+    @Test
+    fun `boats are kept in the early game, with fewer than 4 cities founded, until turn 101`() {
+        fleet(3, 2)
+        civ.citiesCreated = 3
+        game.gameInfo.turns = 100
+        civ.ai.economic.disbandExtraWorkboats(civ)
+        assertEquals(2, boats())
+        game.gameInfo.turns = 101
+        civ.ai.economic.disbandExtraWorkboats(civ)
+        assertEquals(1, boats())
+        assertEquals(101, civ.ai.economic.lastTurnWorkerDisbanded)
+    }
+
+    @Test
+    fun `a boat being trained counts as one, and the lock-out is set even when there is none to scrap`() {
+        fleet(4, 0)
+        civ.cities.first().cityConstructions.setCurrentConstruction("Work Boats")
+        civ.ai.economic.disbandExtraWorkboats(civ)
+        assertEquals(0, boats())
+        assertEquals(40, civ.ai.economic.lastTurnWorkerDisbanded)
+    }
+
+    @Test
+    fun `no boats, nothing is done`() {
+        fleet(4, 0)
+        civ.ai.economic.disbandExtraWorkboats(civ)
+        assertEquals(-1, civ.ai.economic.lastTurnWorkerDisbanded)
+    }
+
+    //endregion
+
     //region The worker bonus of unit production
 
     @Test

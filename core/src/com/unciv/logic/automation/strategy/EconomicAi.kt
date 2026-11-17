@@ -71,10 +71,11 @@ class EconomicAi : IsPartOfGameInfoSerialization {
         doAntiquitySites(civ)
     }
 
-    /** What CvEconomicAI::DoTurn does after its strategy loop for AI players: DoPlotPurchases, DisbandExtraWorkers */
+    /** What CvEconomicAI::DoTurn does after its strategy loop for AI players: DoPlotPurchases, DisbandExtraWorkers, DisbandExtraWorkboats */
     fun doTurnAfterStrategies(civ: Civilization) {
         UseGoldAutomation.doPlotPurchases(civ)
         disbandExtraWorkers(civ)
+        disbandExtraWorkboats(civ)
     }
 
     /**
@@ -292,7 +293,45 @@ class EconomicAi : IsPartOfGameInfoSerialization {
      */
     private fun findWorkerToScrap(workers: List<MapUnit>): MapUnit? = workers.firstOrNull()
 
+    /**
+     *  CvEconomicAI::DisbandExtraWorkboats (Vox Populi), every turn of an AI player: scraps one work boat when
+     *  - the civilization has sea workers (those being trained included), and no more cities run NEED_NAVAL_TILE_IMPROVEMENT than there are of them;
+     *  - it has founded 4 cities or it is turn 101;
+     *  - the water plots it owns that a unit can pass and that have a resource it sees without an improvement are fewer than the sea workers.
+     *  The original sets [lastTurnWorkerDisbanded] (the lock-out of the tile improver strategies) before it looks for a boat, so a turn with no boat
+     *  to scrap sets it too. The boat to go is [findSeaWorkerToScrap]. Rules: as for [disbandExtraWorkers] (CvUnit::canScrap is not asked).
+     */
+    fun disbandExtraWorkboats(civ: Civilization) {
+        val numWorkers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.WORKER_SEA, includeBeingTrained = true, includeWater = true)
+        if (numWorkers <= 0) return
+
+        // If we want workers in any city, don't disband; # of cities needing workers greater than number of workers? don't disband
+        if (civ.cities.count { it.ai.isCityStrategyActive(NEED_NAVAL_TILE_IMPROVEMENT) } >= numWorkers) return
+        // Don't disband during the early game
+        if (civ.citiesCreated < 4 && civ.gameInfo.turns <= 100) return
+
+        var unimproved = 0
+        for (city in civ.cities) for (tile in city.getTiles()) {
+            if (!tile.isWater || tile.isImpassible()) continue
+            val resource = tile.tileResource
+            if (tile.improvement == null && resource != null && civ.canSeeResource(resource)) unimproved++
+        }
+        if (numWorkers <= unimproved) return
+
+        lastTurnWorkerDisbanded = civ.gameInfo.turns
+        findSeaWorkerToScrap(civ)?.disband()
+    }
+
+    /**
+     *  CvEconomicAI::FindSeaWorkerToScrap: the first scrappable work boat (a water unit that is no combat unit and creates water improvements:
+     *  the original compares the unit type with the civilization's work boat), in the civilization's unit list.
+     */
+    private fun findSeaWorkerToScrap(civ: Civilization): MapUnit? = civ.units.getCivUnits().firstOrNull {
+        it.baseUnit.isWaterUnit && it.isCivilian() && it.cache.hasUniqueToCreateWaterImprovements
+    }
+
     companion object {
+        private const val NEED_NAVAL_TILE_IMPROVEMENT = "AICITYSTRATEGY_NEED_NAVAL_TILE_IMPROVEMENT"
         /** CvEconomicAI::DisbandExtraWorkers iWorstCaseWorkerPerCityRatio: one worker for four cities */
         private const val WORST_CASE_WORKERS_PER_CITY_PERCENT = 25
         /** CvEconomicAI::DisbandExtraWorkers: the share of improved tiles up to which no worker is scrapped */

@@ -83,14 +83,9 @@ object CivilianUnitAutomation {
         if (unit.isAutomatingRoadConnection())
             return mapUnit.civ.getWorkerAutomation().roadToAutomation.automateConnectRoad(unit)
 
-        if (unit.hasUnique(UniqueType.BuildImprovements))
+        // Land workers and work boats (UNITAI_WORKER_SEA) alike: CvHomelandAI::PlotWorkerMoves
+        if (unit.hasUnique(UniqueType.BuildImprovements) || unit.hasUniqueToCreateWaterImprovements())
             return mapUnit.civ.getWorkerAutomation().automateWorkerAction(unit)
-
-        if (unit.hasUniqueToCreateWaterImprovements()) {
-            if (!mapUnit.civ.getWorkerAutomation().automateWorkBoats(unit))
-                HomelandAi.exploreUnit(mapUnit, cache)
-            return
-        }
 
         if (unit.hasUnique(UniqueType.MayFoundReligion) || unit.hasUnique(UniqueType.MayEnhanceReligion)) {
             if (unit.civ().isCityState) {

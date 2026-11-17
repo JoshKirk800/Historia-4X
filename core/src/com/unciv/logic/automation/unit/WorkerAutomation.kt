@@ -26,7 +26,9 @@ import yairm210.purity.annotations.Readonly
  */
 class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
     val roadToAutomation = RoadToAutomation(civInfo)
-    val builderTaskingAi by lazy { BuilderTaskingAi(civInfo) }
+    /** The route plan of the turn (CvBuilderTaskingAI's planned routes): made on first use, read by the directives, the scoring and plot buying */
+    val plannedRoutes by lazy { PlannedRoutes(civInfo) }
+    val builderTaskingAi by lazy { BuilderTaskingAi(civInfo, plannedRoutes) }
 
     /** CvHomelandAI's AI_HOMELAND_TARGET_NAVAL_RESOURCE targets of this turn (FindHomelandTargets) */
     private val navalResourceTargets: List<Tile> by lazy { findNavalResourceTargets() }

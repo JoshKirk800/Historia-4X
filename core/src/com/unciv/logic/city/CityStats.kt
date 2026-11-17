@@ -22,6 +22,7 @@ import yairm210.purity.annotations.LocalState
 import yairm210.purity.annotations.Pure
 import yairm210.purity.annotations.Readonly
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 class StatTreeNode {
     val children = LinkedHashMap<String, StatTreeNode>()
@@ -137,12 +138,16 @@ class CityStats(val city: City) {
         return stats
     }
 
-    /** The gold this city's connection to the capital yields or would yield (CvTreasury::GetCityConnectionRouteGoldTimes100 / 100); 0 for the capital */
+    /**
+     *  CvTreasury::GetCityConnectionRouteGoldTimes100: the gold this city's connection to the capital yields or would yield, in hundredths
+     *  (0 when it would not yield any); 0 for the capital. The float gold of [getTradeRouteStats] is rounded, not truncated.
+     */
     @Readonly
-    fun getTradeRouteGold(): Float {
-        val capital = city.civ.getCapital() ?: return 0f
-        if (city == capital) return 0f
-        return getTradeRouteStats(capital).gold
+    fun getTradeRouteGoldTimes100(): Int {
+        val capital = city.civ.getCapital() ?: return 0
+        if (city == capital) return 0
+        val gold = getTradeRouteStats(capital).gold
+        return if (gold <= 0f) 0 else (gold * 100).roundToInt()
     }
 
     @Readonly

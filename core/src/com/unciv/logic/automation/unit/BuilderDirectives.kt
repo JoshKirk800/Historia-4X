@@ -1,8 +1,11 @@
 package com.unciv.logic.automation.unit
 
 import com.unciv.Constants
+import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.tile.TileImprovement
+import kotlin.math.roundToInt
 
 /**
  *  One thing a builder can do on a tile (the original's CvBuildInfo). The original's builds remove the plot feature as part of
@@ -70,6 +73,26 @@ class BuilderDirective(
 object BuilderDirectives {
     /** The square root of INT_MAX, precomputed in the original */
     private const val SQRT_INT_MAX = 46340
+
+    /** CvBuilderTaskingAI::ShouldAnyBuilderConsiderPlot: seen, not a city, not another major's land; not the marker of a ruin's improvement either */
+    fun shouldAnyBuilderConsiderPlot(civ: Civilization, tile: Tile): Boolean {
+        if (tile.isCityCenter() || tile.isMarkedForCreatesOneImprovement() || !tile.isExplored(civ)) return false
+        val owner = tile.getOwner()
+        return owner == null || owner == civ || owner.isCityState
+    }
+
+    /**
+     *  CvBuilderTaskingAI::GetTurnsToBuild: the turns [unit] needs to build [improvement] on [tile], counting work already done there; 0 for an
+     *  instant (Great Person) improvement. Without a unit the original returns the total build time at a work rate of 1; here that is the
+     *  improvement's turns at the game speed and era, without a worker's bonus.
+     */
+    fun turnsToBuild(civ: Civilization, unit: MapUnit?, tile: Tile, improvement: TileImprovement): Int = when {
+        tile.improvementInProgress == improvement.name -> tile.turnsToImprovement
+        improvement.turnsToBuild == -1 -> 0
+        unit != null -> improvement.getTurnsToBuild(civ, unit, tile)
+        else -> (civ.gameInfo.speed.improvementBuildLengthModifier * civ.gameInfo.getStartingEra().buildPercent / 100f * improvement.turnsToBuild)
+            .roundToInt().coerceAtLeast(1)
+    }
 
     /**
      *  CvHomelandAI.cpp: GetDirectiveWeight, static. A Great Person's improvement gets 100 × (priority score - 100 × move turns), so it goes

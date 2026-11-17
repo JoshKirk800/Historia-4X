@@ -19,6 +19,7 @@ import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -336,6 +337,26 @@ class HomelandAiTests {
         assertFalse(scout.isDestroyed)
         assertEquals(UnitAiType.FAST_ATTACK, UnitAiTypes.current(scout))
         assertEquals(UnitAiType.ATTACK, UnitAiTypes.current(warrior))
+    }
+
+    @Test
+    fun `a warrior that is the only explorer roams beyond six plots of the cities, with a Scout exploring it stays near them`() {
+        game.addCity(civ, tile(0))
+        val warrior = game.addUnit("Warrior", civ, tile(0))
+        UnitAiTypes.set(warrior, UnitAiType.EXPLORE)
+        see()
+        val far = tile(8)
+        assertFalse(ExplorerAi.limitedToHome(warrior))
+        assertTrue(ExplorerAi.isValidExplorerEndTurnPlot(warrior, far))
+        val scout = game.addUnit("Scout", civ, tile(1))
+        UnitAiTypes.set(scout, UnitAiType.EXPLORE)
+        assertTrue(ExplorerAi.limitedToHome(warrior))
+        assertFalse(ExplorerAi.isValidExplorerEndTurnPlot(warrior, far))
+        assertNull(ExplorerAi.bestExploreTarget(warrior, 12, ExplorerAi.Reach(warrior), ExplorationPlotSets.build(civ)))
+        assertTrue(ExplorerAi.isValidExplorerEndTurnPlot(scout, far))
+        // a Scout that stopped exploring is no explorer to leave it to
+        UnitAiTypes.set(scout, UnitAiType.FAST_ATTACK)
+        assertFalse(ExplorerAi.limitedToHome(warrior))
     }
 
     // endregion

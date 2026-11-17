@@ -88,8 +88,23 @@ object ExplorerAi {
     fun isRecon(unit: MapUnit): Boolean = unit.civ.gameInfo.ruleset.ai.unitAiTypesOf(unit.baseUnit.name)?.combatClass == RECON
 
     /**
+     *  Whether [unit] explores only near its cities and no further than 5 turns: an AI land unit that is not Recon (GetBestExploreTarget,
+     *  IsValidExplorerEndTurnPlot: "AI controlled non-explorers should not explore too far").
+     *
+     *  Deviation: only while the civilization has a Recon unit exploring. Vox Populi leaves the far exploring to the Recon unit every
+     *  civilization starts with (EraChanges.sql: Ancient era StartingExploreUnits 1); Brave New World's start has none, so the
+     *  free military unit that CvPlayer::initFreeUnits sets to explore is the only explorer until a Scout is trained, and kept at home
+     *  the civilizations met nobody (met pairs at turn 25: 12 before the explorer port, 0 with it).
+     */
+    fun limitedToHome(unit: MapUnit): Boolean {
+        val civ = unit.civ
+        if (!unit.baseUnit.isLandUnit || civ.isHuman() || isRecon(unit)) return false
+        return civ.units.getCivUnits().any { it.baseUnit.isLandUnit && isRecon(it) && UnitAiTypes.current(it) == UnitAiType.EXPLORE }
+    }
+
+    /**
      *  CvHomelandAI::GetBestExploreTarget: the plot within [maxTurns] where [unit] best ends a turn exploring, null if none (an AI land
-     *  unit other than a Scout looks no further than 5 turns).
+     *  unit that is [limitedToHome] looks no further than 5 turns).
      *  - a goody hut or empty barbarian camp ([isHighValueExploreTarget]) not next to an unseen camp: the nearest such (turns x 600 - moves
      *    left + the other explorers' penalty) wins over everything;
      *  - else, by score: the plot's exploration value ([ExplorationPlotSets.valueFor]) with the unit's sight there (a land unit: 1 on
@@ -105,7 +120,7 @@ object ExplorerAi {
     fun bestExploreTarget(unit: MapUnit, maxTurns: Int, reach: Reach, plots: ExplorationPlotSets): Tile? {
         val civ = unit.civ
         val human = civ.isHuman()
-        if (unit.baseUnit.isLandUnit && !human && !isRecon(unit) && maxTurns > 5) return null
+        if (limitedToHome(unit) && maxTurns > 5) return null
 
         val others = civ.units.getCivUnits().filter { other ->
             other != unit && if (human) other.isExploring()
@@ -183,7 +198,7 @@ object ExplorerAi {
     /**
      *  CvHomelandAI::IsValidExplorerEndTurnPlot: not the unit's own plot; revealed; water only for a land unit that can embark at all,
      *  water only for ships; not territory it may not stay in or of a civilization at war with it; not an unseen barbarian camp; for an AI
-     *  land unit other than a Scout, within 6 plots of one of our cities on its landmass; no visible enemy unit; a plot it can move to.
+     *  land unit that is [limitedToHome], within 6 plots of one of our cities on its landmass; no visible enemy unit; a plot it can move to.
      *  (VP lets it end on a lone enemy civilian to capture it; capturing needs an attack here.)
      */
     fun isValidExplorerEndTurnPlot(unit: MapUnit, tile: Tile): Boolean {
@@ -194,7 +209,7 @@ object ExplorerAi {
         val owner = tile.getOwner()
         if (owner != null && owner != civ && (civ.isAtWarWith(owner) || !civ.diplomacyFunctions.canPassThroughTiles(owner))) return false
         if (tile.isBarbarianEncampment() && !tile.isVisible(civ)) return false
-        if (unit.baseUnit.isLandUnit && !civ.isHuman() && !isRecon(unit)
+        if (limitedToHome(unit)
             && civ.cities.none { it.getCenterTile().getContinent() == tile.getContinent() && it.getCenterTile().aerialDistanceTo(tile) <= 6 })
             return false
         if (tile.isVisible(civ) && tile.getUnits().any { it.civ.isAtWarWith(civ) }) return false

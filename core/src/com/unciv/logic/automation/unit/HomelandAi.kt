@@ -439,25 +439,31 @@ object HomelandAi {
                 val highValue = ExplorerAi.isHighValueExploreTarget(civ, best3) || unit.hasUnique(UniqueType.SellExoticGoods)
                     && UnitActionsExoticGoods.canSell(unit, best3) && UnitActionsExoticGoods.distanceFactor(unit, best3) >= 0.5f
                 if (highValue && unit.movement.canReach(best3)) {
+                    AiDecisionLog.log(civ) { "Homeland Explore: ${unit.name} ${oldTile.position} -> ${best3.position} (high value)" }
                     unit.movement.headTowards(best3)
                     return unit.getTile() == oldTile || !unit.hasMovement()
                 }
             }
             var best = best3
+            var bestTurns = 3
             for (turns in intArrayOf(5, 12, 23)) {
                 if (best != null) break
                 best = ExplorerAi.bestExploreTarget(unit, turns, reach, plots)
+                bestTurns = turns
             }
             if (best != null) {
                 if (best != unit.getTile()) {
                     if (unit.movement.canReach(best)) {
+                        AiDecisionLog.log(civ) { "Homeland Explore: ${unit.name} ${oldTile.position} -> ${best.position} (within $bestTurns turns)" }
                         unit.movement.headTowards(best)
                         return unit.getTile() == oldTile || !unit.hasMovement()
                     }
+                    AiDecisionLog.log(civ) { "Homeland Explore: ${unit.name} ${oldTile.position} cannot reach ${best.position}" }
                 } else if (unit.health < 100 && unit.getHealAmountForCurrentTile() > 0) return true
             }
             if (unit.isExploring()) unit.action = null
             if (best == null) {
+                AiDecisionLog.log(civ) { "Homeland Explore: ${unit.name} ${oldTile.position} found no target" }
                 val default = UnitAiTypes.defaultOf(unit.baseUnit, civ.gameInfo.ruleset.ai)
                 UnitAiTypes.set(unit, if (default != UnitAiType.EXPLORE) default else UnitAiType.FAST_ATTACK)
             }

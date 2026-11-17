@@ -148,11 +148,53 @@
         "title": "AI Unit Maintenance Modifier",
         "description": "Multiplier for AI unit maintenance costs."
       },
-      "aiUnitSupplyModifier": {
-        "type": "number",
-        "default": 5,
-        "title": "AI Unit Supply Modifier",
-        "description": "Modifier for the number of units the AI can supply."
+      "aiUnitSupplyBase": {
+        "type": "integer",
+        "default": 7,
+        "title": "AI Unit Supply Base",
+        "description": "Unit supply of an AI major civilization that does not depend on its cities or population. Read from the difficulty the game is played at."
+      },
+      "aiUnitSupplyPerCity": {
+        "type": "integer",
+        "default": 3,
+        "title": "AI Unit Supply Per City",
+        "description": "Unit supply per city of an AI major civilization."
+      },
+      "aiUnitSupplyPopulationPercent": {
+        "type": "integer",
+        "default": 50,
+        "title": "AI Unit Supply Population Percent",
+        "description": "Percentage of the citizens of its cities that an AI major civilization gets as unit supply."
+      },
+      "aiUnitSupplyBonusPercent": {
+        "type": "integer",
+        "default": 0,
+        "title": "AI Unit Supply Bonus Percent",
+        "description": "Percentage added to the whole unit supply of an AI major civilization."
+      },
+      "cityStateUnitSupplyBase": {
+        "type": "integer",
+        "default": 7,
+        "title": "City-State Unit Supply Base",
+        "description": "As aiUnitSupplyBase, for city-state civilizations."
+      },
+      "cityStateUnitSupplyPerCity": {
+        "type": "integer",
+        "default": 3,
+        "title": "City-State Unit Supply Per City",
+        "description": "As aiUnitSupplyPerCity, for city-state civilizations."
+      },
+      "cityStateUnitSupplyPopulationPercent": {
+        "type": "integer",
+        "default": 50,
+        "title": "City-State Unit Supply Population Percent",
+        "description": "As aiUnitSupplyPopulationPercent, for city-state civilizations."
+      },
+      "cityStateUnitSupplyBonusPercent": {
+        "type": "integer",
+        "default": 0,
+        "title": "City-State Unit Supply Bonus Percent",
+        "description": "As aiUnitSupplyBonusPercent, for city-state civilizations."
       },
       "aiFreeTechs": {
         "type": "array",

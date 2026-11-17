@@ -3,7 +3,6 @@ package com.unciv.logic.civilization.transients
 import com.unciv.Constants
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.models.ruleset.Policy
@@ -156,31 +155,67 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         return transportationUpkeep
     }
 
+    /** An AI major civilization takes its unit supply from the AI columns of the difficulty the game is played at */
+    @Readonly
+    private fun isAiMajor() = civInfo.isMajorCiv && civInfo.isAI()
+
+    /**
+     *  CvPlayer::GetUnitSupplyBreakdown (Community Patch): (the supply of the difficulty, of the cities and of the population) x
+     *  (100 + the difficulty's bonus percent) / 100. For an AI major the four values are the chosen difficulty's AIUnitSupply columns
+     *  ([com.unciv.models.ruleset.nation.Difficulty.aiUnitSupplyBase] and its siblings), for a city-state its CityStateUnitSupply
+     *  columns, for everyone else the player settings of their own difficulty with the bonus 0.
+     */
     @Readonly
     fun getUnitSupply(): Int {
-        /* TotalSupply = BaseSupply + NumCities*modifier + Population*modifier
-        * In civ5, it seems population modifier is always 0.5, so i hardcoded it down below */
-        var supply = getBaseUnitSupply() + getUnitSupplyFromCities() + getUnitSupplyFromPop()
-
-        if (civInfo.isMajorCiv && civInfo.playerType == PlayerType.AI)
-            supply = (supply*(1f + civInfo.getDifficulty().aiUnitSupplyModifier)).toInt()
-        return supply
+        val supply = getBaseUnitSupply() + getUnitSupplyFromCities() + getUnitSupplyFromPop()
+        val chosen = civInfo.gameInfo.getDifficulty()
+        val bonusPercent = when {
+            civInfo.isCityState -> chosen.cityStateUnitSupplyBonusPercent
+            isAiMajor() -> chosen.aiUnitSupplyBonusPercent
+            else -> 0
+        }
+        return supply * (100 + bonusPercent) / 100
     }
 
+    /** CvPlayer::GetNumUnitsSuppliedByHandicap: the difficulty's base supply, with the [UniqueType.BaseUnitSupply] uniques */
     @Readonly
     fun getBaseUnitSupply(): Int {
-        return civInfo.getDifficulty().unitSupplyBase +
-            civInfo.getMatchingUniques(UniqueType.BaseUnitSupply).sumOf { it.params[0].toInt() }
+        val chosen = civInfo.gameInfo.getDifficulty()
+        val fromDifficulty = when {
+            civInfo.isCityState -> chosen.cityStateUnitSupplyBase
+            isAiMajor() -> chosen.aiUnitSupplyBase
+            else -> civInfo.getDifficulty().unitSupplyBase
+        }
+        return fromDifficulty + civInfo.getMatchingUniques(UniqueType.BaseUnitSupply).sumOf { it.params[0].toInt() }
     }
+
+    /** CvPlayer::GetNumUnitsSuppliedByCities: the supply of each city, with the [UniqueType.UnitSupplyPerCity] uniques */
     @Readonly
     fun getUnitSupplyFromCities(): Int {
+        val chosen = civInfo.gameInfo.getDifficulty()
+        val perCity = when {
+            civInfo.isCityState -> chosen.cityStateUnitSupplyPerCity
+            isAiMajor() -> chosen.aiUnitSupplyPerCity
+            else -> civInfo.getDifficulty().unitSupplyPerCity
+        }
         return civInfo.cities.size *
-            (civInfo.getDifficulty().unitSupplyPerCity
-                    + civInfo.getMatchingUniques(UniqueType.UnitSupplyPerCity).sumOf { it.params[0].toInt() })
+            (perCity + civInfo.getMatchingUniques(UniqueType.UnitSupplyPerCity).sumOf { it.params[0].toInt() })
     }
+
+    /**
+     *  CvPlayer::GetNumUnitsSuppliedByPopulation: the share of the citizens of every city, with the [UniqueType.UnitSupplyPerPop] uniques.
+     *  The share is the difficulty's population percent for an AI major or a city-state, [com.unciv.models.ModConstants.unitSupplyPerPopulation]
+     *  (Civ V's 50%) for the others.
+     */
     @Readonly
     fun getUnitSupplyFromPop(): Int {
-        var totalSupply = civInfo.cities.sumOf { it.population.population } * civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyPerPopulation
+        val chosen = civInfo.gameInfo.getDifficulty()
+        val citizens = civInfo.cities.sumOf { it.population.population }
+        var totalSupply = when {
+            civInfo.isCityState -> citizens * chosen.cityStateUnitSupplyPopulationPercent / 100.0
+            isAiMajor() -> citizens * chosen.aiUnitSupplyPopulationPercent / 100.0
+            else -> citizens * civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyPerPopulation
+        }
 
         civInfo.forEachMatchingUnique(UniqueType.UnitSupplyPerPop) { unique ->
             val applicablePopulation = civInfo.cities

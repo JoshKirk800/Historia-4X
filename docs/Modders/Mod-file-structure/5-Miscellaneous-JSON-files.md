@@ -35,7 +35,14 @@ Each difficulty level has the following structure:
 | aiWonderCostModifier              | Float           | 1        |                                                                                                                                                                                                                            |
 | aiBuildingMaintenanceModifier     | Float           | 1        |                                                                                                                                                                                                                            |
 | aiUnitMaintenanceModifier         | Float           | 1        |                                                                                                                                                                                                                            |
-| aiUnitSupplyModifier              | Integer         | 5        |                                                                                                                                                                                                                            |
+| aiUnitSupplyBase                  | Integer         | 7        | Unit supply of an AI major civilization that does not depend on its cities or population (the Community Patch's AIUnitSupplyBase). Read from the difficulty the game is played at, not from the level of the AI itself |
+| aiUnitSupplyPerCity               | Integer         | 3        | Unit supply per city of an AI major civilization (AIUnitSupplyPerCity) |
+| aiUnitSupplyPopulationPercent     | Integer         | 50       | Percentage of the citizens of its cities that an AI major civilization gets as unit supply (AIUnitSupplyPopulationPercent). 50: one per two citizens |
+| aiUnitSupplyBonusPercent          | Integer         | 0        | Percentage added to the whole unit supply of an AI major civilization (AIUnitSupplyBonusPercent). 20: 20% more |
+| cityStateUnitSupplyBase           | Integer         | 7        | As aiUnitSupplyBase, for city-state civilizations (CityStateUnitSupplyBase) |
+| cityStateUnitSupplyPerCity        | Integer         | 3        | As aiUnitSupplyPerCity, for city-state civilizations (CityStateUnitSupplyPerCity) |
+| cityStateUnitSupplyPopulationPercent | Integer      | 50       | As aiUnitSupplyPopulationPercent, for city-state civilizations (CityStateUnitSupplyPopulationPercent) |
+| cityStateUnitSupplyBonusPercent   | Integer         | 0        | As aiUnitSupplyBonusPercent, for city-state civilizations (CityStateUnitSupplyBonusPercent) |
 | aiFreeTechs                       | List of Strings | empty    | Must be in [Techs.json](2-Civilization-related-JSON-files.md#techsjson)                                                                                                                                                    |
 | aiMajorCivBonusStartingUnits      | List of Strings | empty    | Same rules as playerBonusStartingUnits, See above. Applies only to AI major civs                                                                                                                                           |
 | aiCityStateBonusStartingUnits     | List of Strings | empty    | Same rules as playerBonusStartingUnits, See above. Applies only to city-state civs                                                                                                                                         |
@@ -414,6 +421,7 @@ Legend:
     unitSupplyBase and unitSupplyPerCity can be found in difficulties.json
     unitSupplyBase, unitSupplyPerCity and unitSupplyPerPopulation can also be increased through uniques
     Only the units that use supply count against it: those with a combat strength, and those with the unique "Uses unit supply" (the Caravan, Cargo Ship and Work Boat of the Civ V rulesets). Workers, settlers, Great People and religious units do not.
+    For an AI major civilization or a city-state, the base, the amount per city and the population share (a percentage of the citizens, in place of unitSupplyPerPopulation) are the aiUnitSupply... and cityStateUnitSupply... fields of the difficulty the game is played at, and the sum is multiplied by (100 + the bonus percent) / 100.
 - [^U]: Formula for the gold maintenance of units (0.5 gold per unit that is not free):
     cost = (paidUnits \* 0.5 \* (1 + unitMaintenanceGameMultiplier \* progress)) ^ (1 + progress / unitMaintenanceExponentDivisor)
     progress is the turn divided by the number of turns of the game speed, paidUnits is the number of units minus unitMaintenanceFreeUnits and the units made free by uniques.

@@ -41,6 +41,8 @@ class ModConstants {
     // unitSupplyBase and unitSupplyPerCity can be found in difficulties.json
     // unitSupplyBase, unitSupplyPerCity and unitSupplyPerPopulation can also be increased through uniques
     // Only the units that use supply count against it: those with a combat strength and those with the "Uses unit supply" unique.
+    // An AI major civilization and a city-state take base, per city and population share (instead of unitSupplyPerPopulation) from the difficulty's
+    // aiUnitSupply... and cityStateUnitSupply... fields, and the sum is increased by their bonus percent.
     var unitSupplyPerPopulation = 0.5
 
     // Gold maintenance of units (CvTreasury::CalculateUnitCost), with 0.5 gold per unit that is not free:

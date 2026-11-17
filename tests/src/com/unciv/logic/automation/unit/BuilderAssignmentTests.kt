@@ -7,6 +7,7 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
+import com.unciv.view.GameView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -276,6 +277,82 @@ class BuilderAssignmentTests {
         assertEquals(tile(1, 0), sentry.tile)
         assertEquals(HomelandTargetType.SentryPoint, sentry.type)
         assertEquals(picks.single { it.tile == tile(1, 0) }.directive.priorityScore, sentry.weight)
+    }
+
+    //endregion
+    //region Work boats
+
+    /** The plots [keep] are land except those in [water], which are coast with Fish (or without, [fish] false); the city is at (0,0) */
+    private fun seaSetup(water: List<Pair<Int, Int>>, fish: Boolean = true, vararg land: Pair<Int, Int>) {
+        research("Sailing", "Agriculture")
+        onlyPlots(*(water + land).toTypedArray())
+        for ((x, y) in water) {
+            game.setTileTerrain(HexCoord(x, y), "Coast")
+            if (fish) tile(x, y).setTileResource("Fish")
+        }
+        game.addCity(civ, tile(0, 0))
+    }
+
+    @Test
+    fun `a work boat takes the water directive of its plot and two boats do not take the same plot`() {
+        seaSetup(listOf(1 to 0, -1 to 0))
+        val east = game.addUnit("Work Boats", civ, tile(1, 0))
+        val west = game.addUnit("Work Boats", civ, tile(-1, 0))
+        val picks = BuilderAssignment(civ, BuilderTaskingAi(civ)).assign(listOf(east, west))
+        assertEquals(2, picks.size)
+        assertEquals(tile(1, 0), picks.single { it.unit == east }.tile)
+        assertEquals(tile(-1, 0), picks.single { it.unit == west }.tile)
+        assertEquals("Fishing Boats", picks.first().build.improvement.name)
+    }
+
+    @Test
+    fun `one water plot goes to one boat, the other has no directive and is left over`() {
+        seaSetup(listOf(1 to 0, -1 to 0), fish = false)
+        tile(1, 0).setTileResource("Fish")
+        val capital = civ.cities.single()
+        val east = game.addUnit("Work Boats", civ, tile(1, 0))
+        val west = game.addUnit("Work Boats", civ, tile(-1, 0))
+        val assignment = BuilderAssignment(civ, BuilderTaskingAi(civ))
+        val picks = assignment.assign(listOf(east, west))
+        assertEquals(east, picks.single().unit)
+        assertNull(assignment.allPicks.firstOrNull { it.unit == west })
+        assertEquals("a boat without a directive goes to the city with the fewest builders", capital, assignment.leftoverCity(west))
+    }
+
+    @Test
+    fun `a worker never takes the fishing boats and a boat never takes the farm`() {
+        seaSetup(listOf(-1 to 0), fish = true, 1 to 0)
+        val worker = game.addUnit("Worker", civ, tile(1, 0))
+        val boat = game.addUnit("Work Boats", civ, tile(-1, 0))
+        val picks = BuilderAssignment(civ, BuilderTaskingAi(civ)).assign(listOf(worker, boat))
+        assertEquals(2, picks.size)
+        assertEquals("Farm", picks.single { it.unit == worker }.build.improvement.name)
+        assertEquals("Fishing Boats", picks.single { it.unit == boat }.build.improvement.name)
+    }
+
+    @Test
+    fun `a boat with no water resource has no pick even with land work to do`() {
+        seaSetup(listOf(-1 to 0), fish = false, 1 to 0)
+        val boat = game.addUnit("Work Boats", civ, tile(-1, 0))
+        assertNull(BuilderTaskingAi(civ).pickFor(boat))
+    }
+
+    @Test
+    fun `the first builder to move plans the boats too, and a boat is used up creating the improvement on its plot`() {
+        seaSetup(listOf(1 to 0))
+        val boat = game.addUnit("Work Boats", civ, tile(1, 0))
+        val automation = civ.getWorkerAutomation()
+        assertTrue(automation.executeWorkerMove(boat))
+        assertEquals("Fishing Boats", tile(1, 0).improvement)
+        assertTrue(boat.isDestroyed)
+    }
+
+    @Test
+    fun `a boat with nothing to build moves towards the city`() {
+        seaSetup(listOf(1 to 0, 2 to 0), fish = false)
+        val boat = game.addUnit("Work Boats", civ, tile(2, 0))
+        civ.getWorkerAutomation().automateWorkerAction(GameView(game.gameInfo, civ).getMapUnitView(boat))
+        assertTrue(boat.getTile().aerialDistanceTo(tile(0, 0)) < 2)
     }
 
     //endregion

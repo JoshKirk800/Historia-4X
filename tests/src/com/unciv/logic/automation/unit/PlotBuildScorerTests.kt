@@ -239,4 +239,57 @@ class PlotBuildScorerTests {
         assertEquals(0, resourceWeight(civ, game.ruleset.tileResources["Gems"]!!, 2))
         assertEquals(4 * 750, resourceWeight(civ, game.ruleset.tileResources["Wine"]!!, 1))
     }
+
+    @Test
+    fun `the resources the planned builds connect count as available, a third and then two thirds of the weight move to the potential score`() {
+        research("Bronze Working", "Mining")
+        game.addCity(civ, tile(0, 0))
+        val plot = tile(1, 0).also { it.setTileResource("Iron") }
+        val mine = improvement("Mine")
+        val weight = resourceWeight(civ, game.ruleset.tileResources["Iron"]!!, plot.resourceAmount)
+        assertTrue("setup", weight >= 6)
+        val scorer = scorer()
+        val none = scorer.scorePlotBuild(plot, mine, Build(mine))
+        val one = scorer.scorePlotBuild(plot, mine, Build(mine), SBuilderState(extra = mapOf("Iron" to 1)))
+        val plenty = scorer.scorePlotBuild(plot, mine, Build(mine), SBuilderState(extra = mapOf("Iron" to 2)))
+        assertEquals(weight / 3, none.score - one.score)
+        assertEquals(weight / 3, one.potentialScore - none.potentialScore)
+        assertEquals(weight * 2 / 3, none.score - plenty.score)
+        assertEquals(weight * 2 / 3, plenty.potentialScore - none.potentialScore)
+        assertEquals("another resource is not counted", none, scorer.scorePlotBuild(plot, mine, Build(mine), SBuilderState(extra = mapOf("Horses" to 2))))
+    }
+
+    @Test
+    fun `a planned moai next to a plot gives a moai there its culture and the planned one the culture of this one`() {
+        val city = game.addCity(civ, tile(0, 0))
+        val here = tile(1, 0).also { city.expansion.takeOwnership(it) }
+        val next = tile(2, 0).also { city.expansion.takeOwnership(it) }
+        val far = tile(0, 2).also { city.expansion.takeOwnership(it) }
+        val moai = improvement("Moai")
+        val culture = PlotBuildScorer(civ).yieldBaseModifierTimes100(Stat.Culture)
+
+        city.workOnly(next)
+        var scorer = scorer()
+        val alone = scorer.scorePlotBuild(here, moai, Build(moai))
+        val planned = scorer.scorePlotBuild(here, moai, Build(moai), SBuilderState(mapOf(next to moai)))
+        assertEquals("its own culture, and the culture of the worked neighbour in the score", alone.score + 2 * culture, planned.score)
+        assertEquals(alone.potentialScore, planned.potentialScore)
+
+        city.workOnly(tile(-1, 0))
+        scorer = scorer()
+        val aloneUnworked = scorer.scorePlotBuild(here, moai, Build(moai))
+        val plannedUnworked = scorer.scorePlotBuild(here, moai, Build(moai), SBuilderState(mapOf(next to moai)))
+        assertEquals("a neighbour nobody works counts as potential", aloneUnworked.score + culture, plannedUnworked.score)
+        assertEquals(aloneUnworked.potentialScore + culture, plannedUnworked.potentialScore)
+
+        val farPlan = scorer.scorePlotBuild(here, moai, Build(moai), SBuilderState(mapOf(far to moai)))
+        assertEquals("a plan that is not adjacent changes nothing", aloneUnworked, farPlan)
+
+        // The moai that is built is in the yields already, the plan does not count it twice
+        next.setImprovement("Moai")
+        scorer = scorer()
+        val built = scorer.scorePlotBuild(here, moai, Build(moai))
+        assertTrue("built, it counts in the yields and in what the neighbour gains", built.score > aloneUnworked.score || built.potentialScore > aloneUnworked.potentialScore)
+        assertEquals(built, scorer.scorePlotBuild(here, moai, Build(moai), SBuilderState(mapOf(next to moai))))
+    }
 }

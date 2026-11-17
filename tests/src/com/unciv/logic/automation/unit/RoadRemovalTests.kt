@@ -157,7 +157,7 @@ class RoadRemovalTests {
         val plot = tile(x, 0)
         val worker = game.addUnit("Worker", civ, plot)
         plot.queueImprovement(improvement, turns)
-        if (claimed) worker.builderTarget = plot.position
+        if (claimed) civ.assignedBuilderDirectives[worker.id] = AssignedBuilderDirective(plot.position, improvement)
         return plot to worker
     }
 
@@ -191,6 +191,16 @@ class RoadRemovalTests {
         val (unclaimed, stranger) = building("Road", 1, claimed = false, x = 3)
         WorkerAutomation.finishBuildIfSafe(stranger)
         assertEquals(RoadStatus.None, unclaimed.roadStatus)
+
+        val (elsewhere, wanderer) = building("Road", 1, x = 5)
+        civ.assignedBuilderDirectives[wanderer.id] = AssignedBuilderDirective(tile(6, 0).position, "Road")
+        WorkerAutomation.finishBuildIfSafe(wanderer)
+        assertEquals("sent to another plot", RoadStatus.None, elsewhere.roadStatus)
+
+        val (other, changer) = building("Road", 1, x = 6)
+        civ.assignedBuilderDirectives[changer.id] = AssignedBuilderDirective(other.position, "Railroad")
+        WorkerAutomation.finishBuildIfSafe(changer)
+        assertEquals("sent to build another route", RoadStatus.None, other.roadStatus)
 
         val (tired, tiredWorker) = building("Road", 1, x = 4)
         tiredWorker.currentMovement = 0f

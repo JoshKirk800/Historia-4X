@@ -20,9 +20,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- *  Decision-level checks of how the route directives of [PlannedRoutes] are taken and the claims of [BuilderTaskingAi], against the DLL formulas
+ *  Decision-level checks of how the route directives of [PlannedRoutes] are taken, against the DLL formulas
  *  with the BNW XML values (road maintenance 1, railroad 2). The improvement directives are in [BuilderDirectiveTests], their scores in
- *  [PlotBuildScorerTests], the plan itself in [PlannedRoutesTests].
+ *  [PlotBuildScorerTests], the plan itself in [PlannedRoutesTests], the assignment of the builders in [BuilderAssignmentTests].
  */
 @RunWith(GdxTestRunner::class)
 class BuilderTaskingAiTest {
@@ -61,7 +61,7 @@ class BuilderTaskingAiTest {
         val plots = roadPlots(other)
         val worker = civ.units.getCivUnits().single()
         val ai = BuilderTaskingAi(civ)
-        val picked = ai.evaluateBuilder(worker)
+        val picked = ai.pickFor(worker)
         assertNotNull(picked)
         picked!!
         assertEquals(BuilderDirective.Type.BuildRoute, picked.directive.type)
@@ -71,25 +71,8 @@ class BuilderTaskingAiTest {
         assertEquals(PlotBuildScore(ai.routes.additiveValueOf(route) + ai.routes.nonAdditiveValueOf(route)), picked.directive.plotBuildScore)
         val routeTurns = plots.sumOf { improvement("Road").getTurnsToBuild(civ, worker, it) }
         assertEquals("the build time is that of all the plots of the planned route", routeTurns, picked.buildTurns)
-        assertEquals(worker.getTile().aerialDistanceTo(picked.tile), picked.moveTurns)
+        assertEquals("a plot the worker reaches with moves left is no turn away", 0, picked.moveTurns)
         assertEquals(BuilderDirectives.directiveWeight(picked.directive, routeTurns, picked.moveTurns), picked.weight)
-    }
-
-    @Test
-    fun `a plot another builder was sent to is skipped on later turns and the target is set by the move`() {
-        val (capital, _) = twoCities(10)
-        val worker = capital.getCenterTile().civilianUnit!!
-        val first = BuilderTaskingAi(civ).evaluateBuilder(worker)!!
-        // The same decision on the next turn (a new instance), after another builder started walking to that plot
-        val claimer = game.addUnit("Worker", civ, tile(0, 3))
-        claimer.builderTarget = first.tile.position
-        assertTrue(BuilderTaskingAi(civ).evaluateBuilder(worker)!!.tile != first.tile)
-        // Once that builder is sent elsewhere the plot is free again
-        claimer.builderTarget = null
-        assertEquals(first.tile, BuilderTaskingAi(civ).evaluateBuilder(worker)!!.tile)
-
-        assertTrue(civ.getWorkerAutomation().executeWorkerMove(worker))
-        assertEquals(first.tile.position, worker.builderTarget)
     }
 
     @Test

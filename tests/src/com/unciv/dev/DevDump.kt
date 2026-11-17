@@ -13,6 +13,7 @@ import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.MilitaryTargets
 import com.unciv.logic.automation.strategy.NavalOperationLogic
 import com.unciv.logic.automation.strategy.OperationAbortReason
+import com.unciv.logic.automation.unit.BuilderAssignment
 import com.unciv.logic.automation.unit.BuilderDirective
 import com.unciv.logic.automation.unit.BuilderDirectives
 import com.unciv.logic.automation.unit.BuilderTaskingAi
@@ -147,7 +148,7 @@ class DevDump {
         }
     }
 
-    /** Per civilization: this turn's builder directives, and the pick of each of its builders (a fresh plan, no claims made) */
+    /** Per civilization: this turn's builder directives, and the picks of the assignment pass of its builders in the order made (a fresh plan, nothing executed) */
     private fun builders(game: GameInfo, out: StringBuilder) {
         val limit = System.getenv("DEV_DUMP_BUILDER_LIMIT")?.toIntOrNull() ?: 60
         out.append("builder directives at turn ${game.turns}\n")
@@ -169,12 +170,10 @@ class DevDump {
                     "score ${score.score} potential ${score.potentialScore} unused ${score.unusedYieldScore} penalty ${score.scorePenalty}, " +
                     "priority ${directive.priorityScore}, weight ${BuilderDirectives.directiveWeight(directive, 0, 0)}\n")
             }
-            for (unit in builders) {
-                val picked = ai.evaluateBuilder(unit)
-                out.append("  builder ${unit.name} at ${unit.getTile().position}: " + (picked?.let {
-                    "${it.directive.type} ${it.build.improvement.name} at ${it.tile.position}, weight ${it.weight}, build turns ${it.buildTurns}, move turns ${it.moveTurns}"
-                } ?: "no directive") + "\n")
-            }
+            val picks = BuilderAssignment(civ, ai).assign(builders.filter { it.hasMovement() })
+            for (pick in picks) out.append("  pick ${pick.unit.name} at ${pick.unit.getTile().position}: ${pick.directive.type} ${pick.build.improvement.name} at ${pick.tile.position}, " +
+                "weight ${pick.weight}, build turns ${pick.buildTurns}, move turns ${pick.moveTurns}\n")
+            for (unit in builders) if (picks.none { it.unit == unit }) out.append("  builder ${unit.name} at ${unit.getTile().position}: no directive\n")
         }
     }
 

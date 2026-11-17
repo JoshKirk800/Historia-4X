@@ -234,6 +234,8 @@ object HomelandAi {
                 roads.add(HomelandTarget(HomelandTargetType.HomeRoad, tile))
             }
         }
+        // The plots outside our land where builders were sent (CvHomelandAI::ExecuteWorkerMoves adds them to m_TargetedSentryPoints), weighted by their priority
+        for (point in civ.getWorkerAutomation().sentryPoints) if (sentries.none { it.tile == point.tile }) sentries.add(point)
         // CvHomelandAI::EliminateAdjacentSentryPoints (sorts first) / EliminateAdjacentHomelandRoads
         HomelandTargets(
             cities.sortedByDescending { it.weight },

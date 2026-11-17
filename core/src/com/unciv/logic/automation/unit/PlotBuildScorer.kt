@@ -19,12 +19,16 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- *  CvHomelandAI's SBuilderState: what the assignment pass has planned so far (builds, features and extra resources of plots), which the
- *  scoring takes into account. [changedPlotImprovements] is mChangedPlotImprovements: the improvement planned for a plot (null: none, the
- *  improvement the plot has counts). Empty until the assignment pass plans for several builders at once ([BuilderTaskingAi] plans one turn's
- *  directives and every builder picks on its own).
+ *  CvHomelandAI.h: SBuilderState: what the assignment pass ([BuilderAssignment]) has planned so far, which the scoring takes into account:
+ *  [changedPlotImprovements] is mChangedPlotImprovements: the improvement planned for a plot (null: none, the improvement the plot has
+ *  counts) and [extraResources] is mExtraResources: the resources (by name) the planned builds will connect (+) or disconnect (-).
+ *  mChangedPlotFeatures is none: what reads it is Vox Populi's adjacent feature yields and the vanilla Celts' forests. The pass fills the
+ *  maps; [Default] is the empty state of the scoring outside the pass and is never filled.
  */
-class SBuilderState(val changedPlotImprovements: Map<Tile, TileImprovement?> = emptyMap()) {
+class SBuilderState(changed: Map<Tile, TileImprovement?> = emptyMap(), extra: Map<String, Int> = emptyMap()) {
+    val changedPlotImprovements: MutableMap<Tile, TileImprovement?> = HashMap(changed)
+    val extraResources: MutableMap<String, Int> = HashMap(extra)
+
     /** CvBuilderTaskingAI.cpp: GetPlannedImprovementInPlot: the improvement planned for [tile], else the one it has unless it is pillaged */
     fun plannedImprovement(tile: Tile): TileImprovement? =
         if (tile in changedPlotImprovements) changedPlotImprovements[tile]
@@ -52,7 +56,13 @@ class SBuilderState(val changedPlotImprovements: Map<Tile, TileImprovement?> = e
  *    is smoothed for golden ages (the tile stats already add 1 gold of a golden age on a tile with gold): +40 when no golden age is on, -60 in
  *    one. Only for a plot that one of our cities can work.
  *  - Connecting a resource: its [resourceWeight] to the base score, ⅔ of it (⅓ with exactly one available) moved to the potential score when
- *    the resource is already available more than once (once); resources the old improvement connects do not count as available.
+ *    the resource is already available more than once (once); resources the old improvement connects do not count as available, those the
+ *    assignment pass plans to connect do ([SBuilderState.extraResources]).
+ *  - Adjacency (CvBuilderTaskingAI::ScorePlotBuild's planned adjacency, with the one adjacency rule BNW has: ImprovementStatsForAdjacencies naming
+ *    an improvement, the Moai's culture): the improvement's own yield changes by the planned improvements of its neighbours that differ from what
+ *    they have; the neighbours' planned improvements that gain from this one add their yield to the secondary score (worked plot) or to the
+ *    potential score (not worked); the best improvement still to be planned beside it that would give or take such a yield counts ⅔ of it in the
+ *    potential score ([potentialAdjacentImprovements]).
  *  - A plot on a planned shortcut or capital connection route ([PlannedRoutes.bestRouteTypeAndValue], [PlannedRoutes.isRoutePlanned]) costs the
  *    improvement 100 (a Great Person's 1000 to build; none to keep or repair), the road taking its place: the original's penalty for an improvement
  *    that gains nothing from roads, which is all of ours (its village improvements are none).
@@ -69,8 +79,8 @@ class SBuilderState(val changedPlotImprovements: Map<Tile, TileImprovement?> = e
  *    yield score goes to [PlotBuildScore.unusedYieldScore].
  *
  *  Not ported (none-inputs, the rules BNW lacks or later branches): the tile claim (NewOwner), BlockTileSteal (a theft bonus for an improvement
- *  that blocks tile theft), Great Person rate (GreatPersonRateModifier), domain production and experience, the plans of other builds in
- *  [SBuilderState] other than the planned improvements (the assignment pass fills them) and potential adjacent improvements (YieldPerXAdjacent*, adjacency yields), WLTKD and
+ *  that blocks tile theft), Great Person rate (GreatPersonRateModifier), domain production and experience, the planned features of
+ *  [SBuilderState] (mChangedPlotFeatures), the adjacency yields of Vox Populi's own rules (YieldPerXAdjacentImprovement/Terrain, AdjacentTerrain/Feature/ResourceYieldChanges), WLTKD and
  *  golden age improvement yields, resource monopolies, the canal term (MakesPassable), CvDiplomacyAI::IsBadTheftTarget (nobody is one: the -10000
  *  of a major's culture bomb and of an embassy never applies), CvPlot::IsChokePoint, CvPlot::IsStealBlockedByImprovement and embassy improvements,
  *  improvement maintenance (0 in the rules), spawned resources, IMPROVEMENTS_EXTENSIONS and the vanilla Celts block (inactive in Vox Populi).
@@ -174,27 +184,59 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
             if (productionFromChop > 0) secondaryScore += productionFromChop * yieldBaseModifierTimes100(Stat.Production) / 50
         }
 
-        var extraResource = 0
         val connectsResource = resource != null && plotImprovement != null && resource.isImprovedBy(plotImprovement.name)
+        // What the planned builds of other builders will connect
+        var extraResource = if (connectsResource) resource?.let { sState.extraResources[it.name] } ?: 0 else 0
 
         val yields = if (!isWithinWorkRange) null else if (build != null) projectedYields(tile, build, owningCity) else currentYields(tile, owningCity)
-        for ((i, stat) in YIELDS.withIndex()) {
-            if (yields == null) break
-            var newYieldTimes100 = 100 * yields[i]
-            var futureYieldTimes100 = 0
 
-            // Normalize Golden Age gold yields (assume active 40% of the time)
-            if (stat == Stat.Gold && newYieldTimes100 >= GOLDEN_AGE_GOLD_THRESHOLD * 100) {
-                newYieldTimes100 += if (!civ.goldenAges.isGoldenAge()) 40 * GOLDEN_AGE_GOLD_YIELD else -60 * GOLDEN_AGE_GOLD_YIELD
+        // The adjacency of improvements (the Moai's culture): what the planned improvements of the neighbours change
+        val ownBonuses = if (plotImprovement != null) adjacencyBonuses(plotImprovement) else emptyList()
+        val users = if (plotImprovement != null) adjacencyUsers[plotImprovement.name].orEmpty() else emptyList()
+        val plannedOwn = if (yields != null && ownBonuses.isNotEmpty()) plannedOwnAdjacency(tile, ownBonuses, sState) else null
+        val neighbourGain = if (users.isNotEmpty()) neighbourAdjacencyGain(tile, users, sState) else null
+        val potentialAdjacency =
+            if (plotImprovement != null && isWithinWorkRange && (ownBonuses.isNotEmpty() || users.isNotEmpty())) potentialAdjacency(tile, plotImprovement, ownBonuses, users, sState)
+            else null
+
+        for ((i, stat) in YIELDS.withIndex()) {
+            var newYieldTimes100 = 0
+            var futureYieldTimes100 = 0
+            val price = yieldBaseModifierTimes100(stat)
+            fun cityYieldModifier() = owningCity?.let { yieldCityModifierTimes100(it, stat) } ?: 100
+
+            if (yields != null) {
+                newYieldTimes100 = 100 * (yields[i] + (plannedOwn?.get(i) ?: 0))
+
+                // Normalize Golden Age gold yields (assume active 40% of the time)
+                if (stat == Stat.Gold && newYieldTimes100 >= GOLDEN_AGE_GOLD_THRESHOLD * 100) {
+                    newYieldTimes100 += if (!civ.goldenAges.isGoldenAge()) 40 * GOLDEN_AGE_GOLD_YIELD else -60 * GOLDEN_AGE_GOLD_YIELD
+                }
+
+                // Bonus yields from future techs/policies
+                if (plotImprovement != null) futureYieldTimes100 += futureYields[plotImprovement, stat]
             }
 
-            // Bonus yields from future techs/policies
-            if (plotImprovement != null) futureYieldTimes100 += futureYields[plotImprovement, stat]
+            // Bonus yields that this improvement provides to adjacent improvements
+            if (neighbourGain != null) {
+                secondaryScore += neighbourGain.first[i]
+                potentialScore += neighbourGain.second[i]
+            }
 
             if (newYieldTimes100 != 0 || futureYieldTimes100 != 0) {
-                val cityYieldModifier = owningCity?.let { yieldCityModifierTimes100(it, stat) } ?: 100
-                yieldScore += newYieldTimes100 * yieldBaseModifierTimes100(stat) * cityYieldModifier / 10000
-                potentialScore += futureYieldTimes100 * yieldBaseModifierTimes100(stat) * cityYieldModifier / 10000
+                yieldScore += newYieldTimes100 * price * cityYieldModifier() / 10000
+                potentialScore += futureYieldTimes100 * price * cityYieldModifier() / 10000
+            }
+
+            // Extra adjacency bonuses from potential adjacent improvements
+            if (potentialAdjacency != null) {
+                var potentialNewYieldTimes100 = 100 * potentialAdjacency.thisPlot[i]
+                // Yield was below the threshold, but including potential adjacent improvements we get above the threshold
+                if (stat == Stat.Gold && newYieldTimes100 + potentialNewYieldTimes100 >= GOLDEN_AGE_GOLD_THRESHOLD * 100 && newYieldTimes100 < GOLDEN_AGE_GOLD_THRESHOLD * 100)
+                    potentialNewYieldTimes100 += 40 * GOLDEN_AGE_GOLD_YIELD
+                potentialNewYieldTimes100 += potentialAdjacency.adjacentPlots[i]
+                // Assume 2/3 of potential will happen (divide by 15000 instead of 10000)
+                if (potentialNewYieldTimes100 != 0) potentialScore += potentialNewYieldTimes100 * price * cityYieldModifier() / 15000
             }
         }
 
@@ -355,6 +397,145 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
         if (stealScore != 0) secondaryScore += stealScore
         return secondaryScore
     }
+
+    //region Adjacency of improvements
+
+    /** An ImprovementStatsForAdjacencies unique that names an improvement: [stats] for each adjacent [improvement] (the original's YieldPerXAdjacentImprovement) */
+    private class AdjacencyBonus(val improvement: String, val stats: Stats)
+
+    /** What [potentialAdjacency] adds, by yield (in [YIELDS] order): to this plot, and to the plots next to it (hundredths) */
+    private class PotentialAdjacency(val thisPlot: IntArray, val adjacentPlots: IntArray)
+
+    private val adjacencyBonusCache = HashMap<TileImprovement, List<AdjacencyBonus>>()
+
+    /** The adjacency bonuses [improvement] gets from other improvements (the Moai's culture for each adjacent Moai) */
+    private fun adjacencyBonuses(improvement: TileImprovement): List<AdjacencyBonus> = adjacencyBonusCache.getOrPut(improvement) {
+        improvement.getMatchingUniques(UniqueType.ImprovementStatsForAdjacencies, GameContext.IgnoreConditionals)
+            .filter { it.params[1] in ruleset.tileImprovements }.map { AdjacencyBonus(it.params[1], it.stats) }.toList()
+    }
+
+    /** For each improvement name, the improvements that gain from an adjacent one of that name, with what they gain */
+    private val adjacencyUsers: Map<String, List<Pair<TileImprovement, Stats>>> by lazy {
+        val users = HashMap<String, MutableList<Pair<TileImprovement, Stats>>>()
+        for (improvement in ruleset.tileImprovements.values) for (bonus in adjacencyBonuses(improvement))
+            users.getOrPut(bonus.improvement) { ArrayList() }.add(improvement to bonus.stats)
+        users
+    }
+
+    private fun bonusFrom(bonuses: List<AdjacencyBonus>, improvement: String, stat: Stat): Float =
+        bonuses.sumOf { if (it.improvement == improvement) it.stats[stat].toDouble() else 0.0 }.toFloat()
+
+    /**
+     *  The planned adjacency in the yield loop of ScorePlotBuild: what the neighbours' improvements the assignment pass has planned give or take
+     *  from [tile]'s yields compared with those they have now (which the tile's own yields already count), by yield; null if nothing differs.
+     */
+    private fun plannedOwnAdjacency(tile: Tile, bonuses: List<AdjacencyBonus>, sState: SBuilderState): IntArray? {
+        if (sState.changedPlotImprovements.isEmpty()) return null
+        var delta: FloatArray? = null
+        for (neighbour in tile.neighbors) {
+            if (neighbour !in sState.changedPlotImprovements) continue
+            val planned = sState.changedPlotImprovements[neighbour]?.name
+            val actual = if (neighbour.improvementIsPillaged) null else neighbour.improvement
+            for (bonus in bonuses) {
+                val change = (if (planned == bonus.improvement) 1 else 0) - (if (actual == bonus.improvement) 1 else 0)
+                if (change == 0) continue
+                val sum = delta ?: FloatArray(YIELDS.size).also { delta = it }
+                for ((i, stat) in YIELDS.withIndex()) sum[i] += bonus.stats[stat] * change
+            }
+        }
+        return delta?.let { sum -> IntArray(YIELDS.size) { sum[it].toInt() } }
+    }
+
+    /**
+     *  "Bonus yields that this improvement provides to adjacent improvements" of ScorePlotBuild: for each neighbour of ours that one of our cities works
+     *  or can work, whose planned improvement ([users]: the improvements that gain from this one) gains yield from this one: that yield at the price
+     *  of the yield in the secondary score when the plot is worked, in the potential score when it is not. By yield, null if there is none.
+     */
+    private fun neighbourAdjacencyGain(tile: Tile, users: List<Pair<TileImprovement, Stats>>, sState: SBuilderState): Pair<IntArray, IntArray>? {
+        var result: Pair<IntArray, IntArray>? = null
+        for (neighbour in tile.neighbors) {
+            if (neighbour.isCityCenter() || neighbour.getOwner() != civ || !isWithinWorkRange(neighbour)) continue
+            val city = neighbour.getCity()?.takeUnless { it.isBeingRazed } ?: continue
+            val planned = sState.plannedImprovement(neighbour) ?: continue
+            val gains = users.filter { it.first == planned }
+            if (gains.isEmpty()) continue
+            val worked = city.isWorked(neighbour)
+            for ((i, stat) in YIELDS.withIndex()) {
+                val delta = gains.sumOf { it.second[stat].toDouble() }.toFloat().toInt()
+                if (delta == 0) continue
+                val value = delta * yieldBaseModifierTimes100(stat) * yieldCityModifierTimes100(city, stat) / 100
+                val sums = result ?: Pair(IntArray(YIELDS.size), IntArray(YIELDS.size)).also { result = it }
+                if (worked) sums.first[i] += value else sums.second[i] += value
+            }
+        }
+        return result
+    }
+
+    /**
+     *  "Calculate the best potential adjacent improvements" and "Extra adjacency bonuses from potential adjacent improvements" of ScorePlotBuild: on
+     *  every neighbour with nothing planned the improvement that would give (or gain) the most yield next to [improvement] counts as built. The
+     *  yield this plot would gain from those, and what they would gain from this one, go to the potential score. The neighbour must be a plot of ours
+     *  or nobody's that one of our cities can work, no city, and the improvement one a builder can build there now (the original lets the next
+     *  era's techs count too, and ignores Great People's improvements).
+     */
+    private fun potentialAdjacency(
+        tile: Tile, improvement: TileImprovement, ownBonuses: List<AdjacencyBonus>, users: List<Pair<TileImprovement, Stats>>, sState: SBuilderState
+    ): PotentialAdjacency {
+        val candidates = LinkedHashMap<String, TileImprovement>()
+        for (bonus in ownBonuses) ruleset.tileImprovements[bonus.improvement]?.let { candidates[it.name] = it }
+        for ((user, _) in users) candidates[user.name] = user
+
+        val current = FloatArray(YIELDS.size)
+        val potential = FloatArray(YIELDS.size)
+        val toAdjacent = FloatArray(YIELDS.size)
+        for (neighbour in tile.neighbors) {
+            val planned = sState.plannedImprovement(neighbour)
+            if (planned != null) {
+                for ((i, stat) in YIELDS.withIndex()) current[i] += bonusFrom(ownBonuses, planned.name, stat)
+                continue
+            }
+            val best = bestPotentialImprovement(neighbour, improvement, ownBonuses, candidates.values) ?: continue
+            val bestBonuses = adjacencyBonuses(best)
+            for ((i, stat) in YIELDS.withIndex()) {
+                potential[i] += bonusFrom(ownBonuses, best.name, stat)
+                toAdjacent[i] += bonusFrom(bestBonuses, improvement.name, stat)
+            }
+        }
+        return PotentialAdjacency(
+            IntArray(YIELDS.size) { (potential[it] + current[it]).toInt() - current[it].toInt() },
+            IntArray(YIELDS.size) { (toAdjacent[it] * 100).toInt() }
+        )
+    }
+
+    /** The improvement of [candidates] with the best adjacency score next to [improvement] that a builder can build on [neighbour], null if none scores above 0 */
+    private fun bestPotentialImprovement(
+        neighbour: Tile, improvement: TileImprovement, ownBonuses: List<AdjacencyBonus>, candidates: Collection<TileImprovement>
+    ): TileImprovement? {
+        if (neighbour.isCityCenter() || !isWithinWorkRange(neighbour)) return null
+        val owner = neighbour.getOwner()
+        if (owner != null && owner != civ) return null
+        val city = neighbour.getCity()
+        var best: TileImprovement? = null
+        var bestScore = 0
+        for (other in candidates) {
+            if (other.isGreatImprovement()) continue
+            if (!neighbour.improvementFunctions.canBuildImprovement(other, GameContext(civ, tile = neighbour))) continue
+            val otherBonuses = adjacencyBonuses(other)
+            var score = 0
+            for (stat in YIELDS) {
+                val modifier = yieldBaseModifierTimes100(stat) * (city?.let { yieldCityModifierTimes100(it, stat) } ?: 100)
+                score += (bonusFrom(ownBonuses, other.name, stat) * modifier / 100f).toInt()
+                score += (bonusFrom(otherBonuses, improvement.name, stat) * modifier / 100f).toInt()
+            }
+            if (score > bestScore) {
+                bestScore = score
+                best = other
+            }
+        }
+        return best
+    }
+
+    //endregion
 
     /** The tile has an antiquity site we can dig, and [build] is not the dig */
     private fun blockedByAntiquitySite(tile: Tile, resourceName: String, build: Build): Boolean {

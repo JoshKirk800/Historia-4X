@@ -350,33 +350,37 @@ class EconomicMilitaryAiTests {
     }
 
     @Test
-    fun `recon weight and threshold follow the fog formula`() {
-        val civ = neutralCiv()
-        // 100 x 50 / (1 + 1)^2 / (int)sqrt(120)
-        assertEquals(5000 / 4 / 10, EconomicAi.reconWeight(civ, 50, 120, 1))
-        civ.ai.setPersonalityFlavor(Flavor.Recon, 3)
-        assertEquals(80, EconomicAi.reconThreshold(civ, Flavor.Recon))
-        civ.ai.setPersonalityFlavor(Flavor.Recon, 0)
-        assertEquals(100, EconomicAi.reconThreshold(civ, Flavor.Recon))
-    }
-
-    @Test
-    fun `with enough recon explorers go back to attack, keeping one before turn 100`() {
+    fun `with nothing to explore one explorer stays and the others retire one a turn`() {
         val civ = neutralCiv()
         game.makeHexagonalMap(2, Constants.grassland)
         game.addCity(civ, tile(0, 0))
         for (t in game.tileMap.values) t.setExplored(civ, true)
-        val first = game.addUnit("Warrior", civ, tile(1, 0))
-        val second = game.addUnit("Warrior", civ, tile(-1, 0))
-        UnitAiTypes.set(first, UnitAiType.EXPLORE)
-        UnitAiTypes.set(second, UnitAiType.EXPLORE)
-        game.gameInfo.turns = 50
+        for (position in listOf(tile(1, 0), tile(-1, 0), tile(0, 1)))
+            UnitAiTypes.set(game.addUnit("Warrior", civ, position), UnitAiType.EXPLORE)
+        fun exploring() = civ.units.getCivUnits().count { UnitAiTypes.current(it) == UnitAiType.EXPLORE }
+        // no plot to explore: 50 wanted, so ENOUGH above 100 and NEUTRAL from there
         civ.ai.economic.doReconState(civ)
         assertEquals(ReconState.Enough, civ.ai.economic.reconState)
-        assertEquals(1, civ.units.getCivUnits().count { UnitAiTypes.current(it) == UnitAiType.EXPLORE })
-        game.gameInfo.turns = 120
+        assertEquals(2, exploring())
         civ.ai.economic.doReconState(civ)
-        assertEquals(0, civ.units.getCivUnits().count { UnitAiTypes.current(it) == UnitAiType.EXPLORE })
+        assertEquals(1, exploring())
+        civ.ai.economic.doReconState(civ)
+        assertEquals(ReconState.Neutral, civ.ai.economic.reconState)
+        assertEquals(1, exploring())
+    }
+
+    @Test
+    fun `a needed explorer is the unit farthest from our cities among those older than three turns`() {
+        val civ = neutralCiv()
+        game.addCity(civ, tile(0, 0))
+        for (t in tile(0, 0).getTilesInDistance(2)) t.setExplored(civ, true)
+        game.gameInfo.turns = 10
+        val near = game.addUnit("Warrior", civ, tile(1, 0)).apply { turnCreated = 0 }
+        val far = game.addUnit("Warrior", civ, tile(2, 0)).apply { turnCreated = 0 }
+        val fresh = game.addUnit("Warrior", civ, tile(-2, 0)).apply { turnCreated = 8 }
+        civ.ai.economic.doReconState(civ)
+        assertEquals(ReconState.Needed, civ.ai.economic.reconState)
+        assertEquals(listOf(UnitAiType.ATTACK, UnitAiType.EXPLORE, UnitAiType.ATTACK), listOf(near, far, fresh).map { UnitAiTypes.current(it) })
     }
 
     @Test

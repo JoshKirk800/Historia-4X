@@ -388,8 +388,8 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
      *  BALANCE_BASIC_ATTACK_ARMY_SIZE per major with a preferred attack target and once more under conquest; the naval share of offense
      *  is effective coastal cities x NAVAL (personality) x 7 / cities. Defense x (100 + 2 x DEFENSE), offense x (100 + boldness + OFFENSE)
      *  (personality and grand strategy). Explorers (units whose default unit AI is EXPLORE) take their own share first: the explorers
-     *  [EconomicAi.doReconState] wants, at most a quarter of the cap, no more than the supply leaves room for. Land is truncated, sea
-     *  rounded, as in the original; a share our units already exceed grows to them at the other's expense.
+     *  [EconomicAi.doReconState] wants, at most a quarter of the cap, no more than the supply leaves room for. Land and sea are rounded
+     *  (CvMilitaryAI.cpp 1821-1822); a share our units already exceed grows to them at the other's expense.
      */
     private fun setRecommendedArmyNavySize(civ: Civilization) {
         var maxPossibleUnits = EconomicAi.softSupplyCap(civ)
@@ -439,7 +439,7 @@ class MilitaryAi : IsPartOfGameInfoSerialization {
         recommendedExplorers = explorersNeeded
         maxPossibleUnits -= max(explorersNeeded, numExplorers)
 
-        var land = (maxPossibleUnits.toLong() * (100L * landDefenseWeight + totalOffenseWeight.toLong() * (100 - navalPercent)) / (100f * totalWeight)).toInt()
+        var land = (maxPossibleUnits.toLong() * (100L * landDefenseWeight + totalOffenseWeight.toLong() * (100 - navalPercent)) / (100f * totalWeight) + 0.5f).toInt()
         var naval = (maxPossibleUnits.toLong() * (100L * navalDefenseWeight + totalOffenseWeight.toLong() * navalPercent) / (100f * totalWeight) + 0.5f).toInt()
         val numLand = numLandUnits - numExplorers
         if (numLand > land) {

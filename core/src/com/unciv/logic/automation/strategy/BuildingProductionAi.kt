@@ -37,11 +37,11 @@ import kotlin.math.min
  *  buildings.
  *
  *  The values of [BuildingValueAi] (GetBuildingBasicValue, GetBuildingGrandStrategyValue (x (era + 1)), GetBuildingPolicyValue and
- *  GetBuildingReligionValue) are added where the original adds them. None, because they come in a later branch: the yield loop
- *  (GetBuildingYieldValue, GetBuildingTraitValue and the median reductions) counts as 0.
+ *  GetBuildingReligionValue) and the yield loop of [BuildingYieldAi] (GetBuildingYieldValue, GetBuildingTraitValue) are added where the
+ *  original adds them; a building that helps a negative gold income is exempt from the maintenance refusal.
  *
  *  None, because VP's input is not in BNW: the free resources of a wonder (trait), the defense per wonder, accomplishments, the happiness
- *  of the VP rules (unhappiness, happiness per war, median modifiers, isolation: so no building is "good for gold per turn"), the empire's
+ *  of the VP rules (unhappiness, happiness per war, median modifiers, isolation), the empire's
  *  VP happiness levels (BNW's: excess happiness below 0, at most VERY_UNHAPPY_THRESHOLD, at most SUPER_UNHAPPY_THRESHOLD), the building
  *  columns of VP (supply, ranged strike range and indirect fire, border obstacles of water and land, damage reduction, air and
  *  industrial routes, fresh water, units trainable, great work experience, corporations, marriages, themes, claimed plots, investments),
@@ -155,7 +155,9 @@ object BuildingProductionAi {
             unlocks()
             militaryExperience()
             valueTerms()
-            maintenance()?.let { return it }
+            val yields = BuildingYieldAi.yieldTerms(city, building)
+            bonus += yields.bonus
+            maintenance(yields.goodForGold)?.let { return it }
             bonus += BuildingValueAi.religionValue(city, building)
             warPenalty()
             eraTerms()
@@ -222,7 +224,7 @@ object BuildingProductionAi {
             return null
         }
 
-        /** The base, grand strategy and policy values (the yield loop comes between the policy value and the maintenance in the original) */
+        /** The base, grand strategy and policy values (the yield loop follows them in the original) */
         private fun valueTerms() {
             bonus += BuildingValueAi.basicValue(city, building)
             //Acts as modifier for value.
@@ -426,9 +428,9 @@ object BuildingProductionAi {
             }
         }
 
-        private fun maintenance(): Int? {
+        private fun maintenance(goodForGold: Boolean): Int? {
             //careful if it would bankrupt us
-            if (building.maintenance > 0 && !courthouse && building.cityHealth == 0 &&
+            if (building.maintenance > 0 && !courthouse && !goodForGold && building.cityHealth == 0 &&
                 WarStateAi.turnsToBankruptcy(civ, building.maintenance) < 9) return SR_MAINTENANCE
             return null
         }

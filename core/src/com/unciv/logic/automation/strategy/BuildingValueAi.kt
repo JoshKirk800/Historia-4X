@@ -19,8 +19,7 @@ import kotlin.math.max
 /**
  *  Four of the values CvBuildingProductionAI::CheckBuildingBuildSanity adds to a building's bonus (Vox Populi, CvCityStrategyAI.cpp,
  *  CityStrategyAIHelpers): [basicValue] (GetBuildingBasicValue), [grandStrategyValue] (GetBuildingGrandStrategyValue), [policyValue]
- *  (GetBuildingPolicyValue) and [religionValue] (GetBuildingReligionValue). The trait and yield values (GetBuildingTraitValue,
- *  GetBuildingYieldValue) are a later branch.
+ *  (GetBuildingPolicyValue) and [religionValue] (GetBuildingReligionValue); the yield loop is [BuildingYieldAi].
  *
  *  BNW's building columns are read as the uniques that replace them, a local one (VP's building column) when the unique is a local effect
  *  (`<in this city>`) and a global one (the column's "Global" twin, or the player-level total) otherwise: Theming bonuses and great work
@@ -70,6 +69,13 @@ object BuildingValueAi {
     }
 
     private fun population(civ: Civilization) = civ.cities.sumOf { it.population.population }
+
+    /** The great person rate modifiers of the city (its local ones, the original's getTotalGreatPeopleRateModifier) and of the civilization (getGreatPeopleRateModifier) */
+    fun greatPeopleRate(city: City): Int {
+        var cityRate = 0
+        city.forEachLocalMatchingUnique(UniqueType.GreatPersonPointPercentage) { if (it.isLocalEffect) cityRate += it.params[0].toInt() }
+        return cityRate + city.civ.amount(UniqueType.GreatPersonPointPercentage)
+    }
 
     /**
      *  GetBuildingBasicValue: what the building is worth beyond its yields: great work slots (a theming bonus each, a slot is worth twice
@@ -367,11 +373,10 @@ object BuildingValueAi {
         val greatPersonPoints = building.greatPersonPoints.values.sum()
         if (building.hasUnique(UniqueType.OneTimeFreeGreatPerson, ignoreConditionals) || greatPersonPoints > 0 ||
             greatPeopleGlobal > 0 || greatPeopleLocal > 0) {
-            var cityRate = 0
-            city.forEachLocalMatchingUnique(UniqueType.GreatPersonPointPercentage) { if (it.isLocalEffect) cityRate += it.params[0].toInt() }
+            val cityRate = greatPeopleRate(city)
             val expendGold = civ.getTriggeredUniques(UniqueType.TriggerUponExpendingUnit, ignoreConditionals)
                 .filter { it.type == UniqueType.OneTimeGainStat && it.params[1] == Stat.Gold.name }.sumOf { it.params[0].toInt() }
-            value += cityRate + civ.amount(UniqueType.GreatPersonPointPercentage) + expendGold / 10 + greatPeopleGlobal + greatPeopleLocal
+            value += cityRate + expendGold / 10 + greatPeopleGlobal + greatPeopleLocal
             value += greatPersonPoints * 50
             val religion = civ.religionManager.religion
             if (religion != null) {

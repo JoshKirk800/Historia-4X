@@ -7,9 +7,9 @@ import com.unciv.logic.automation.WeightedChoice
 import com.unciv.logic.automation.strategy.AiOperations
 import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.ProductionAi
+import com.unciv.logic.automation.strategy.ProductionSanityAi
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
-import com.unciv.logic.automation.strategy.UnitProductionAi
 import com.unciv.logic.automation.strategy.WonderProductionAi
 import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.automation.unit.SettlerAutomation
@@ -205,7 +205,7 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
             }
         }
 
-        if (rawProductionTimes100() >= 500 || candidates.isEmpty()) {
+        if (ProductionSanityAi.rawProductionTimes100(city) >= 500 || candidates.isEmpty()) {
             for (process in PerpetualConstruction.perpetualConstructionsMap.values) {
                 if (process == PerpetualConstruction.Idle || !process.isBuildable(cityConstructions)) continue
                 if (process is PerpetualConstruction.StatConversion && process.stat == Stat.Science && civInfo.tech.allTechsAreResearched()) continue
@@ -260,13 +260,6 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
         if (weight > 0) candidates.add(Buildable(unit, weight, ProductionAi.turnsLeft(city, unit), forOperation = true))
     }
 
-    /** CvCity::getRawProductionPerTurnTimes100: the production rate x 100 with the city's general modifiers, not those of what it builds */
-    private fun rawProductionTimes100(): Int {
-        val base = city.cityStats.baseStatTree.totalStats.production
-        val modifier = 100 + city.cityStats.statPercentBonusTree.totalStats.production
-        return (base * 100 * modifier / 100).toInt()
-    }
-
     /** CvBuildingEntry::GetDomainFreeExperience(DOMAIN_LAND) > 0 */
     private fun givesLandFreeExperience(building: Building): Boolean {
         val units = civInfo.gameInfo.ruleset.units.values
@@ -276,8 +269,8 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
 
     /**
      *  The selection of CvCityStrategyAI::ChooseProduction (Vox Populi):
-     *  - the sanity checks: the units CheckUnitBuildSanity refuses ([UnitProductionAi.isRefused]) go (the sanity weights of the units,
-     *    buildings, projects and processes are not ported yet); with nothing left, all [candidates] at their weight as they are;
+     *  - each candidate through the sanity check of its kind ([ProductionSanityAi]: units, buildings, processes, projects), which
+     *    normalises its weight and refuses at 0 or below; with nothing left, all [candidates] at their flavor weight as they are;
      *  - each weight divided by its time penalty ([WonderProductionAi.reweightByTurnsLeft], ReweightByDuration), best first;
      *  - among those at least half as good as the best, in order: a project a victory of this game needs, or what the city is building
      *    (a building only without [interruptBuildings], never a process), is kept;
@@ -287,15 +280,22 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
      */
     fun choose(candidates: List<Buildable>, interruptBuildings: Boolean = false): Buildable? {
         if (candidates.isEmpty()) return null
-        val sane = candidates.filter { candidate ->
-            val unit = candidate.construction as? BaseUnit
-            unit == null || !UnitProductionAi.isRefused(city, unit, candidate.forOperation)
+        val rules = civInfo.gameInfo.ruleset.ai
+        val sane = candidates.mapNotNull { candidate ->
+            val construction = candidate.construction
+            val weight = when {
+                construction is BaseUnit -> ProductionSanityAi.unitSanity(city, construction, candidate.weight, candidate.forOperation)
+                construction is PerpetualConstruction -> ProductionSanityAi.processSanity(city, construction, candidate.weight)
+                construction is Building && ProductionAi.isProject(rules, construction) ->
+                    ProductionSanityAi.projectSanity(city, construction, candidate.weight)
+                else -> ProductionSanityAi.buildingSanity(candidate.weight)
+            }
+            if (weight > 0) Buildable(construction, weight, candidate.turns, candidate.slotOffer, candidate.forOperation) else null
         }
         for (candidate in sane) candidate.weight = WonderProductionAi.reweightByTurnsLeft(civInfo, candidate.weight, candidate.turns)
         val options = sane.ifEmpty { candidates }.sortedByDescending { it.weight }
         val best = options.first().weight
         val current = cityConstructions.getCurrentConstruction()
-        val rules = civInfo.gameInfo.ruleset.ai
         for (option in options) {
             if (option.weight < best / 2) break
             val construction = option.construction

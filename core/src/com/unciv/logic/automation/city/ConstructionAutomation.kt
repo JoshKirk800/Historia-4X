@@ -5,10 +5,14 @@ import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.WeightedChoice
 import com.unciv.logic.automation.strategy.AiOperations
+import com.unciv.logic.automation.strategy.BuildingProductionAi
+import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.logic.automation.strategy.EconomicMilitaryStrategyTests
 import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.ProductionAi
 import com.unciv.logic.automation.strategy.ProductionSanityAi
+import com.unciv.logic.automation.strategy.UnitAiType
+import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.strategy.WonderProductionAi
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityConstructions
@@ -36,7 +40,8 @@ import com.unciv.ui.screens.cityscreen.CityScreen
  *  Every buildable item gets its flavor weight ([ProductionAi]: Σ item flavor × city flavor), adjusted per kind as the original does;
  *  then Vox Populi's selection ([choose]): the sanity checks, the time penalty ([WonderProductionAi.reweightByTurnsLeft], ReweightByDuration),
  *  the current build kept while it is still half as good as the best, else a weighted pick among those within
- *  HandicapInfos.CityProductionChoiceCutoffThreshold % of the best. The wonder city first rolls whether to start the next wonder desired.
+ *  HandicapInfos.CityProductionChoiceCutoffThreshold % of the best. A city told to interrupt wonders that is the best for the next wonder
+ *  desired starts it right away ([chooseNextWonder]).
  *
  *  Units for the open slots of the operations (CvCity::GetUnitForOperation, CITY_BUILDABLE_UNIT_FOR_OPERATION: settler escorts, attack
  *  armies, barbarian hunters ... see [AiOperations]) are candidates in the muster city of the next open slot ([AiOperations.isNextSlotMusteredIn])
@@ -79,8 +84,8 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
     fun chooseNextConstruction(interruptWonders: Boolean = false): Unit = timeThis("AI.ChooseProduction") {
         if (!interruptWonders && cityConstructions.getCurrentConstruction() !is PerpetualConstruction) return
 
-        val chosen = chooseWonderForWonderCity(interruptWonders)?.also { wonder ->
-            AiDecisionLog.log(civInfo) { "${city.name} builds wonder ${wonder.name} (wonder city)" }
+        val chosen = chooseNextWonder(interruptWonders)?.also { wonder ->
+            AiDecisionLog.log(civInfo) { "${city.name} builds wonder ${wonder.name} (next wonder desired)" }
         } ?: run {
             val candidates = getBuildables()
             val options = rank(candidates)
@@ -138,23 +143,22 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
     }
 
     /**
-     *  The wonder part of CvCityAI::AI_chooseProduction, for the wonder city only: it keeps a wonder underway unless [interruptWonders];
-     *  if the next wonder desired cannot be built here any more the specializations are re-evaluated; otherwise it starts that wonder when a
-     *  roll of 0..10 is at most max(WONDER, GREAT_PEOPLE) of personality and grand strategy.
+     *  The wonder part of CvCityAI::AI_chooseProduction: the next wonder desired is a world wonder some civilization has built already: the
+     *  specializations are evaluated again. A city that does not build a wonder and is told to interrupt wonders ([interruptWonders])
+     *  starts the next wonder desired right away when it is the best city for it ([BuildingProductionAi.isBestForWonder]) and the civilization
+     *  has an Engineer (UNITAI_ENGINEER). Unciv's queue also needs the wonder to be buildable here.
      *  @return the wonder to build, null to choose normally
      */
-    private fun chooseWonderForWonderCity(interruptWonders: Boolean): Building? {
-        if (WonderProductionAi.wonderBuildCity(civInfo) != city) return null
-        val current = cityConstructions.getCurrentConstruction()
-        if (!interruptWonders && current is Building && WonderProductionAi.isWonder(current)) return current
+    private fun chooseNextWonder(interruptWonders: Boolean): Building? {
         val state = civInfo.ai.citySpecialization
-        val nextWonder = state.nextWonderDesired?.let { civInfo.gameInfo.ruleset.buildings[it] }
-        if (nextWonder == null || !nextWonder.isBuildable(cityConstructions)) {
+        val nextWonder = state.nextWonderDesired?.let { civInfo.gameInfo.ruleset.buildings[it] } ?: return null
+        if (nextWonder.isWonder && civInfo.gameInfo.civilizations.any { civ -> civ.cities.any { it.cityConstructions.isBuilt(nextWonder.name) } })
             state.specializationsDirty = true
-            return null
-        }
-        val flavor = maxOf(civInfo.ai.personalityAndGrandStrategy(Flavor.Wonder), civInfo.ai.personalityAndGrandStrategy(Flavor.GreatPeople))
-        return if (civInfo.ai.random("WonderRoll" + city.id).nextInt(11) <= flavor) nextWonder else null
+        val current = cityConstructions.getCurrentConstruction()
+        if (current is Building && WonderProductionAi.isWonder(current) || !interruptWonders) return null
+        if (!BuildingProductionAi.isBestForWonder(city, nextWonder) || !nextWonder.isBuildable(cityConstructions)) return null
+        if (civInfo.units.getCivUnits().none { UnitAiTypes.current(it) == UnitAiType.ENGINEER }) return null
+        return nextWonder
     }
 
     private fun withAiChoiceWeight(construction: INonPerpetualConstruction, weight: Int): Int =
@@ -163,8 +167,8 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
     /**
      *  The candidates of CvCityStrategyAI::ChooseProduction (m_BuildablesPrecheck), each with its weight, only weights above 0:
      *  - buildings (not projects): [ProductionAi.buildingWeight]; a diplomatic-voting building only when going for the diplomatic victory with
-     *    the gold to buy the missing votes; in puppets 0 for wonders, land military training and resource-consuming buildings, doubled without
-     *    maintenance;
+     *    the gold to buy the missing votes; in a puppet we may annex (MOD_CORE_PUPPET_BUILDING_LIMITATIONS) none of an era later than ours - 1,
+     *    and none with gold maintenance and no defense while ECONOMICAISTRATEGY_LOSING_MONEY;
      *  - not in puppets: units ([ProductionAi.unitWeight]); projects ([ProductionAi.projectWeight]; Vox Populi skips the limited ones in
      *    puppets, which BNW's all are);
      *  - processes, when the city makes at least 5 production before the modifiers of what it builds (getRawProductionPerTurnTimes100 at
@@ -179,6 +183,9 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
         addOperationUnit(candidates)
         addArmyUnit(candidates)
 
+        // Puppets we may annex build fewer buildings (CvCityStrategyAI::ChooseProduction, MOD_CORE_PUPPET_BUILDING_LIMITATIONS, 1 in VP)
+        val limitedPuppet = ProductionSanityAi.isPuppetAndAnnexable(city)
+        val losingMoney = limitedPuppet && civInfo.ai.isEconomicStrategyActive(EconomicAi.LOSING_MONEY)
         for (building in ruleset.buildings.values) {
             if (ProductionAi.isProject(rules, building)) {
                 if (city.isPuppet || !isAllowed(building) || !building.isBuildable(cityConstructions)) continue
@@ -186,16 +193,16 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
                 if (weight > 0) candidates.add(Buildable(building, weight, ProductionAi.turnsLeft(city, building)))
                 continue
             }
+            if (limitedPuppet) {
+                //too new? not ok
+                if (BuildingProductionAi.era(ruleset, building) > civInfo.getEraNumber() - 1) continue
+                //disallow everything (except defense buildings) that costs maintenance if we are running a deficit
+                if (building.cityStrength <= 0 && building.maintenance > 0 && losingMoney) continue
+            }
             var weight = ProductionAi.buildingWeight(city, building)
-            // Only weights above 0 are candidates, and the adjustments below never raise a weight from 0: skip the costly buildable test
+            // Only weights above 0 are candidates, and the adjustment below never raises a weight from 0: skip the costly buildable test
             if (weight <= 0 || !isAllowed(building) || !building.isBuildable(cityConstructions)) continue
             if (WonderProductionAi.isDiplomaticVoting(building) && !WonderProductionAi.isWorthBuildingUnitedNations(civInfo)) weight = 0
-            if (city.isPuppet) {
-                if (building.isAnyWonder()) weight = 0
-                if (givesLandFreeExperience(building)) weight = 0
-                if (building.maintenance == 0) weight *= 2
-                if (building.getResourceRequirementsPerTurn(city.state).isNotEmpty()) weight = 0
-            }
             weight = withAiChoiceWeight(building, weight)
             if (weight > 0) candidates.add(Buildable(building, weight, ProductionAi.turnsLeft(city, building)))
         }
@@ -256,13 +263,6 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
         if (weight > 0) candidates.add(Buildable(unit, weight, ProductionAi.turnsLeft(city, unit), forOperation = true))
     }
 
-    /** CvBuildingEntry::GetDomainFreeExperience(DOMAIN_LAND) > 0 */
-    private fun givesLandFreeExperience(building: Building): Boolean {
-        val units = civInfo.gameInfo.ruleset.units.values
-        return building.getMatchingUniques(UniqueType.UnitStartingExperience, GameContext.IgnoreConditionals)
-            .any { unique -> unique.params[1].toInt() > 0 && units.any { it.isLandUnit && it.isMilitary && it.matchesFilter(unique.params[0]) } }
-    }
-
     /**
      *  The selection of CvCityStrategyAI::ChooseProduction (Vox Populi), [rank] and [pick]: the chosen one of [candidates], null without
      *  candidates.
@@ -290,7 +290,7 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
                 construction is PerpetualConstruction -> ProductionSanityAi.processSanity(city, construction, candidate.weight)
                 construction is Building && ProductionAi.isProject(rules, construction) ->
                     ProductionSanityAi.projectSanity(city, construction, candidate.weight)
-                else -> ProductionSanityAi.buildingSanity(candidate.weight)
+                else -> ProductionSanityAi.buildingSanity(city, construction as Building, candidate.weight)
             }
             if (weight > 0 && candidate.forOperation && civInfo.ai.isEconomicStrategyActive(EconomicMilitaryStrategyTests.EARLY_EXPANSION)) weight *= 3
             if (weight > 0) Buildable(construction, weight, candidate.turns, candidate.slotOffer, candidate.forOperation) else null

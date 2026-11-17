@@ -38,7 +38,11 @@ import kotlin.math.max
  *    vanilla Celts and Vox Populi's adjacent feature yields read it), so are the plots next to a planned no-two-adjacent improvement (none in the rules),
  *    the canal and the culture-bomb owner of a plot nobody owns (a plan is for our plots), CvBuilderTaskingAI::UpdateCityWorstPlots (the original
  *    stores a build it never set: the worst plot stays the one of the start of the turn).
- *  - None: worker regions (CvHomelandAI::PlanWorkerDistribution, the worker region branch: a later branch), the plots of builders that were assigned
+ *  - Worker regions (CvHomelandAI::PlanWorkerDistribution, [WorkerRegions]): for an AI civilization at peace a builder outside the region it was
+ *    allocated to walks to the region's first city before any directive is weighed ([regionTarget]; the original's ExecuteMoveToTarget, which
+ *    is carried out when the builder's own turn comes, and counted as done when a path exists), and the others only weigh the directives of their
+ *    region (bConsiderRegions of CvHomelandAI::GetWeightedDirectives). The regions are planned once, with the pass's first builder.
+ *  - None: the plots of builders that were assigned
  *    before the pass (the human's UI sets them), builders that are not automated (a human's: only automated builders take part, and the original's
  *    recommendation for the others is UI), the naval sentry points (nothing reads them), CvHomelandAI::MoveCivilianToGarrison (the fallback of
  *    [WorkerAutomation] is [CivilianSafety.moveToSafety], which prefers cities).
@@ -79,6 +83,14 @@ class BuilderAssignment(private val civ: Civilization, private val ai: BuilderTa
     /** The picks of the builders planned so far, in the order they were made */
     val allPicks: Collection<Pick> get() = picks.values
 
+    /** CvHomelandAI::PlanWorkerDistribution: how the builders are spread over the land regions this turn */
+    val regions = WorkerRegions(civ, ai.routes)
+
+    private val regionWalkers = HashMap<MapUnit, Tile>()
+
+    /** The first city of the region a builder that is not in its region goes to (CvHomelandAI::ExecuteWorkerMoves, the region move), null if it has none */
+    fun regionTarget(unit: MapUnit): Tile? = regionWalkers[unit]
+
     /** The pick of [unit], null if it has none; plans [unit] (with the builders that can move: [pending]) first when it is not planned yet */
     fun pickFor(unit: MapUnit, pending: () -> List<MapUnit>): Pick? {
         if (unit !in planned) assign((pending() + unit).distinct())
@@ -95,6 +107,15 @@ class BuilderAssignment(private val civ: Civilization, private val ai: BuilderTa
         val fresh = workers.filter { planned.add(it) }
         val processed = HashSet<MapUnit>()
         val newPicks = ArrayList<Pick>()
+
+        // Check if any worker is in the wrong region, if so they should move to the right one
+        if (regions.considerRegions) for (unit in fresh) {
+            if (regions.isAtAllocatedRegion(unit)) continue
+            val target = regions.targetPlot(unit) ?: continue
+            if (unit.getTile() == target || !unit.movement.canReach(target)) continue
+            regionWalkers[unit] = target
+            processed.add(unit)
+        }
 
         // Loop through all the directives sorted by weighted score and distance (see GetDirectiveWeight)
         var weighted = weigh(remaining, fresh, processed)
@@ -158,6 +179,7 @@ class BuilderAssignment(private val civ: Civilization, private val ai: BuilderTa
             var bestMoveTurns = 0
             for (unit in workers) {
                 if (unit in processed) continue
+                if (regions.considerRegions && regions.targetPlot(unit) != null && !regions.isAtAllocatedRegion(unit, tile)) continue
                 if (!ai.shouldBuilderConsiderPlot(unit, tile) || !builds(unit).canPerform(directive, testEra = true)) continue
                 if (isTooDangerous(unit, tile)) continue
 

@@ -58,13 +58,12 @@ class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
             if (executeWorkerMove(unit)) return@timeThis
 
             unitView.tryAddNotification("${unitView.shortDisplayName()} has no work to do.", NotificationCategory.Units, unitView.name, "OtherIcons/Sleep")
-            if (assignment.leftoverCity(unit)?.let { moveToCity(unit, it) } == true) return@timeThis
+            if (assignment.leftoverCity(unit)?.let { moveToCity(unit, it.getCenterTile()) } == true) return@timeThis
             if (CivilianSafety.moveToSafety(unit, ignoreUnits = true)) unit.currentMovement = 0f
         }
 
-    /** CvHomelandAI::ExecuteMoveToTarget for a builder without a directive: true when it is in the city or moved towards it */
-    private fun moveToCity(unit: MapUnit, city: City): Boolean {
-        val target = city.getCenterTile()
+    /** CvHomelandAI::ExecuteMoveToTarget for a builder without a directive or outside its region: true when it is on [target] or moved towards it */
+    private fun moveToCity(unit: MapUnit, target: Tile): Boolean {
         if (unit.getTile() == target) return true
         val before = unit.getTile()
         unit.movement.tryHeadTowards(target)
@@ -72,14 +71,16 @@ class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
     }
 
     /**
-     *  CvHomelandAI::ExecuteWorkerMove: a builder already building keeps building; otherwise it carries out its pick of the assignment
+     *  CvHomelandAI::ExecuteWorkerMove: a builder already building keeps building; a builder outside its worker region (CvHomelandAI::ExecuteWorkerMoves'
+     *  region move, [WorkerRegions]) walks to the region's first city; otherwise it carries out its pick of the assignment
      *  ([BuilderAssignment.pickFor], which plans the builders that can move first when this is the first one) as [executeDirective] does.
      *  False if there is no directive for it, or it cannot be carried out.
      */
     fun executeWorkerMove(unit: MapUnit): Boolean {
         if (isBuilding(unit)) return true
-        val pick = assignment.pickFor(unit) { pendingBuilders() } ?: return false
-        return executeDirective(unit, pick.directive)
+        val pick = assignment.pickFor(unit) { pendingBuilders() }
+        assignment.regionTarget(unit)?.let { return moveToCity(unit, it) }
+        return pick != null && executeDirective(unit, pick.directive)
     }
 
     /**

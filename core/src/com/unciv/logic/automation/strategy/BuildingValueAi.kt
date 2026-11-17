@@ -1,6 +1,8 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.civilization.BeliefAiProfile
+import com.unciv.logic.automation.diplomacy.TheftAi
+import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -50,7 +52,8 @@ import kotlin.math.max
  *  diplomat unit combat, the medians, the instant military increase, the great general rate, the global military production per war,
  *  the military production modifier and the experience columns of the unit combat classes and domains (they are the rows
  *  [BuildingProductionAi] reads; the original's generic FreeExperience and GlobalFreeExperience are BNW's "Military" rows of those),
- *  CvDiplomacyAI::IsBadTheftTarget (conversion) of the religion calculator, and the unit special types other than great people.
+ *  and the unit special types other than great people. The religion calculator skips a bad conversion target as the original
+ *  (CvDiplomacyAI::IsBadTheftTarget, [TheftAi]).
  */
 object BuildingValueAi {
     private val ignoreConditionals = GameContext.IgnoreConditionals
@@ -161,13 +164,15 @@ object BuildingValueAi {
     /**
      *  CvReligionAI::GetNumCitiesWithReligionCalculator for the state religion: every living civilization's cities that follow it (cities
      *  without a majority religion or with a pantheon for none or a pantheon: 2 each), doubled for ourselves and for civilizations that
-     *  founded no religion, then halved, quartered or divided by six by how close their land is, times the eras left, halved.
+     *  founded no religion, then halved, quartered or divided by six by how close their land is, times the eras left, halved. A major
+     *  skips the civilizations that are a bad target for a conversion ([TheftAi.isBadTheftTarget]).
      */
     private fun numCitiesWithReligion(civ: Civilization): Int {
         val religion = civ.religionManager.religion
         var total = 0
         for (other in civ.gameInfo.civilizations) {
             if (!other.isAlive() || !(other.isMajorCiv || other.isCityState)) continue
+            if (civ.isMajorCiv && TheftAi.isBadTheftTarget(civ, other, TheftType.Conversion)) continue
             var numCities = 0
             for (city in other.cities) {
                 val majority = city.religion.getMajorityReligion()

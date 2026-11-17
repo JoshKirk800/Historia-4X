@@ -5,6 +5,8 @@ import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.city.City
 import com.unciv.logic.city.GreatPersonPointsBreakdown
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.map.tile.ImprovementBuildingProblem
+import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.ai.AiDefine
@@ -26,9 +28,12 @@ import kotlin.math.roundToInt
  *  reads CvCity::getThreatValue, the danger map's [com.unciv.logic.automation.unit.PlotDanger.cityThreat] ([CityThreat]).
  */
 object CityStrategyAi {
-    private const val NEED_TILE_IMPROVERS_LOCKOUT_TURNS = 25
-    private const val WANT_TILE_IMPROVERS_LOCKOUT_TURNS = 10
-    private const val ENOUGH_TILE_IMPROVERS_LOCKOUT_TURNS = 10
+    /** CityStrategyAI.cpp NO_WORKER_AFTER_DISBAND_DURATION: the lock-out of all three tile improver strategies after a scrapped worker */
+    private const val NO_WORKER_AFTER_DISBAND_DURATION = 12
+    /** The reasons that keep an improvement from the tiles of a civilization whatever the tile (the build's tech, obsolescence and civilization) */
+    private val TILE_INDEPENDENT_PROBLEMS = listOf(
+        ImprovementBuildingProblem.Replaced, ImprovementBuildingProblem.WrongCiv, ImprovementBuildingProblem.MissingTech,
+        ImprovementBuildingProblem.Unbuildable, ImprovementBuildingProblem.Obsolete)
     private const val NEED_TILE_IMPROVERS = "AICITYSTRATEGY_NEED_TILE_IMPROVERS"
     private const val NEED_NAVAL_TILE_IMPROVEMENT = "AICITYSTRATEGY_NEED_NAVAL_TILE_IMPROVEMENT"
     private const val CAPITAL_UNDER_THREAT = "AICITYSTRATEGY_CAPITAL_UNDER_THREAT"
@@ -36,15 +41,13 @@ object CityStrategyAi {
     //region Helpers
 
     /**
-     *  Per civilization and turn: the counts and lists the tests of all its cities share (CvPlayer::GetNumUnitsWithUnitAI,
-     *  countCitiesFeatureSurrounded, ...). Rebuilt on a new turn and by [clearTurnCache].
+     *  Per civilization and turn: the counts and lists the tests of all its cities share (CvPlayer::GetNumUnitsWithUnitAI, ...).
+     *  Rebuilt on a new turn and by [clearTurnCache].
      */
     private class TurnCache(val turn: Int) {
         var landWorkers = -1
         var seaWorkers = -1
-        var landSettlers = -1
-        var allSettlers = -1
-        var featureSurrounded = -1
+        var settlers = -1
         var enemyNavalTiles: List<Tile>? = null
     }
     private val turnCaches = WeakHashMap<Civilization, TurnCache>()
@@ -67,14 +70,9 @@ object CityStrategyAi {
         if (seaWorkers < 0) seaWorkers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.WORKER_SEA, includeBeingTrained = true, includeWater = true)
         seaWorkers
     }
-    private fun numSettlers(civ: Civilization, includeWater: Boolean): Int = turnCache(civ).run {
-        if (includeWater) {
-            if (allSettlers < 0) allSettlers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.SETTLE, includeBeingTrained = true, includeWater = true)
-            allSettlers
-        } else {
-            if (landSettlers < 0) landSettlers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.SETTLE, includeBeingTrained = true, includeWater = false)
-            landSettlers
-        }
+    private fun numSettlers(civ: Civilization): Int = turnCache(civ).run {
+        if (settlers < 0) settlers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.SETTLE, includeBeingTrained = true, includeWater = true)
+        settlers
     }
 
     /** The yields of CvCityStrategyAI::PrecalcYieldStats, in the original's YieldTypes order, with their define of the expected yield per citizen */
@@ -154,32 +152,6 @@ object CityStrategyAi {
         return experience
     }
 
-    private val removableFeatures = WeakHashMap<AiRuleset, Set<String>>()
-
-    /** CvCity::IsFeatureSurrounded (DoUpdateFeatureSurrounded): at least half of the 25 places of the 5×5 square around the city - the
-     *  original counts the square, though only the 19 tiles within 2 can hold a feature - have a removable feature */
-    private fun isFeatureSurrounded(city: City, removable: Set<String>): Boolean {
-        var featured = 0
-        city.getCenterTile().forEachTileInDistance(2) { tile ->
-            if (tile.terrainFeatures.any { it in removable }) featured++
-        }
-        return featured >= 25 / 2
-    }
-
-    /** CvPlayer::countCitiesFeatureSurrounded (getCitiesNeedingTerrainImprovements), once per turn */
-    fun countCitiesFeatureSurrounded(civ: Civilization): Int = turnCache(civ).run {
-        if (featureSurrounded < 0) {
-            val ruleset = civ.gameInfo.ruleset
-            val removable = synchronized(removableFeatures) {
-                removableFeatures.getOrPut(ruleset.ai) {
-                    ruleset.terrains.keys.filterTo(HashSet()) { "${Constants.remove}$it" in ruleset.tileImprovements }
-                }
-            }
-            featureSurrounded = civ.cities.count { isFeatureSurrounded(it, removable) }
-        }
-        featureSurrounded
-    }
-
     /** Tiles within 2 of the city owned by its owner */
     private fun countOwnedTilesWithin2(city: City, predicate: (Tile) -> Boolean): Int {
         var count = 0
@@ -218,77 +190,110 @@ object CityStrategyAi {
     fun isLargeCity(city: City): Boolean =
         city.population.population >= city.civ.gameInfo.ruleset.ai.define(AiDefine.AI_CITYSTRATEGY_LARGE_CITY_POP_THRESHOLD)
 
-    /** CvEconomicAI::GetLastTurnWorkerDisbanded is set and the game turn is at most [turns] after it */
-    private fun workerDisbandedWithin(civ: Civilization, turns: Int): Boolean {
+    /** CvEconomicAI::GetLastTurnWorkerDisbanded is set and the game turn is at most NO_WORKER_AFTER_DISBAND_DURATION after it */
+    private fun workerDisbandedRecently(civ: Civilization): Boolean {
         val last = civ.ai.economic.lastTurnWorkerDisbanded
-        return last >= 0 && civ.gameInfo.turns - last <= turns
+        return last >= 0 && civ.gameInfo.turns - last <= NO_WORKER_AFTER_DISBAND_DURATION
     }
 
-    /** IsTestCityStrategy_NeedTileImprovers: false for 25 turns after a worker was scrapped (CvEconomicAI::DisbandExtraWorkers), before anything else */
+    /**
+     *  CvCity::UpdateTerrainImprovementNeed (Vox Populi), run at the start of the city's strategy turn ([CityAi.doTurn]): how many of the
+     *  city's workable tiles - the city tile itself excluded - a worker could improve. A land tile of the owner that is passable and no
+     *  city counts:
+     *  - once if it has no improvement and at least one build applies to it, twice if it also has a resource its owner can see. A build
+     *    applies when the tile takes that improvement (or removal) now: the owner has its tech and the improvement is not obsolete,
+     *    unique to another civilization or unbuildable. Like the original's build list this includes the Great Person improvements (they
+     *    have no tech, so any flat tile counts from the start), the removal of a feature, and the removal of a road or railroad;
+     *  - once if its improvement is pillaged;
+     *  - once if it has a road or railroad that is not the best the owner can build, or is pillaged.
+     *
+     *  Rules: the original's IsNoBuild (a trait that forbids a build: Vox Populi's Byzantine fort) has no counterpart in BNW's data; its
+     *  build prerequisites and obsolescence are the improvement's tech and "obsolete with" ([ImprovementBuildingProblem]). The original
+     *  does not test whether the tile is worked, nor the city's population.
+     */
+    fun terrainImprovementNeed(city: City): Int {
+        val civ = city.civ
+        val ruleset = civ.gameInfo.ruleset
+        val builds = ruleset.tileImprovements.values.filter { improvement ->
+            improvement.name != Constants.cancelImprovementOrder && improvement.name != Constants.repair
+                && TILE_INDEPENDENT_PROBLEMS.none { it.isRelevant(improvement, civ.state) }
+        }
+        val bestRoute = civ.tech.getBestRoadAvailable()
+        var need = 0
+        for (tile in city.tilesInRange) {
+            if (tile.isCityCenter() || tile.isWater || tile.getOwner() != civ || tile.isImpassible()) continue
+            if (tile.improvement == null) {
+                val context = GameContext(civ, tile = tile)
+                if (builds.none { tile.improvementFunctions.canBuildImprovement(it, context) }) continue
+                need++
+                if (civ.canSeeResource(tile.tileResource)) need++
+            } else if (tile.improvementIsPillaged) need++
+            else if (tile.roadStatus != RoadStatus.None && (tile.roadStatus != bestRoute || tile.roadIsPillaged)) need++
+        }
+        return need
+    }
+
+    /**
+     *  IsTestCityStrategy_NeedTileImprovers (Vox Populi): do we really need to train workers? False for 12 turns after a worker was
+     *  scrapped ([EconomicAi.disbandExtraWorkers]), then, with [needing] the cities with a [terrainImprovementNeed]:
+     *  - a city-state with at least one worker per needing city: false (the original's MOD_MINOR_CIV_EXTENDED branch, which rebuilds a lost
+     *    worker after half the training-percent turns, is not in BNW's rules);
+     *  - a major civilization with more workers than needing cities + 1, or one that is losing all wars: false;
+     *  - with at most 4 needing cities and the ERADICATE_BARBARIANS military strategy, 6 workers or more for each military unit: false;
+     *  - true after the desperate turn ([AiDefine.AI_CITYSTRATEGY_NEED_TILE_IMPROVERS_DESPERATE_TURN], scaled by the speed's training
+     *    percent) when the workers x [weightThreshold] / 100 are no more than the needing cities, or none.
+     *  Workers count the ones being trained. The military units are CvPlayer::getNumMilitaryUnits' (units with military support: [com.unciv.logic.map.mapunit.MapUnit.isMilitary]).
+     */
     fun needTileImprovers(city: City, weightThreshold: Int): Boolean {
         val civ = city.civ
-        if (workerDisbandedWithin(civ, NEED_TILE_IMPROVERS_LOCKOUT_TURNS)) return false
-        val numCities = civ.cities.size
+        val needing = civ.ai.citiesNeedingTerrainImprovements
+        if (workerDisbandedRecently(civ)) return false
         val numWorkers = numLandWorkers(civ)
         if (civ.isCityState) {
-            if (numWorkers >= numCities) return false
+            if (numWorkers >= needing) return false
         } else {
-            if (numWorkers >= maxOf(1, numCities * 3 / 4)) return false
+            if (numWorkers > needing + 1) return false
             if (WarStateAi.stateAllWars(civ) == StateAllWars.Losing) return false
         }
-        if (numCities <= 1 && civ.ai.isMilitaryStrategyActive("MILITARYAISTRATEGY_ERADICATE_BARBARIANS")) return false
+        if (needing <= 4 && civ.ai.isMilitaryStrategyActive("MILITARYAISTRATEGY_ERADICATE_BARBARIANS")
+            && numWorkers * 6 >= civ.units.getCivUnits().count { it.isMilitary() }) return false
         val moddedNumWorkers = numWorkers * weightThreshold / 100
-        val moddedNumCities = numCities + countCitiesFeatureSurrounded(civ)
-        if (moddedNumWorkers <= moddedNumCities || moddedNumWorkers == 0) {
+        if (moddedNumWorkers <= needing || moddedNumWorkers == 0) {
             val desperateTurn = civ.gameInfo.ruleset.ai.define(AiDefine.AI_CITYSTRATEGY_NEED_TILE_IMPROVERS_DESPERATE_TURN) * trainPercent(civ) / 100
             if (civ.gameInfo.turns > desperateTurn) return true
         }
         return false
     }
 
-    fun wantTileImprovers(city: City, perCityThreshold: Int): Boolean {
+    /**
+     *  IsTestCityStrategy_WantTileImprovers (Vox Populi): the owner's workers (those being trained included) are fewer than the
+     *  cities needing improvements x [weightThreshold] (1 in Vox Populi: a worker per city), the city has at least
+     *  [AiDefine.AI_CITYSTRATEGY_WANT_TILE_IMPROVERS_MINIMUM_SIZE] citizens, and it is not locked out for 12 turns after a scrapped
+     *  worker, or while the owner is losing all wars. No workers at all: always.
+     */
+    fun wantTileImprovers(city: City, weightThreshold: Int): Boolean {
         val civ = city.civ
-        if (workerDisbandedWithin(civ, WANT_TILE_IMPROVERS_LOCKOUT_TURNS)) return false
+        if (workerDisbandedRecently(civ)) return false
         if (!civ.isCityState && WarStateAi.stateAllWars(civ) == StateAllWars.Losing) return false
-        val numWorkers = numLandWorkers(civ)
-        if (numWorkers >= civ.cities.size * 3 / 2 + 1) return false
-        if (city.population.population < civ.gameInfo.ruleset.ai.define(AiDefine.AI_CITYSTRATEGY_WANT_TILE_IMPROVERS_MINIMUM_SIZE)) return false
-        if (numWorkers < 1) return true
-
-        var numResources = 0
-        var numImproved = 0
-        for (tile in city.tilesInRange) {
-            if (tile.getOwner() != civ || tile.isWater) continue
-            val resource = tile.tileResource ?: continue
-            if (!civ.canSeeResource(resource)) continue
-            // the first improvement that connects the resource
-            val improvement = resource.getImprovements().firstNotNullOfOrNull { civ.gameInfo.ruleset.tileImprovements[it] } ?: continue
-            if (!tile.improvementFunctions.canBuildImprovement(improvement, civ.state)) {
-                if (tile.improvement == improvement.name) {
-                    numImproved++
-                    numResources++
-                }
-                continue
-            }
-            numResources++
-        }
-        val manyUnimproved = 2 * (numResources - numImproved) > numResources
-        var multiplier = civ.cities.size + countCitiesFeatureSurrounded(civ)
-        if (manyUnimproved) multiplier += 1
-        multiplier += numSettlers(civ, includeWater = false)
-        if (numWorkers * 100 < perCityThreshold * multiplier)
-            return civ.stats.statsForNextTurn.gold > -10
-        return false
+        val numBuilders = numLandWorkers(civ)
+        if (numBuilders <= 0) return true
+        return city.population.population >= civ.gameInfo.ruleset.ai.define(AiDefine.AI_CITYSTRATEGY_WANT_TILE_IMPROVERS_MINIMUM_SIZE)
+            && numBuilders < civ.ai.citiesNeedingTerrainImprovements * weightThreshold
     }
 
+    /**
+     *  IsTestCityStrategy_EnoughTileImprovers (Vox Populi): always for 12 turns after a worker was scrapped; never without workers or
+     *  while the city needs workers (NEED_TILE_IMPROVERS); a city-state with a worker per city has enough; else the workers x 100 reach
+     *  [perCityThreshold] (125 plus the TileImprovement flavor modifier) per city needing improvements.
+     */
     fun enoughTileImprovers(city: City, perCityThreshold: Int): Boolean {
         val civ = city.civ
-        if (workerDisbandedWithin(civ, ENOUGH_TILE_IMPROVERS_LOCKOUT_TURNS)) return true
-        if (city.ai.isCityStrategyActive(NEED_TILE_IMPROVERS)) return false
+        if (workerDisbandedRecently(civ)) return true
         val numBuilders = numLandWorkers(civ)
+        if (numBuilders <= 0) return false
+        if (city.ai.isCityStrategyActive(NEED_TILE_IMPROVERS)) return false
         if (civ.isCityState && numBuilders >= civ.cities.size) return true
-        val moddedNumCities = civ.cities.size + countCitiesFeatureSurrounded(civ)
-        return numBuilders * 100 >= perCityThreshold * moddedNumCities
+        return numBuilders * 100 >= perCityThreshold * civ.ai.citiesNeedingTerrainImprovements
     }
 
     /** At least the threshold percent of the city's owned workable tiles are water that is not a lake */
@@ -315,7 +320,7 @@ object CityStrategyAi {
         if (!city.isCapital()) return false
         val civ = city.civ
         if (civ.isCityState) return false
-        val citiesPlusSettlers = civ.cities.size + numSettlers(civ, includeWater = true)
+        val citiesPlusSettlers = civ.cities.size + numSettlers(civ)
         if (citiesPlusSettlers >= 3) return false
         val turn = civ.gameInfo.turns
         if (turn > 50 && city.ai.isCityStrategyActive(CAPITAL_UNDER_THREAT)) return false
@@ -439,9 +444,7 @@ object CityStrategyAi {
         tests.registerCity("AICITYSTRATEGY_LARGE_CITY") { city, _ -> isLargeCity(city) }
         tests.registerCity("AICITYSTRATEGY_LANDLOCKED") { city, _ -> !WaterBodies.isCoastal(city) }
         tests.registerCity(NEED_TILE_IMPROVERS) { city, def -> needTileImprovers(city, def.weightThreshold) }
-        tests.registerCity("AICITYSTRATEGY_WANT_TILE_IMPROVERS") { city, def ->
-            wantTileImprovers(city, def.weightThreshold + city.civ.ai.weightThresholdModifier(def))
-        }
+        tests.registerCity("AICITYSTRATEGY_WANT_TILE_IMPROVERS") { city, def -> wantTileImprovers(city, def.weightThreshold) } // no flavor modifier, as in the original
         tests.registerCity("AICITYSTRATEGY_ENOUGH_TILE_IMPROVERS") { city, def ->
             enoughTileImprovers(city, def.weightThreshold + city.civ.ai.weightThresholdModifier(def))
         }

@@ -316,7 +316,7 @@ object UnitProductionAi {
             if (zone != null && zone.dominance != TacticalDominance.Friendly) return ProductionSanityAi.SR_STRATEGY
             if (city.getCenterTile().getUnits().any { it.civ == civ && UnitAiTypes.current(it) == UnitAiType.WORKER }) return ProductionSanityAi.SR_USELESS
             val numBuilders = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.WORKER, includeBeingTrained = true)
-            val missingBuilders = CityStrategyAi.countCitiesFeatureSurrounded(civ) + 1 - numBuilders // one for roads
+            val missingBuilders = civ.ai.citiesNeedingTerrainImprovements + 1 - numBuilders // one for roads
             val scale = if (missingBuilders > 2) 3 else 1
             if (city.ai.isCityStrategyActive("AICITYSTRATEGY_ENOUGH_TILE_IMPROVERS")) return ProductionSanityAi.SR_USELESS
             if (city.ai.isCityStrategyActive("AICITYSTRATEGY_WANT_TILE_IMPROVERS")) bonus += 200 * missingBuilders * scale

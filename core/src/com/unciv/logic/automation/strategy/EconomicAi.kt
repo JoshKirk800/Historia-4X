@@ -243,17 +243,25 @@ class EconomicAi : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  CvEconomicAI::DisbandExtraWorkers: when losing money (LOSING_MONEY) or paying more than 4 gold per unit, scraps one land worker if
-     *  there are more than one, more than one per four cities, at least two thirds of the improvable tiles are improved, and more workers
-     *  than one per five unimproved tiles (rounded up) plus one per unconnected city on the capital's landmass.
+     *  CvEconomicAI::DisbandExtraWorkers (Vox Populi), every turn of an AI player: scraps one land worker when
+     *  - there is more than one (those being trained included), and the civilization has founded 4 cities or it is turn 101;
+     *  - the workers are more than a quarter per city (whole percent, at least one city);
+     *  - more than 66% (whole percent) of the owned improvable tiles ([EconomicAiRatios.isImprovablePlot]: land, passable, no city) have an
+     *    unpillaged improvement;
+     *  - more workers than cities stand idle in a city.
+     *  The worker to go is [findWorkerToScrap]; only a scrapped worker sets [lastTurnWorkerDisbanded], which locks out the tile improver
+     *  strategies for 12 turns. Rules: the original's CvUnit::canScrap (the unit can move and is not under fire, MOD_BALANCE_VP's rule
+     *  against disbanding to deny a kill) is not asked.
+     *
+     *  Replaces BNW's version, which ran only when losing money or paying more than 4 gold a unit, and kept a worker for every five
+     *  unimproved tiles and one for every city not connected to the capital.
      */
     fun disbandExtraWorkers(civ: Civilization) {
-        val inDeficit = civ.ai.isEconomicStrategyActive(LOSING_MONEY)
-        if (!inDeficit && civ.stats.getUnitMaintenance() / maxOf(1, civ.units.getCivUnitsSize()) <= 4) return
-
         val numWorkers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.WORKER, includeBeingTrained = true, includeWater = false)
+        if (numWorkers <= 1) return
+        if (civ.citiesCreated < 4 && civ.gameInfo.turns <= 100) return
         val numCities = civ.cities.size
-        if (numWorkers / numCities.toDouble() <= 0.25 || numWorkers == 1) return
+        if (100 * numWorkers / maxOf(1, numCities) <= WORST_CASE_WORKERS_PER_CITY_PERCENT) return
 
         var valid = 0
         var improved = 0
@@ -262,27 +270,34 @@ class EconomicAi : IsPartOfGameInfoSerialization {
             valid++
             if (tile.improvement != null && !tile.improvementIsPillaged) improved++
         }
-        if (valid <= 0) return
-        if (improved / valid.toDouble() < 2 / 3.0) return
+        if (valid == 0 || 100 * improved / valid <= IMPROVED_PLOTS_PERCENT_TO_DISBAND) return
 
-        val unimproved = valid - improved
-        var minWorkers = (unimproved + 4) / 5
-        val capital = civ.getCapital(firstCityIfNoCapital = false) ?: return
-        val capitalContinent = capital.getCenterTile().getContinent()
-        for (city in civ.cities)
-            if (city != capital && city.getCenterTile().getContinent() == capitalContinent && !city.isConnectedToCapital()) minWorkers++
-        if (numWorkers <= minWorkers) return
-
-        lastTurnWorkerDisbanded = civ.gameInfo.turns
-        // CvEconomicAI::FindWorkerToScrap: the first land worker that is not a combat unit
         val rules = civ.gameInfo.ruleset.ai
-        val worker = civ.units.getCivUnits().firstOrNull {
-            it.baseUnit.isLandUnit && it.isCivilian() && UnitAiTypes.defaultOf(it.baseUnit, rules) == UnitAiType.WORKER
-        } ?: return
+        val workers = civ.units.getCivUnits().filter { isLandWorker(it, rules) }.toList()
+        if (workers.count { it.getTile().isCityCenter() } <= numCities) return
+
+        val worker = findWorkerToScrap(workers) ?: return
+        lastTurnWorkerDisbanded = civ.gameInfo.turns
         worker.disband()
     }
 
+    /** A land unit that is no combat unit with the worker unit AI (the original compares the unit type with the civilization's worker) */
+    private fun isLandWorker(unit: MapUnit, rules: AiRuleset): Boolean =
+        unit.baseUnit.isLandUnit && unit.isCivilian() && UnitAiTypes.defaultOf(unit.baseUnit, rules) == UnitAiType.WORKER
+
+    /**
+     *  CvEconomicAI::FindWorkerToScrap: the worker with the smallest positive work rate bonus (CvUnit::GetWorkRateMod), else the first
+     *  scrappable worker. Rules: no unit has a work rate modifier here (a promotion or trait of Vox Populi), so it is the first one in the
+     *  civilization's unit list.
+     */
+    private fun findWorkerToScrap(workers: List<MapUnit>): MapUnit? = workers.firstOrNull()
+
     companion object {
+        /** CvEconomicAI::DisbandExtraWorkers iWorstCaseWorkerPerCityRatio: one worker for four cities */
+        private const val WORST_CASE_WORKERS_PER_CITY_PERCENT = 25
+        /** CvEconomicAI::DisbandExtraWorkers: the share of improved tiles up to which no worker is scrapped */
+        private const val IMPROVED_PLOTS_PERCENT_TO_DISBAND = 66
+
         const val LOSING_MONEY = "ECONOMICAISTRATEGY_LOSING_MONEY"
 
         /** EconomicAIHelpers::IsPotentialLandExplorer: a land combat unit, not a ranged one with at most 2 moves */

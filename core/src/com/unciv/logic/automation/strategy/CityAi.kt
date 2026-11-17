@@ -29,6 +29,12 @@ class CityAi : IsPartOfGameInfoSerialization {
      */
     var mostDeficientYield: Stat? = null
     var mostAbundantYield: Stat? = null
+    /**
+     *  CvCity::m_iTerrainImprovementNeed, as of the last [CityStrategyAi.terrainImprovementNeed] (the start of the city's strategy turn):
+     *  how many of the city's owned tiles a worker could improve, resource tiles twice. Read through the owner's count of cities with a
+     *  need ([CivAi.citiesNeedingTerrainImprovements]).
+     */
+    var terrainImprovementNeed = 0
 
     @Transient lateinit var city: City
     @Transient private var flavorVector: IntArray? = null
@@ -43,6 +49,7 @@ class CityAi : IsPartOfGameInfoSerialization {
         toReturn.defaultSpecializationAssigned = defaultSpecializationAssigned
         toReturn.mostDeficientYield = mostDeficientYield
         toReturn.mostAbundantYield = mostAbundantYield
+        toReturn.terrainImprovementNeed = terrainImprovementNeed
         return toReturn
     }
 
@@ -59,6 +66,7 @@ class CityAi : IsPartOfGameInfoSerialization {
         defaultSpecializationAssigned = false
         mostDeficientYield = null
         mostAbundantYield = null
+        terrainImprovementNeed = 0
         flavorVector = null
     }
 
@@ -103,9 +111,14 @@ class CityAi : IsPartOfGameInfoSerialization {
         flavorVector = null
     }
 
-    /** CvCityStrategyAI::DoTurn: [CityStrategyAi.precalcYieldStats], then the city strategy loop (see [runStrategyLoop]; city strategies have no FirstTurnExecuted) */
+    /**
+     *  What CvCity::DoTurn does for the city AI: [CityStrategyAi.terrainImprovementNeed] (UpdateTerrainImprovementNeed, after the citizens
+     *  and before the strategies), then CvCityStrategyAI::DoTurn: [CityStrategyAi.precalcYieldStats], then the city strategy loop (see
+     *  [runStrategyLoop]; city strategies have no FirstTurnExecuted)
+     */
     fun doTurn() {
         val civ = city.civ
+        terrainImprovementNeed = CityStrategyAi.terrainImprovementNeed(city)
         CityStrategyAi.precalcYieldStats(city)
         if (runStrategyLoop(civ.gameInfo.ruleset.ai.cityStrategies, cityStrategies, civ, checkFirstTurn = false) { StrategyTests.test(city, it) })
             flavorVector = null

@@ -43,7 +43,9 @@ object EconomicMilitaryStrategyTests {
         tests.register("ECONOMICAISTRATEGY_ENOUGH_RECON") { civ, _ -> civ.ai.economic.reconState == ReconState.Enough }
         tests.register(REALLY_NEED_RECON_SEA) { civ, _ -> reallyNeedReconSea(civ) }
         tests.register(NEED_RECON_SEA) { civ, _ -> needReconSea(civ) }
-        tests.register("ECONOMICAISTRATEGY_ENOUGH_RECON_SEA") { civ, _ -> civ.ai.economic.navalReconState == ReconState.Enough }
+        // IsTestStrategy_EnoughReconSea (Vox Populi): always while LOSING_WARS
+        tests.register("ECONOMICAISTRATEGY_ENOUGH_RECON_SEA") { civ, _ ->
+            civ.ai.isMilitaryStrategyActive(LOSING_WARS) || civ.ai.economic.navalReconState == ReconState.Enough }
         tests.register(EARLY_EXPANSION) { civ, _ -> earlyExpansion(civ) }
         tests.register("ECONOMICAISTRATEGY_ENOUGH_EXPANSION") { civ, def -> enoughExpansion(civ, def) }
         tests.register("ECONOMICAISTRATEGY_NEED_HAPPINESS") { civ, def -> needHappiness(civ, def) }

@@ -14,9 +14,8 @@ import kotlin.math.max
  *
  *  Not here yet, with the reason: the weights (the flavor weight's sqrt(10 x weight), the bonuses of the land and sea need, war types,
  *  resources and unit types; with VP's building weights, which they are balanced against), the civilian refusals (lines 905 on: settlers,
- *  archaeologists, workers, trade units, great people), the purchase and free-unit callers, the explorers' supply limit (it needs the
- *  explorers VP's CvEconomicAI::DoReconState wants, not ported: with none, no explorer would ever be trained), the Aluminum kept for the
- *  spaceship (GetNumAluminumStillNeededForSpaceship not ported).
+ *  archaeologists, workers, trade units, great people), the purchase and free-unit callers, the Aluminum kept for the spaceship
+ *  (GetNumAluminumStillNeededForSpaceship not ported).
  */
 object UnitProductionAi {
 
@@ -31,7 +30,8 @@ object UnitProductionAi {
      *    a garrison;
      *  - unit supply: no land combat unit (explorers aside) once the land combat units, ours and those our other cities are training,
      *    less the explorers, reach the recommended army ([MilitaryAi.recommendedLandArmySize]); no sea combat unit once they reach the
-     *    recommended navy;
+ *    recommended navy; no explorer (default unit AI EXPLORE) once the explorers, those in training included, reach the recommended
+ *    explorers ([MilitaryAi.recommendedExplorers]);
      *  - city-states: no combat unit once there are more than max(4, (era + 3) x cities), no ship at the recommended navy, no land unit
      *    at the recommended army;
      *  - no land combat unit, outside an operation, in a city on a landmass of at most 3 tiles that a land unit garrisons;
@@ -76,6 +76,7 @@ object UnitProductionAi {
         if (combat) {
             if (unit.isLandUnit && unitAi != UnitAiType.EXPLORE && numLandUnits >= military.recommendedLandArmySize) return true
             if (unit.isWaterUnit && numSeaUnits >= military.recommendedNavySize) return true
+            if (unitAi == UnitAiType.EXPLORE && numExplorers >= military.recommendedExplorers) return true
         }
 
         if (civ.isCityState && combat) {

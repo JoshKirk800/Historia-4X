@@ -9751,7 +9751,8 @@
         "MinorCivDisputePercent": 50,
         "HumanOpinionChange": -10,
         "AIOpinionChange": 0,
-        "PolicyChoiceCutoffThreshold": 90
+        "PolicyChoiceCutoffThreshold": 90,
+        "CityProductionChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9797,7 +9798,8 @@
         "MinorCivDisputePercent": 60,
         "HumanOpinionChange": -5,
         "AIOpinionChange": 0,
-        "PolicyChoiceCutoffThreshold": 90
+        "PolicyChoiceCutoffThreshold": 90,
+        "CityProductionChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9843,7 +9845,8 @@
         "MinorCivDisputePercent": 70,
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
-        "PolicyChoiceCutoffThreshold": 90
+        "PolicyChoiceCutoffThreshold": 90,
+        "CityProductionChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9889,7 +9892,8 @@
         "MinorCivDisputePercent": 80,
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
-        "PolicyChoiceCutoffThreshold": 90
+        "PolicyChoiceCutoffThreshold": 90,
+        "CityProductionChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9935,7 +9939,8 @@
         "MinorCivDisputePercent": 90,
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
-        "PolicyChoiceCutoffThreshold": 90
+        "PolicyChoiceCutoffThreshold": 90,
+        "CityProductionChoiceCutoffThreshold": 90
       }
     },
     {
@@ -9981,7 +9986,8 @@
         "MinorCivDisputePercent": 100,
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
-        "PolicyChoiceCutoffThreshold": 90
+        "PolicyChoiceCutoffThreshold": 90,
+        "CityProductionChoiceCutoffThreshold": 90
       }
     },
     {
@@ -10027,7 +10033,8 @@
         "MinorCivDisputePercent": 115,
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
-        "PolicyChoiceCutoffThreshold": 90
+        "PolicyChoiceCutoffThreshold": 90,
+        "CityProductionChoiceCutoffThreshold": 90
       }
     },
     {
@@ -10073,7 +10080,8 @@
         "MinorCivDisputePercent": 125,
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
-        "PolicyChoiceCutoffThreshold": 90
+        "PolicyChoiceCutoffThreshold": 90,
+        "CityProductionChoiceCutoffThreshold": 90
       }
     },
     {
@@ -10119,7 +10127,8 @@
         "MinorCivDisputePercent": 100,
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
-        "PolicyChoiceCutoffThreshold": 90
+        "PolicyChoiceCutoffThreshold": 90,
+        "CityProductionChoiceCutoffThreshold": 90
       }
     }
   ],

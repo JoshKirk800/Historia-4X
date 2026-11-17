@@ -167,6 +167,27 @@ class EconomicMilitaryAiTests {
     }
 
     @Test
+    fun `a civilization with no explorer and room for fewer than four units is still recommended one`() {
+        val civ = neutralCiv()
+        val capital = game.addCity(civ, tile(0, 0))
+        addGoldIncome(capital, -2000f)
+        assertEquals(2, EconomicAi.softSupplyCap(civ))
+        civ.ai.economic.explorersNeeded = 1
+        val military = civ.ai.military
+        military.updateBaseData(civ)
+        assertEquals(1, military.recommendedExplorers)
+        // a Scout in the field is the explorer: the quarter of the cap rounded down is 0 again
+        game.addUnit("Scout", civ, tile(1, 0))
+        military.updateBaseData(civ)
+        assertEquals(0, military.recommendedExplorers)
+        // and none is recommended where none is wanted
+        civ.units.getCivUnits().toList().forEach { it.destroy() }
+        civ.ai.economic.explorersNeeded = 0
+        military.updateBaseData(civ)
+        assertEquals(0, military.recommendedExplorers)
+    }
+
+    @Test
     fun `the affordable units are split by the land and naval defense weights after the explorers`() {
         val civ = neutralCiv()
         civ.ai.setPersonalityFlavor(Flavor.Naval, 10)

@@ -6,6 +6,7 @@ import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.logic.automation.strategy.ProductionAi
 import com.unciv.logic.automation.strategy.PurchaseType
 import com.unciv.logic.automation.strategy.UnitAiType
+import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.models.ruleset.Building
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -122,10 +123,11 @@ object UseGoldAutomation {
         val currentCost = civ.cities.minOfOrNull { baseTileCost(it) } ?: return
         var bestScore = minimumPlotBuyScore(civ, currentCost) ?: return
 
+        val waterAreas = waterAreasOf(civ)
         var bestCity: City? = null
         var bestTile: Tile? = null
         for (city in civ.cities) {
-            val (score, tile) = buyPlotScore(city) ?: continue
+            val (score, tile) = buyPlotScore(city, waterAreas) ?: continue
             if (score > bestScore) {
                 bestCity = city
                 bestTile = tile
@@ -155,7 +157,7 @@ object UseGoldAutomation {
     }
 
     /** CvCity::GetBuyPlotScore: the best tile the city can buy and its [individualPlotScore]; null if it can buy none (CanBuyAnyPlot) */
-    fun buyPlotScore(city: City): Pair<Int, Tile>? {
+    fun buyPlotScore(city: City, waterAreas: Lazy<PlotShape.WaterAreas> = waterAreasOf(city.civ)): Pair<Int, Tile>? {
         var bestScore = -1
         var bestTile: Tile? = null
         var scoring: PlotScoring? = null
@@ -164,7 +166,7 @@ object UseGoldAutomation {
             if (!city.expansion.canBuyTile(tile)) continue
             // CvCity::CanBuyPlot without bIgnoreCost: only a tile the civilization can pay for counts
             if (likeCivV && city.expansion.getGoldCostOfTile(tile) > city.civ.gold) continue
-            val plotScoring = scoring ?: PlotScoring(city).also { scoring = it }
+            val plotScoring = scoring ?: PlotScoring(city, waterAreas).also { scoring = it }
             val score = plotScoring.score(tile)
             if (score > bestScore) {
                 bestScore = score
@@ -174,20 +176,30 @@ object UseGoldAutomation {
         return bestTile?.let { bestScore to it }
     }
 
+    /** The water areas of the map, computed when a plot first needs them */
+    private fun waterAreasOf(civ: Civilization) = lazy { PlotShape.WaterAreas(civ.gameInfo.tileMap) }
+
     /**
-     *  CvCity::GetIndividualPlotScore: a revealed strategic resource AI_PLOT_VALUE_STRATEGIC_RESOURCE (80, Vox Populi's; BNW's is 50), a luxury 40
-     *  (x2 if the civilization has none of it); each yield x10 (x20 if it is the city specialization's yield), x5 if it is the city's most
-     *  deficient yield (CvCityStrategyAI::GetMostDeficientYield); AI_PLOT_VALUE_STRATEGIC_RESOURCE more for a plot on a route the builders plan
-     *  ([com.unciv.logic.automation.unit.PlannedRoutes.bestRouteTypeAndValue], Vox Populi's GetBestRouteTypeAndValue term); for every major
-     *  we have a land dispute with whose nearest city on the tile's landmass is within 10 tiles, (10 - distance) x 6 / 4 / 2
-     *  (fierce / strong / weak); all x base tile cost / this tile's cost. The rest of Vox Populi's version is not ported: its x3 on the resource
-     *  values (240 strategic, 120 luxury), the choke point and water area separator terms (AI_PLOT_VALUE_STRATEGIC_RESOURCE each), the trait
-     *  yield of a purchased terrain and the manifest destiny multipliers of a plot owned by a dispute partner.
+     *  CvCity::GetIndividualPlotScore (Vox Populi): a revealed strategic resource 3 x AI_PLOT_VALUE_STRATEGIC_RESOURCE (3 x 80), a luxury
+     *  3 x AI_PLOT_VALUE_LUXURY_RESOURCE (3 x 40, x2 if the civilization has none of it); each yield x10 (x20 if it is the city specialization's
+     *  yield), x5 if it is the city's most deficient yield (CvCityStrategyAI::GetMostDeficientYield); AI_PLOT_VALUE_STRATEGIC_RESOURCE more for a
+     *  plot on a route the builders plan ([com.unciv.logic.automation.unit.PlannedRoutes.bestRouteTypeAndValue]), for a choke point
+     *  ([PlotShape.isChokePoint]) and for a water area separator ([PlotShape.isWaterAreaSeparator]); for every major we have a land dispute
+     *  with whose nearest city on the tile's landmass is within 10 tiles, (10 - distance) x 6 / 4 / 2 (fierce / strong / weak). Then x the base
+     *  tile cost; +50% for each of the plot's neighbours that is ours if a foreign great general stands on it within 3 tiles of the city;
+     *  x2 for a natural wonder next to the land of someone else; divided by this tile's cost.
+     *
+     *  BNW's version had none of the route, choke point, separator, citadel and wonder terms, and 1 x the resource values (50, 40).
+     *  Inputs of Vox Populi's version that the BNW rules lack, counted as none: the yield a trait grants for buying a terrain
+     *  (Trait_YieldFromTilePurchaseTerrainType: each yield adds that x the yield multiplier / 10) and the trait that lets a civilization buy
+     *  tiles others own (Traits.BuyOwnedTiles, America in Vox Populi: x8 / x4 / x2 for a dispute partner's tile, and the value must be positive).
+     *  The original's impassable terrain test per team (a team that crosses mountains) is the plain terrain test here.
      */
-    fun individualPlotScore(city: City, tile: Tile): Int = PlotScoring(city).score(tile)
+    fun individualPlotScore(city: City, tile: Tile, waterAreas: Lazy<PlotShape.WaterAreas> = waterAreasOf(city.civ)): Int =
+        PlotScoring(city, waterAreas).score(tile)
 
     /** What [individualPlotScore] needs of a city, computed once for all its tiles */
-    private class PlotScoring(val city: City) {
+    private class PlotScoring(val city: City, val waterAreas: Lazy<PlotShape.WaterAreas>) {
         val civ = city.civ
         val rules = civ.gameInfo.ruleset.ai
         val baseCost = baseTileCost(city)
@@ -220,9 +232,9 @@ object UseGoldAutomation {
             val resource = tile.tileResource
             if (tile.resource != null && civ.canSeeResource(resource)) {
                 when (resource.resourceType) {
-                    ResourceType.Strategic -> value += rules.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE)
+                    ResourceType.Strategic -> value += rules.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE) * 3
                     ResourceType.Luxury -> {
-                        var luxuryValue = rules.define(AiDefine.AI_PLOT_VALUE_LUXURY_RESOURCE)
+                        var luxuryValue = rules.define(AiDefine.AI_PLOT_VALUE_LUXURY_RESOURCE) * 3
                         if (civ.getResourceAmount(resource) == 0) luxuryValue *= 2
                         value += luxuryValue
                     }
@@ -232,8 +244,11 @@ object UseGoldAutomation {
             val natureYields = tile.stats.getTileStats(null, civ)
             for ((index, stat) in YIELDS.withIndex()) value += natureYields[stat].toInt() * yieldMultipliers[index]
 
-            // CvCity::GetIndividualPlotScore (Vox Populi): a plot on a route the builders plan adds AI_PLOT_VALUE_STRATEGIC_RESOURCE
-            if (plannedRoutes.bestRouteTypeAndValue(tile) != null) value += rules.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE)
+            // A route the builders plan, a choke point and a water area separator are each worth a strategic resource's base value
+            val strategicValue = rules.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE)
+            if (plannedRoutes.bestRouteTypeAndValue(tile) != null) value += strategicValue
+            if (PlotShape.isChokePoint(tile)) value += strategicValue
+            if (PlotShape.isWaterAreaSeparator(tile, waterAreas.value)) value += strategicValue
 
             for ((multiplier, cities) in disputes) {
                 var nearest = Int.MAX_VALUE
@@ -247,7 +262,17 @@ object UseGoldAutomation {
 
             val cost = city.expansion.getGoldCostOfTile(tile)
             if (cost == 0) return 0
-            return value * baseCost / cost
+            value *= baseCost
+
+            // Protect against citadels: a foreign great general within 3 tiles of the city, +50% for each neighbour of the plot that is ours
+            if (city.getCenterTile().aerialDistanceTo(tile) < 4 &&
+                tile.getUnits().any { it.civ != civ && UnitAiTypes.current(it) == UnitAiType.GENERAL }) {
+                val bonus = 50 * tile.neighbors.count { it.getOwner() == civ }
+                value += value * bonus / 100
+            }
+            // Try and snatch up natural wonders next to the land of someone else
+            if (tile.isNaturalWonder() && tile.neighbors.any { val owner = it.getOwner(); owner != null && owner != civ }) value *= 2
+            return value / cost
         }
     }
 

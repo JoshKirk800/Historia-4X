@@ -92,7 +92,7 @@ class ProductionChoiceTests {
     }
 
     /** A building no other one needs and that no strategy touches: the sanity is the normalised weight plus 200 for the era */
-    private fun plainBuilding() = game.createBuilding().apply { cost = 30; culture = 1f }
+    private fun plainBuilding() = game.createBuilding().apply { cost = 30 }
 
     @Test
     fun `the pick is a weighted roll among the choices within 90 percent of the best`() {

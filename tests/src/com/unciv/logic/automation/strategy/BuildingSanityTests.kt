@@ -40,13 +40,13 @@ class BuildingSanityTests {
 
     @Test
     fun `a plain building is worth its normalised weight plus 200 per era`() {
-        val building = game.createBuilding().apply { cost = 30; culture = 1f }
+        val building = game.createBuilding().apply { cost = 30 }
         assertEquals(ProductionSanityAi.normalise(1000) + 200, ProductionSanityAi.buildingSanity(city, building, 1000))
     }
 
     @Test
     fun `a tiny army takes 75 percent off the bonus so far, not off the era`() {
-        val building = game.createBuilding().apply { cost = 30; culture = 1f; happiness = 2f }
+        val building = game.createBuilding().apply { cost = 30; happiness = 2f }
         // no military unit (at most 3 per city): the 20 of two happiness points lose 75%
         assertEquals(ProductionSanityAi.normalise(1000) + 5 + 200, ProductionSanityAi.buildingSanity(city, building, 1000))
         addWarriors(4)
@@ -72,7 +72,7 @@ class BuildingSanityTests {
     fun `military experience counts the experience the city already has`() {
         addWarriors(4)
         val unique = "New [Military] units start with [15] XP [in this city]"
-        val plain = game.createBuilding().apply { cost = 30; culture = 1f }
+        val plain = game.createBuilding().apply { cost = 30 }
         val barracks = game.createBuilding(unique).apply { cost = 30 }
         val academy = game.createBuilding(unique).apply { cost = 30 }
         // the first one finds no experience in the city to count; the second counts the first one's 15 in each of the three domains

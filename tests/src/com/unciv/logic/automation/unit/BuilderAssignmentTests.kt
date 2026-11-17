@@ -74,7 +74,7 @@ class BuilderAssignmentTests {
         onlyPlots(1 to 0)
         val capital = game.addCity(civ, tile(0, 0))
         val near = game.addUnit("Worker", civ, tile(0, 0))
-        val far = game.addUnit("Worker", civ, tile(6, 0))
+        val far = game.addUnit("Worker", civ, tile(3, 0))  // two plots outside the city's land: still in its worker region
         val assignment = BuilderAssignment(civ, BuilderTaskingAi(civ))
         val picks = assignment.assign(listOf(far, near))
         assertEquals("the plot is taken once", 1, picks.size)
@@ -106,6 +106,11 @@ class BuilderAssignmentTests {
         // Hills cost two moves: a worker walks a plot a turn
         for (plot in game.tileMap.values) if (plot.position != HexCoord(0, 0) && plot.position != HexCoord(1, 0)) game.setTileTerrain(plot.position, "Hill")
         game.addCity(civ, tile(0, 0))
+        // At war no worker regions are planned (a builder this far from every city would first walk back to its region)
+        val enemy = game.addCiv()
+        game.addUnit("Warrior", enemy, tile(-9, 0))
+        civ.diplomacyFunctions.makeCivilizationsMeet(enemy)
+        civ.getDiplomacyManager(enemy)!!.declareWar()
         civ.viewableTiles = game.tileMap.values.toSet()
         val worker = game.addUnit("Worker", civ, tile(9, 0))
         civ.viewableTiles = game.tileMap.values.toSet()  // putting a unit on the map recomputes what the civilization sees

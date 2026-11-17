@@ -552,7 +552,7 @@ class PlannedRoutes(val civ: Civilization) {
      *  CvPlayer::IsPlotSafeForRoute: our plots, and with [includeAdjacent] the plots next to ours, the plots of city-states not at war with us, and
      *  with [includeAdjacent] the plots next to those.
      */
-    private fun isPlotSafeForRoute(tile: Tile, includeAdjacent: Boolean): Boolean {
+    fun isPlotSafeForRoute(tile: Tile, includeAdjacent: Boolean): Boolean {
         val owner = tile.getOwner()
         if (owner == civ) return true
         if (includeAdjacent && tile.neighbors.any { it.getOwner() == civ }) return true

@@ -526,7 +526,7 @@ no economic/military/city strategies, and item flavors derived from each object'
 | economicStrategies  | List   | `name`, `noMinorCivs`, `checkTriggerTurnCount`, `minimumNumTurnsExecuted`, `firstTurnExecuted`, `weightThreshold`, `techPrereq`, `techObsolete`, `advisor`, `advisorCounsel`, `advisorCounselImportance`, `playerFlavors`, `cityFlavors`, `personalityFlavorThresholdMods` |
 | militaryStrategies  | List   | As economic strategies, plus `onlyMinorCivs`, `updateCitySpecializations`                                              |
 | cityStrategies      | List   | As economic strategies without `firstTurnExecuted` and player/city flavors, plus `permanent` and `flavors`             |
-| citySpecializations | List   | `name`, `yieldType`, `subtype`, `isDefault`, `isWonder`, `mustBeCoastal`, `isOperationUnitProvider`, `flavors`, `targetYields` |
+| citySpecializations | List   | `name`, `yieldType`, `subtype`, `isDefault`, `isWonder`, `mustBeCoastal`, `isOperationUnitProvider`, `flavors`                |
 | minorCivFlavors     | List   | `name` (a city-state nation), `flavors`                                                                                |
 | itemFlavors         | List   | `kind` (Building, Unit, Technology, Policy, Process, Project, Resource, Improvement), `name`, `flavors`                 |
 | unitAiTypes         | List   | `name` (a unit), `defaultUnitAi`, `unitAiTypes`                                                                        |

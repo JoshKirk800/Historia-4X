@@ -54,15 +54,16 @@ class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
         }
 
     /**
-     *  CvHomelandAI::ExecuteWorkerMove: a builder already building keeps building; otherwise it builds the best directive's build when it
-     *  stands on the plot, or moves there and ends its turn (it starts building on the next one). False if there is no directive.
+     *  CvHomelandAI::ExecuteWorkerMove: a builder already building keeps building; otherwise it builds the build of the directive of the best weight
+     *  for it ([BuilderTaskingAi.evaluateBuilder]) when it stands on the plot, or moves there and ends its turn (it starts building on the next one).
+     *  False if there is no directive.
      */
     fun executeWorkerMove(unit: MapUnit): Boolean {
         if (isBuilding(unit)) return true
-        val directive = builderTaskingAi.evaluateBuilder(unit) ?: return false
-        builderTaskingAi.claim(unit, directive.tile)
-        if (unit.getTile() == directive.tile) startBuild(unit, directive.build)
-        else unit.movement.tryHeadTowards(directive.tile)
+        val picked = builderTaskingAi.evaluateBuilder(unit) ?: return false
+        builderTaskingAi.claim(unit, picked.tile)
+        if (unit.getTile() == picked.tile) startBuild(unit, picked.build)
+        else unit.movement.tryHeadTowards(picked.tile)
         return true
     }
 

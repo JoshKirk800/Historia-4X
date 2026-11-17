@@ -3,108 +3,97 @@ package com.unciv.logic.automation.unit
 import com.unciv.Constants
 import com.unciv.UncivGame
 import com.unciv.logic.automation.Timers.Companion.timeThis
-import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.city.City
-import com.unciv.logic.city.CityFocus
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.MapPathing
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActionModifiers
+import com.unciv.logic.map.tile.ImprovementBuildingProblem
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.logic.map.tile.Tile
-import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.QuestName
 import com.unciv.models.ruleset.ai.AiDefine
-import com.unciv.models.ruleset.ai.CitySpecializationDef
-import com.unciv.models.ruleset.ai.Flavor
-import com.unciv.models.ruleset.ai.MinorCivApproach
-import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileImprovement
-import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
-import com.unciv.models.stats.Stat
-import com.unciv.models.stats.Stats
-import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.min
 
-/**
- *  One thing a builder can do on a tile (the original's CvBuildInfo). The original's builds remove the plot feature as part of
- *  the improvement (a Farm on a Forest); Unciv removes it with a separate "Remove <feature>" improvement queued before, kept in
- *  [removeFirst]. A route build has the road or railroad as [improvement]; a repair has [Constants.repair].
- */
-class Build(val improvement: TileImprovement, val removeFirst: TileImprovement? = null) {
-    val isRepair get() = improvement.name == Constants.repair
-}
-
-/** BuilderDirective: what a builder should do where; [weight] is the original's directive weight */
-class BuilderDirective(val type: Type, val build: Build, val tile: Tile, val moveTurnsAway: Int, val weight: Int) {
-    enum class Type { BuildImprovementOnResource, BuildImprovement, Repair, BuildRoute, Chop }
+/** A [BuilderDirective] picked for one builder: [weight] is the original's directive weight (CvHomelandAI::GetDirectiveWeight) of the build time and the move time */
+class WeightedDirective(val directive: BuilderDirective, val weight: Int, val buildTurns: Int, val moveTurns: Int) {
+    val tile get() = directive.tile
+    val build get() = directive.build!!
 }
 
 /**
- *  CvBuilderTaskingAI: which tile a builder (worker, or a Great Person that creates an improvement) of [civ] should improve, and how.
- *  One instance per civilization and turn (held by [WorkerAutomation]); [update] runs again when the number of cities changes mid-turn,
- *  as in the original.
+ *  CvBuilderTaskingAI (Vox Populi): what the builders (workers, and Great People that create an improvement) of [civ] should do. One
+ *  instance per civilization and turn (held by [WorkerAutomation]); the constructor plans the turn ([update]): the planned routes, then one civ-wide list
+ *  of [BuilderDirective]s sorted by priority score ([directives]), improvements scored by [PlotBuildScorer.scorePlotBuild].
+ *  A builder then takes the directive of the best weight for it ([evaluateBuilder], CvHomelandAI::GetWeightedDirectives for one unit).
+ *
+ *  What a turn plans, CvBuilderTaskingAI::GetImprovementDirectives for every plot of ours:
+ *  - KEEP_IMPROVEMENT: an unpillaged improvement is scored as it stands, so that a build replaces it only when it scores more.
+ *  - AddImprovingPlotsDirective: every improvement the plot takes. A tech one era ahead counts as possible (CvPlayer::canBuild with bTestEra:
+ *    a tech whose era is at most ours + 1), as a directive that cannot be built yet; if its feature has to go first and that can be removed
+ *    now, a REMOVE_FEATURE directive for the chop (a third of the score, the rest as potential). A build scoring 0 or less is dropped.
+ *  - AddScrubFalloutDirectives (20000, always first) and AddRepairImprovementDirective.
+ *  - FilterOnlyBestImprovements and UpdateGreatPersonDirectives ([BuilderDirectives]).
  *
  *  Unciv mapping and deviations:
- *  - Plot yields are Unciv tile stats (Food, Production, Gold, Science, Culture, Faith), truncated to integers; projected yields come from
- *    a copy of the tile with the build applied.
- *  - GetBuildCostWeight is always ×100: builds cost no gold in the original's XML.
- *  - DoesBuildHelpRush reads the city's current construction: an AI city's non-perpetual construction counts as rushed when it needs more
- *    than AI_ATTEMPT_RUSH_OVER_X_TURNS_TO_BUILD turns (×MINOR_CIV_PRODUCTION_PERCENT for city-states), which is when the original's
- *    CvCityStrategyAI::ChooseProduction sets the order's rush flag. Chop production is Unciv's (closest city within 5 tiles).
- *  - A road is free for the route value when someone else built it (Unciv has no per-plot trade route flag).
- *  - A non-human major connects its capital to a city-state's capital only while it wants to (CvDiplomacyAI::IsWantToRouteConnectToMinor,
- *    kept by [com.unciv.logic.automation.civilization.CityStateAi.contactMinorCivs]) and the city-state has a route quest for it; a city-state
- *    connects to non-human majors it gave a route quest, never to a human's capital.
+ *  - The original loops over all plots of the map; plots we do not own score -1 (no improvement of the rules takes land), so only the plots of our
+ *    cities are walked. The builds a unit can do are its own at selection time ([BuilderBuilds.canPerform]); the plan considers an improvement
+ *    possible when the civilization may build it (WrongCiv, Replaced, Unbuildable, Obsolete, conditionals) and, if it is built instantly, a unit of
+ *    ours creates it.
+ *  - A route directive keeps BNW's flagged route value as its score ([PlotBuildScore.score]); the original's route planning is not ported yet.
+ *  - No new plan when the city count changes mid-turn: a city founded after the plan is in the next turn's.
+ *  - Great Person improvements and the ones with "Will not be replaced by automated units" are never replaced, whoever plays (the original protects
+ *    them for a human's automated workers only). The Celts' forests next to their cities stay unimproved ([faithFromUnimprovedForest],
+ *    the original's code for it is not in Vox Populi). The human's options PLAYEROPTION_SAFE_AUTOMATION and PLAYEROPTION_LEAVE_FORESTS
+ *    (here: not removing vegetation, unless the build connects the resource) are kept for a human's automated workers.
+ *  - A not-yet-buildable improvement without a feature to chop gets no REMOVE_FEATURE directive. The original adds one without a build,
+ *    which nothing executes.
+ *  - A route is free for the route value when someone else built it (Unciv has no per-plot trade route flag). A non-human major connects its capital
+ *    to a city-state's capital only while it wants to (CvDiplomacyAI::IsWantToRouteConnectToMinor, kept by
+ *    [com.unciv.logic.automation.civilization.CityStateAi.contactMinorCivs]) and the city-state has a route quest for it; a city-state connects to
+ *    non-human majors it gave a route quest, never to a human's capital.
  *  - Builders keep their plot across turns as the original's MISSIONAI_BUILD does ([MapUnit.builderTarget]): another builder skips it until
  *    that one is sent elsewhere. A human's builder only counts while it is automated.
+ *  - Time and distance: the build time is [turnsLeft] (Unciv's work rate; a repair takes the shorter of repairing and rebuilding, as the original's
+ *    getBuildTime); the distance is the plot distance, the unit must be able to reach the plot.
  */
 class BuilderTaskingAi(val civ: Civilization) {
     private val ruleset = civ.gameInfo.ruleset
     private val rules = ruleset.ai
+    val scorer = PlotBuildScorer(civ)
 
     /** CvPlayerTraits::IsFaithFromUnimprovedForest (the Celts): a nation unique conditional on neighboring unimproved forests */
     private val faithFromUnimprovedForest = civ.nation.uniqueObjects.any { unique ->
         unique.modifiers.any { it.type == UniqueType.ConditionalNeighborTiles && "unimproved" in it.params[2] && FOREST in it.params[2] }
     }
-    /** CvPlayerTraits::IsEmbarkedAllWater (Polynesia): embarkation from the nation itself */
-    private val embarksFromStart = civ.nation.uniqueObjects.any { it.type == UniqueType.LandUnitEmbarkation }
 
-    /** CvBuilderTaskingAI::m_iNumCities */
-    private var numCities = -1
-    /** The builder AI scratch pad of CvPlot: route value and route per plot flagged this turn (UpdateRoutePlots) */
-    val routePlots = HashMap<Tile, RoutePlot>()
+    /** The builder AI scratch pad of CvPlot: route value and route per plot flagged this turn (UpdateRoutePlots), in the order they were flagged */
+    val routePlots = LinkedHashMap<Tile, RoutePlot>()
     /** m_aiNonTerritoryPlots: flagged plots outside our territory */
     private val nonTerritoryPlots = ArrayList<Tile>()
-    /** CvCityStrategyAI::UpdateBestYields of every city, this turn */
-    private val cityYields = HashMap<City, CityYieldTargets>()
-    /** Current yields per plot this turn (UpdateCurrentPlotYields) */
-    private val currentYieldCache = HashMap<Tile, IntArray>()
-    /** Projected yields per plot and build this turn (UpdateProjectedPlotYields) */
-    private val projectedYieldCache = HashMap<Pair<Tile, String>, IntArray>()
-    /** Copies of plots with their top feature removed, to test and project builds that need the feature gone */
-    private val withoutFeatureCache = HashMap<Tile, Tile>()
 
     /** Route value (CvPlot::GetBuilderAIScratchPadValue) and route (GetBuilderAIScratchPadRoute) of a flagged plot */
     class RoutePlot(var value: Int, var route: RoadStatus)
 
-    /** CvCityStrategyAI's yield deltas (best yield average - specialization target, ×100) and focus yield (index in [YIELDS], -1 = none) */
-    class CityYieldTargets(val deltaTimes100: IntArray, val focusYield: Int)
+    /** m_directives: this turn's directives, the highest priority score first, ties in the order they were added */
+    var directives: List<BuilderDirective> = emptyList()
+        private set
+    private var directivesByTile: Map<Tile, List<BuilderDirective>> = emptyMap()
+    /** IsBestDirectiveForPlot of every directive, computed when asked */
+    private val bestForPlot = HashMap<BuilderDirective, Boolean>()
 
     init {
         update()
     }
 
-    /** CvBuilderTaskingAI::Update: the route plots, and the best yields of every city */
-    fun update() {
-        numCities = civ.cities.size
-        cityYields.clear()
+    /** CvBuilderTaskingAI::Update: the route plots, then the directives */
+    fun update() = timeThis("AI.BuilderDirectives") {
         updateRoutePlots()
+        updateImprovementPlots()
     }
 
     /** CvPlayer::getBestRoute, except for a human who turned off automated road building */
@@ -223,39 +212,230 @@ class BuilderTaskingAi(val civ: Civilization) {
         }
     }
 
+    /**
+     *  CvBuilderTaskingAI::GetRouteDirectives with BNW's route values: a flagged plot without the best route gets a directive for the flagged
+     *  route (its repair when the road is pillaged) that scores the route value.
+     */
+    private fun routeDirectives(): List<BuilderDirective> {
+        val best = bestRoute()
+        if (best == RoadStatus.None) return emptyList()
+        val repair = ruleset.tileImprovements[Constants.repair]
+        val out = ArrayList<BuilderDirective>()
+        for ((tile, plot) in routePlots) {
+            if (!shouldAnyBuilderConsiderPlot(tile)) continue
+            if (tile.roadStatus == best && !tile.roadIsPillaged) continue
+            val score = PlotBuildScore(plot.value)
+            if (tile.roadIsPillaged) {
+                if (repair != null) out.add(BuilderDirective(BuilderDirective.Type.RepairRoute, Build(repair), tile, false, true, score))
+            } else {
+                val road = plot.route.improvement(ruleset) ?: continue
+                out.add(BuilderDirective(BuilderDirective.Type.BuildRoute, Build(road), tile, false, true, score))
+            }
+        }
+        return out
+    }
+
     //endregion
     //region Directives
 
+    /** CvBuilderTaskingAI::UpdateImprovementPlots: the route and improvement directives, stably sorted by priority score */
+    private fun updateImprovementPlots() {
+        directives = (routeDirectives() + improvementDirectives()).sortedByDescending { it.priorityScore }
+        directivesByTile = directives.groupBy { it.tile }
+        bestForPlot.clear()
+    }
+
+    /** CvBuilderTaskingAI::ShouldAnyBuilderConsiderPlot: seen, not a city, not another major's land; not the marker of a ruin's improvement either */
+    private fun shouldAnyBuilderConsiderPlot(tile: Tile): Boolean {
+        if (tile.isCityCenter() || tile.isMarkedForCreatesOneImprovement() || !tile.isExplored(civ)) return false
+        val owner = tile.getOwner()
+        return owner == null || owner == civ || owner.isCityState
+    }
+
     /**
-     *  CvBuilderTaskingAI::EvaluateBuilder for one directive: the best-weighted directive of [unit] over our plots and the flagged route
-     *  plots outside our territory, the first one in weight order that [unit] can reach. Null if there is none.
-     *  The "already building" bail-out of the original is the caller's ([WorkerAutomation.automateWorkerAction]).
+     *  CvBuilderTaskingAI::GetImprovementDirectives: for every plot of ours, a KEEP directive for the improvement it has, the directives that
+     *  improve it, scrub fallout and repair; then the filters. The builds are the possible ones ([possibleImprovements]).
      */
-    fun evaluateBuilder(unit: MapUnit): BuilderDirective? = timeThis("AI.EvaluateBuilder") {
-        if (civ.cities.size != numCities) update()
+    private fun improvementDirectives(): List<BuilderDirective> {
+        val possible = possibleImprovements()
+        if (possible.isEmpty()) return emptyList()
+        scorer.updateAllCityWorstPlots()
+
+        val out = ArrayList<BuilderDirective>()
+        for (city in civ.cities) for (tile in city.getTiles()) {
+            if (!shouldAnyBuilderConsiderPlot(tile)) continue
+
+            // Evaluate the improvement currently on the tile
+            val existing = tile.tileImprovement
+            if (existing != null && !tile.improvementIsPillaged) {
+                val score = scorer.scorePlotBuild(tile, existing, null)
+                out.add(BuilderDirective(BuilderDirective.Type.KeepImprovement, null, tile, false, true, score))
+            }
+
+            val owningCity = tile.getCity()
+            addImprovingPlotsDirective(out, tile, owningCity, possible)
+            addScrubFalloutDirectives(out, tile, owningCity)
+            addRepairImprovementDirective(out, tile, owningCity)
+        }
+        return BuilderDirectives.filterOnlyBestImprovements(BuilderDirectives.updateGreatPersonDirectives(out))
+    }
+
+    /**
+     *  The builds of GetImprovementDirectives' first loop (aPossibleBuilds): the improvements [civ] may build, a tech one era ahead included
+     *  (CvPlayer::canBuild(NULL, build, true)), and that a unit can build: the ones a worker builds, and a Great Person improvement only when one of
+     *  our units creates it instantly. Roads, removals, the repair and the cancel order are not improvements of a plot.
+     */
+    private fun possibleImprovements(): List<TileImprovement> {
+        val instant = civ.units.getCivUnits().filter { it.getMatchingUniques(UniqueType.ConstructImprovementInstantly).any() }
+            .flatMap { BuilderBuilds(it).instantImprovements.orEmpty() }.toSet()
+        val context = civ.state
+        // The original's workers have no build for the dig; our workers could build any improvement the plot takes, so it is for the units that excavate
+        val excavators = civ.units.getCivUnits().any { it.hasUnique(UniqueType.CanExcavate) }
+        return ruleset.tileImprovements.values.filter { improvement ->
+            !improvement.isRoad() && !improvement.name.startsWith(Constants.remove)
+                && improvement.name != Constants.repair && improvement.name != Constants.cancelImprovementOrder
+                && (improvement.turnsToBuild != -1 || improvement in instant)
+                && (!improvement.hasUnique(UniqueType.OneTimeExcavation) || excavators)
+                && isBuildableAhead(ImprovementBuildingProblem.entries.filter { it.isRelevant(improvement, context) }, improvement)
+        }
+    }
+
+    /** The build is possible given its [problems]: none, or only a missing tech whose era is at most our era + 1 (CvPlayer::canBuild with bTestEra) */
+    private fun isBuildableAhead(problems: List<ImprovementBuildingProblem>, improvement: TileImprovement): Boolean {
+        if (problems.isEmpty()) return true
+        if (problems.any { it != ImprovementBuildingProblem.MissingTech }) return false
+        val tech = improvement.techRequired?.let { ruleset.technologies[it] } ?: return false
+        return (tech.era(ruleset)?.eraNumber ?: 0) <= civ.getAiEraNumber() + 1
+    }
+
+    /** What [planBuild] decided: the build, whether it can be done now, whether the feature in its way can be removed now (true without a feature) */
+    private class PlannedBuild(val build: Build, val canBuild: Boolean, val canChop: Boolean)
+
+    /**
+     *  CvPlot::canBuild with the original's bTestEra and the feature removal of its builds: [improvement] on [tile], with the feature removed
+     *  first when the plot does not take it with the feature (the removal improvement needs not to be known yet). Null if the plot cannot take it.
+     */
+    private fun planBuild(tile: Tile, improvement: TileImprovement): PlannedBuild? {
+        val direct = problemsAfterEraAhead(improvement, tile)
+        if (direct != null) return PlannedBuild(Build(improvement), ImprovementBuildingProblem.MissingTech !in direct, true)
+
+        val feature = tile.terrainFeatures.lastOrNull() ?: return null
+        val removal = ruleset.tileImprovements[Constants.remove + feature] ?: return null
+        val cleared = problemsAfterEraAhead(improvement, scorer.withoutFeature(tile)) ?: return null
+        val removalNow = tile.improvementFunctions.canBuildImprovement(removal, GameContext(civ, tile = tile))
+        return PlannedBuild(Build(improvement, removal), ImprovementBuildingProblem.MissingTech !in cleared && removalNow, removalNow)
+    }
+
+    /** The problems that keep [improvement] from [tile], null when one of them is not just a tech one era ahead */
+    private fun problemsAfterEraAhead(improvement: TileImprovement, tile: Tile): List<ImprovementBuildingProblem>? {
+        val problems = tile.improvementFunctions.getImprovementBuildingProblems(improvement, GameContext(civ, tile = tile)).toList()
+        return problems.takeIf { isBuildableAhead(it, improvement) }
+    }
+
+    /** "Do we have a special improvement here?" (CvBuilderTaskingAI::PlotHasSpecialImprovement): a Great Person's or one automation must not replace */
+    private fun hasSpecialImprovement(improvement: TileImprovement) =
+        improvement.hasUnique(UniqueType.GreatImprovement) || improvement.hasUnique(UniqueType.AutomatedUnitsWillNotReplace)
+
+    /**
+     *  CvBuilderTaskingAI::AddImprovingPlotsDirective: one directive per improvement the plot takes that scores above 0 - of the type "on
+     *  resource" when it connects the plot's visible resource - and, for a build not possible yet whose feature can be chopped now, a
+     *  directive for the chop.
+     */
+    private fun addImprovingPlotsDirective(out: MutableList<BuilderDirective>, tile: Tile, owningCity: City?, possible: List<TileImprovement>) {
+        val existing = tile.tileImprovement
+        val human = civ.isHuman()
+        val settings = UncivGame.Current.settings
+        // A special improvement, or a human's wish to keep what is there (PLAYEROPTION_SAFE_AUTOMATION)
+        if (existing != null && (hasSpecialImprovement(existing) || (human && !settings.automatedWorkersReplaceImprovements))) return
+        // If the city owning this plot is being razed, ignore this plot
+        if (owningCity != null && owningCity.isBeingRazed) return
+        val topFeature = tile.terrainFeatures.lastOrNull()
+        if (faithFromUnimprovedForest && existing == null && topFeature == FOREST
+            && tile.neighbors.any { it.isCityCenter() && it.getOwner() == civ }) return
+
+        val resource = scorer.visibleResource(tile)
+        for (improvement in possible) {
+            if (improvement == existing) continue
+            val planned = planBuild(tile, improvement) ?: continue
+            val build = planned.build
+            val connectsResource = resource != null && resource.isImprovedBy(improvement.name)
+            // PLAYEROPTION_LEAVE_FORESTS
+            if (!connectsResource && build.removeFirst != null && human && settings.stopAutomatedWorkersRemoveVegetation
+                && topFeature != null && ruleset.terrains[topFeature]?.hasUnique(UniqueType.Vegetation) == true) continue
+
+            val score = scorer.scorePlotBuild(tile, improvement, build)
+            // If we're going backward, bail out!
+            if (score.maxScore <= 0) continue
+
+            val type = if (connectsResource) BuilderDirective.Type.BuildImprovementOnResource else BuilderDirective.Type.BuildImprovement
+            out.add(BuilderDirective(type, build, tile, improvement.isGreatImprovement(), planned.canBuild, score))
+
+            // If we can't build it yet, we may still want to prechop it
+            if (!planned.canBuild && planned.canChop && build.removeFirst != null) {
+                val chopScore = PlotBuildScore(score.score / 3, score.potentialScore + score.score * 2 / 3 - 1, score.unusedYieldScore, score.scorePenalty)
+                out.add(BuilderDirective(BuilderDirective.Type.RemoveFeature, Build(build.removeFirst), tile, false, true, chopScore))
+            }
+        }
+    }
+
+    /** CvBuilderTaskingAI::AddScrubFalloutDirectives: fallout (a feature that nullifies the yields) on our plot, if we can remove it: SCRUB_FALLOUT */
+    private fun addScrubFalloutDirectives(out: MutableList<BuilderDirective>, tile: Tile, owningCity: City?) {
+        if (tile.getOwner() != civ) return
+        if (owningCity != null && owningCity.isBeingRazed) return
+        val feature = tile.terrainFeatures.lastOrNull() ?: return
+        if (ruleset.terrains[feature]?.hasUnique(UniqueType.NullifyYields) != true) return
+        val removal = ruleset.tileImprovements[Constants.remove + feature] ?: return
+        if (!tile.improvementFunctions.canBuildImprovement(removal, GameContext(civ, tile = tile))) return
+        val score = PlotBuildScore(rules.define(AiDefine.BUILDER_TASKING_BASELINE_SCRUB_FALLOUT))
+        out.add(BuilderDirective(BuilderDirective.Type.RemoveFeature, Build(removal), tile, false, true, score, scrubsFallout = true))
+    }
+
+    /** CvBuilderTaskingAI::AddRepairImprovementDirective: the pillaged improvement of our plot, scored as the repaired improvement */
+    private fun addRepairImprovementDirective(out: MutableList<BuilderDirective>, tile: Tile, owningCity: City?) {
+        val existing = tile.tileImprovement ?: return
+        if (!tile.improvementIsPillaged || tile.getOwner() != civ) return
+        if (owningCity != null && owningCity.isBeingRazed) return
+        val repair = Build(ruleset.tileImprovements[Constants.repair] ?: return)
+        val score = scorer.scorePlotBuild(tile, existing, repair)
+        if (score.maxScore > 0) out.add(BuilderDirective(BuilderDirective.Type.RepairImprovement, repair, tile, false, true, score))
+    }
+
+    //endregion
+    //region Selection
+
+    /**
+     *  CvHomelandAI::GetWeightedDirectives for the one builder [unit]: the directive of the best weight (CvHomelandAI::GetDirectiveWeight of its
+     *  priority score, the turns [unit] needs to build and the plot distance), null if there is none it can do and reach.
+     *  A directive is considered when it can be built now, is the best one for its plot ([BuilderDirectives.isBestDirectiveForPlot]), [unit]
+     *  can do it ([BuilderBuilds.canPerform]) and the plot is one the builder may consider ([shouldBuilderConsiderPlot]). A directive that cannot
+     *  be better than the best found (its weight without time) is not looked at. Ties go to the earlier directive.
+     *  The "already building" bail-out of the original is the caller's ([WorkerAutomation.executeWorkerMove]).
+     */
+    fun evaluateBuilder(unit: MapUnit): WeightedDirective? = timeThis("AI.EvaluateBuilder") {
         val builds = BuilderBuilds(unit)
         val claimed = otherBuilderTargets(unit)
-        val directives = ArrayList<BuilderDirective>()
-        for (city in civ.cities) for (tile in city.getTiles()) {
+        var best: WeightedDirective? = null
+        for (directive in directives) {
+            val build = directive.build ?: continue
+            if (!directive.canBuild) continue
+            val tile = directive.tile
+            if (best != null && BuilderDirectives.directiveWeight(directive, 0, 0) <= best.weight) continue
             if (!shouldBuilderConsiderPlot(unit, tile, claimed)) continue
-            val turnsAway = findTurnsAway(unit, tile)
-            if (turnsAway < 0) continue
-            addRouteDirectives(unit, builds, tile, turnsAway, directives)
-            addImprovingResourcesDirectives(unit, builds, tile, turnsAway, directives)
-            addImprovingPlotsDirectives(unit, builds, tile, turnsAway, directives)
-            addChopDirectives(unit, builds, tile, turnsAway, directives)
-            addScrubFalloutDirectives(unit, builds, tile, turnsAway, directives)
+            if (!isBestDirectiveForPlot(directive)) continue
+            if (!builds.canPerform(directive)) continue
+            val buildTurns = turnsLeft(unit, tile, build)
+            val moveTurns = findTurnsAway(unit, tile)
+            if (moveTurns < 0) continue
+            val weight = BuilderDirectives.directiveWeight(directive, buildTurns, moveTurns)
+            if (best != null && weight <= best.weight) continue
+            if (tile != unit.getTile() && !unit.movement.canReach(tile)) continue
+            best = WeightedDirective(directive, weight, buildTurns, moveTurns)
         }
-        for (tile in nonTerritoryPlots) {
-            if (!shouldBuilderConsiderPlot(unit, tile, claimed)) continue
-            val turnsAway = findTurnsAway(unit, tile)
-            if (turnsAway < 0) continue
-            addRouteDirectives(unit, builds, tile, turnsAway, directives)
-        }
-        // StableSortItems: highest weight first, ties in insertion order
-        directives.sortByDescending { it.weight }
-        directives.firstOrNull { it.tile == unit.getTile() || unit.movement.canReach(it.tile) }
+        best
     }
+
+    private fun isBestDirectiveForPlot(directive: BuilderDirective) =
+        bestForPlot.getOrPut(directive) { BuilderDirectives.isBestDirectiveForPlot(directive, directivesByTile.getValue(directive.tile)) }
 
     /** Sends [unit] to [tile] (MISSIONAI_BUILD): no other builder considers it until [unit] gets another directive */
     fun claim(unit: MapUnit, tile: Tile) {
@@ -275,14 +455,11 @@ class BuilderTaskingAi(val civ: Civilization) {
     }
 
     /**
-     *  CvBuilderTaskingAI::ShouldBuilderConsiderPlot: not impassable, not owned by another major, in the builder's domain, on its landmass
-     *  unless it can embark, not the target of another builder ([claimed]), without plot danger, and with no other civilian of ours on it.
+     *  CvBuilderTaskingAI::ShouldBuilderConsiderPlot: not impassable, in the builder's domain, on its landmass unless it can embark, not the
+     *  target of another builder ([claimed]), without plot danger, and with no other civilian of ours on it.
      */
     private fun shouldBuilderConsiderPlot(unit: MapUnit, tile: Tile, claimed: Set<HexCoord>): Boolean {
         if (tile.isImpassible() || tile.getBaseTerrain().impassable) return false
-        val owner = tile.getOwner()
-        if (owner != null && owner != civ && !owner.isCityState) return false
-        if (tile.isCityCenter() || tile.isMarkedForCreatesOneImprovement()) return false
         val landUnit = unit.baseUnit.isLandUnit
         if (landUnit == tile.isWater) return false
         if (landUnit && tile.getContinent() != unit.getTile().getContinent() && !civ.tech.unitsCanEmbark) return false
@@ -300,265 +477,11 @@ class BuilderTaskingAi(val civ: Civilization) {
         return unit.getTile().aerialDistanceTo(tile)
     }
 
-    /** "Do we have a special improvement here?" (CvPlot::HasSpecialImprovement): a Great Person's or one automation must not replace */
-    private fun hasSpecialImprovement(tile: Tile): Boolean {
-        val improvement = tile.tileImprovement ?: return false
-        return improvement.hasUnique(UniqueType.GreatImprovement) || improvement.hasUnique(UniqueType.AutomatedUnitsWillNotReplace)
-    }
-
-    /** CvPlot::getResourceType(team): the resource if [civ] can see it */
-    private fun visibleResource(tile: Tile): TileResource? = tile.tileResource?.takeIf { civ.canSeeResource(it) }
-
     /**
-     *  CvBuilderTaskingAI::AddImprovingResourcesDirectives: improvements that hook up a luxury or strategic resource, in ruleset order,
-     *  stopping at the first the builder cannot build or that is already there: (BUILD_RESOURCE_IMPROVEMENTS × 100 + time weight
-     *  [adding the build points of the improvement to replace] + [resourceWeight]) × the plot score when positive, plus the chop
-     *  production when the build helps a rush.
+     *  CvBuilderTaskingAI::GetTurnsToBuild: the turns [unit] needs to finish [build] on [tile], counting work already done there; 0 for an instant
+     *  (Great Person) improvement. A repair takes the shorter of repairing and building the improvement again.
      */
-    private fun addImprovingResourcesDirectives(unit: MapUnit, builds: BuilderBuilds, tile: Tile, turnsAway: Int, out: MutableList<BuilderDirective>) {
-        val existing = tile.tileImprovement
-        if (existing != null && hasSpecialImprovement(tile) && !tile.improvementIsPillaged) return
-        val resource = visibleResource(tile) ?: return
-        if (resource.resourceType == ResourceType.Bonus) return
-
-        for (improvement in ruleset.tileImprovements.values) {
-            if (!resource.isImprovedBy(improvement.name)) continue
-            var build: Build
-            var type = BuilderDirective.Type.BuildImprovementOnResource
-            var weight = rules.define(AiDefine.BUILDER_TASKING_BASELINE_BUILD_RESOURCE_IMPROVEMENTS)
-            if (improvement == existing) {
-                if (!tile.improvementIsPillaged) break  // already hooked up
-                build = builds.repair(tile) ?: break
-                type = BuilderDirective.Type.Repair
-                weight = rules.define(AiDefine.BUILDER_TASKING_BASELINE_REPAIR)
-            } else {
-                if (existing != null && hasSpecialImprovement(tile)) continue
-                build = builds.build(tile, improvement) ?: break
-            }
-
-            weight = buildCostWeight(weight)
-            // CvPlot::getBuildTime of the first build of the improvement already there, in build points (100 per worker turn): also when
-            // it is the pillaged one to repair; a created improvement (no build time) counts nothing
-            val investedTime = if (existing != null && existing.turnsToBuild > 0) existing.getTurnsToBuild(civ, unit, tile) * 100 else 0
-            val helpsRush = doesBuildHelpRush(tile, build)
-            weight += buildTimeWeight(unit, tile, build, helpsRush, investedTime + turnsAway)
-            weight = correctWeight(weight)
-            weight += resourceWeight(civ, resource, improvement, tile.resourceAmount)
-            weight = correctWeight(weight)
-            val score = scorePlot(tile, build)
-            if (score > 0) weight = correctWeight(weight * score)
-            if (helpsRush) weight += chopProduction(tile, build)
-            if (weight <= 0) continue
-            out.add(BuilderDirective(type, build, tile, turnsAway, weight))
-        }
-    }
-
-    /**
-     *  CvBuilderTaskingAI::AddImprovingPlotsDirectives: every improvement for a plot within a city's reach that has no luxury or strategic
-     *  resource (a bonus resource only with its own improvement): (BUILD_IMPROVEMENTS × 100 + time weight) × plot score, skipping builds
-     *  that do not raise the score. A culture improvement starts from ADDS_CULTURE × its culture; repairs from REPAIR.
-     *  Trait rules: the Celts keep forests next to their cities, the Dutch their marshes and Brazil its jungles (for a civilization with a
-     *  unique improvement valid on them), and a civilization whose forests and jungles count as roads weighs their removal a quarter.
-     */
-    private fun addImprovingPlotsDirectives(unit: MapUnit, builds: BuilderBuilds, tile: Tile, turnsAway: Int, out: MutableList<BuilderDirective>) {
-        val existing = tile.tileImprovement
-        if (existing != null && hasSpecialImprovement(tile) && !tile.improvementIsPillaged) return
-        if (!isWithinCityRadius(tile)) return
-        val resource = visibleResource(tile)
-        if (resource != null && resource.resourceType != ResourceType.Bonus) return
-        val topFeature = tile.terrainFeatures.lastOrNull()
-        if (faithFromUnimprovedForest && existing == null && topFeature == FOREST
-            && tile.neighbors.any { it.isCityCenter() && it.getOwner() == civ }) return
-        workingCity(tile) ?: return
-        val human = civ.isHuman()
-        val settings = UncivGame.Current.settings
-
-        for (improvement in builds.candidates(tile)) {
-            if (improvement.isRoad()) continue
-            if (resource != null && !resource.isImprovedBy(improvement.name)) continue
-            val build: Build
-            if (improvement == existing) {
-                if (!tile.improvementIsPillaged) continue
-                build = builds.repair(tile) ?: continue
-            } else {
-                // PLAYEROPTION_SAFE_AUTOMATION: a human's workers keep existing improvements unless allowed to replace them
-                if (existing != null && (hasSpecialImprovement(tile) || (human && !settings.automatedWorkersReplaceImprovements))) continue
-                build = builds.build(tile, improvement) ?: continue
-            }
-
-            val removedFeature = if (build.removeFirst != null) topFeature else null
-            if (removedFeature == MARSH && keepsFeature(MARSH)) continue
-            if (removedFeature == JUNGLE && keepsFeature(JUNGLE) && resource == null) continue
-            // PLAYEROPTION_LEAVE_FORESTS
-            if (removedFeature != null && human && settings.stopAutomatedWorkersRemoveVegetation
-                && ruleset.terrains[removedFeature]?.hasUnique(UniqueType.Vegetation) == true) continue
-
-            var score = scorePlot(tile, build)
-            if (score <= 0) continue
-
-            var type = BuilderDirective.Type.BuildImprovement
-            var weight = rules.define(AiDefine.BUILDER_TASKING_BASELINE_BUILD_IMPROVEMENTS)
-            if (build.isRepair) {
-                type = BuilderDirective.Type.Repair
-                weight = rules.define(AiDefine.BUILDER_TASKING_BASELINE_REPAIR)
-            } else if (improvement.culture > 0) {
-                weight = rules.define(AiDefine.BUILDER_TASKING_BASELINE_ADDS_CULTURE) * improvement.culture.toInt()
-                val adjacentCulture = adjacentSameTypeCulture(tile, improvement)
-                if (adjacentCulture >= 0) score *= 1 + adjacentCulture
-            }
-            weight = buildCostWeight(weight)
-            weight += buildTimeWeight(unit, tile, build, doesBuildHelpRush(tile, build), turnsAway)
-            weight *= score
-            if ((removedFeature == FOREST || removedFeature == JUNGLE) && civ.hasUnique(UniqueType.ForestsAndJunglesAreRoads)) weight /= 4
-            weight = correctWeight(weight)
-            out.add(BuilderDirective(type, build, tile, turnsAway, weight))
-        }
-    }
-
-    /**
-     *  CvImprovementEntry::GetCultureAdjacentSameType + CvPlot::ComputeCultureFromAdjacentImprovement: the culture a Moai-like improvement
-     *  ([UniqueType.ImprovementStatsForAdjacencies] naming itself) gets from neighbors with the same improvement; -1 if it has no such bonus
-     */
-    private fun adjacentSameTypeCulture(tile: Tile, improvement: TileImprovement): Int {
-        val perNeighbor = improvement.getMatchingUniques(UniqueType.ImprovementStatsForAdjacencies, GameContext.IgnoreConditionals)
-            .filter { it.params[1] == improvement.name }
-            .sumOf { it.stats.culture.toInt() }
-        if (perNeighbor <= 0) return -1
-        return perNeighbor * tile.neighbors.count { it.improvement == improvement.name }
-    }
-
-    /** m_bKeepMarshes / m_bKeepJungle: [civ] has a unique improvement that the feature makes valid */
-    private fun keepsFeature(feature: String): Boolean = ruleset.tileImprovements.values.any {
-        it.uniqueTo != null && civ.matchesFilter(it.uniqueTo!!) && feature in it.terrainsCanBeBuiltOn
-    }
-
-    /**
-     *  CvBuilderTaskingAI::AddRouteDirectives: a flagged plot without the best route gets (BUILD_ROUTES / (turns away + 1) × 100 + time
-     *  weight) × its route value, the flagged route's build (repair when the road is pillaged).
-     */
-    private fun addRouteDirectives(unit: MapUnit, builds: BuilderBuilds, tile: Tile, turnsAway: Int, out: MutableList<BuilderDirective>) {
-        val best = bestRoute()
-        if (best == RoadStatus.None) return
-        if (tile.roadStatus == best && !tile.roadIsPillaged) return
-        val plot = routePlots[tile] ?: return
-        var type = BuilderDirective.Type.BuildRoute
-        var weight = rules.define(AiDefine.BUILDER_TASKING_BASELINE_BUILD_ROUTES)
-        val build: Build
-        if (tile.roadIsPillaged) {
-            build = builds.repair(tile) ?: return
-            type = BuilderDirective.Type.Repair
-            weight = rules.define(AiDefine.BUILDER_TASKING_BASELINE_REPAIR)
-        } else {
-            val road = plot.route.improvement(ruleset) ?: return
-            if (!unit.canBuildImprovement(road, tile)) return
-            build = Build(road)
-        }
-        weight /= turnsAway + 1
-        weight = buildCostWeight(weight)
-        weight += buildTimeWeight(unit, tile, build, false, turnsAway)
-        weight *= plot.value
-        weight = correctWeight(weight)
-        out.add(BuilderDirective(type, build, tile, turnsAway, weight))
-    }
-
-    /**
-     *  CvBuilderTaskingAI::AddChopDirectives: removing an unworked, unimproved, resource-free plot's feature that yields production, only
-     *  when that helps a rush: (REPAIR / (turns away + 1) × 100 + time weight) × chop production + the flavor-weighted yield change
-     *  (Growth×food×2, Production×production×2, Gold, Science, Culture), skipped when that change is negative.
-     */
-    private fun addChopDirectives(unit: MapUnit, builds: BuilderBuilds, tile: Tile, turnsAway: Int, out: MutableList<BuilderDirective>) {
-        if (!isWithinCityRadius(tile)) return
-        if (tile.improvement != null) return
-        if (civ.isHuman() && UncivGame.Current.settings.stopAutomatedWorkersRemoveVegetation) return
-        if (visibleResource(tile) != null) return
-        val city = workingCity(tile) ?: return
-        if (city.isWorked(tile)) return
-        val feature = tile.terrainFeatures.lastOrNull() ?: return
-        if (faithFromUnimprovedForest && feature == FOREST
-            && tile.neighbors.any { it.isCityCenter() && it.getOwner() == civ }) return
-        val terrain = ruleset.terrains[feature] ?: return
-        if (!terrain.hasUnique(UniqueType.ProductionBonusWhenRemoved)) return
-        val removal = builds.removal(tile) ?: return
-        val build = Build(removal)
-        val production = chopProduction(tile, build)
-        if (!doesBuildHelpRush(tile, build)) return
-
-        var weight = rules.define(AiDefine.BUILDER_TASKING_BASELINE_REPAIR)
-        weight /= turnsAway + 1
-        weight = buildCostWeight(weight)
-        weight += buildTimeWeight(unit, tile, build, false, turnsAway)
-        weight *= production
-
-        val before = natureYields(tile)
-        val after = natureYields(withoutFeature(tile))
-        var yieldDifferenceWeight = 0
-        for (i in YIELDS.indices) {
-            val delta = after[i] - before[i]
-            if (delta == 0) continue
-            yieldDifferenceWeight += when (YIELDS[i]) {
-                Stat.Food -> delta * civ.ai.personality(Flavor.Growth) * rules.define(AiDefine.BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_FOOD)
-                Stat.Production -> delta * civ.ai.personality(Flavor.Production) * rules.define(AiDefine.BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_PRODUCTION)
-                Stat.Gold -> delta * civ.ai.personality(Flavor.Gold) * rules.define(AiDefine.BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_GOLD)
-                Stat.Science -> delta * civ.ai.personality(Flavor.Science) * rules.define(AiDefine.BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_SCIENCE)
-                Stat.Culture -> delta * civ.ai.personality(Flavor.Culture) * rules.define(AiDefine.BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_CULTURE)
-                else -> 0
-            }
-        }
-        if (yieldDifferenceWeight < 0) return
-        weight += yieldDifferenceWeight
-        if ((feature == FOREST || feature == JUNGLE) && civ.hasUnique(UniqueType.ForestsAndJunglesAreRoads)) weight /= 4
-        if (feature == FOREST && faithFromUnimprovedForest) weight /= 4
-        // "this doesn't actually help them, but adds some historical flavor" (Polynesia)
-        if ((feature == FOREST || feature == JUNGLE) && embarksFromStart) weight *= 2
-        weight = correctWeight(weight)
-        if (weight > 0) out.add(BuilderDirective(BuilderDirective.Type.Chop, build, tile, turnsAway, weight))
-    }
-
-    /** CvBuilderTaskingAI::AddScrubFalloutDirectives: SCRUB_FALLOUT / (turns away + 1) × 100 + time weight, for fallout in a city's reach */
-    private fun addScrubFalloutDirectives(unit: MapUnit, builds: BuilderBuilds, tile: Tile, turnsAway: Int, out: MutableList<BuilderDirective>) {
-        val feature = tile.terrainFeatures.lastOrNull() ?: return
-        if (ruleset.terrains[feature]?.hasUnique(UniqueType.NullifyYields) != true) return
-        workingCity(tile) ?: return
-        val removal = builds.removal(tile) ?: return
-        val build = Build(removal)
-        var weight = rules.define(AiDefine.BUILDER_TASKING_BASELINE_SCRUB_FALLOUT)
-        weight /= turnsAway + 1
-        weight = buildCostWeight(weight)
-        weight += buildTimeWeight(unit, tile, build, false, turnsAway)
-        out.add(BuilderDirective(BuilderDirective.Type.Chop, build, tile, turnsAway, weight))
-    }
-
-    //endregion
-    //region Weights
-
-    /** CvBuilderTaskingAI::GetBuildCostWeight: builds have no gold cost in the original's XML, so always ×100 */
-    private fun buildCostWeight(weight: Int) = weight * 100
-
-    /**
-     *  CvBuilderTaskingAI::GetBuildTimeWeight: 10000 / (turns left after this turn's work, at least 1, + [additionalTime]). When
-     *  [ignoreFeatureTime], the feature removal time is subtracted in build points (turns × 100), as the original does.
-     *  An improvement (route) build on a plot whose improvement (route) is pillaged is timed as the repair, whatever it replaces.
-     */
-    fun buildTimeWeight(unit: MapUnit, tile: Tile, build: Build, ignoreFeatureTime: Boolean, additionalTime: Int): Int {
-        val timed = timedAsRepair(tile, build)
-        var buildTime = turnsLeft(unit, tile, timed) - 1
-        if (buildTime <= 0) buildTime = 1
-        if (ignoreFeatureTime && timed.removeFirst != null) buildTime -= timed.removeFirst.turnsToBuild * 100
-        buildTime += additionalTime
-        if (buildTime == 0) buildTime = 1
-        return 10000 / buildTime
-    }
-
-    private fun timedAsRepair(tile: Tile, build: Build): Build {
-        if (build.isRepair || build.improvement.name.startsWith(Constants.remove)) return build
-        val pillaged = if (build.improvement.isRoad()) tile.roadStatus != RoadStatus.None && tile.roadIsPillaged
-            else tile.improvement != null && tile.improvementIsPillaged
-        if (!pillaged) return build
-        return ruleset.tileImprovements[Constants.repair]?.let { Build(it) } ?: build
-    }
-
-    /** Turns [unit] needs to finish [build] on [tile], counting work already done there; 0 for an instant (Great Person) improvement */
-    private fun turnsLeft(unit: MapUnit, tile: Tile, build: Build): Int {
+    fun turnsLeft(unit: MapUnit, tile: Tile, build: Build): Int {
         if (build.isRepair) {
             if (tile.improvementInProgress == Constants.repair) return tile.turnsToImprovement
             val pillaged = tile.getImprovementToRepair() ?: return 0
@@ -575,154 +498,12 @@ class BuilderTaskingAi(val civ: Civilization) {
         else -> improvement.getTurnsToBuild(civ, unit, tile)
     }
 
-    /** CorrectWeight: an overflowed (below -1000) weight becomes the maximum */
-    private fun correctWeight(weight: Int) = if (weight < -1000) Int.MAX_VALUE else weight
-
-    /**
-     *  CvBuilderTaskingAI::ScorePlot: for every yield, a city short of it (negative delta) scores the projected yield × |delta| when the
-     *  build raises it; a city not short of it scores the projected yield (when not lowered); a lowered yield costs the loss × |delta|.
-     *  With no yield short, a build raising the focus yield adds it ×100. The capital's plots count ×8, an original capital's ×2.
-     *  -1 when the plot has no working city of ours.
-     */
-    fun scorePlot(tile: Tile, build: Build): Int {
-        val city = tile.getCity()?.takeIf { it.civ == civ && tile in it.tilesInRange } ?: return -1
-        val multiplier = if (city.isCapital()) 8 else if (city.isOriginalCapital) 2 else 1
-        return scoreYields(currentYields(tile, city), projectedYields(tile, build, city), cityYieldTargets(city)) * multiplier
-    }
-
-    /**
-     *  CvCityStrategyAI::UpdateBestYields: per yield, the average of the best (population + 2) plot yields of the plots the city owns in
-     *  its reach (×100), food plus the city plot's food above 2 and the flat food of its buildings; minus the specialization's target yield.
-     *  The specialization is the city's, else for a human the one matching the city focus (food: settler pump, gold: commerce), else the
-     *  default one; its yield is the focus yield.
-     */
-    fun cityYieldTargets(city: City): CityYieldTargets = cityYields.getOrPut(city) {
-        val tiles = city.tilesInRange.filter { it.getCity() == city }
-        val slots = min(tiles.size, city.population.population + 2)
-        val delta = IntArray(YIELDS.size)
-        val specialization = specializationFor(city)
-        if (slots > 0) {
-            val yieldsByTile = tiles.map { currentYields(it, city) }
-            for (i in YIELDS.indices) {
-                var sum = yieldsByTile.map { it[i] }.sortedDescending().take(slots).sum() * 100
-                if (YIELDS[i] == Stat.Food) {
-                    val cityFood = currentYields(city.getCenterTile(), city)[i] - MIN_CITY_FOOD +
-                        city.cityConstructions.getBuiltBuildings().sumOf { it.food.toInt() }
-                    sum += cityFood * 100
-                }
-                delta[i] = sum / slots - (specialization?.targetYields?.get(YIELDS[i].name) ?: 0)
-            }
-        }
-        val focus = specialization?.yieldType?.let { name -> YIELDS.indexOfFirst { it.name == name } } ?: -1
-        CityYieldTargets(delta, focus)
-    }
-
-    private fun specializationFor(city: City): CitySpecializationDef? {
-        city.ai.specializationDef()?.let { return it }
-        val specializations = rules.citySpecializations
-        if (civ.isHuman()) {
-            val lookup = when (city.getCityFocus()) {
-                CityFocus.FoodFocus -> "CITYSPECIALIZATION_SETTLER_PUMP"
-                CityFocus.GoldFocus -> "CITYSPECIALIZATION_COMMERCE"
-                else -> null
-            }
-            if (lookup != null) specializations.firstOrNull { it.name == lookup }?.let { return it }
-        }
-        return specializations.firstOrNull { it.isDefault }
-    }
-
-    /** CvPlot::getYield, cached for the turn */
-    private fun currentYields(tile: Tile, city: City?): IntArray = currentYieldCache.getOrPut(tile) {
-        yieldsOf(tile.stats.getTileStats(city, civ))
-    }
-
-    /** CvPlot::getYieldWithBuild (each at least 0), cached for the turn */
-    private fun projectedYields(tile: Tile, build: Build, city: City): IntArray = projectedYieldCache.getOrPut(tile to build.improvement.name) {
-        val alternative = if (build.removeFirst != null) withoutFeature(tile).clone(addUnits = false) else tile.clone(addUnits = false)
-        alternative.setTerrainTransients()
-        if (build.isRepair) {
-            alternative.improvementIsPillaged = false
-            alternative.roadIsPillaged = false
-        } else if (!build.improvement.name.startsWith(Constants.remove)) {
-            alternative.setImprovement(build.improvement.name)
-        }
-        yieldsOf(alternative.stats.getTileStats(city, civ)).also { for (i in it.indices) it[i] = max(it[i], 0) }
-    }
-
-    /** CvPlot::calculateNatureYield: the plot's yields without improvement and route (tile stats are never below 0, as there) */
-    private fun natureYields(tile: Tile): IntArray {
-        val bare = tile.clone(addUnits = false)
-        bare.setTerrainTransients()
-        bare.improvement = null
-        bare.roadStatus = RoadStatus.None
-        return yieldsOf(bare.stats.getTileStats(null, civ))
-    }
-
-    /** A copy of [tile] without its top terrain feature */
-    fun withoutFeature(tile: Tile): Tile = withoutFeatureCache.getOrPut(tile) {
-        val copy = tile.clone(addUnits = false)
-        copy.setTerrainTransients()
-        copy.terrainFeatures.lastOrNull()?.let { copy.removeTerrainFeature(it) }
-        copy
-    }
-
-    private fun yieldsOf(stats: Stats) = IntArray(YIELDS.size) { stats[YIELDS[it]].toInt() }
-
-    /** CvPlot::isWithinTeamCityRadius: within the work range of one of our cities */
-    private fun isWithinCityRadius(tile: Tile) = civ.cities.any { tile in it.tilesInRange }
-
-    /** CvBuilderTaskingAI::GetWorkingCity: the city owning the plot in its reach, else one of ours that could work it */
-    private fun workingCity(tile: Tile): City? {
-        if (tile.getOwner() != civ) return null
-        val owning = tile.getCity()
-        if (owning != null && tile in owning.tilesInRange) return owning
-        return civ.cities.firstOrNull { tile in it.tilesInRange }
-    }
-
-    /** CvPlot::getFeatureProduction for Unciv's chop (TileImprovementFunctions): the production the removal gives the closest city */
-    private fun chopProduction(tile: Tile, build: Build): Int {
-        val removal = build.removeFirst ?: build.improvement.takeIf { it.name.startsWith(Constants.remove) } ?: return 0
-        val feature = removal.name.removePrefix(Constants.remove)
-        val terrain = ruleset.terrains[feature] ?: return 0
-        val city = closestCityForChop(tile) ?: return 0
-        val distance = city.getCenterTile().aerialDistanceTo(tile)
-        var production = 0f
-        for (unique in terrain.getMatchingUniques(UniqueType.ProductionBonusWhenRemoved, GameContext(civ, tile = tile))) {
-            var stats = unique.stats
-            if (unique.isModifiedByGameSpeed()) stats = stats * civ.gameInfo.speed.modifier
-            if (unique.isModifiedByGameProgress()) stats = stats * unique.getGameProgressModifier(civ)
-            production += stats.production
-        }
-        if (distance != 1) production *= (6 - distance) / 4f
-        if (tile.getCity()?.civ != civ) production *= 2 / 3f
-        return production.toInt()
-    }
-
-    private fun closestCityForChop(tile: Tile): City? {
-        val city = civ.cities.minByOrNull { it.getCenterTile().aerialDistanceTo(tile) } ?: return null
-        return city.takeIf { it.getCenterTile().aerialDistanceTo(tile) <= 5 }
-    }
-
-    /**
-     *  CvBuilderTaskingAI::DoesBuildHelpRush: the build removes a feature that gives production to a city whose current order is rushed
-     *  (an AI city's non-perpetual construction needing more than AI_ATTEMPT_RUSH_OVER_X_TURNS_TO_BUILD turns; see the class comment)
-     */
-    fun doesBuildHelpRush(tile: Tile, build: Build): Boolean {
-        if (chopProduction(tile, build) <= 0) return false
-        val city = closestCityForChop(tile) ?: return false
-        if (city.civ.isHuman()) return false
-        val construction = city.cityConstructions.currentConstructionName()
-        if (construction.isEmpty() || construction in PerpetualConstruction.perpetualConstructionsMap) return false
-        var rushOver = rules.define(AiDefine.AI_ATTEMPT_RUSH_OVER_X_TURNS_TO_BUILD)
-        if (civ.isCityState) rushOver = rushOver * rules.define(AiDefine.MINOR_CIV_PRODUCTION_PERCENT) / 100
-        return city.cityConstructions.turnsToConstruction(construction) > rushOver
-    }
-
     //endregion
 
     /** The builds [unit] can do: a worker's improvements, or the improvements a Great Person creates instantly */
     inner class BuilderBuilds(private val unit: MapUnit) {
-        private val instant: List<TileImprovement>? =
+        /** The improvements [unit] creates instantly (a Great Person's), null for a worker */
+        val instantImprovements: List<TileImprovement>? =
             UnitActionModifiers.getUsableUnitActionUniques(unit, UniqueType.ConstructImprovementInstantly).toList()
                 .takeIf { it.isNotEmpty() }
                 ?.let { uniques ->
@@ -734,29 +515,32 @@ class BuilderTaskingAi(val civ: Civilization) {
                     }
                 }
 
-        /** Improvements worth testing on [tile], in ruleset order */
-        fun candidates(tile: Tile): Collection<TileImprovement> = instant ?: ruleset.tileImprovements.values.filter {
-            !it.name.startsWith(Constants.remove) && it.name != Constants.repair && it.name != Constants.cancelImprovementOrder
-        }
-
         private fun canBuildOn(improvement: TileImprovement, tile: Tile): Boolean {
-            if (instant != null) return improvement in instant && tile.improvementFunctions.canBuildImprovement(improvement, GameContext(civ, unit = unit, tile = tile))
+            if (instantImprovements != null)
+                return improvement in instantImprovements && tile.improvementFunctions.canBuildImprovement(improvement, GameContext(civ, unit = unit, tile = tile))
+            if (improvement.hasUnique(UniqueType.OneTimeExcavation) && !unit.hasUnique(UniqueType.CanExcavate)) return false
             return unit.canBuildImprovement(improvement, tile) &&
                 tile.improvementFunctions.canBuildImprovement(improvement, GameContext(civ, unit = unit, tile = tile))
         }
 
-        /** The build of [improvement] on [tile], removing the top feature first when the improvement needs it gone; null if impossible */
-        fun build(tile: Tile, improvement: TileImprovement): Build? {
-            if (canBuildOn(improvement, tile)) return Build(improvement)
-            if (instant != null) return null
-            val removal = removal(tile) ?: return null
-            val cleared = withoutFeature(tile)
-            return if (canBuildOn(improvement, cleared)) Build(improvement, removal) else null
+        /**
+         *  CvBuilderTaskingAI::CanUnitPerformDirective: [unit] can do the build of [directive] now (without the plot checks of
+         *  [shouldBuilderConsiderPlot]): its improvement on the plot, after the removal of the feature when the build comes with one.
+         */
+        fun canPerform(directive: BuilderDirective): Boolean {
+            val build = directive.build ?: return false
+            val tile = directive.tile
+            return when {
+                build.isRepair -> repair(tile) != null
+                build.removeFirst != null -> removal(tile) == build.removeFirst && canBuildOn(build.improvement, scorer.withoutFeature(tile))
+                build.isRemoval -> removal(tile) == build.improvement
+                else -> canBuildOn(build.improvement, tile)
+            }
         }
 
         /** The "Remove <top feature>" improvement if [unit] can build it on [tile] */
         fun removal(tile: Tile): TileImprovement? {
-            if (instant != null) return null
+            if (instantImprovements != null) return null
             val feature = tile.terrainFeatures.lastOrNull() ?: return null
             val removal = ruleset.tileImprovements[Constants.remove + feature] ?: return null
             return removal.takeIf { canBuildOn(it, tile) }
@@ -764,7 +548,7 @@ class BuilderTaskingAi(val civ: Civilization) {
 
         /** The repair build (CvBuilderTaskingAI::m_eRepairBuild) if [unit] can repair [tile] */
         fun repair(tile: Tile): Build? {
-            if (instant != null || !unit.cache.hasUniqueToBuildImprovements || tile.isCityCenter()) return null
+            if (instantImprovements != null || !unit.cache.hasUniqueToBuildImprovements || tile.isCityCenter()) return null
             if (!tile.isPillaged()) return null
             val repair = ruleset.tileImprovements[Constants.repair] ?: return null
             return Build(repair)
@@ -772,34 +556,6 @@ class BuilderTaskingAi(val civ: Civilization) {
     }
 
     companion object {
-        /** [scorePlot] before the capital multiplier: the plot's [current] and [projected] yields (in [YIELDS] order) for a city's [targets] */
-        fun scoreYields(current: IntArray, projected: IntArray, targets: CityYieldTargets): Int {
-            var score = 0
-            var anyNegativeMultiplier = false
-            for (i in YIELDS.indices) {
-                val multiplier = targets.deltaTimes100[i]
-                val absMultiplier = abs(multiplier)
-                val yieldDelta = projected[i] - current[i]
-                if (multiplier < 0) {
-                    anyNegativeMultiplier = true
-                    if (yieldDelta > 0) score += projected[i] * absMultiplier
-                    else if (yieldDelta < 0) score += yieldDelta * absMultiplier
-                } else {
-                    if (yieldDelta >= 0) score += projected[i]
-                    else score += yieldDelta * absMultiplier
-                }
-            }
-            val focus = targets.focusYield
-            if (!anyNegativeMultiplier && focus != -1 && projected[focus] - current[focus] > 0) score += projected[focus] * 100
-            return score
-        }
-
-        /** The original's yields, in YieldTypes order */
-        val YIELDS = arrayOf(Stat.Food, Stat.Production, Stat.Gold, Stat.Science, Stat.Culture, Stat.Faith)
-        /** Yields.MinCity of food */
-        private const val MIN_CITY_FOOD = 2
         private const val FOREST = "Forest"
-        private const val JUNGLE = "Jungle"
-        private const val MARSH = "Marsh"
     }
 }

@@ -392,18 +392,14 @@
     "BORDER_PROMISE_TURNS_EFFECTIVE": 50,
     "BROKEN_BORDER_PROMISE_PER_OPINION_WEIGHT": 1,
     "BROKEN_EXPANSION_PROMISE_PER_OPINION_WEIGHT": 1,
-    "BUILDER_TASKING_BASELINE_ADDS_CULTURE": 100,
-    "BUILDER_TASKING_BASELINE_BUILD_IMPROVEMENTS": 1,
-    "BUILDER_TASKING_BASELINE_BUILD_RESOURCE_IMPROVEMENTS": 10,
-    "BUILDER_TASKING_BASELINE_BUILD_ROUTES": 100,
-    "BUILDER_TASKING_BASELINE_REPAIR": 250,
+    "BUILDER_TASKING_BASELINE_ADDS_CULTURE": 240,
+    "BUILDER_TASKING_BASELINE_ADDS_FAITH": 240,
+    "BUILDER_TASKING_BASELINE_ADDS_FOOD": 180,
+    "BUILDER_TASKING_BASELINE_ADDS_GOLD": 90,
+    "BUILDER_TASKING_BASELINE_ADDS_PRODUCTION": 180,
+    "BUILDER_TASKING_BASELINE_ADDS_SCIENCE": 240,
     "BUILDER_TASKING_BASELINE_SCRUB_FALLOUT": 20000,
-    "BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_CULTURE": 1,
-    "BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_FOOD": 2,
-    "BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_GOLD": 1,
     "BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_LUXURY_RESOURCE": 750,
-    "BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_PRODUCTION": 2,
-    "BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_SCIENCE": 1,
     "BUILD_ON_RESOURCE_PERCENT": -50,
     "BUILD_ON_RIVER_PERCENT": 50,
     "BUILT_LANDMARK_TURNS_UNTIL_FORGOTTEN": 50,
@@ -3012,12 +3008,6 @@
         "Culture": -4,
         "Wonder": -6,
         "WaterConnection": -5
-      },
-      "targetYields": {
-        "Food": 233,
-        "Production": 88,
-        "Gold": 0,
-        "Science": 0
       }
     },
     {
@@ -3035,12 +3025,6 @@
         "Production": -4,
         "Gold": -4,
         "Science": -4
-      },
-      "targetYields": {
-        "Food": 233,
-        "Production": 120,
-        "Gold": 0,
-        "Science": 0
       }
     },
     {
@@ -3058,12 +3042,6 @@
         "Production": -4,
         "Gold": -4,
         "Science": -4
-      },
-      "targetYields": {
-        "Food": 233,
-        "Production": 120,
-        "Gold": 0,
-        "Science": 0
       }
     },
     {
@@ -3083,12 +3061,6 @@
         "Production": -4,
         "Gold": -4,
         "Science": -4
-      },
-      "targetYields": {
-        "Food": 233,
-        "Production": 120,
-        "Gold": 0,
-        "Science": 0
       }
     },
     {
@@ -3107,12 +3079,6 @@
         "Gold": -4,
         "Science": -4,
         "Wonder": 30
-      },
-      "targetYields": {
-        "Food": 233,
-        "Production": 120,
-        "Gold": 0,
-        "Science": 0
       }
     },
     {
@@ -3130,12 +3096,6 @@
         "Gold": -4,
         "Science": -4,
         "Spaceship": 30
-      },
-      "targetYields": {
-        "Food": 233,
-        "Production": 120,
-        "Gold": 0,
-        "Science": 0
       }
     },
     {
@@ -3156,12 +3116,6 @@
         "GreatPeople": 5,
         "Spaceship": -100,
         "WaterConnection": 20
-      },
-      "targetYields": {
-        "Food": 233,
-        "Production": 120,
-        "Gold": 100,
-        "Science": 0
       }
     },
     {
@@ -3181,12 +3135,6 @@
         "Happiness": 10,
         "GreatPeople": 5,
         "Spaceship": -100
-      },
-      "targetYields": {
-        "Food": 233,
-        "Production": 120,
-        "Gold": 0,
-        "Science": 100
       }
     },
     {
@@ -3205,12 +3153,6 @@
         "Culture": 30,
         "Happiness": 20,
         "GreatPeople": 10
-      },
-      "targetYields": {
-        "Food": 233,
-        "Production": 120,
-        "Gold": 0,
-        "Science": 0
       }
     }
   ],

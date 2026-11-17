@@ -13,10 +13,13 @@ import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.MilitaryTargets
 import com.unciv.logic.automation.strategy.NavalOperationLogic
 import com.unciv.logic.automation.strategy.OperationAbortReason
+import com.unciv.logic.automation.unit.BuilderDirectives
+import com.unciv.logic.automation.unit.BuilderTaskingAi
 import com.unciv.logic.files.UncivFiles
 import com.unciv.models.metadata.GameSettings
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.testing.GdxTestRunner
 import com.unciv.ui.audio.MusicController
 import org.junit.Assume
@@ -36,6 +39,9 @@ import java.io.File
  *   ([NavalOperationLogic.nukeCityValue]);
  * - `military`: per major, its unit supply, the soft supply cap, the recommended army and navy with the units it has, the defense
  *   states and next turn's gold.
+ * - `builders`: per civilization with cities, this turn's builder plan ([BuilderTaskingAi.directives], the first DEV_DUMP_BUILDER_LIMIT, default 60):
+ *   type, build, tile, whether it can be built now, the score parts (base, potential, unused yield, penalty), the priority score, the weight
+ *   without time; then, for each builder of the civilization, the directive it would pick with its weight, build and move turns.
  * A developer tool, not a test: it does nothing unless DEV_DUMP_SAVE is set. Run it with tools/dev_dump.py.
  */
 @RunWith(GdxTestRunner::class)
@@ -64,7 +70,8 @@ class DevDump {
                 "nukes" -> nukes(game, out)
                 "targets" -> targets(game, out)
                 "military" -> military(game, out)
-                else -> out.append("unknown mode $mode (approach, operations, nukes, targets, military)\n")
+                "builders" -> builders(game, out)
+                else -> out.append("unknown mode $mode (approach, operations, nukes, targets, military, builders)\n")
             }
             out.append("\n")
         }
@@ -136,6 +143,32 @@ class DevDump {
                     "approach ${target.approachScore}, path ${target.pathLength}${if (target.preferred) ", preferred" else ""}\n")
             for (exposed in military.exposedCities)
                 out.append("  exposed ${exposed.targetCity.name} to ${exposed.musterCity.civ.civName} from ${exposed.musterCity.name}: ${exposed.armyType}\n")
+        }
+    }
+
+    /** Per civilization: this turn's builder directives, and the pick of each of its builders (a fresh plan, no claims made) */
+    private fun builders(game: GameInfo, out: StringBuilder) {
+        val limit = System.getenv("DEV_DUMP_BUILDER_LIMIT")?.toIntOrNull() ?: 60
+        out.append("builder directives at turn ${game.turns}\n")
+        for (civ in game.civilizations.filter { it.isAlive() && it.cities.isNotEmpty() }) {
+            val builders = civ.units.getCivUnits()
+                .filter { it.cache.hasUniqueToBuildImprovements || it.getMatchingUniques(UniqueType.ConstructImprovementInstantly).any() }.toList()
+            val ai = BuilderTaskingAi(civ)
+            out.append("\n${civ.civName}: ${ai.directives.size} directives, ${builders.size} builders, " +
+                "improved tiles ${civ.cities.sumOf { city -> city.getTiles().count { it.improvement != null } }} of ${civ.cities.sumOf { it.getTiles().count() }}\n")
+            for (directive in ai.directives.take(limit)) {
+                val score = directive.plotBuildScore
+                out.append("  ${directive.type} ${directive.build?.improvement?.name ?: "-"}${directive.build?.removeFirst?.let { " after ${it.name}" } ?: ""} " +
+                    "at ${directive.tile.position}${if (directive.canBuild) "" else " (not yet)"}${if (directive.isGreatPerson) " (Great Person)" else ""}: " +
+                    "score ${score.score} potential ${score.potentialScore} unused ${score.unusedYieldScore} penalty ${score.scorePenalty}, " +
+                    "priority ${directive.priorityScore}, weight ${BuilderDirectives.directiveWeight(directive, 0, 0)}\n")
+            }
+            for (unit in builders) {
+                val picked = ai.evaluateBuilder(unit)
+                out.append("  builder ${unit.name} at ${unit.getTile().position}: " + (picked?.let {
+                    "${it.directive.type} ${it.build.improvement.name} at ${it.tile.position}, weight ${it.weight}, build turns ${it.buildTurns}, move turns ${it.moveTurns}"
+                } ?: "no directive") + "\n")
+            }
         }
     }
 

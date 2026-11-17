@@ -73,7 +73,7 @@ class CityStrategyDef : StrategyDef() {
     @delegate:Transient val flavorVector by lazy { Flavor.vectorOf(flavors) }
 }
 
-/** CitySpecializations + CitySpecialization_Flavors, _TargetYields */
+/** CitySpecializations + CitySpecialization_Flavors */
 class CitySpecializationDef : INamed {
     override var name = ""
     /** Unciv Stat name */
@@ -84,8 +84,6 @@ class CitySpecializationDef : INamed {
     var isWonder = false
     var mustBeCoastal = false
     var flavors = LinkedHashMap<String, Int>()
-    /** By Unciv Stat name */
-    var targetYields = LinkedHashMap<String, Int>()
 
     @delegate:Transient val flavorVector by lazy { Flavor.vectorOf(flavors) }
 }

@@ -2,6 +2,7 @@ package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.automation.civilization.BeliefAiProfile
+import com.unciv.logic.automation.civilization.DealAi
 import com.unciv.logic.automation.civilization.MinorCivHelpers
 import com.unciv.logic.automation.diplomacy.ApproachPart6Ai
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
@@ -35,8 +36,8 @@ import kotlin.math.roundToInt
  *  YieldOnCompletion, the Messenger unit), investments, the policy unit class production modifiers (no BNW policy has one), the
  *  AICITYSTRATEGY_ENOUGH_SETTLERS and NEW_CONTINENT_FEEDER city strategies, the settle plot quality (CvGame::GetCityQualityReference),
  *  the traits' expansion WLTKD and artifact yields, the archaeological dig tourism of policies, the German unit gifts, the trade route
- *  priorities of VP's trade route ranking ([com.unciv.logic.automation.unit.TradeRouteAutomation] is not VP's), the Aluminum kept for
- *  the spaceship (VP's core cities for spaceship production are not ported) and the MOD_AI_UNIT_PRODUCTION strategies (off in VP's
+ *  priorities of VP's trade route ranking ([com.unciv.logic.automation.unit.TradeRouteAutomation] is not VP's) and the
+ *  MOD_AI_UNIT_PRODUCTION strategies (off in VP's
  *  database). A purchase pays no part here: purchases do not go through the sanity.
  */
 object UnitProductionAi {
@@ -175,6 +176,16 @@ object UnitProductionAi {
         }
 
         if (!minor) {
+            // Aluminum kept for the spaceship: no Aluminum unit (other than a spaceship part) while our own Aluminum is no more than the
+            // parts and the core cities' buildings still need
+            if (!unit.hasUnique(UniqueType.SpaceshipPart, GameContext.IgnoreConditionals) && SpaceshipProductionAi.plansSpaceship(civ)) {
+                val aluminum = civ.gameInfo.ruleset.tileResources[SpaceshipProductionAi.ALUMINUM]
+                if (aluminum != null && unit.getResourceRequirementsPerTurn(city.state)[SpaceshipProductionAi.ALUMINUM] > 0 &&
+                    DealAi.numResourceAvailable(civ, aluminum, includeImport = false) <=
+                    SpaceshipProductionAi.aluminumStillNeededForSpaceship(civ) + SpaceshipProductionAi.aluminumStillNeededForCoreCities(civ))
+                    return ProductionSanityAi.SR_STRATEGY
+            }
+
             if (unitAi == UnitAiType.CITY_SPECIAL) {
                 var num = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.CITY_SPECIAL, includeBeingTrained = true, includeWater = true)
                 if (current != null && UnitAiTypes.defaultOf(current, rules) == UnitAiType.CITY_SPECIAL) num--

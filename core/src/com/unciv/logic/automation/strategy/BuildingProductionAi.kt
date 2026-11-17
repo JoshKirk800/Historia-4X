@@ -25,7 +25,8 @@ import kotlin.math.min
  *  in a city, [checkBuildingBuildSanity]; and CvPlayer::SetBestWonderCities / CvCity::IsBestForWonder, [isBestForWonder].
  *
  *  Ported: the refusals (the city about to fall, wonders in small cities, religion wonders without a religion to found, the best wonder city,
- *  resource-consuming buildings in puppets and automated cities, a city under siege, bankruptcy), the weight (flavor weight brought to
+ *  resource-consuming buildings in puppets and automated cities, Aluminum the spaceship needs ([SpaceshipProductionAi]), a city under
+ *  siege, bankruptcy), the weight (flavor weight brought to
  *  sqrti(10 x weight), plus the bonus sum below, 0 if the bonus is below 1) and the bonus terms: wonders (best city +500, the next wonder
  *  desired up to +1500, -150 for each rival building it), minor civ quests (+10), geography (airlift, trade and city connections, a
  *  luxury copying building), happiness (BNW's single happiness, each point worth 10, x4 for each of unhappy, very unhappy and super
@@ -43,7 +44,7 @@ import kotlin.math.min
  *  VP happiness levels (BNW's: excess happiness below 0, at most VERY_UNHAPPY_THRESHOLD, at most SUPER_UNHAPPY_THRESHOLD), the building
  *  columns of VP (supply, ranged strike range and indirect fire, border obstacles of water and land, damage reduction, air and
  *  industrial routes, fresh water, units trainable, great work experience, corporations, marriages, themes, claimed plots, investments),
- *  the "needs the spaceship planner" aluminum rule (the planner is not in this branch) and the trade priorities of cities (VP's
+ *  and the trade priorities of cities (VP's
  *  CvTradeAI::GetPrioritizedTradeRoutes stores them: counted as 0, so a building for land or sea trade is penalised -50 as in a city with
  *  no route; the potential sea routes are asked of the trade routes of the civilization).
  *
@@ -261,6 +262,16 @@ object BuildingProductionAi {
             //Building uses resources? Not if we're in resistance, a puppet or automated, thanks!
             if (building.getResourceRequirementsPerTurn(city.state).any { it.value > 0 } &&
                 (isPuppetAndAnnexable || civ.isHuman() || city.isInResistance())) return SR_STRATEGY
+
+            // the building needs aluminum? check if we'd still have enough for the spaceship (and, outside the core cities for the
+            // spaceship parts, for the buildings in those core cities)
+            val aluminumNeeded = building.getResourceRequirementsPerTurn(city.state)[SpaceshipProductionAi.ALUMINUM]
+            val aluminum = ruleset.tileResources[SpaceshipProductionAi.ALUMINUM]
+            if (aluminumNeeded > 0 && aluminum != null) {
+                var usable = DealAi.numResourceAvailable(civ, aluminum, includeImport = true) - SpaceshipProductionAi.aluminumStillNeededForSpaceship(civ)
+                if (city !in SpaceshipProductionAi.coreCities(civ)) usable -= SpaceshipProductionAi.aluminumStillNeededForCoreCities(civ)
+                if (aluminumNeeded > usable) return SR_STRATEGY
+            }
 
             for (unique in building.getMatchingUniques(UniqueType.ProvidesResources, GameContext.IgnoreConditionals)) {
                 if (unique.params[0].toInt() <= 0) continue

@@ -6,6 +6,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.VictoryPursuit
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -78,5 +79,20 @@ class BuildingSanityTests {
         assertEquals(0, ProductionSanityAi.buildingSanity(city, barracks, 1000) - ProductionSanityAi.buildingSanity(city, plain, 1000))
         city.cityConstructions.addBuilding(barracks.name)
         assertEquals(45, ProductionSanityAi.buildingSanity(city, academy, 1000) - ProductionSanityAi.buildingSanity(city, plain, 1000))
+    }
+
+    @Test
+    fun `going for the spaceship keeps Aluminum for the parts and two buildings per core city`() {
+        game.gameInfo.gameParameters.victoryTypes = ArrayList(game.ruleset.victories.keys)
+        val aluminumBuilding = game.createBuilding().apply { cost = 30; culture = 1f; requiredResource = "Aluminum" }
+        assertEquals(0, SpaceshipProductionAi.aluminumStillNeededForSpaceship(civ))
+        assertEquals(emptyList<City>(), SpaceshipProductionAi.coreCities(civ))
+        civ.ai.currentVictoryPursuit = VictoryPursuit.Science
+        assertEquals("one for each of the six parts", 6, SpaceshipProductionAi.aluminumStillNeededForSpaceship(civ))
+        assertEquals(listOf(city), SpaceshipProductionAi.coreCities(civ))
+        assertEquals(2, SpaceshipProductionAi.aluminumStillNeededForCoreCities(civ))
+        city.cityConstructions.addBuilding("Spaceship Factory")
+        assertEquals("the factory's Aluminum is spent", 1, SpaceshipProductionAi.aluminumStillNeededForCoreCities(civ))
+        assertEquals(ProductionSanityAi.SR_STRATEGY, ProductionSanityAi.buildingSanity(city, aluminumBuilding, 1000))
     }
 }

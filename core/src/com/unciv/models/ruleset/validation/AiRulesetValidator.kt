@@ -44,7 +44,7 @@ internal class AiRulesetValidator(private val ruleset: Ruleset) {
         for (def in ai.cityStrategies) checkFlavors(def.flavors, "city strategy ${def.name}")
         for (def in ai.citySpecializations) {
             checkFlavors(def.flavors, "city specialization ${def.name}")
-            checkStats(def.targetYields.keys + listOfNotNull(def.yieldType), "city specialization ${def.name}")
+            checkStats(listOfNotNull(def.yieldType), "city specialization ${def.name}")
         }
         for (entry in ai.minorCivFlavors) checkFlavors(entry.flavors, "minor civ ${entry.name}")
         for (entry in ai.itemFlavors) checkFlavors(entry.flavors, "${entry.kind} ${entry.name}")

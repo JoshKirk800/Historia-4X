@@ -180,8 +180,9 @@ class CityStats(val city: City) {
         return null
     }
 
+    /** The percent bonuses of a puppet city (BNW's PUPPET_SCIENCE_MODIFIER and PUPPET_CULTURE_MODIFIER, -25); read by the builder AI's yield prices */
     @Readonly
-    private fun getStatPercentBonusesFromPuppetCity(): Stats? {
+    fun getStatPercentBonusesFromPuppetCity(): Stats? {
         if (!city.isPuppet) return null
         return Stats(science = -25f, culture = -25f)
     }

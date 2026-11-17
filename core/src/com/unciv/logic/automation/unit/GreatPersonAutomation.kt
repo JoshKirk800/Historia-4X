@@ -352,7 +352,7 @@ object GreatPersonAutomation {
      *  CvPlayerAI::FindBestArtistTargetPlot (where a general plants its citadel): among our land tiles next to another civilization's territory,
      *  without a luxury, where [unit] can build its improvement (the original: no feature that forbids improvements) and that holds no
      *  tile-taking improvement yet, the one whose neighbours of other civilizations (not their city centers) are worth most:
-     *  [resourceWeight] × 10 for a resource, else the sum of the tile's yields. A neighbour of a city-state we do not approach as Conquest
+     *  [resourceWeight] (Vox Populi's, which replaced BNW's flavor formula there) × 10 for a resource, else the sum of the tile's yields. A neighbour of a city-state we do not approach as Conquest
      *  or Ignore, or of a major we are not [isTickedOffAt], rules the tile out. Null if no tile scores above 0.
      */
     fun findBestArtistTargetPlot(unit: MapUnit): Tile? {
@@ -383,7 +383,7 @@ object GreatPersonAutomation {
                     break
                 }
                 val resource = neighbor.tileResource
-                score += if (resource != null) resourceWeight(civ, resource, null, neighbor.resourceAmount) * 10
+                score += if (resource != null) resourceWeight(civ, resource, neighbor.resourceAmount) * 10
                 else neighbor.stats.getTileStats(null).let { it.sum() - it.happiness }.toInt() // the six yields
             }
             if (score > bestScore) {

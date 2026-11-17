@@ -35,8 +35,10 @@ class SBuilderState private constructor() {
  *    own (the original scores building outside our borders as worth nothing unless the improvement takes the tiles: NewOwner is none).
  *  - A chop that helps a rush adds the feature's production × the production price / 50.
  *  - The yield loop: for each yield of the tile (food, production, gold, science, culture, faith) the yield the plot has with the build (what it
- *    has now without one), ×100, price per yield (BUILDER_TASKING_BASELINE_ADDS_*) and the city's puppet modifier. Gold is smoothed for golden
- *    ages (the tile stats already add 1 gold of a golden age on a tile with gold): +40 when no golden age is on, -60 in one. Only for a plot that
+ *    has now without one), ×100, price per yield (BUILDER_TASKING_BASELINE_ADDS_*) and the city's puppet modifier. The yields that techs and
+ *    policies will add to the improvement ([FutureYields], CvBuilderTaskingAI::GetFutureYields) go the same way into the potential score. Gold
+ *    is smoothed for golden ages (the tile stats already add 1 gold of a golden age on a tile with gold): +40 when no golden age is on, -60 in
+ *    one. Only for a plot that
  *    one of our cities can work.
  *  - Connecting a resource: its [resourceWeight] to the base score, ⅔ of it (⅓ with exactly one available) moved to the potential score when
  *    the resource is already available more than once (once); resources the old improvement connects do not count as available.
@@ -50,7 +52,7 @@ class SBuilderState private constructor() {
  *  Not ported (none-inputs, the rules BNW lacks or later branches): the tile claim and the culture bomb (NewOwner), tile theft and
  *  BlockTileSteal, Great Person rate (GreatPersonRateModifier), domain production and
  *  experience, the planned state of other builds ([SBuilderState]) and potential adjacent improvements (YieldPerXAdjacent*, adjacency yields),
- *  WLTKD and golden age improvement yields, future yields from techs and policies, resource monopolies, defense, combat bonus and canal terms,
+ *  WLTKD and golden age improvement yields, resource monopolies, defense, combat bonus and canal terms,
  *  improvement maintenance (0 in the rules), spawned resources, IMPROVEMENTS_EXTENSIONS and the vanilla Celts block (inactive in Vox Populi).
  *
  *  Unciv mapping: plot yields are Unciv tile stats truncated to integers (a copy of the tile with the build applied gives the projected
@@ -70,6 +72,9 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
     private val withoutFeatureCache = HashMap<Tile, Tile>()
     /** m_worstCityPlotValues: the simplified yield value of the worst plot each city works */
     private val worstCityPlotValues = HashMap<City, Int>()
+
+    /** m_futureYieldBonuses, filled by [BuilderTaskingAi] every turn (empty: no future yields) */
+    val futureYields = FutureYields(civ)
 
     /** GetYieldBaseModifierTimes100: the price of one point of [stat] (the original's yields beyond culture are zero in the rules) */
     fun yieldBaseModifierTimes100(stat: Stat): Int = when (stat) {
@@ -138,15 +143,20 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
         for ((i, stat) in YIELDS.withIndex()) {
             if (yields == null) break
             var newYieldTimes100 = 100 * yields[i]
+            var futureYieldTimes100 = 0
 
             // Normalize Golden Age gold yields (assume active 40% of the time)
             if (stat == Stat.Gold && newYieldTimes100 >= GOLDEN_AGE_GOLD_THRESHOLD * 100) {
                 newYieldTimes100 += if (!civ.goldenAges.isGoldenAge()) 40 * GOLDEN_AGE_GOLD_YIELD else -60 * GOLDEN_AGE_GOLD_YIELD
             }
 
-            if (newYieldTimes100 != 0) {
+            // Bonus yields from future techs/policies
+            if (plotImprovement != null) futureYieldTimes100 += futureYields[plotImprovement, stat]
+
+            if (newYieldTimes100 != 0 || futureYieldTimes100 != 0) {
                 val cityYieldModifier = owningCity?.let { yieldCityModifierTimes100(it, stat) } ?: 100
                 yieldScore += newYieldTimes100 * yieldBaseModifierTimes100(stat) * cityYieldModifier / 10000
+                potentialScore += futureYieldTimes100 * yieldBaseModifierTimes100(stat) * cityYieldModifier / 10000
             }
         }
 

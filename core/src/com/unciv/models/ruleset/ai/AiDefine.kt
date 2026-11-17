@@ -950,6 +950,8 @@ enum class AiDefine(val default: Float) {
     CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD(55f),
     CLOSE_TO_SCIENCE_VICTORY_THRESHOLD(80f),
     CLOSE_TO_CULTURE_VICTORY_THRESHOLD(60f),
+    // CvPlayer::DoUpdateCoreCitiesForSpaceshipProduction (SpaceshipProductionAi.coreCities; Vox Populi's value, tools/gen_ai_data.py VP_DEFINES; not in BNW)
+    AI_NUM_CORE_CITIES_FOR_SPACESHIP(4f),
     // CvDiplomacyAI::SelectDefaultVictoryPursuits (VictoryPursuitAi; VP database values)
     VICTORY_PURSUIT_DISABLED_VICTORY_PENALTY(-20f),
     VICTORY_PURSUIT_PRIMARY_ONLY_HINT_WEIGHT(16f),

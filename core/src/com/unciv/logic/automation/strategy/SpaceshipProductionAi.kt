@@ -1,17 +1,21 @@
 package com.unciv.logic.automation.strategy
 
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.Victory
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.unit.BaseUnit
+import kotlin.math.roundToInt
 
 /**
  *  Vox Populi's spaceship production planner (CvPlayerAI::AI_doSpaceshipAndUtopiaProduction, GetBestCitiesForSpaceshipParts,
  *  CvPlayer::GetNumSpaceshipPartsBuildableNow): the AI picks the cities that build the spaceship parts on the player level, before its
  *  cities choose their production. BNW has no Utopia project, so that half is none. Not ported: the production focus VP sets for a
- *  moment to count a city's turns (the turns are those of its current focus), airlifts between the city and the capital.
+ *  moment to count a city's turns (the turns are those of its current focus), airlifts between the city and the capital. Also the
+ *  Aluminum the AI keeps for the parts and for the buildings of its [coreCities] (read by the building and unit sanity).
  */
 object SpaceshipProductionAi {
 
@@ -27,6 +31,64 @@ object SpaceshipProductionAi {
     private fun isPart(construction: Any?) = construction is BaseUnit && construction.hasUnique(UniqueType.SpaceshipPart)
 
     private fun producingPart(city: City) = isPart(city.cityConstructions.getCurrentConstruction())
+
+    /** RESOURCE_ALUMINUM, the resource Vox Populi keeps for the spaceship */
+    const val ALUMINUM = "Aluminum"
+
+    /** CvDiplomacyAI::IsGoingForSpaceshipVictory || IsCloseToSpaceshipVictory (science victory progress at least CLOSE_TO_SCIENCE_VICTORY_THRESHOLD) */
+    fun plansSpaceship(civ: Civilization): Boolean = civ.ai.isGoingForSpaceshipVictory() ||
+        VictoryProgressAi.scienceVictoryProgress(civ) >= civ.gameInfo.ruleset.ai.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
+
+    /**
+     *  CvPlayer::DoUpdateCoreCitiesForSpaceshipProduction, computed when asked (VP keeps the list, updated each turn and on a city's loss):
+     *  for an AI that [plansSpaceship], of its cities that are no puppets and not under siege, the AI_NUM_CORE_CITIES_FOR_SPACESHIP with
+     *  the most production per turn for a spaceship part (in hundredths, x2 in the capital, -4 per tile to the capital without an airlift),
+     *  those above 0, the most first.
+     */
+    fun coreCities(civ: Civilization): List<City> {
+        if (civ.isHuman() || !plansSpaceship(civ)) return emptyList()
+        val part = parts(civ).firstOrNull() ?: return emptyList()
+        val capital = civ.getCapital(firstCityIfNoCapital = false)
+        val weights = ArrayList<Pair<City, Int>>()
+        for (city in civ.cities) {
+            if (city.isPuppet || CityDangerAi.isUnderSiege(city)) continue
+            var weight = (city.cityConstructions.productionForConstructionExact(part.name) * 100f).roundToInt()
+            if (city.isCapital()) weight *= 2
+            else if (!city.canAirlift() && capital != null) weight -= 4 * city.getCenterTile().aerialDistanceTo(capital.getCenterTile())
+            if (weight > 0) weights.add(city to weight)
+        }
+        return weights.sortedByDescending { it.second }
+            .take(civ.gameInfo.ruleset.ai.define(AiDefine.AI_NUM_CORE_CITIES_FOR_SPACESHIP)).map { it.first }
+    }
+
+    /**
+     *  CvPlayer::GetNumAluminumStillNeededForCoreCities: for an AI that [plansSpaceship], two Aluminum-using buildings for each of the
+     *  [coreCities] (VP's hard-coded spaceship factory and hydro plant), less the Aluminum of those already built or queued there
+     */
+    fun aluminumStillNeededForCoreCities(civ: Civilization): Int {
+        if (!plansSpaceship(civ)) return 0
+        val core = coreCities(civ)
+        if (core.isEmpty()) return 0
+        var total = core.size * 2
+        for (building in civ.gameInfo.ruleset.buildings.values) {
+            val aluminum = building.getResourceRequirementsPerTurn()[ALUMINUM]
+            if (aluminum <= 0) continue
+            for (city in core)
+                if (city.cityConstructions.isBuilt(building.name) || building.name in city.cityConstructions.constructionQueue) total -= aluminum
+        }
+        return total
+    }
+
+    /**
+     *  CvPlayer::GetNumAluminumStillNeededForSpaceship: for a major with a capital that [plansSpaceship], one Aluminum for each spaceship
+     *  part still to add that no city is building
+     */
+    fun aluminumStillNeededForSpaceship(civ: Civilization): Int {
+        if (civ.isBarbarian || civ.isCityState || !plansSpaceship(civ)) return 0
+        if (civ.getCapital(firstCityIfNoCapital = false) == null) return 0
+        val spaceRace = spaceRace(civ) ?: return 0
+        return spaceRace.requiredSpaceshipParts.size - civ.victoryManager.currentsSpaceshipParts.values.sum() - civ.cities.count { producingPart(it) }
+    }
 
     /**
      *  CvPlayer::GetNumSpaceshipPartsBuildableNow(true): with the space race on and the Apollo Program built, the parts still to add of

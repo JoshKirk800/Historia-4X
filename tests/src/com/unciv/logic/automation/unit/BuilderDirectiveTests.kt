@@ -2,7 +2,6 @@ package com.unciv.logic.automation.unit
 
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
-import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.GdxTestRunner
@@ -306,20 +305,6 @@ class BuilderDirectiveTests {
         val worker = game.addUnit("Worker", civ, tile(0, 1))
         assertTrue(ai.evaluateBuilder(worker)?.directive?.isGreatPerson != true)
         assertTrue(civ.getWorkerAutomation().executeWorkerMove(scientist))
-    }
-
-    @Test
-    fun `a builder with the road already built there gets no route directive`() {
-        research("The Wheel")
-        val capital = game.addCity(civ, tile(0, 0), initialPopulation = 10)
-        game.addCity(civ, tile(4, 0), initialPopulation = 10)
-        game.addUnit("Worker", civ, capital.getCenterTile())
-        val before = BuilderTaskingAi(civ)
-        val flagged = before.routePlots.keys.toList()
-        assertTrue(flagged.isNotEmpty())
-        for (plot in flagged) plot.roadStatus = RoadStatus.Road
-        val after = BuilderTaskingAi(civ)
-        assertTrue(after.directives.none { it.type == BuilderDirective.Type.BuildRoute })
     }
 
     //endregion

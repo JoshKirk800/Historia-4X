@@ -1,6 +1,5 @@
 package com.unciv.logic.automation.unit.tactical
 
-import com.unciv.logic.automation.strategy.ExplorationAi
 import com.unciv.logic.automation.strategy.MilitaryAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
@@ -158,35 +157,33 @@ object BarbarianMoves {
     }
 
     /**
-     *  CvTacticalAI::FindBarbarianExploreTarget: of the revealed tiles within the movement the unit has left, on its landmass or sea, that it
-     *  reaches this turn, the one with the best explore score (CvEconomicAI::ScoreExplorePlot) plus 100 beside foreign land, 200 on it; a
-     *  tile that scores nothing counts as its distance. The first best one wins.
+     *  CvTacticalAI::FindBarbarianExploreTarget (Vox Populi): of the plots the unit reaches this turn without embarking, not its own,
+     *  revealed and without a city, the one with the most around it (the plot and its neighbours): 3 for each not revealed, 2 for each
+     *  revealed one that is owned and not visible; +100 for a plot of its own domain while embarked. The first best wins; none with
+     *  nothing around it. VP's danger check (a plot more dangerous than the unit's hit points) is not ported.
      */
     fun findExploreTarget(ctx: TacticalContext, unit: MapUnit): Tile? {
         val civ = ctx.civ
         val unitTile = unit.getTile()
-        val moves = unit.currentMovement.toInt()
-        if (moves <= 0) return null
-        val forShip = unit.baseUnit.isWaterUnit
-        val sight = unit.getVisibilityRange()
         var best: Tile? = null
         var bestValue = 0
-        for (tile in unitTile.getTilesInDistance(moves)) {
-            if (tile == unitTile || !civ.hasExplored(tile) || !ctx.sameArea(unitTile, tile)) continue
-            if (TacticalAttacks.turnsToReach(unit, tile) > 1) continue
-            var value = ExplorationAi.scoreExplorePlot(civ, tile, sight, forShip)
-            // Add special value for popping up near enemy lands
-            if (tile.neighbors.any { it.getOwner() != null }) value += ADJACENT_OWNED_BONUS
-            else if (tile.getOwner() != null) value += OWNED_BONUS
-            // If still have no value, score equal to distance from my current plot
-            if (value == 0) value = unitTile.aerialDistanceTo(tile)
-            if (value > bestValue) { best = tile; bestValue = value }
+        for (tile in unit.movement.getDistanceToTiles().keys) {
+            if (tile == unitTile || !civ.hasExplored(tile) || tile.isCityCenter()) continue
+            val nativeDomain = if (unit.baseUnit.isWaterUnit) tile.isWater else tile.isLand
+            if (!nativeDomain && !unit.isEmbarked() || !unit.movement.canMoveTo(tile)) continue
+            var value = 0
+            for (around in tile.neighbors + tile) {
+                if (!civ.hasExplored(around)) value += 3
+                else if (!around.isVisible(civ) && around.getOwner() != null) value += 2
+            }
+            if (unit.isEmbarked() && nativeDomain) value += 100
+            if (value > bestValue) {
+                best = tile
+                bestValue = value
+            }
         }
         return best
     }
-
-    private const val ADJACENT_OWNED_BONUS = 100
-    private const val OWNED_BONUS = 200
     //endregion
 
     //region Captured civilians

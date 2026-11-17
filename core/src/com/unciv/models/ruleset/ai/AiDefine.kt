@@ -188,10 +188,12 @@ enum class AiDefine(val default: Float) {
     AI_STRATEGY_ISLAND_START_COAST_REVEAL_PERCENT(80f),
     AI_STRATEGY_NAVAL_UNITS_PER_CITY(1f),
     AI_STRATEGY_NEED_IMPROVEMENT_CITY_RATIO(0.34f),
-    // Vox Populi's exploration plots and recon state (ExplorationPlotSets, EconomicAi.doReconState; BNW has none of them)
+    // Vox Populi's exploration plots, recon state and explorer targets (ExplorationPlotSets, EconomicAi.doReconState, ExplorerAi;
+    // BNW has none of them)
     LAND_EXPLORE_TILE_VALUE(50f),
     COAST_EXPLORE_TILE_VALUE(20f),
     OCEAN_EXPLORE_TILE_VALUE(10f),
+    UNKNOWN_EXPLORE_TILE_VALUE(25f),
     MAX_PLOTS_PER_EXPLORER(54f),
 
     // CvMinorCivAI::DoTurnStatus (CvTeam::IsMinorCivAggressor / IsMinorCivWarmonger), CvPlayerAI::AI_considerAnnex

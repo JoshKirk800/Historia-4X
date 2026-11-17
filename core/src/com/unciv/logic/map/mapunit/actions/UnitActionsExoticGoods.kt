@@ -35,9 +35,16 @@ object UnitActionsExoticGoods {
         return (tile.aerialDistanceTo(capital.getCenterTile()).toFloat() / threshold).coerceAtMost(1f)
     }
 
-    /** CvHomelandAI::ExecuteExplorerMoves sells only when at least halfway to the reward cap. */
+    /**
+     *  CvHomelandAI::ExecuteExplorerMoves (Vox Populi): the reward factor x 10 next to the territory of a city-state we are not at war with
+     *  must reach 5, so an AI sells only next to such a city-state and at least halfway to the reward cap
+     */
     fun tryAutoSell(unit: MapUnit) {
-        if (distanceFactor(unit, unit.getTile()) < 0.5f) return
+        val nextToCityState = unit.getTile().neighbors.any { neighbor ->
+            val owner = neighbor.getOwner()
+            owner != null && owner.isCityState && !unit.civ.isAtWarWith(owner)
+        }
+        if (distanceFactor(unit, unit.getTile()) * (if (nextToCityState) 10 else 1) < 5f) return
         getActions(unit, unit.getTile()).firstOrNull()?.action?.invoke()
     }
 

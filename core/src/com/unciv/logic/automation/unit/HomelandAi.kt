@@ -6,8 +6,7 @@ import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.strategy.AiOperationLogic
-import com.unciv.logic.automation.strategy.ExplorationAi
-import com.unciv.logic.automation.strategy.ExplorationPlots
+import com.unciv.logic.automation.strategy.ExplorationPlotSets
 import com.unciv.logic.automation.strategy.ReconState
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
@@ -24,7 +23,6 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.view.MapUnitView
-import kotlin.math.max
 
 /** CvHomelandAI's AIHomelandMove subset that moves military units, in the original's enum order (the tie-break of the priority sort) */
 enum class HomelandMove(val priority: AiDefine) {
@@ -62,7 +60,7 @@ class HomelandTargets(
  *  CvHomelandAI, the military moves: the units the tactical AI and the operations did not take ([AutomationCache.processedUnits]) go
  *  through the priority list of [priorities] (EstablishHomelandPriorities), each move taking the units that suit it to the targets of
  *  [findTargets] (FindHomelandTargets): [HomelandMove.Explore]/[HomelandMove.ExploreSea] (PlotExplorerMoves, ExecuteExplorerMoves with
- *  [ExplorationAi]), [HomelandMove.Garrison] and the city-state variant (PlotGarrisonMoves), [HomelandMove.Heal] and [HomelandMove.ToSafety]
+ *  [ExplorerAi]), [HomelandMove.Garrison] and the city-state variant (PlotGarrisonMoves), [HomelandMove.Heal] and [HomelandMove.ToSafety]
  *  (the moves of [TacticalSafety], which the tactical AI shares), [HomelandMove.MobileReserve], [HomelandMove.Sentry],
  *  [HomelandMove.AncientRuins], [HomelandMove.Upgrade] (the movement part of PlotUpgradeMoves; the gold part is
  *  [UseGoldAutomation.plotUpgradeMoves]), [HomelandMove.Patrol] and [HomelandMove.Airlift] (PlotAirliftMoves: spare units go to the free
@@ -183,11 +181,9 @@ object HomelandAi {
      */
     fun exploreUnit(unit: MapUnit, cache: AutomationCache): Boolean {
         val turn = HomelandTurn(unit.civ, cache, canUpgrade = false)
-        turn.currentUnits.add(unit)
-        turn.currentSet.add(unit)
         val before = unit.getTile()
-        val ordered = turn.executeExplorerMoves(listOf(unit), disbandWhenStuck = false)
-        return ordered || unit.getTile() != before
+        turn.exploreWithUnit(unit)
+        return unit.getTile() != before
     }
 
     /**
@@ -393,124 +389,79 @@ object HomelandAi {
 
         //region Explorers
 
-        /** CvHomelandAI::PlotExplorerMoves / PlotExplorerSeaMoves: the explorers, twice so that one that could reach the end of its sight can move again */
+        /**
+         *  CvHomelandAI::PlotExplorerMoves (Vox Populi): every explorer (unit AI EXPLORE or EXPLORE_SEA, or a unit on Explore) goes through
+         *  [exploreWithUnit]; one that spent its movement is done for the turn, one that can still move stays for the other homeland moves
+         *  (and a unit on Explore stops exploring).
+         */
         private fun plotExplorerMoves(sea: Boolean) {
             val wanted = if (sea) UnitAiType.EXPLORE_SEA else UnitAiType.EXPLORE
-            val explorers = currentUnits.filter {
-                it.baseUnit.isWaterUnit == sea && (UnitAiTypes.current(it) == wanted || (it.isExploring()))
+            val explorers = currentUnits.filter { it.baseUnit.isWaterUnit == sea && (UnitAiTypes.current(it) == wanted || it.isExploring()) }
+            for (unit in explorers) {
+                if (unit.isDestroyed || unit !in currentSet) continue
+                exploreWithUnit(unit)
+                if (unit.hasMovement()) {
+                    if (unit.isExploring()) unit.action = null
+                } else processed(unit, if (sea) HomelandMove.ExploreSea else HomelandMove.Explore)
             }
-            if (explorers.isEmpty()) return
-            executeExplorerMoves(explorers, disbandWhenStuck = true)
-            executeExplorerMoves(explorers.filter { it in currentSet }, disbandWhenStuck = true)
         }
 
         /**
-         *  CvHomelandAI::ExecuteExplorerMoves. Per explorer: sell exotic goods when far from home; go to the goody hut or barbarian camp
-         *  the economic AI assigned ([ExplorationPlots]); else to the best plot within its movement that it reaches this turn
-         *  (ScoreExplorePlot of the plot with the unit's sight, +50 hills, +200 off shallow water for units that may embark anywhere; ships: exotic
-         *  goods bonus, +200 next to land); else, as the best of the exploration plots by rating x 1000 / estimated turns, the plot where
-         *  its path to one ends this turn. With no target, a land explorer that reaches none of our cities is disbanded.
-         *  @return whether a unit was ordered somewhere
+         *  The loop of PlotExplorerMoves for one explorer: up to 9 runs of [executeExplorerMoves] while it can move, until one says it is done.
+         *  The exploration plots are rebuilt first ([com.unciv.logic.automation.strategy.EconomicAi.refreshExplorationPlots]), as VP's
+         *  follow the plots revealed.
          */
-        fun executeExplorerMoves(explorers: List<MapUnit>, disbandWhenStuck: Boolean): Boolean {
-            var ordered = false
-            val landExplorers = civ.units.getCivUnits().filter { UnitAiTypes.current(it) == UnitAiType.EXPLORE && it.civ == civ && !it.baseUnit.isWaterUnit && !it.isDestroyed }.toList()
-            val exploration = ExplorationPlots(civ, landExplorers)
-            for (unit in explorers) {
-                if (unit.isDestroyed || unit in cache.processedUnits || !unit.hasMovement()) continue
-                if (unit.hasUnique(UniqueType.SellExoticGoods)) UnitActionsExoticGoods.tryAutoSell(unit)
+        fun exploreWithUnit(unit: MapUnit) {
+            val plots = civ.ai.economic.refreshExplorationPlots(civ)
+            var failsafe = 0
+            while (unit.hasMovement() && ++failsafe < 10) if (executeExplorerMoves(unit, plots)) break
+        }
 
-                if (goToGoody(unit, exploration)) { ordered = true; continue }
-
-                val best = bestNearbyExplorePlot(unit) ?: bestExplorationPlotStep(unit, exploration)
-                if (best != null) {
-                    unit.movement.tryHeadTowards(best)
-                    ordered = true
-                    if (!unit.hasMovement()) processed(unit, if (unit.baseUnit.isWaterUnit) HomelandMove.ExploreSea else HomelandMove.Explore)
-                } else if (disbandWhenStuck && UnitAiTypes.current(unit) == UnitAiType.EXPLORE && civ.cities.none { unit.movement.getShortestPath(it.getCenterTile()).isNotEmpty() }) {
-                    // "If this is a land explorer and there is no path to a friendly city, then disband him"
-                    processed(unit)
-                    unit.disband()
+        /**
+         *  CvHomelandAI::ExecuteExplorerMoves (Vox Populi) for one unit. @return whether it is done: it did not move or has no movement left.
+         *  - an AI sells exotic goods where that pays ([UnitActionsExoticGoods.tryAutoSell]);
+         *  - when the best target within 3 turns ([ExplorerAi.bestExploreTarget]) is a goody hut or an empty barbarian camp
+         *    ([ExplorerAi.isHighValueExploreTarget]) or sells exotic goods at half the reward, it heads there;
+         *  - else to the best target within 3, 5, 12 or 23 turns; when that is its own plot and it is damaged and heals there, it stays;
+         *  - with no target, it stops exploring: back to its own unit AI (FAST_ATTACK for a unit made to explore), a unit on Explore
+         *    leaves it.
+         *  Not ported: the Lua hook; going home to upgrade (only for units with scouting XP); reusing the path to a target more than 10
+         *  plots away (VP's MISSIONAI_EXPLORE memory); the AI's harassment on the way (a lone enemy killed, a civilian captured, an
+         *  improvement pillaged, a trade route plundered).
+         */
+        private fun executeExplorerMoves(unit: MapUnit, plots: ExplorationPlotSets): Boolean {
+            if (!unit.hasMovement()) return true
+            if (!civ.isHuman() && unit.hasUnique(UniqueType.SellExoticGoods)) UnitActionsExoticGoods.tryAutoSell(unit)
+            val oldTile = unit.getTile()
+            val reach = ExplorerAi.Reach(unit)
+            val best3 = ExplorerAi.bestExploreTarget(unit, 3, reach, plots)
+            if (best3 != null) {
+                val highValue = ExplorerAi.isHighValueExploreTarget(civ, best3) || unit.hasUnique(UniqueType.SellExoticGoods)
+                    && UnitActionsExoticGoods.canSell(unit, best3) && UnitActionsExoticGoods.distanceFactor(unit, best3) >= 0.5f
+                if (highValue && unit.movement.canReach(best3)) {
+                    unit.movement.headTowards(best3)
+                    return unit.getTile() == oldTile || !unit.hasMovement()
                 }
             }
-            return ordered
-        }
-
-        /** The goody target of the unit: heads for it along its path and ends its turn there. @return whether it went */
-        private fun goToGoody(unit: MapUnit, exploration: ExplorationPlots): Boolean {
-            val goody = exploration.targetGoodyPlot(unit) ?: return false
-            val ruleset = civ.gameInfo.ruleset
-            val stillWorth = ruleset.tileImprovements[goody.improvement]?.isAncientRuinsEquivalent() == true ||
-                (goody.isBarbarianEncampment() && goody.militaryUnit == null)
-            if (!stillWorth || unit.movement.getShortestPath(goody).isEmpty()) return false
-            unit.movement.tryHeadTowards(goody)
-            processed(unit, if (unit.baseUnit.isWaterUnit) HomelandMove.ExploreSea else HomelandMove.Explore)
-            return true
-        }
-
-        /** CvHomelandAI::IsValidExplorerEndTurnPlot */
-        fun isValidExplorerEndTurnPlot(unit: MapUnit, tile: Tile): Boolean {
-            if (unit.getTile() == tile || !civ.hasExplored(tile)) return false
-            if (tile.getContinent() != unit.getTile().getContinent()) {
-                val canEmbark = !unit.cache.cannotEmbark && civ.tech.unitsCanEmbark
-                if (!canEmbark && !(unit.baseUnit.isWaterUnit && tile.isWater)) return false
+            var best = best3
+            for (turns in intArrayOf(5, 12, 23)) {
+                if (best != null) break
+                best = ExplorerAi.bestExploreTarget(unit, turns, reach, plots)
             }
-            // Don't let the auto-explore end its turn in a city
-            if (tile.isCityCenter() && tile.getCity()?.civ != civ) return false
-            return unit.movement.canMoveTo(tile)
-        }
-
-        private class Scored(val tile: Tile, val score: Int)
-
-        private fun bestNearbyExplorePlot(unit: MapUnit): Tile? {
-            val ship = unit.baseUnit.isWaterUnit
-            val range = max(1, unit.currentMovement.toInt())
-            val sight = unit.getVisibilityRange()
-            val embarkAnywhere = !ship && civ.tech.embarkedUnitsCanEnterOcean
-            val scored = ArrayList<Scored>()
-            unit.getTile().forEachTileInDistance(range) { tile ->
-                if (!isValidExplorerEndTurnPlot(unit, tile)) return@forEachTileInDistance
-                var score = ExplorationAi.scoreExplorePlot(civ, tile, sight, ship)
-                if (score <= 0) return@forEachTileInDistance
-                if (!ship) {
-                    if (tile.isHill()) score += 50
-                    if (embarkAnywhere && !(tile.isWater && !tile.isOcean)) score += 200
-                } else {
-                    if (unit.hasUnique(UniqueType.SellExoticGoods) && UnitActionsExoticGoods.canSell(unit, tile)) {
-                        val factor = UnitActionsExoticGoods.distanceFactor(unit, tile)
-                        if (factor >= 0.75f) score += 150 else if (factor >= 0.5f) score += 75
+            if (best != null) {
+                if (best != unit.getTile()) {
+                    if (unit.movement.canReach(best)) {
+                        unit.movement.headTowards(best)
+                        return unit.getTile() == oldTile || !unit.hasMovement()
                     }
-                    if (tile.neighbors.any { !it.isWater }) score += 200
-                }
-                scored.add(Scored(tile, score))
+                } else if (unit.health < 100 && unit.getHealAmountForCurrentTile() > 0) return true
             }
-            for (candidate in scored.sortedByDescending { it.score }) { // highest first, equal ones in discovery order
-                val path = unit.movement.getShortestPath(candidate.tile)
-                if (path.isNotEmpty() && path.size <= 1) return candidate.tile
+            if (unit.isExploring()) unit.action = null
+            if (best == null) {
+                val default = UnitAiTypes.defaultOf(unit.baseUnit, civ.gameInfo.ruleset.ai)
+                UnitAiTypes.set(unit, if (default != UnitAiType.EXPLORE) default else UnitAiType.FAST_ATTACK)
             }
-            return null
-        }
-
-        /** The exploration plots by rating x 1000 / estimated turns: where the path of the best one that has a path ends this turn */
-        private fun bestExplorationPlotStep(unit: MapUnit, exploration: ExplorationPlots): Tile? {
-            val range = unit.currentMovement.toInt()
-            if (range <= 0 || exploration.plots.isEmpty()) return null
-            val here = unit.getTile()
-            val scored = ArrayList<Scored>(exploration.plots.size)
-            for ((index, plot) in exploration.plots.withIndex()) {
-                val estimateTurns = here.aerialDistanceTo(plot) / range
-                val rating = exploration.ratings[index]
-                scored.add(Scored(plot, if (estimateTurns == 0) 1000 * rating else 1000 * rating / estimateTurns))
-            }
-            for (candidate in scored.sortedByDescending { it.score }) {
-                if (!isValidExplorerEndTurnPlot(unit, candidate.tile)) continue
-                val path = unit.movement.getShortestPath(candidate.tile)
-                if (path.isEmpty()) continue
-                val endTurn = path.first()
-                if (endTurn == here) continue
-                if (isValidExplorerEndTurnPlot(unit, endTurn)) return endTurn
-            }
-            return null
+            return true
         }
 
         //endregion

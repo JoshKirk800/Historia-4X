@@ -165,11 +165,17 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
             if (ownerAtWar && improvement != null && tile.canPillageTileImprovement()) {
                 val resource = tile.tileResource
                 val isImportant = resource != null && (resource.resourceType == ResourceType.Strategic || resource.resourceType == ResourceType.Luxury)
-                // On land, civs prioritize improvements built on resources
+                // VP FindTacticalTargets values strategic resources above luxuries; VP's warmonger trait is absent in BNW.
+                val score = (when (resource?.resourceType) {
+                    ResourceType.Strategic -> 80
+                    ResourceType.Luxury -> 40
+                    else -> 5
+                }) + if (civ.isBarbarian) 20 else 0
+                // Keep the existing target classes for water and barbarian pillage consumers.
                 if (isImportant || tile.isWater || civ.isBarbarian)
-                    return if (civ.isBarbarian && tile.isWater) null // barbarians can't target naval improvements
-                    else TacticalTarget(TacticalTargetType.ImprovementResource, tile, zoneId, owner)
-                return TacticalTarget(TacticalTargetType.Improvement, tile, zoneId, owner)
+                    return if (civ.isBarbarian && tile.isWater) null
+                    else TacticalTarget(TacticalTargetType.ImprovementResource, tile, zoneId, owner, aux = score)
+                return TacticalTarget(TacticalTargetType.Improvement, tile, zoneId, owner, aux = score)
             }
             // ... enemy trade route? A road of a trade route is pillaged like an improvement
             if (ownerAtWar && tile.canPillageRoad() && tile in trade.anyRoute)

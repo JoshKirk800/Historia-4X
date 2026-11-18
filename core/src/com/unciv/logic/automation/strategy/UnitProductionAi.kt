@@ -22,13 +22,14 @@ import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
+import com.unciv.models.stats.Stat
 import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
  *  Vox Populi's CvUnitProductionAI::CheckUnitBuildSanity (CvUnitProductionAI.cpp 172-1678) for the units a city chooses to train
- *  ([com.unciv.logic.automation.city.ConstructionAutomation]): bForPurchase and bFree are false. [checkUnitBuildSanity] returns the
- *  SanityResult codes of [ProductionSanityAi] or the weight, in VP's order of tests.
+ *  ([com.unciv.logic.automation.city.ConstructionAutomation]) and, with forPurchase, for the units a purchase chooser considers (bFree is
+ *  false). [checkUnitBuildSanity] returns the SanityResult codes of [ProductionSanityAi] or the weight, in VP's order of tests.
  *
  *  A combat unit is one with a strength (CvUnitEntry::GetCombat / GetRangedCombat above 0); nuclear weapons have none in BNW's
  *  database, so they count as civilians here. Input VP has and BNW lacks counts as none: the unit columns of VP's database (ResourceType,
@@ -38,7 +39,8 @@ import kotlin.math.roundToInt
  *  the traits' expansion WLTKD and artifact yields, the archaeological dig tourism of policies, the German unit gifts, the trade route
  *  priorities of VP's trade route ranking ([com.unciv.logic.automation.unit.TradeRouteAutomation] is not VP's) and the
  *  MOD_AI_UNIT_PRODUCTION strategies (off in VP's
- *  database). A purchase pays no part here: purchases do not go through the sanity.
+ *  database). The purchase terms are those of bForPurchase; VP's unit purchase cooldown and unit investments (MOD_BALANCE_UNIT_INVESTMENTS)
+ *  have no BNW counterpart.
  */
 object UnitProductionAi {
 
@@ -92,10 +94,14 @@ object UnitProductionAi {
      *  - with at most 2 land units per city a land combat unit +300, other land units -300; at most as many ships as effective coastal
      *    cities likewise; under siege combat +500 else -500; ERADICATE_BARBARIANS +250 (_CRITICAL +500) for combat units; combat units: +100
      *    (+50 outside war) for what the city is already building, -100 when it builds another combat unit;
+     *  - [forPurchase] (bForPurchase): first SR_IMPOSSIBLE unless the city may buy the unit for gold now (CvCity::IsCanPurchase: puppet,
+     *    resistance, no room, not trainable, no price, too little gold); no puppet or fewer-than-2-buildings refusal; the city's current
+     *    construction is neither taken out of the unit counts nor weighed; the work boat count includes the city itself and the bonus uses the
+     *    capital's population less the steps to the nearest boat tile; a combat unit in a city under siege +250;
      *  - at the end a negative bonus is SR_UNKNOWN, else the weight plus the bonus, a fifth of it in an occupied city without a courthouse
      *    (a conquered, not puppeted, city), at least 1.
      */
-    fun checkUnitBuildSanity(city: City, unit: BaseUnit, flavorWeight: Int, forOperation: Boolean): Int {
+    fun checkUnitBuildSanity(city: City, unit: BaseUnit, flavorWeight: Int, forOperation: Boolean, forPurchase: Boolean = false): Int {
         if (flavorWeight < 1) return ProductionSanityAi.SR_IMPOSSIBLE
         val civ = city.civ
         val rules = civ.gameInfo.ruleset.ai
@@ -110,10 +116,15 @@ object UnitProductionAi {
         val domainLand = unit.isLandUnit
         val domainSea = unit.isWaterUnit
 
-        if (city.isPuppet) return ProductionSanityAi.SR_IMPOSSIBLE
+        if (forPurchase) {
+            // IsCanPurchase(bTestPurchaseCost, bTestTrainable, unit, gold): a puppet (barring the exceptions), resistance, no room for the unit,
+            // not trainable, no gold price or not enough gold
+            val cost = unit.getStatBuyCost(city, Stat.Gold) ?: return ProductionSanityAi.SR_IMPOSSIBLE
+            if (!city.cityConstructions.isConstructionPurchaseAllowed(unit, Stat.Gold, cost)) return ProductionSanityAi.SR_IMPOSSIBLE
+        } else if (city.isPuppet) return ProductionSanityAi.SR_IMPOSSIBLE
         val desperate = CityDangerAi.isUnderSiege(city)
         if (desperate && !combat) return ProductionSanityAi.SR_STRATEGY
-        if (city.cityConstructions.getBuiltBuildings().count() < 2 && !desperate) return ProductionSanityAi.SR_STRATEGY
+        if (city.cityConstructions.getBuiltBuildings().count() < 2 && !desperate && !forPurchase) return ProductionSanityAi.SR_STRATEGY
         if (upgradeTrainableAnywhere(civ, unit)) return ProductionSanityAi.SR_STRATEGY
 
         if (!desperate && combat && !hasNoMaintenance(unit)) {
@@ -134,7 +145,8 @@ object UnitProductionAi {
             if (!training.isMilitary) continue
             if (training.isLandUnit) numLandUnits++ else if (training.isWaterUnit) numSeaUnits++
         }
-        val current = city.cityConstructions.getCurrentConstruction() as? BaseUnit
+        // eCurrentlyProducing is read only when !bForPurchase
+        val current = if (forPurchase) null else city.cityConstructions.getCurrentConstruction() as? BaseUnit
         if (current != null) when {
             current.isLandUnit && UnitAiTypes.defaultOf(current, rules) == UnitAiType.EXPLORE -> numExplorers--
             current.isLandUnit && current.isMilitary -> numLandUnits--
@@ -307,9 +319,11 @@ object UnitProductionAi {
         if (unitAi == UnitAiType.WORKER_SEA) {
             val zone = tacticalMap?.zoneByCity(city, true)
             if (zone != null && zone.dominance != TacticalDominance.Friendly) return ProductionSanityAi.SR_STRATEGY
-            val needed = workBoatsNeeded(city)
-            if (needed > 0) bonus += 1000 * needed * (city.population.population + civ.getEraNumber())
-            else return ProductionSanityAi.SR_USELESS
+            val (needed, closestDistance) = workBoatsNeeded(city, forPurchase)
+            if (needed > 0) {
+                if (!forPurchase) bonus += 1000 * needed * (city.population.population + civ.getEraNumber())
+                else bonus += 1000 * needed * ((civ.getCapital() ?: city).population.population + civ.getEraNumber()) - closestDistance
+            } else return ProductionSanityAi.SR_USELESS
         }
         if (unitAi == UnitAiType.WORKER) {
             val zone = tacticalMap?.zoneByCity(city, false)
@@ -375,6 +389,8 @@ object UnitProductionAi {
                 else if (unit == current) bonus += 50
                 else if (isCombat(current)) bonus -= 100
             }
+            // prioritize besieged cities for purchase
+            if (forPurchase && desperate) bonus += 250
         }
 
         if (bonus < 0) return ProductionSanityAi.SR_UNKNOWN
@@ -524,9 +540,10 @@ object UnitProductionAi {
     /**
      *  The work boats the city's waters need: the resources in our unimproved water tiles within 12 steps by water of the city (not under
      *  an owner who is being razed, bonus resources only in the work range of the city that owns the tile) that a work boat can improve
-     *  ([needsWorkBoat]), less each work boat of ours in those tiles and each other city of ours there that trains one.
+     *  ([needsWorkBoat]), less each work boat of ours in those tiles and each other city of ours there that trains one (the city itself too
+     *  for a purchase). Also returns the steps to the nearest tile counted (Int.MAX_VALUE when none).
      */
-    private fun workBoatsNeeded(city: City): Int {
+    private fun workBoatsNeeded(city: City, forPurchase: Boolean): Pair<Int, Int> {
         val civ = city.civ
         val rules = civ.gameInfo.ruleset.ai
         val start = city.getCenterTile()
@@ -547,12 +564,13 @@ object UnitProductionAi {
             }
         }
         var needed = 0
+        var closestDistance = Int.MAX_VALUE
         val needsBoat = HashMap<TileResource, Boolean>()
         for (tile in distance.keys) {
             for (unit in tile.getUnits())
                 if (unit.civ == civ && UnitAiTypes.current(unit) == UnitAiType.WORKER_SEA) needed--
             val tileCity = tile.getCity()
-            if (tile.isCityCenter() && tileCity != null && tileCity != city && tileCity.civ == civ) {
+            if (tile.isCityCenter() && tileCity != null && (tileCity != city || forPurchase) && tileCity.civ == civ) {
                 val training = tileCity.cityConstructions.getCurrentConstruction() as? BaseUnit
                 if (training != null && UnitAiTypes.defaultOf(training, rules) == UnitAiType.WORKER_SEA) needed--
             }
@@ -563,9 +581,10 @@ object UnitProductionAi {
             if (!civ.canSeeResource(resource)) continue
             if (!needsBoat.getOrPut(resource) { needsWorkBoat(civ, resource, tile) }) continue
             if (resource.resourceType == ResourceType.Bonus && tile !in owningCity.tilesInRange) continue
+            closestDistance = minOf(closestDistance, distance.getValue(tile))
             needed++
         }
-        return needed
+        return needed to closestDistance
     }
 
     /** CvPlayer::NeedWorkboatToImproveResource: a water improvement that is no great person's connects [resource] and we can build it */

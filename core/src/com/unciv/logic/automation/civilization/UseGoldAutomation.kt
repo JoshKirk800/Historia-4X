@@ -1,14 +1,17 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.AiDecisionLog
+import com.unciv.logic.automation.city.HurryChoice
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.DisputeLevel
 import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.logic.automation.strategy.ProductionAi
+import com.unciv.logic.automation.strategy.ProductionSanityAi
 import com.unciv.logic.automation.strategy.PurchaseType
 import com.unciv.logic.automation.strategy.StateAllWars
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
+import com.unciv.logic.automation.strategy.UnitProductionAi
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.models.ruleset.Building
 import com.unciv.logic.city.City
@@ -26,10 +29,9 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- *  Where the AI spends gold, by the rules of the original: plot purchases (CvEconomicAI::DoPlotPurchases), unit upgrades
- *  (CvHomelandAI::PlotUpgradeMoves) and military unit purchases (CvMilitaryAI::BuyEmergencyUnit), each through the purchase savings
- *  ([com.unciv.logic.automation.strategy.PurchaseSavings]). The original never buys the current construction of a city
- *  (CvEconomicAI::DoHurry's gold branch is disabled), so neither does this. City-state gifts are the city-state diplomacy port's.
+ *  Where the AI spends gold: Vox Populi's hurry and plot purchases (CvEconomicAI::DoHurry and DoPlotPurchases), unit upgrades
+ *  (CvHomelandAI::PlotUpgradeMoves) and emergency purchases (CvMilitaryAI::BuyEmergencyUnit), through the purchase savings
+ *  ([com.unciv.logic.automation.strategy.PurchaseSavings]). City-state gifts are the city-state diplomacy port's.
  */
 object UseGoldAutomation {
 
@@ -100,6 +102,51 @@ object UseGoldAutomation {
         return UpgradeMoves(0, candidates.first().unit)
     }
     //endregion
+
+    /**
+     * CvEconomicAI::DoHurry (Vox Populi): reserve twice the other savings requests, choose one purchase per eligible city, and
+     * attempt them highest value first while above the treasury cushion. Threat ordering uses the raw city threat, including zero.
+     * VP investments, cooldowns and diplomat purchases have no BNW counterpart; purchases use existing game rules.
+     */
+    fun doHurry(civ: Civilization) {
+        val buffer = treasuryBuffer(civ)
+        if (civ.gold < buffer) return
+        val savings = civ.ai.purchaseSavings
+        val reserved = PurchaseType.entries.filter { it != PurchaseType.Unit && it != PurchaseType.Building }
+            .sumOf { (savings.requests[it.name]?.amount ?: 0).coerceAtLeast(0).toLong() * 2 }
+        if (civ.gold.toLong() <= reserved) return
+        val threatened = civ.cities.maxByOrNull { civ.ai.plotDanger.cityThreat(it) }
+        val choices = civ.cities.asSequence()
+            .filter { !ProductionSanityAi.isPuppetAndAnnexable(it) && (it != threatened || it.isCapital()) }
+            .mapNotNull { HurryChoice.choose(it) }
+            .sortedByDescending { it.score }
+            .toList()
+        for (choice in choices) {
+            if (civ.gold <= buffer) break
+            val city = choice.city
+            val construction = choice.construction
+            val cost = choice.goldCost ?: continue
+            if (!choice.canBuyNow) continue
+            val type = if (construction is BaseUnit) PurchaseType.Unit else PurchaseType.Building
+            var valuation = cost
+            if (construction is Building) {
+                valuation += when (choice.turns) {
+                    1 -> continue
+                    2 -> cost
+                    3 -> cost / 2
+                    4 -> cost / 5
+                    else -> 0
+                }
+            }
+            if (!savings.canWithdrawMoneyForPurchase(civ, type, valuation)) continue
+            if (construction is BaseUnit &&
+                UnitProductionAi.checkUnitBuildSanity(city, construction, 100, forOperation = true, forPurchase = true) <= 0) continue
+            if (!city.cityConstructions.purchaseConstruction(construction, -1, true, Stat.Gold)) continue
+            if (construction is BaseUnit && construction.isCityFounder()) civ.ai.military.numberOfTimesSettlerBuildSkippedOver = 0
+            if (choice.kind == HurryChoice.Kind.Operation) civ.ai.military.numberOfTimesOpsBuildSkippedOver = 0
+            AiDecisionLog.log(civ) { "Hurry bought: ${construction.name} in ${city.name} for $cost" }
+        }
+    }
 
     //region Plot purchases (CvEconomicAI::DoPlotPurchases)
 

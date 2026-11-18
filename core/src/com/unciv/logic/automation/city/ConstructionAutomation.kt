@@ -53,7 +53,7 @@ import com.unciv.ui.screens.cityscreen.CityScreen
  *  escort in the early expansion phase (EARLY_EXPANSION) counts three times its weight.
  *  The settler skip count (CvMilitaryAI::NumberOfTimesSettlerBuildSkippedOver, which the settler sanity reads) starts over when a settler is
  *  started or none is among the choices, else goes up by one.
- *  Not ported: the "rush" flag of long builds, which BNW's DoHurry no longer spends gold on.
+ *  Hurry selection is separate: [HurryChoice] and CvEconomicAI::DoHurry.
  *  Unciv extras kept: items a human disabled in the city, the personality's "Will not build" uniques and the ruleset's AiChoiceWeight
  *  uniques (a multiplier on the weight, none in the base rulesets).
  */

@@ -11,7 +11,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Nuclear might after Vox Populi's CvPlayer::calculateNuclearMight (Release-5.4.8), on the scale of our unit power */
+/** Nuclear might after Vox Populi's CvPlayer::calculateNuclearMight (Release-5.4.8). */
 @RunWith(GdxTestRunner::class)
 class NuclearMightTests {
     private lateinit var game: TestGame
@@ -47,8 +47,8 @@ class NuclearMightTests {
     @Test
     fun `a weapon counts the strongest land and air units it would destroy, a missile more than a bomb`() {
         nuke("Atomic Bomb")
-        val infantry = b.units.getCivUnits().first { it.name == "Infantry" }.getAiPower()
-        val fighter = b.units.getCivUnits().first { it.name == "Fighter" }.getAiPower()
+        val infantry = b.units.getCivUnits().first { it.name == "Infantry" }.baseUnit.strength
+        val fighter = b.units.getCivUnits().first { it.name == "Fighter" }.baseUnit.rangedStrength
         // blast radius 2: 18 tiles around the target; damage level 1 counts each twice
         assertEquals(infantry * 3 + fighter * 12 + infantry * 18 * 2, NuclearMight.of(a, b))
         val bomb = NuclearMight.of(a, b)

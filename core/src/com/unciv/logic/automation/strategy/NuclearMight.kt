@@ -12,10 +12,20 @@ import kotlin.math.roundToInt
  *  `phaseE/vp-conquest-endgame-plan.md` step 3). BNW's might counts a nuclear weapon as any other unit (its power); VP counts what it
  *  would destroy: per weapon, the strongest land-or-sea unit 3 times and the strongest air unit 12 times (one land and four air units on
  *  the target tile), plus the strongest land-or-sea unit 2 times (damage level 1) or 3 times (level 2 and up) for each other tile in the
- *  blast. Departure, recorded: VP measures a unit by its best attack strength; we use the unit's AI power ([MapUnit.getAiPower]), the
- *  measure of the rest of our might, so that the two add up on one scale.
+ *  blast. Both this and conventional might use [attackStrength] so their scales agree.
  */
 object NuclearMight {
+
+    /**
+     * Approximation of CvUnit::GetBestAttackStrength: use the larger base attack and VP's normal wounded penalty.
+     * Unlike VP's quick combat calculation this omits contextual and promotion-specific combat modifiers.
+     */
+    @Readonly
+    internal fun attackStrength(unit: MapUnit): Int {
+        val strength = maxOf(unit.baseUnit.strength, unit.baseUnit.rangedStrength)
+        val woundedPenalty = (100 - unit.health) * 33 / 100
+        return strength * (100 - woundedPenalty) / 100
+    }
 
     /**
      *  The nuclear might of [civ]: against [against]'s units and shelters, or, when [against] is null, against the strongest units of all
@@ -31,7 +41,7 @@ object NuclearMight {
         var highestAir = 0
         for (unit in targets.flatMap { it.units.getCivUnits() }) {
             if (unit.isNuclearWeapon() || unit.isCivilian()) continue
-            val power = unit.getAiPower()
+            val power = attackStrength(unit)
             if (unit.baseUnit.isAirUnit()) highestAir = maxOf(highestAir, power)
             else highestLandOrSea = maxOf(highestLandOrSea, power)
         }

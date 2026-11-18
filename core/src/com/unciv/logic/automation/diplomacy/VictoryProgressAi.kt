@@ -18,7 +18,7 @@ object VictoryProgressAi {
      *  the living major civilizations that have a city, and our share of the original capitals of major civilizations that still stand.
      *  A capital never founded or razed counts for no one. 0 when the civilization is dead or cannot win by Domination
      *  (CvGame::CanPlayerAttemptDominationVictory: Unciv has no passive AI or always-peace option, so only whether the victory is open).
-     *  Might is [com.unciv.logic.automation.strategy.CivAi.militaryMight] (the BNW formula; VP's calculateMilitaryMight is a later queue item),
+     *  Might is [com.unciv.logic.automation.strategy.CivAi.militaryMight],
      *  a statistic of the turn as in VP; the capitals are counted at the call, so a capture counts at once.
      */
     @Readonly

@@ -27,8 +27,6 @@ import org.jetbrains.annotations.VisibleForTesting
 import yairm210.purity.annotations.Cache
 import yairm210.purity.annotations.Readonly
 import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.sqrt
 import kotlin.random.Random
 
 /** How sure a player is of its guess of another player's grand strategy (the original's GuessConfidenceTypes) */
@@ -448,25 +446,22 @@ class CivAi : IsPartOfGameInfoSerialization {
     //region Inputs the original keeps on CvPlayer
 
     /**
-     *  CvPlayer::GetMilitaryMight (calculateMilitaryMight), computed once per turn: per unit the unit type's power, × (1000 + 125 × level) / 1000,
-     *  × health / 100, halved for water units; the sum × min(2, 1 + √gold / 100).
-     *  The unit type's power is [com.unciv.models.ruleset.unit.BaseUnit.getAiPower] (CvUnitEntry::GetPower);
-     *  the unit level is 1 + its promotions gained by experience (CvUnit::getLevel starts at 1).
-     *  After Vox Populi (CvPlayer::updateMightStatistics, D7) nuclear weapons are not counted as units: their [nuclearMight] is added instead.
+     * CvPlayer::calculateMilitaryMight and updateMightStatistics (Vox Populi 5.4.8): offensive unit strength,
+     * with 10% per level above three, plus nuclear might. Civilian and nuclear units are excluded from the sum.
+     * [NuclearMight.attackStrength] records the approximation used for VP's contextual combat strength.
      */
     @Readonly fun militaryMight(): Int {
         val turn = civ.gameInfo.turns
         if (militaryMightTurn == turn) return militaryMightCache
         var sum = 0
         for (unit in civ.units.getCivUnits()) {
-            if (unit.isNuclearWeapon()) continue
-            var power = unit.getAiPower()
-            if (unit.baseUnit.isWaterUnit) power /= 2
-            sum += power
+            if (unit.isCivilian() || unit.isNuclearWeapon()) continue
+            val level = 1 + unit.promotions.numberOfPromotions
+            val power = NuclearMight.attackStrength(unit)
+            sum += if (level > 3) power * (100 + (level - 3) * 10) / 100 else power
         }
-        val goldMultiplier = min(2f, 1f + sqrt(max(0, civ.gold).toFloat()) / 100f)
         nuclearMightCache = NuclearMight.of(civ, null)
-        militaryMightCache = (sum * goldMultiplier).toInt() + nuclearMightCache
+        militaryMightCache = sum + nuclearMightCache
         militaryMightTurn = turn
         return militaryMightCache
     }

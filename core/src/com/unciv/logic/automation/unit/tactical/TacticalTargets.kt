@@ -127,7 +127,12 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
                     else if (civ.isAtWarWith(city.civ)) targets.add(TacticalTarget(TacticalTargetType.City, tile, zoneId, city.civ, city = city))
                     continue
                 }
-                targetOfTile(civ, map, danger, trade, tile, zoneId)?.let { targets.add(it) }
+                val target = targetOfTile(civ, map, danger, trade, tile, zoneId)
+                if (target != null) targets.add(target)
+                // VP FindTacticalTargets also retains an occupied camp as an independent objective.
+                if (target?.unit != null && tile.isBarbarianEncampment() && tile.getOwner() == null &&
+                    (civ.isMajorCiv || civ.isBarbarian))
+                    targets.add(TacticalTarget(TacticalTargetType.BarbarianCamp, tile, zoneId, civ.gameInfo.getBarbarianCivilization()))
             }
             if (civ.isBarbarian) identifyPriorityBarbarianTargets(civ, targets) else identifyPriorityTargets(civ, targets)
             identifyPriorityTargetsByType(targets)

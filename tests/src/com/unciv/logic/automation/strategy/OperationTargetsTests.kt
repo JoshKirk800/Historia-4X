@@ -305,7 +305,9 @@ class OperationTargetsTests {
         civ.tech.unitsCanEmbark = true
         assertTrue(MilitaryOperations.requestShowOfForce(civ, enemy))
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
-        assertEquals(enemyCity.getCenterTile().position, operation.targetTile)
+        // CvAIOperationCityAttackNaval::Init: the goal is the coastal water next to the city
+        val goal = game.getTile(operation.targetTile!!)
+        assertTrue(goal.isWater && goal.aerialDistanceTo(enemyCity.getCenterTile()) <= 2)
         assertEquals(city.id, operation.startCityId)
         assertNull(ops.firstOfType(AiOperationType.BASIC_CITY_ATTACK))
         assertTrue(fleet.all { ops.armyOf(it) == operation.firstArmy })

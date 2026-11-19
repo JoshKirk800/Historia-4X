@@ -139,6 +139,36 @@ class OperationalMovesTests {
         assertEquals(OperationAbortReason.HALF_STRENGTH, operation.abortReason)
     }
 
+    /** A city of a third player two plots from the turn target of the army, which is on its way to the enemy city */
+    private fun thirdCityNextToTheWay(operation: AiOperation): Civilization {
+        val third = neutralCiv()
+        civ.diplomacyFunctions.makeCivilizationsMeet(third)
+        val (turnTarget, _) = OperationalMoves.computeCenterOfMassForTurn(civ, operation, operation.firstArmy!!)!!
+        game.addCity(third, turnTarget.getTilesAtDistance(2).first {
+            it.aerialDistanceTo(tile(8, 0)) > 3 && it.aerialDistanceTo(tile(0, 0)) > 3 && it.militaryUnit == null && !it.isCityCenter()
+        })
+        return third
+    }
+
+    /** CvTacticalAI::PlotArmyMovesCombat: an army whose turn target is less than 3 plots from the city of another enemy is called off (TOO_DANGEROUS) */
+    @Test
+    fun `a moving army whose way leads past a city of another enemy is called off`() {
+        val operation = moving()
+        val third = thirdCityNextToTheWay(operation)
+        civ.getDiplomacyManager(third)!!.declareWar()
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+        assertEquals(OperationState.ABORTED, operation.state)
+        assertEquals(OperationAbortReason.TOO_DANGEROUS, operation.abortReason)
+    }
+
+    @Test
+    fun `a moving army is not called off by the city of a player it is not at war with`() {
+        val operation = moving()
+        thirdCityNextToTheWay(operation)
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+        assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
+    }
+
     // endregion
     // region Recruiting
 

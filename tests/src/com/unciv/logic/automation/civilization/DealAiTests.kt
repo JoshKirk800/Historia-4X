@@ -5,6 +5,7 @@ import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.PeaceTreatyType
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.automation.strategy.StrengthLevel
+import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.WarDamageAi
 import com.unciv.logic.city.City
 import com.unciv.logic.city.GreatWorkSlot
@@ -114,26 +115,64 @@ class DealAiTests {
         assertEquals(-150, DealAi.getDealValue(a, b, trade, false).total)
     }
 
+    /** CvDealAI::GetLuxuryResourceValue's surcharge for the receiver's net gold, from the share [per] of it */
+    private fun withGoldSurcharge(value: Int, netGold: Int, per: Double) =
+        if (netGold > 0) value + minOf((0.25 + kotlin.math.sqrt(netGold / per)).toInt(), value) else value
+
+    private fun giveLuxury(civ: Civilization, resource: String, copies: Int = 1) {
+        civ.getCapital()!!.cityConstructions.addBuilding(game.createBuilding("Provides [$copies] [$resource]"))
+        civ.cache.updateCivResources()
+    }
+
+    private fun luxuryBase(owner: Civilization, turns: Int) =
+        (4 + owner.getDifficulty().extraHappinessPerLuxury.toInt() + DiplomacyTurn.gameEraNumber(owner)) * turns / 2
+
     @Test
-    fun `a luxury is worth happiness times turns times two and ours is scaled by opinion and approach`() {
+    fun `a luxury we receive is worth its owner's happiness plus the era, times the turns over two`() {
         val silk = game.ruleset.tileResources["Silk"]!!
-        // 1 × 4 × 30 × 2
-        assertEquals(240, DealAi.getResourceValue(a, b, silk, 1, 30, false))
-        // Giving (not our last copy): (100 Neutral opinion + 300 Hostile) / 200
-        feelings(a, b, MajorCivApproach.Hostile, MajorCivOpinion.Neutral)
-        assertEquals(480, DealAi.getResourceValue(a, b, silk, 1, 30, true))
-        // Friendly or Afraid replaces the sum with 200: no change
-        feelings(a, b, MajorCivApproach.Friendly, MajorCivOpinion.Unforgivable)
-        assertEquals(240, DealAi.getResourceValue(a, b, silk, 1, 30, true))
+        giveLuxury(b, "Silk")
+        // (4 + extra happiness per luxury + era) x 30 / 2, and the quarter of sqrt(net gold / 4) of our own income
+        assertEquals(withGoldSurcharge(luxuryBase(b, 30), DealAi.goldRate(a), 4.0), DealAi.getResourceValue(a, b, silk, 1, 30, false))
     }
 
     @Test
-    fun `a strategic we receive counts at most max(5, cities) units`() {
-        val iron = game.ruleset.tileResources["Iron"]!!
-        // min(max(5, 1 city), 8) × 30 × 1.5
-        assertEquals(225, DealAi.getResourceValue(a, b, iron, 8, 30, false))
-        // Giving counts every unit: 8 × 30 × 1.5 × (100 + 100) / 200
-        assertEquals(360, DealAi.getResourceValue(a, b, iron, 8, 30, true))
+    fun `our last copy of a luxury costs three times as much`() {
+        val silk = game.ruleset.tileResources["Silk"]!!
+        giveLuxury(a, "Silk")
+        val base = withGoldSurcharge(luxuryBase(a, 30), DealAi.goldRate(b), 3.0)
+        assertEquals(base * 3, DealAi.getResourceValue(a, b, silk, 1, 30, true))
+        giveLuxury(a, "Silk")
+        assertEquals("a second copy is not dear", base, DealAi.getResourceValue(a, b, silk, 1, 30, true))
+    }
+
+    @Test
+    fun `an unhappy empire keeps its last copy of a luxury`() {
+        val silk = game.ruleset.tileResources["Silk"]!!
+        giveLuxury(a, "Silk")
+        a.stats.happiness = -1
+        assertEquals(DealAi.NEVER, DealAi.getResourceValue(a, b, silk, 1, 30, true))
+        giveLuxury(a, "Silk")
+        assertTrue("not the last copy", DealAi.getResourceValue(a, b, silk, 1, 30, true) < DealAi.NEVER)
+    }
+
+    @Test
+    fun `a luxury an unhappy empire receives is worth twice as much, three times when very unhappy`() {
+        val silk = game.ruleset.tileResources["Silk"]!!
+        giveLuxury(b, "Silk")
+        val content = DealAi.getResourceValue(a, b, silk, 1, 30, false)
+        a.stats.happiness = -1
+        assertEquals(content * 2, DealAi.getResourceValue(a, b, silk, 1, 30, false))
+        a.stats.happiness = -10
+        assertEquals(content * 3, DealAi.getResourceValue(a, b, silk, 1, 30, false))
+    }
+
+    @Test
+    fun `no opinion or approach scaling applies to the value of a resource we give`() {
+        val silk = game.ruleset.tileResources["Silk"]!!
+        giveLuxury(a, "Silk", 3)
+        val neutral = DealAi.getResourceValue(a, b, silk, 1, 30, true)
+        feelings(a, b, MajorCivApproach.Hostile, MajorCivOpinion.Enemy)
+        assertEquals(neutral, DealAi.getResourceValue(a, b, silk, 1, 30, true))
     }
 
     @Test

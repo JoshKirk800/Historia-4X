@@ -19,8 +19,8 @@ import com.unciv.logic.automation.unit.tactical.CityThreat
  *  for the two most threatened cities ([CityThreat.threatenedCities]), and at war [doCityAttacks]' city attacks at its attack targets and
  *  pillage raids). The defense operations (rapid response, city defense, naval superiority at a threatened coastal city) are
  *  [AiOperationLogic]'s and [NavalOperationLogic]'s, and their armies are moved by the tactical AI as the attacks' are. Not ported: the
- *  carrier group (no such operation), and the city defense that Vox Populi's city-state quests (horde, rebellion) start (Unciv's quests
- *  have no such). The naval and nuke operations are [NavalOperationLogic]'s.
+ *  city defense that Vox Populi's city-state quests (horde, rebellion) start (Unciv's quests
+ *  have no such). The naval, carrier group and nuke operations are [NavalOperationLogic]'s.
  *  The show of force and the pillage raid are Vox Populi's RequestBullyingOperation and RequestPillageAttack ([requestShowOfForce],
  *  [requestPillageAttack]): BNW's show of force by its target scorer is gone.
  *  MakeEmergencyPurchases itself only buys the last unit of operations; the defensive emergency purchases of the original are the tactical
@@ -336,7 +336,7 @@ object MilitaryOperations {
      *  city of ours is listed by [CityThreat.threatenedCities], so only with no cities), [checkLandDefenses] and [checkSeaDefenses] for
      *  the two most threatened cities (coastal cities), then nukes ([shouldLaunchNuke]) and the attacks ([doCityAttacks]). BNW's barbarian
      *  camp operations, opportunity naval operations (superiority and bombardment) and its kill rules are gone: Vox Populi has none of them.
-     *  Not here: the carrier group (no such operation).
+     *  The idle carrier starts a carrier group ([NavalOperationLogic.initCarrierGroup]) against nobody, with all its required units at hand.
      */
     fun updateOperations(civ: Civilization) {
         if (!civ.isMajorCiv) return
@@ -361,6 +361,9 @@ object MilitaryOperations {
             if (shouldLaunchNuke(civ, other)) requestNukeAttack(civ, other)
             doCityAttacks(civ, other)
         }
+        // if we have an idle carrier, try to start a strike group. the carrier may be empty! the operation finds its own target and remains
+        // active indefinitely; the airplanes rebase independently, they are not part of the operation
+        if (NavalOperationLogic.idleCarrier(civ) != null) addLimitedOperation(civ, AiOperationType.CARRIER_GROUP, 0, null)
     }
 
     /**
@@ -446,7 +449,7 @@ object MilitaryOperations {
      *  @return the operation, null if none was made
      */
     private fun addLimitedOperation(
-        civ: Civilization, type: AiOperationType, maxMissingUnits: Int, enemy: Civilization, target: City? = null, muster: City? = null
+        civ: Civilization, type: AiOperationType, maxMissingUnits: Int, enemy: Civilization?, target: City? = null, muster: City? = null
     ): AiOperation? {
         if (!AiOperationLogic.preconditionsAreMet(civ, type, target?.getCenterTile(), muster?.getCenterTile(), maxMissingUnits, enemy)) return null
         return AiOperationLogic.addOperation(civ, type, enemy, target, muster, maxMissingUnits).takeIf { it.state != OperationState.ABORTED }

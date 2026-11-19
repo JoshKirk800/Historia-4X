@@ -60,6 +60,8 @@ class DominanceZone(
     var friendlyRangedUnitCount = 0
     /** Adjacent revealed zones, populated by CvTacticalAnalysisMap::EstablishZoneNeighborhood. */
     val neighbors = ArrayList<DominanceZone>()
+    /** CvTacticalDominanceZone::GetCenterX/Y as a tile ([TacticalMap.computeZoneCenters]), null for a zone with no tile or a center off the map */
+    var centerTile: Tile? = null
 
     var dominance = TacticalDominance.NoUnitsVisible
     /** CvTacticalDominanceZone::GetDominanceZoneValue, set by [TacticalMap]'s PrioritizeZones */
@@ -196,9 +198,32 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
         for (tile in tileList) populateCell(tile, visible[tile.zeroBasedIndex])
         createDominanceZones()
         establishZoneNeighborhood()
+        computeZoneCenters()
         calculateMilitaryStrengths()
         prioritizeZones()
         buildEnemyUnitList()
+    }
+
+    /**
+     *  CvTacticalDominanceZone::GetCenterX / GetCenterY: the average position of the zone's tiles, rounded; the tile there (it may lie in
+     *  another zone or on the other kind of terrain, as in the original). Hex coordinates are averaged, not the original's offset grid.
+     */
+    private fun computeZoneCenters() {
+        val sums = LongArray(zonesById.size * 3)
+        for (tile in tileList) {
+            val zone = zoneIds[tile.zeroBasedIndex]
+            if (zone < 0) continue
+            sums[zone * 3] += tile.position.x.toLong()
+            sums[zone * 3 + 1] += tile.position.y.toLong()
+            sums[zone * 3 + 2]++
+        }
+        for (zone in zonesById) {
+            val count = sums[zone.id * 3 + 2]
+            if (count == 0L) continue
+            val x = Math.floorDiv(sums[zone.id * 3] * 2 + count, count * 2).toInt()
+            val y = Math.floorDiv(sums[zone.id * 3 + 1] * 2 + count, count * 2).toInt()
+            zone.centerTile = civ.gameInfo.tileMap.getOrNull(x, y)
+        }
     }
 
     //region Cell access

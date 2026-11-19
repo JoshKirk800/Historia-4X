@@ -434,9 +434,11 @@ object CityStateAi {
         val (conquestPercent, minorPercent, peacefulBonus) = when (ai.diplomacy.targetValue(minor) ?: TargetValue.Average) {
             TargetValue.Impossible -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_IMPOSSIBLE, AiDefine.MINOR_APPROACH_WAR_TARGET_IMPOSSIBLE, 5)
             TargetValue.Bad -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_BAD, AiDefine.MINOR_APPROACH_WAR_TARGET_BAD, 4)
+            TargetValue.Difficult -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_DIFFICULT, AiDefine.MINOR_APPROACH_WAR_TARGET_DIFFICULT, 3)
             TargetValue.Average -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_AVERAGE, AiDefine.MINOR_APPROACH_WAR_TARGET_AVERAGE, 2)
             TargetValue.Favorable -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_FAVORABLE, AiDefine.MINOR_APPROACH_WAR_TARGET_FAVORABLE, 1)
             TargetValue.Soft -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_SOFT, AiDefine.MINOR_APPROACH_WAR_TARGET_SOFT, 0)
+            TargetValue.Cakewalk -> Triple(AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_CAKEWALK, AiDefine.MINOR_APPROACH_WAR_TARGET_CAKEWALK, 0)
         }
         val percent = civ.define(if (wantsConquest) conquestPercent else minorPercent)
         w[war] = w[war] * percent / 100

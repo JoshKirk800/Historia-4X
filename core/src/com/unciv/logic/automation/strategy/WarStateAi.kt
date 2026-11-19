@@ -28,8 +28,8 @@ enum class WarState { NearlyDefeated, Defensive, Stalemate, Calm, Offensive, Nea
 /** CvDiplomacyAI StateAllWars: the overall assessment of all wars against majors */
 enum class StateAllWars { Neutral, Winning, Losing }
 
-/** CvDiplomacyAI TargetValueTypes, hardest to easiest (order matters) */
-enum class TargetValue { Impossible, Bad, Average, Favorable, Soft }
+/** CvDiplomacyAI TargetValueTypes (Vox Populi's seven), hardest to easiest (order matters) */
+enum class TargetValue { Impossible, Bad, Difficult, Average, Favorable, Soft, Cakewalk }
 
 /** CvDiplomacyAI StrengthTypes: another player's military strength compared to ours, weakest to strongest (order matters) */
 enum class StrengthLevel { Pathetic, Weak, Poor, Average, Strong, Powerful, Immense }
@@ -45,10 +45,14 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
     var warStates = HashMap<String, WarState>()
     /** CvDiplomacyAI::m_eStateAllWars */
     var stateAllWars = StateAllWars.Neutral
-    /** CvDiplomacyAI::m_paePlayerTargetValue */
+    /** CvDiplomacyAI::m_paePlayerTargetValue: with the bias of our boldness (see [StrengthEstimateAi]) */
     var targetValues = HashMap<String, TargetValue>()
+    /** CvDiplomacyAI::m_paeRawTargetValue: without the bias of our boldness */
+    var rawTargetValues = HashMap<String, TargetValue>()
     /** CvDiplomacyAI::m_paePlayerMilitaryStrengthComparedToUs */
     var militaryStrengths = HashMap<String, StrengthLevel>()
+    /** CvDiplomacyAI::m_paeRawMilitaryStrengthComparedToUs */
+    var rawMilitaryStrengths = HashMap<String, StrengthLevel>()
     /** CvPlayer::IsInTerribleShapeForWar (Vox Populi): see [WarStateAi.updateBadShapeForWar] */
     var terribleShapeForWar = false
     /** CvPlayer::IsNoNewWars (Vox Populi): see [WarStateAi.updateBadShapeForWar] */
@@ -65,7 +69,9 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
         it.warStates.putAll(warStates)
         it.stateAllWars = stateAllWars
         it.targetValues.putAll(targetValues)
+        it.rawTargetValues.putAll(rawTargetValues)
         it.militaryStrengths.putAll(militaryStrengths)
+        it.rawMilitaryStrengths.putAll(rawMilitaryStrengths)
         it.terribleShapeForWar = terribleShapeForWar
         it.noNewWars = noNewWars
         it.easyTargets.addAll(easyTargets)
@@ -76,18 +82,18 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
 
 /**
  *  The war assessment of CvDiplomacyAI (CvDiplomacyAI.cpp), run each turn for major civilizations, humans included, as CvDiplomacyAI::DoTurn
- *  does: DoUpdatePlayerMilitaryStrengths, DoUpdatePlayerTargetValues, DoUpdateWarStates, plus the turns-at-war counter of DoCounters.
+ *  does: DoUpdatePlayerStrengthEstimates ([StrengthEstimateAi]), DoUpdateWarStates, plus the turns-at-war counter of DoCounters.
  *
  *  Queries (read the state of the last [doTurn]):
  *  - [warState] (CvDiplomacyAI::GetWarState): null if not at war with that player;
  *  - [stateAllWars] (CvDiplomacyAI::GetStateAllWars);
- *  - [targetValue] (CvDiplomacyAI::GetPlayerTargetValue), [militaryStrengthComparedToUs] (GetPlayerMilitaryStrengthComparedToUs),
- *    [turnsAtWar] (GetPlayerNumTurnsAtWar);
+ *  - [targetValue] (CvDiplomacyAI::GetTargetValue), [militaryStrengthComparedToUs] (GetMilitaryStrengthComparedToUs), and their raw
+ *    forms without the bias of our boldness ([rawTargetValue], [rawMilitaryStrengthComparedToUs]); [turnsAtWar] (GetPlayerNumTurnsAtWar);
  *  - [numberCivsAtWarWith] (CvMilitaryAI::GetNumberCivsAtWarWith), [isPlayerValid] (CvDiplomacyAI::IsPlayerValid).
  *
  *  Unciv mapping: unit power is [com.unciv.models.ruleset.unit.BaseUnit.getAiPower] (CvUnitEntry::GetPower) × (1000 + 125 × level) / 1000
  *  × health / 100 (CvUnit::GetPower, level = 1 + promotions); city power is the city's combat strength ^ 1.5 (CvCity::GetPower);
- *  CvPlayer::getPower is [CivAi.militaryMight] plus the economic might (5 + population + production + gold of all cities).
+ *  CvPlayer::getPower is [CivAi.militaryMight] plus the economic might ([economicMight]).
  *  Unciv has no teams: "team" checks are per civilization.
  */
 object WarStateAi {
@@ -105,6 +111,12 @@ object WarStateAi {
 
     /** CvDiplomacyAI::GetPlayerMilitaryStrengthComparedToUs: null (NO_STRENGTH_VALUE) before the first evaluation or for invalid players */
     fun militaryStrengthComparedToUs(civ: Civilization, other: Civilization): StrengthLevel? = civ.ai.warStates.militaryStrengths[other.civID]
+
+    /** CvDiplomacyAI::GetRawTargetValue: the target value without the bias of our boldness */
+    fun rawTargetValue(civ: Civilization, other: Civilization): TargetValue? = civ.ai.warStates.rawTargetValues[other.civID]
+
+    /** CvDiplomacyAI::GetRawMilitaryStrengthComparedToUs: the military strength without the bias of our boldness */
+    fun rawMilitaryStrengthComparedToUs(civ: Civilization, other: Civilization): StrengthLevel? = civ.ai.warStates.rawMilitaryStrengths[other.civID]
 
     /** CvDiplomacyAI::GetPlayerNumTurnsAtWar */
     fun turnsAtWar(civ: Civilization, other: Civilization): Int = civ.ai.warStates.turnsAtWar[other.civID] ?: 0
@@ -160,7 +172,7 @@ object WarStateAi {
         other != civ && !other.isBarbarian && !other.isSpectator && other.isAlive() && other.cities.isNotEmpty() && civ.knows(other)
     //endregion
 
-    /** The per-turn update, in CvDiplomacyAI::DoTurn order: turns at war (DoCounters), military strengths, target values, war states */
+    /** The per-turn update, in CvDiplomacyAI::DoTurn order: turns at war (DoCounters), strength estimates, war states */
     fun doTurn(civ: Civilization) {
         val memory = civ.ai.warStates
         val rules = civ.gameInfo.ruleset.ai
@@ -169,15 +181,7 @@ object WarStateAi {
             if (civ.isAtWarWith(other)) memory.turnsAtWar[other.civID] = (memory.turnsAtWar[other.civID] ?: 0) + 1
             else memory.turnsAtWar.remove(other.civID)
         }
-        for (other in civ.gameInfo.civilizations) {
-            if (isPlayerValid(civ, other)) memory.militaryStrengths[other.civID] = militaryStrengthOf(civ, other, rules)
-            else memory.militaryStrengths.remove(other.civID)
-        }
-        val myPower = getPower(civ).coerceAtLeast(1)
-        for (other in civ.gameInfo.civilizations) {
-            if (isPlayerValid(civ, other)) memory.targetValues[other.civID] = targetValueOf(civ, other, myPower, rules)
-            else memory.targetValues.remove(other.civID)
-        }
+        StrengthEstimateAi.update(civ)
         updateWarStates(civ, memory, rules)
         updateAverageGoldRate(civ, memory, rules)
         updateBadShapeForWar(civ, memory, rules)
@@ -230,8 +234,7 @@ object WarStateAi {
         val ourMemory = civ.ai.diplomacy.memoryOf(other)
         val sinceCapture = if (ourMemory.lastCityCaptureTurn < 0) Int.MAX_VALUE else civ.gameInfo.turns - ourMemory.lastCityCaptureTurn
         if ((memory.turnsAtWar[other.civID] ?: 0) >= 30 && sinceCapture >= 30) return false
-        val target = memory.targetValues[other.civID] ?: TargetValue.Average
-        if (other.isCityState) return target >= TargetValue.Favorable
+        if (other.isCityState) return (memory.targetValues[other.civID] ?: TargetValue.Average) >= TargetValue.Favorable
         if (!WarIntentAi.isPhonyWar(civ, other)) for (third in valid) {
             if (third == other || !civ.isAtWarWith(third)) continue
             val thirdState = memory.warStates[third.civID] ?: continue
@@ -258,7 +261,10 @@ object WarStateAi {
             theirMemory.numCitiesCapturedBy > ourMemory.numCitiesCapturedBy, skillBoost, moreAggressive, wantsConquest,
             civ.ai.military.havePreferredAttackTarget(other)).count { it }
         val noNewWars = memory.noNewWars && !civ.isAtWarWith(other)
-        val military = memory.militaryStrengths[other.civID] ?: StrengthLevel.Average
+        // Raw values (without our boldness) when we are held back, else the biased ones
+        val raw = noNewWars || deterrents > aggravators
+        val target = (if (raw) memory.rawTargetValues[other.civID] else memory.targetValues[other.civID]) ?: TargetValue.Average
+        val military = (if (raw) memory.rawMilitaryStrengths[other.civID] else memory.militaryStrengths[other.civID]) ?: StrengthLevel.Average
         val economic = ourMemory.economicStrength ?: StrengthLevel.Average
         if (target <= TargetValue.Bad || military == StrengthLevel.Immense || economic == StrengthLevel.Immense) return false
         if (target >= TargetValue.Soft || military == StrengthLevel.Pathetic || economic == StrengthLevel.Pathetic) return true
@@ -349,110 +355,6 @@ object WarStateAi {
 
     /** CvPlayer::IsInTerribleShapeForWar (Vox Populi): see [updateBadShapeForWar] */
     fun isInTerribleShapeForWar(civ: Civilization): Boolean = civ.ai.warStates.terribleShapeForWar
-
-    /** CvDiplomacyAI::DoFirstContactInitRelationship: DoUpdateOnePlayerMilitaryStrength then DoUpdateOnePlayerTargetValue for the new contact [other] */
-    fun updateOnContact(civ: Civilization, other: Civilization) {
-        val rules = civ.gameInfo.ruleset.ai
-        civ.ai.warStates.militaryStrengths[other.civID] = militaryStrengthOf(civ, other, rules)
-        civ.ai.warStates.targetValues[other.civID] = targetValueOf(civ, other, getPower(civ).coerceAtLeast(1), rules)
-    }
-
-    //region CvDiplomacyAI::DoUpdateOnePlayerMilitaryStrength
-
-    /** The ratio of their might to ours. After Vox Populi (CvDiplomacyAI::DoUpdatePlayerStrengthEstimates, D7) the nuclear part of each
-     *  side's might is the one against the other side's units and shelters, not the global one ([NuclearMight]). */
-    private fun militaryStrengthOf(civ: Civilization, other: Civilization, rules: AiRuleset): StrengthLevel {
-        val base = rules.define(AiDefine.MILITARY_STRENGTH_BASE)
-        val ours = base + civ.ai.militaryMight() - civ.ai.nuclearMight() + NuclearMight.of(civ, other)
-        val theirs = other.ai.militaryMight() - other.ai.nuclearMight() + NuclearMight.of(other, civ) + base
-        val ratio = theirs * rules.define(AiDefine.MILITARY_STRENGTH_RATIO_MULTIPLIER) / ours
-        return when {
-            ratio >= rules.define(AiDefine.MILITARY_STRENGTH_IMMENSE_THRESHOLD) -> StrengthLevel.Immense
-            ratio >= rules.define(AiDefine.MILITARY_STRENGTH_POWERFUL_THRESHOLD) -> StrengthLevel.Powerful
-            ratio >= rules.define(AiDefine.MILITARY_STRENGTH_STRONG_THRESHOLD) -> StrengthLevel.Strong
-            ratio >= rules.define(AiDefine.MILITARY_STRENGTH_AVERAGE_THRESHOLD) -> StrengthLevel.Average
-            ratio >= rules.define(AiDefine.MILITARY_STRENGTH_POOR_THRESHOLD) -> StrengthLevel.Poor
-            ratio >= rules.define(AiDefine.MILITARY_STRENGTH_WEAK_THRESHOLD) -> StrengthLevel.Weak
-            else -> StrengthLevel.Pathetic
-        }
-    }
-    //endregion
-
-    //region CvDiplomacyAI::DoUpdateOnePlayerTargetValue
-
-    private fun targetValueOf(civ: Civilization, other: Civilization, myPower: Int, rules: AiRuleset): TargetValue {
-        var otherStrength = getPower(other)
-        var cityDamage = 0
-        var numCities = 0
-        for (city in other.cities) {
-            otherStrength += cityPower(city) * rules.define(AiDefine.MILITARY_STRENGTH_CITY_MOD) / 100
-            cityDamage += city.getMaxHealth() - city.health
-            numCities++
-        }
-        if (numCities > 0) {
-            // Average damage as a percentage of a city's hit points; all cities at no health only halve the strength
-            cityDamage = cityDamage / numCities * 100 / rules.define(AiDefine.MAX_CITY_HIT_POINTS)
-            otherStrength -= cityDamage * otherStrength / 200
-        }
-        var targetValue = otherStrength * rules.define(AiDefine.MILITARY_STRENGTH_RATIO_MULTIPLIER) / myPower
-
-        // Already at war with others (majors only; minus our own war with them)
-        var warCount = other.getCivsAtWarWith().count { it.isMajorCiv }
-        if (civ.isAtWarWith(other)) warCount--
-        targetValue += warCount * rules.define(AiDefine.TARGET_ALREADY_WAR_EACH_PLAYER)
-
-        val proximity = civ.getProximity(other)
-        targetValue += when (proximity) {
-            Proximity.Neighbors -> rules.define(AiDefine.TARGET_NEIGHBORS)
-            Proximity.Close -> rules.define(AiDefine.TARGET_CLOSE)
-            Proximity.Far -> rules.define(AiDefine.TARGET_FAR)
-            Proximity.Distant -> rules.define(AiDefine.TARGET_DISTANT)
-            Proximity.None -> 0
-        }
-
-        // The friends of a city-state back it up
-        if (other.isCityState) {
-            val protectors = other.cityStateFunctions.getProtectorCivs()
-            for (third in civ.gameInfo.civilizations) {
-                if (!third.isMajorCiv || !isPlayerValid(civ, third)) continue
-                if (other.allyCiv != third && third !in protectors) continue
-                var thirdValue = when (civ.ai.warStates.militaryStrengths[third.civID]) {
-                    StrengthLevel.Pathetic -> rules.define(AiDefine.TARGET_MINOR_BACKUP_PATHETIC)
-                    StrengthLevel.Weak -> rules.define(AiDefine.TARGET_MINOR_BACKUP_WEAK)
-                    StrengthLevel.Poor -> rules.define(AiDefine.TARGET_MINOR_BACKUP_POOR)
-                    StrengthLevel.Average -> rules.define(AiDefine.TARGET_MINOR_BACKUP_AVERAGE)
-                    StrengthLevel.Strong -> rules.define(AiDefine.TARGET_MINOR_BACKUP_STRONG)
-                    StrengthLevel.Powerful -> rules.define(AiDefine.TARGET_MINOR_BACKUP_POWERFUL)
-                    StrengthLevel.Immense -> rules.define(AiDefine.TARGET_MINOR_BACKUP_IMMENSE)
-                    null -> 0
-                }
-                thirdValue *= when (civ.getProximity(third)) {
-                    Proximity.Distant -> rules.define(AiDefine.TARGET_MINOR_BACKUP_DISTANT)
-                    Proximity.Far -> rules.define(AiDefine.TARGET_MINOR_BACKUP_FAR)
-                    Proximity.Close -> rules.define(AiDefine.TARGET_MINOR_BACKUP_CLOSE)
-                    Proximity.Neighbors -> rules.define(AiDefine.TARGET_MINOR_BACKUP_NEIGHBORS)
-                    Proximity.None -> 0
-                }
-                targetValue += thirdValue / 100
-            }
-        }
-
-        var value = when {
-            targetValue >= rules.define(AiDefine.TARGET_IMPOSSIBLE_THRESHOLD) -> TargetValue.Impossible
-            targetValue >= rules.define(AiDefine.TARGET_BAD_THRESHOLD) -> TargetValue.Bad
-            targetValue >= rules.define(AiDefine.TARGET_AVERAGE_THRESHOLD) -> TargetValue.Average
-            targetValue >= rules.define(AiDefine.TARGET_FAVORABLE_THRESHOLD) -> TargetValue.Favorable
-            else -> TargetValue.Soft
-        }
-        // An aggressive expander is an easier target
-        if (value < TargetValue.Soft && isPlayerRecklessExpander(civ, other)) value = TargetValue.entries[value.ordinal + 1]
-        // A long war makes a target harder
-        if (value > TargetValue.Impossible && turnsAtWar(civ, other) > rules.define(AiDefine.TARGET_INCREASE_WAR_TURNS))
-            value = TargetValue.entries[value.ordinal - 1]
-        // Too far away to be soft (PLAYER_PROXIMITY_FAR or DISTANT)
-        if (value == TargetValue.Soft && proximityRank(proximity) <= proximityRank(Proximity.Far)) value = TargetValue.Favorable
-        return value
-    }
 
     /** CvDiplomacyAI::IsRecklessExpander (Vox Populi, D7): the flag [com.unciv.logic.automation.diplomacy.ExpanderAi] keeps each turn */
     fun isPlayerRecklessExpander(civ: Civilization, other: Civilization): Boolean =
@@ -556,18 +458,24 @@ object WarStateAi {
 
     private fun healthPercent(city: City): Int = city.health * 100 / city.getMaxHealth()
 
-    /** CvPlayer::getPower: military might plus economic might (calculateEconomicMight: 5 + population + production + gold of the cities) */
+    /** CvPlayer::getPower: military might plus economic might ([economicMight]) */
     fun getPower(civ: Civilization): Int = civ.ai.militaryMight() + economicMight(civ)
 
-    /** CvPlayer::calculateEconomicMight: 5 + the population, production and gold of all cities */
+    /**
+     *  CvPlayer::calculateEconomicMight (Vox Populi, Release-5.4.8; D7): 5 + the population and the yields of all cities (calculateTotalYield:
+     *  food as the cities produce it, before their citizens eat; production, science and gold; culture as the civilization makes it,
+     *  policies included), reduced for each city: x100 over 100 + 10 per city, at most 300 (the more cities, the less each can defend).
+     *  VP also adds the yields of instant bonuses over the game's turns, which Unciv does not keep.
+     */
     fun economicMight(civ: Civilization): Int {
-        var economicMight = 5
+        var economicMight = 5 + civ.cities.sumOf { it.population.population }
         for (city in civ.cities) {
-            economicMight += city.population.population
-            economicMight += city.cityStats.currentCityStats.production.toInt()
-            economicMight += city.cityStats.currentCityStats.gold.toInt()
+            val stats = city.cityStats.currentCityStats
+            val eaten = city.cityStats.finalStatList["Population"]?.food ?: 0f
+            economicMight += (stats.food - eaten + stats.production + stats.science + stats.gold).toInt()
         }
-        return economicMight
+        economicMight += civ.stats.statsForNextTurn.culture.toInt()
+        return economicMight * 100 / minOf(300, civ.cities.size * 10 + 100)
     }
     //endregion
 }

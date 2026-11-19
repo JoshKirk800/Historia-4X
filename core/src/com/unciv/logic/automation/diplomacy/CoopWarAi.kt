@@ -103,12 +103,14 @@ object CoopWarAi {
             AiThreat.None -> 0
         }
         if (weight > 0 && OpinionAi.isDoFAccepted(civ, partner)) weight += 5
+        // BNW's table of five target values; VP's seven map onto it by threshold (BNW: impossible from 200, bad from 125, average from 80,
+        // favorable from 50) until VP's GetCoopWarDesireScore replaces this function
         weight = weight * when (WarStateAi.targetValue(civ, target)) {
-            TargetValue.Impossible -> 66
-            TargetValue.Bad -> 75
+            TargetValue.Impossible, TargetValue.Bad -> 66
+            TargetValue.Difficult -> 75
             TargetValue.Average -> 100
             TargetValue.Favorable -> 110
-            TargetValue.Soft -> 120
+            TargetValue.Soft, TargetValue.Cakewalk -> 120
             null -> 100
         } / 100
         weight += civ.ai.random("DiplomacyAI.CoopWarScore" + partner.civID + target.civID).nextInt(5)

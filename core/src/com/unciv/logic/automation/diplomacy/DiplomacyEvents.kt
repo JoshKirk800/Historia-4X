@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.strategy.StrengthEstimateAi
 import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.city.City
@@ -32,8 +33,7 @@ object DiplomacyEvents {
         memory.turnMet = civ.gameInfo.turns
         if (!other.isMajorCiv || other.cities.isEmpty() || civ.cities.isEmpty()) return
         val rules = civ.gameInfo.ruleset.ai
-        WarStateAi.updateOnContact(civ, other)
-        DiplomacyTurn.updateEconomicStrength(civ, other, WarStateAi.economicMight(civ), rules)
+        StrengthEstimateAi.update(civ)
         DisputeAi.updateMilitaryPosture(civ, other, rules)
         DisputeAi.updateExpansionPosture(civ, other, rules)
         OpinionAi.updateOpinion(civ, other, rules)

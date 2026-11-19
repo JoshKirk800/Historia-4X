@@ -311,6 +311,7 @@ object DiplomacyEvents {
      *  Call before the city changes hands, with [receiverWasAlive] the receiver's state before.
      */
     fun onCityLiberated(liberator: Civilization, receiver: Civilization, city: City, receiverWasAlive: Boolean) {
+        if (!receiverWasAlive) receiver.killedBy = null // CvPlayer::setAlive(true): CvTeam::SetKilledByTeam(NO_TEAM)
         if (receiver.isMajorCiv) {
             val memory = receiver.ai.diplomacy.memoryOf(liberator)
             val ownReligion = receiver.religionManager.religion?.takeIf { it.foundingCivName == receiver.civName }
@@ -377,9 +378,10 @@ object DiplomacyEvents {
     /**
      *  CvPlayer::acquireCity -> CvDiplomacyAI::DoPlayerKilledSomeone: [newOwner] took the last city of [oldOwner]. Only a major notifies anyone
      *  (not a city-state, not the barbarians); every other living major that has met it counts one minor or major conquered, and the
-     *  protectors of a dead city-state remember the killing.
+     *  protectors of a dead city-state remember the killing. Whoever the killer is, it is recorded ([Civilization.killedBy]).
      */
     fun onLastCityTaken(newOwner: Civilization, oldOwner: Civilization) {
+        oldOwner.killedBy = newOwner.civID // CvPlayer::verifyAlive(eKiller): CvTeam::SetKilledByTeam, whoever the killer is
         if (!newOwner.isMajorCiv) return
         GrandStrategyAi.onCivDestroyed(newOwner, oldOwner)
         if (!oldOwner.isCityState) return

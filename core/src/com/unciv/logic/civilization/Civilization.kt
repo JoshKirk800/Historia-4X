@@ -268,6 +268,9 @@ class Civilization : IsPartOfGameInfoSerialization {
     // For Aggressor, Warmonger status
     internal var numMinorCivsAttacked = 0
 
+    /** CvTeam::GetKilledByTeam: the civID of the civilization that took this one's last city; cleared when it is resurrected */
+    var killedBy: String? = null
+
     /** CvPlayer::m_iUprisingCounter, used with uprisingCounterLikeCivV: the turns of very high unhappiness until rebels spawn, 0 = not seeded yet */
     var uprisingCounter = 0
 
@@ -393,6 +396,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.hasEverOwnedOriginalCapital = hasEverOwnedOriginalCapital
         toReturn.passableImpassables.addAll(passableImpassables)
         toReturn.numMinorCivsAttacked = numMinorCivsAttacked
+        toReturn.killedBy = killedBy
         toReturn.uprisingCounter = uprisingCounter
         toReturn.totalCultureForContests = totalCultureForContests
         toReturn.totalFaithForContests = totalFaithForContests

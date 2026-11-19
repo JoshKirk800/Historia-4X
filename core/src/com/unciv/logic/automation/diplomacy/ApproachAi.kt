@@ -1182,7 +1182,7 @@ object ApproachAi {
      *  dispute and block levels and its tech and policy blocks have no input here.
      */
     fun victoryConcern(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
-        if (VictoryProgressAi.isCloseToWorldConquest(other, rules) || VictoryProgressAi.capitalsConquered(other) >= 3) return true
+        if (VictoryProgressAi.isCloseToWorldConquest(other, rules) || VictoryProgressAi.numMajorsConquered(other) >= 3) return true
         if (!VictoryProgressAi.isCompetingForVictory(civ)) return false
         val memory = civ.ai.diplomacy.memories[other.civID] ?: return VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)
         return VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)

@@ -45,7 +45,7 @@ object ApproachWinningAi {
         }
         val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
         val easy = WarStateAi.isEasyTarget(civ, other)
-        val danger = VictoryProgressAi.capitalsConquered(other)
+        val danger = VictoryProgressAi.numMajorsConquered(other)
         val closest = maxOf(DiplomacyTurn.proximity(civ, other), DiplomacyTurn.proximity(other, civ))
         if (danger > 0 && closest >= DiplomacyTurn.PROXIMITY_CLOSE) {
             val gameEra = gameEra(civ)

@@ -80,7 +80,7 @@ object ApproachGrandStrategyAi {
     fun addDominationWeights(civ: Civilization, other: Civilization, deception: Boolean, w: IntArray, rules: AiRuleset) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
         if (!VictoryProgressAi.isCompetingForVictory(civ)) return
-        val conquered = VictoryProgressAi.capitalsConquered(civ)
+        val conquered = VictoryProgressAi.numMajorsConquered(civ)
         val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
         val majorsAlive = civ.gameInfo.civilizations.count { it.isMajorCiv && it.isAlive() }
         if (civ.getEra().eraNumber < rules.define(AiDefine.MEDIEVAL_ERA) && !closeToConquest && majorsAlive > 4 && conquered <= 0) return

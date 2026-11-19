@@ -6,8 +6,6 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
-import com.unciv.models.TradeRoute
-import com.unciv.models.TradeRouteKind
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
@@ -139,49 +137,96 @@ class NavalOperationTests {
     }
     // endregion
 
-    // region Superiority
+    // region Superiority (CvAIOperationNavalSuperiority, CvMilitaryAI::CheckSeaDefenses)
 
-    /** The required slots of the naval squadron: an attack ship and an assault ship (a second assault ship takes the optional second attack slot first) */
-    private fun squadron(y: Int): List<MapUnit> = listOf(ship("Quinquereme", 2, y), ship("Galleass", 3, y), ship("Galleass", 4, y))
+    /** The required slots of the naval squadron: two ships that attack at sea and an assault ship, none bound to the coast (Vox Populi asks for ships that can enter the ocean) */
+    private fun squadron(x: Int, y: Int = 0): List<MapUnit> = listOf(ship("Ironclad", x, y), ship("Ironclad", x, y + 1), ship("Frigate", x + 1, y))
 
-    /** Ships with an enemy within 3 plots are engaged (CvUnit::canUseForAIOperation), so the squadron stands further from the enemy ship */
-    @Test
-    fun `a naval superiority squadron at hand hunts the enemy ship and sails at once`() {
-        squadron(0)
-        game.addUnit("Trireme", enemy, tile(8, 2))
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
-        assertEquals("the enemy ship is the target", tile(8, 2).position, operation.targetTile)
-        assertEquals("it sails at once", OperationState.MOVING_TO_TARGET, operation.state)
+    private fun losing() {
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Defensive
     }
 
     @Test
-    fun `naval superiority sails for an enemy trader at sea`() {
-        squadron(0)
-        val route = TradeRoute(enemyCity.location, city.location, TradeRouteKind.International, true, "Cargo Ship",
-            listOf(tile(4, 2).position, tile(5, 2).position, tile(6, 2).position), 4, 30, game.gameInfo.turns)
-        route.setTransients(enemy)
-        route.pathIndex = 1
-        enemy.tradeRoutes.routes.add(route)
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
-        assertEquals(tile(5, 2).position, operation.targetTile)
-    }
-
-    @Test
-    fun `the superiority target is the lightest reachable enemy ship, embarked units counting two thirds`() {
-        ship("Quinquereme", 1, 0)
-        game.addUnit("Trireme", enemy, tile(7, 3)) // far
-        game.addUnit("Trireme", enemy, tile(3, -2)) // near
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
-        assertEquals(tile(3, -2).position, operation.targetTile)
-    }
-
-    @Test
-    fun `with no ship to hunt a superiority fleet patrols next to the nearest coastal enemy city`() {
-        ship("Quinquereme", 1, 0)
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
+    fun `a war going badly sends a squadron to the threatened coastal city, from the water next to our nearest port`() {
+        losing()
+        val ships = squadron(7)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        val operation = ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY)!!
+        assertEquals(enemy.civID, operation.enemyCivId)
+        assertTrue("all three required ships are in it", ships.all { ops.armyOf(it) != null })
         val target = game.gameInfo.tileMap[operation.targetTile!!]
-        assertTrue(target.isWater)
-        assertEquals(1, target.aerialDistanceTo(enemyCity.getCenterTile()))
+        assertTrue("it defends the water by the city", target.isWater && target.aerialDistanceTo(city.getCenterTile()) <= 2)
+        // the army gathers where its ships are, so the muster point is water, not necessarily by the port
+        assertTrue("the squadron musters on water", game.gameInfo.tileMap[operation.musterTile!!].isWater)
+        assertEquals(city.id, operation.startCityId)
+    }
+
+    @Test
+    fun `a war that is not going badly starts no squadron`() {
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Stalemate
+        squadron(7)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        assertNull(ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY))
+    }
+
+    /** PreconditionsAreMet is asked without a muster plot: the ships must be able to enter the ocean */
+    @Test
+    fun `ships that cannot enter the ocean are no squadron`() {
+        losing()
+        listOf(ship("Quinquereme", 7, 0), ship("Quinquereme", 7, 1), ship("Galleass", 8, 0))
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        assertNull(ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY))
+    }
+
+    @Test
+    fun `a squadron that is already running near the coastal city is not doubled`() {
+        losing()
+        squadron(7)
+        squadron(7, 3)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        assertEquals(1, ops.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY))
+        MilitaryOperations.updateOperations(civ)
+        assertEquals(1, ops.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY))
+    }
+
+    @Test
+    fun `a squadron that is in place at the coastal water succeeds and the city is a focus of the tactical AI`() {
+        losing()
+        val ships = squadron(7)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        val operation = ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY)!!
+        val army = operation.firstArmy!!
+        val goal = game.gameInfo.tileMap[army.goalTile!!]
+        // Within 3 plots of the goal: the squadron has arrived (Vox Populi's deploy range)
+        val places = goal.getTilesInDistance(1).filter { it.isWater && it.militaryUnit == null }.toList()
+        for ((index, ship) in ships.withIndex()) {
+            ship.removeFromTile(); ship.putInTile(places[index])
+        }
+        operation.state = OperationState.MOVING_TO_TARGET
+        army.state = ArmyState.MOVING_TO_DESTINATION
+        assertTrue(AiOperationLogic.checkOnTarget(civ, operation))
+        assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
+        assertTrue(civ.ai.tactical.isInFocusArea(city.getCenterTile()))
+    }
+
+    @Test
+    fun `a squadron ends when no coastal city is left to defend`() {
+        game.addCity(civ, tile(-6)) // an inland city, so that the port is not our last one
+        losing()
+        squadron(7)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        val operation = ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY)!!
+        // The port is lost: no threatened coastal city to sail to
+        city.moveToCiv(enemy)
+        civ.ai.invalidateTurnCaches()
+        assertTrue(AiOperationLogic.shouldAbort(civ, operation))
+        assertEquals(OperationAbortReason.NO_TARGET, operation.abortReason)
     }
     // endregion
 

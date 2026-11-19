@@ -208,11 +208,15 @@ class PolicyAttributeRow {
     var value = 0
 }
 
-/** Eras.DiploEmphasisReligion / DiploEmphasisLatePolicies, by Unciv era name (religion and ideology opinion of CvDiplomacyAI) */
+/**
+ *  Eras.DiploEmphasisReligion / DiploEmphasisLatePolicies, by Unciv era name (religion and ideology opinion of CvDiplomacyAI), and
+ *  Vox Populi's WarmongerPercent (CvEraInfo::getWarmongerPercent: the scale of warmonger penalties and liberation bonuses, [WarmongerAi])
+ */
 class EraDiplomacyDef : INamed {
     override var name = ""
     var diploEmphasisReligion = 0
     var diploEmphasisLatePolicies = 0
+    var warmongerPercent = 100
 }
 
 /** GameSpeeds.RelationshipDuration / OpinionDurationPercent, by Unciv speed name (XML defaults: standard speed) */
@@ -222,11 +226,9 @@ class GameSpeedDiplomacyDef : INamed {
     var opinionDurationPercent = 100
 }
 
-/** Worlds.EstimatedNumCities (CvDiplomacyAIHelpers::GetWarmongerOffset) and NumCitiesUnhappinessPercent (CvPolicyAI::WeightPolicyAttributes),
- *  by Unciv map size name */
+/** Worlds.NumCitiesUnhappinessPercent (CvPolicyAI::WeightPolicyAttributes), by Unciv map size name */
 class WorldSizeDef : INamed {
     override var name = ""
-    var estimatedNumCities = 52
     var numCitiesUnhappinessPercent = 100
 }
 

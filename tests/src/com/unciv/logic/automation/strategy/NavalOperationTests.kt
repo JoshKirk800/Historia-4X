@@ -454,6 +454,8 @@ class NavalOperationTests {
         assertTrue("powerful enemy", MilitaryOperations.shouldLaunchNuke(civ, enemy))
         setStrength(StrengthLevel.Strong)
 
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Troubled
+        assertTrue("troubled war", MilitaryOperations.shouldLaunchNuke(civ, enemy))
         civ.ai.warStates.warStates[enemy.civID] = WarState.Defensive
         assertTrue("defensive war", MilitaryOperations.shouldLaunchNuke(civ, enemy))
         civ.ai.warStates.warStates[enemy.civID] = WarState.Stalemate

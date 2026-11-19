@@ -175,11 +175,12 @@ object ApproachWinningAi {
     private fun isFriendOrAlly(civ: Civilization, other: Civilization): Boolean =
         OpinionAi.isDoFAccepted(civ, other) || civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
 
-    /** Our war state on VP's WarStateTypes scale (which has troubled between defensive and stalemate); none = NO_WAR_STATE_TYPE, -1 */
+    /** Our war state on VP's WarStateTypes scale; none = NO_WAR_STATE_TYPE, -1 */
     private fun vpWarState(state: WarState?): Int = when (state) {
         null -> -1
         WarState.NearlyDefeated -> 0
         WarState.Defensive -> 1
+        WarState.Troubled -> 2
         WarState.Stalemate -> 3
         WarState.Calm -> 4
         WarState.Offensive -> 5

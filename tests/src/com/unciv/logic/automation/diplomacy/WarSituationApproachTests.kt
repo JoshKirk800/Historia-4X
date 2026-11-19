@@ -3,6 +3,7 @@ package com.unciv.logic.automation.diplomacy
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.automation.strategy.TargetValue
+import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
@@ -102,5 +103,34 @@ class WarSituationApproachTests {
         // (powerful - average) x 2 = 4 times the bias; war also gains the flavors (boldness + work-against) / 2
         assertEquals(20, delta[MajorCivApproach.Friendly.ordinal])
         assertEquals(5 - 20, delta[MajorCivApproach.War.ordinal])
+    }
+
+    /** a fights c, in [state]; with no new wars, so that no war state is ignored */
+    private fun atWar(state: WarState): IntArray {
+        if (!a.isAtWarWith(c)) a.getDiplomacyManager(c)!!.declareWar()
+        a.ai.warStates.warStates[c.civID] = state
+        a.ai.warStates.noNewWars = true
+        return stageDelta("At war right now")
+    }
+
+    @Test
+    fun `a troubled war draws friendliness like a defensive one`() {
+        val multiplier = ApproachAi.attackMultipliers(a, b).second
+        for (state in listOf(WarState.Troubled, WarState.Defensive)) {
+            val delta = atWar(state)
+            assertEquals("$state", 5 * 2 * multiplier, delta[MajorCivApproach.Friendly.ordinal])
+            assertEquals("$state", -25 - 5 * 2 * multiplier, delta[MajorCivApproach.War.ordinal])
+        }
+    }
+
+    @Test
+    fun `a stalemate draws neutrality by their attack multiplier, a calm war by one`() {
+        val multiplier = ApproachAi.attackMultipliers(a, b).second
+        val stalemate = atWar(WarState.Stalemate)
+        assertEquals(5 * 2 * multiplier, stalemate[MajorCivApproach.Neutral.ordinal])
+        assertEquals(-25 - 5 * multiplier, stalemate[MajorCivApproach.War.ordinal])
+        val calm = atWar(WarState.Calm)
+        assertEquals(5 * 2, calm[MajorCivApproach.Neutral.ordinal])
+        assertEquals(-25 - 5, calm[MajorCivApproach.War.ordinal])
     }
 }

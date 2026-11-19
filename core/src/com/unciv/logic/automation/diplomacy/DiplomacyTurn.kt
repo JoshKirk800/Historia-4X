@@ -9,7 +9,6 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
-import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MinorCivApproach
 import kotlin.math.max
@@ -34,7 +33,7 @@ object DiplomacyTurn {
         warDamageDecay(civ, others)
         updateWarDamageLevels(civ, others, rules)
         WarProgressAi.doTurn(civ, others)
-        updateWarmongerThreats(civ, others, rules)
+        WarmongerAi.updateThreats(civ, updateOnly = false)
         updateMilitaryThreats(civ, others, rules)
         updateWarProjections(civ, others, rules)
         updateWarGoals(civ, others)
@@ -217,41 +216,6 @@ object DiplomacyTurn {
 
     //region Strengths and threats
 
-    /** CvDiplomacyAI::GetOtherPlayerWarmongerScore: the warmonger amount × WarmongerHate / 100 */
-    fun warmongerScore(civ: Civilization, other: Civilization): Int =
-        civ.ai.diplomacy.memoryOf(other).warmongerAmount * civ.ai.diplomacyValue(DiplomacyPersonality.WarmongerHate) / 100
-
-    /** CvDiplomacyAI::DoUpdateWarmongerThreats, with the decay of the warmonger amounts */
-    private fun updateWarmongerThreats(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
-        val playersEver = civ.gameInfo.civilizations.count { !it.isBarbarian && !it.isSpectator }
-        val warmongerHate = civ.ai.diplomacyValue(DiplomacyPersonality.WarmongerHate)
-        for (other in others) {
-            if (!other.isMajorCiv) continue
-            val memory = civ.ai.diplomacy.memoryOf(other)
-            val score = warmongerScore(civ, other)
-            var threat = when {
-                score >= rules.define(AiDefine.WARMONGER_THREAT_CRITICAL_THRESHOLD) -> AiThreat.Critical
-                score >= rules.define(AiDefine.WARMONGER_THREAT_SEVERE_THRESHOLD) -> AiThreat.Severe
-                score >= rules.define(AiDefine.WARMONGER_THREAT_MAJOR_THRESHOLD) -> AiThreat.Major
-                score >= rules.define(AiDefine.WARMONGER_THREAT_MINOR_THRESHOLD) -> AiThreat.Minor
-                else -> AiThreat.None
-            }
-            // Share of the players ever in the game they have killed, adjusted ±50% by WarmongerHate
-            val aggression = civ.ai.aggressionOf(other)
-            val killed = aggression.minorsConquered + aggression.majorsConquered
-            if (killed > 0 && playersEver > 0) {
-                var percent = killed * 100 / playersEver
-                val mod = (warmongerHate - rules.define(AiDefine.DEFAULT_FLAVOR_VALUE)) * rules.define(AiDefine.WARMONGER_THREAT_PERSONALITY_MOD)
-                percent += percent * mod / 100
-                // As the original: the severe test runs last, so it overrides a critical result
-                if (percent >= rules.define(AiDefine.WARMONGER_THREAT_CRITICAL_PERCENT_THRESHOLD)) threat = AiThreat.Critical
-                if (percent >= rules.define(AiDefine.WARMONGER_THREAT_SEVERE_PERCENT_THRESHOLD)) threat = AiThreat.Severe
-            }
-            memory.warmongerThreat = threat
-            memory.warmongerAmount = max(0, memory.warmongerAmount + rules.define(AiDefine.WARMONGER_THREAT_PER_TURN_DECAY))
-        }
-    }
-
     /** CvDiplomacyAI::DoUpdateMilitaryThreats */
     private fun updateMilitaryThreats(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
         var myStrength = max(1, WarStateAi.getPower(civ))
@@ -270,7 +234,8 @@ object DiplomacyTurn {
                 WarState.NearlyWon -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_NEARLY_WON)
                 WarState.Offensive -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_OFFENSIVE)
                 WarState.Stalemate -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_STALEMATE)
-                WarState.Defensive -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_DEFENSIVE)
+                // BNW's military threat has no troubled war (VP's war states, which have it, have no such threat): as defensive
+                WarState.Defensive, WarState.Troubled -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_DEFENSIVE)
                 WarState.NearlyDefeated -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_NEARLY_DEFEATED)
                 null -> 0
             }

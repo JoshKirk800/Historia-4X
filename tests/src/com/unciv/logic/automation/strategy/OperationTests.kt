@@ -560,7 +560,7 @@ class OperationTests {
         civ.ai.military.updateAttackTargets(civ)
         val targets = civ.ai.military.potentialAttackTargets
         assertTrue("preferred: ${targets.map { it.targetCity.name to it.preferred }}", targets.any { it.preferred && it.targetCity == enemyCity })
-        // DoCityAttacks: troubled or worse (ours: defensive or worse) starts nothing
+        // DoCityAttacks: a war worse than troubled starts nothing
         civ.ai.warStates.warStates[enemy.civID] = WarState.Defensive
         MilitaryOperations.doCityAttacks(civ, enemy)
         assertTrue(ops.operations.isEmpty())

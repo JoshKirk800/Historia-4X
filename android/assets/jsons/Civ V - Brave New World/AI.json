@@ -1247,19 +1247,53 @@
     "VOTING_HISTORY_SCORE_OUTCOME_VOTE_PERCENT_VALUE": 200,
     "VOTING_HISTORY_SCORE_PLAYER_VOTE_PERCENT_VALUE": 100,
     "WANT_RESEARCH_AGREEMENT_RAND": 8,
-    "WARMONGER_ON_CITY_STATE_MULTIPLIER": 50,
-    "WARMONGER_THREAT_CRITICAL_PERCENT_THRESHOLD": 40,
+    "WARMONGER_THREAT_ATTACKED_WEIGHT_WORLD_PEACE": 200,
+    "WARMONGER_THREAT_ATTACKER_STRENGTH_AVERAGE": 33,
+    "WARMONGER_THREAT_ATTACKER_STRENGTH_IMMENSE": 100,
+    "WARMONGER_THREAT_ATTACKER_STRENGTH_PATHETIC": -50,
+    "WARMONGER_THREAT_ATTACKER_STRENGTH_POOR": 0,
+    "WARMONGER_THREAT_ATTACKER_STRENGTH_POWERFUL": 75,
+    "WARMONGER_THREAT_ATTACKER_STRENGTH_STRONG": 50,
+    "WARMONGER_THREAT_ATTACKER_STRENGTH_WEAK": -25,
+    "WARMONGER_THREAT_CAPITAL_CITY_PERCENT": 150,
+    "WARMONGER_THREAT_CITY_VALUE_MULTIPLIER": 100,
+    "WARMONGER_THREAT_COOP_WAR_PERCENT": 10,
+    "WARMONGER_THREAT_CRITICAL_PERCENT_THRESHOLD": 33,
     "WARMONGER_THREAT_CRITICAL_THRESHOLD": 200,
-    "WARMONGER_THREAT_MAJOR_ATTACKED_WEIGHT": 250,
+    "WARMONGER_THREAT_DEFENDER_STRENGTH_AVERAGE": 0,
+    "WARMONGER_THREAT_DEFENDER_STRENGTH_IMMENSE": -75,
+    "WARMONGER_THREAT_DEFENDER_STRENGTH_POWERFUL": -50,
+    "WARMONGER_THREAT_DEFENDER_STRENGTH_STRONG": -25,
+    "WARMONGER_THREAT_LIBERATED_TEAM_BONUS_PERCENT": 200,
+    "WARMONGER_THREAT_MAJOR_ATTACKED_WEIGHT": 1500,
     "WARMONGER_THREAT_MAJOR_CONQUERED_WEIGHT": 1000,
-    "WARMONGER_THREAT_MAJOR_THRESHOLD": 50,
-    "WARMONGER_THREAT_MINOR_ATTACKED_WEIGHT": 125,
+    "WARMONGER_THREAT_MAJOR_PREVIOUSLY_ATTACKED_WEIGHT": 500,
+    "WARMONGER_THREAT_MAJOR_THRESHOLD": 80,
+    "WARMONGER_THREAT_MINOR_ATTACKED_WEIGHT": 750,
     "WARMONGER_THREAT_MINOR_CONQUERED_WEIGHT": 1000,
+    "WARMONGER_THREAT_MINOR_PREVIOUSLY_ATTACKED_WEIGHT": 250,
     "WARMONGER_THREAT_MINOR_THRESHOLD": 20,
-    "WARMONGER_THREAT_PERSONALITY_MOD": 10,
-    "WARMONGER_THREAT_PER_TURN_DECAY": -5,
+    "WARMONGER_THREAT_MODIFIER_LARGE": 75,
+    "WARMONGER_THREAT_MODIFIER_MEDIUM": 50,
+    "WARMONGER_THREAT_MODIFIER_NEGATIVE_MEDIUM": -50,
+    "WARMONGER_THREAT_MODIFIER_NEGATIVE_SMALL": -25,
+    "WARMONGER_THREAT_MODIFIER_SMALL": 25,
+    "WARMONGER_THREAT_PER_TURN_DECAY": -200,
+    "WARMONGER_THREAT_PER_TURN_DECAY_DECREASED": 50,
+    "WARMONGER_THREAT_PER_TURN_DECAY_INCREASED_FRIENDS": 200,
+    "WARMONGER_THREAT_PER_TURN_DECAY_MINIMUM": -100,
+    "WARMONGER_THREAT_PLAYER_NUKED_WEIGHT": 4000,
+    "WARMONGER_THREAT_PLAYER_PREVIOUSLY_NUKED_WEIGHT": 2000,
     "WARMONGER_THREAT_SEVERE_PERCENT_THRESHOLD": 25,
-    "WARMONGER_THREAT_SEVERE_THRESHOLD": 100,
+    "WARMONGER_THREAT_SEVERE_THRESHOLD": 140,
+    "WARMONGER_THREAT_SHARED_FATE_PERCENT": 200,
+    "WARMONGER_THREAT_STRENGTH_DECAY_AVERAGE": 150,
+    "WARMONGER_THREAT_STRENGTH_DECAY_IMMENSE": 50,
+    "WARMONGER_THREAT_STRENGTH_DECAY_PATHETIC": 300,
+    "WARMONGER_THREAT_STRENGTH_DECAY_POOR": 200,
+    "WARMONGER_THREAT_STRENGTH_DECAY_POWERFUL": 75,
+    "WARMONGER_THREAT_STRENGTH_DECAY_STRONG": 100,
+    "WARMONGER_THREAT_STRENGTH_DECAY_WEAK": 250,
     "WAR_DAMAGE_LEVEL_CITY_WEIGHT": 175,
     "WAR_DAMAGE_LEVEL_INVOLVED_CITY_POP_MULTIPLIER": 150,
     "WAR_DAMAGE_LEVEL_THRESHOLD_CRIPPLED": 67,
@@ -1316,11 +1350,6 @@
     "WAR_PROJECTION_WAR_DAMAGE_US_NONE": 0,
     "WAR_PROJECTION_WAR_DAMAGE_US_SERIOUS": -45,
     "WAR_PROJECTION_WAR_DURATION_SCORE_CAP": 25,
-    "WAR_STATE_CALM_THRESHOLD_FOREIGN_FORCES": 25,
-    "WAR_STATE_THRESHOLD_DEFENSIVE": 25,
-    "WAR_STATE_THRESHOLD_NEARLY_WON": 75,
-    "WAR_STATE_THRESHOLD_OFFENSIVE": 57,
-    "WAR_STATE_THRESHOLD_STALEMATE": 42,
     "WONDER_DISPUTE_FIERCE_THRESHOLD": 24,
     "WONDER_DISPUTE_STRONG_THRESHOLD": 12,
     "WONDER_DISPUTE_WEAK_THRESHOLD": 1,
@@ -12070,47 +12099,56 @@
     {
       "name": "Ancient era",
       "diploEmphasisReligion": 0,
-      "diploEmphasisLatePolicies": 0
+      "diploEmphasisLatePolicies": 0,
+      "warmongerPercent": 50
     },
     {
       "name": "Classical era",
       "diploEmphasisReligion": 2,
-      "diploEmphasisLatePolicies": 0
+      "diploEmphasisLatePolicies": 0,
+      "warmongerPercent": 60
     },
     {
       "name": "Medieval era",
       "diploEmphasisReligion": 5,
-      "diploEmphasisLatePolicies": 0
+      "diploEmphasisLatePolicies": 0,
+      "warmongerPercent": 70
     },
     {
       "name": "Renaissance era",
       "diploEmphasisReligion": 5,
-      "diploEmphasisLatePolicies": 0
+      "diploEmphasisLatePolicies": 0,
+      "warmongerPercent": 80
     },
     {
       "name": "Industrial era",
       "diploEmphasisReligion": 2,
-      "diploEmphasisLatePolicies": 7
+      "diploEmphasisLatePolicies": 7,
+      "warmongerPercent": 90
     },
     {
       "name": "Modern era",
       "diploEmphasisReligion": 0,
-      "diploEmphasisLatePolicies": 9
+      "diploEmphasisLatePolicies": 9,
+      "warmongerPercent": 100
     },
     {
       "name": "Atomic era",
       "diploEmphasisReligion": 0,
-      "diploEmphasisLatePolicies": 9
+      "diploEmphasisLatePolicies": 9,
+      "warmongerPercent": 110
     },
     {
       "name": "Information era",
       "diploEmphasisReligion": 0,
-      "diploEmphasisLatePolicies": 7
+      "diploEmphasisLatePolicies": 7,
+      "warmongerPercent": 120
     },
     {
       "name": "Future era",
       "diploEmphasisReligion": 0,
-      "diploEmphasisLatePolicies": 7
+      "diploEmphasisLatePolicies": 7,
+      "warmongerPercent": 120
     }
   ],
   "gameSpeedDiplomacy": [
@@ -12138,32 +12176,26 @@
   "worldSizes": [
     {
       "name": "Duel",
-      "estimatedNumCities": 13,
       "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Tiny",
-      "estimatedNumCities": 26,
       "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Small",
-      "estimatedNumCities": 39,
       "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Medium",
-      "estimatedNumCities": 52,
       "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Large",
-      "estimatedNumCities": 80,
       "numCitiesUnhappinessPercent": 80
     },
     {
       "name": "Huge",
-      "estimatedNumCities": 132,
       "numCitiesUnhappinessPercent": 60
     }
   ],

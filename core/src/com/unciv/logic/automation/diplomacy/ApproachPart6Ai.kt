@@ -11,7 +11,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
 /**
  *  Part 6 of Vox Populi's SelectBestApproachTowardsMajorCiv (Release-5.4.8; D7), STRATEGIC DIPLOMACY, the war situation: bankruptcy,
  *  the loss of our capital, the wars we fight right now and dangerous neighbours. On our scale: VP's personality bias is ours x 100.
- *  War weariness (BNW has none) counts as none; VP's troubled war state, which we lack, as none.
+ *  War weariness (BNW has none) counts as none.
  */
 object ApproachPart6Ai {
     private val WAR = MajorCivApproach.War.ordinal
@@ -74,8 +74,9 @@ object ApproachPart6Ai {
      *  AT WAR RIGHT NOW: for each other major we fight, friendliness (2 x bias) towards one fighting it too; friendliness and neutrality
      *  (2 x and 1 x bias) when they are our neighbour, and again when the enemy is. WAR STATE: unless we take no new wars, a war going
      *  better than troubled against an easy target, a player in terrible shape for war, or a phony war is ignored; any other war
-     *  lowers war and hostility (5 x bias), more when it goes badly: a stalemate draws neutrality (2 x bias, war and hostility 1 x
-     *  less), a defensive war friendliness (2 x), nearly defeated 5 x, both times their attack multiplier ([ApproachAi.attackMultipliers]).
+     *  lowers war and hostility (5 x bias), more when it goes badly: a calm war draws neutrality (2 x bias, war and hostility 1 x less),
+     *  a stalemate the same times their attack multiplier ([ApproachAi.attackMultipliers]), a troubled or defensive war friendliness
+     *  (2 x), nearly defeated 5 x, and war and hostility less by as much, all times their attack multiplier.
      */
     fun addAtWarWeights(civ: Civilization, other: Civilization, w: IntArray) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
@@ -94,16 +95,17 @@ object ApproachPart6Ai {
                 w[NEUTRAL] += bias(MajorCivApproach.Neutral)
             }
             val state = WarStateAi.warState(civ, enemy)
-            // Better than VP's troubled: stalemate or better (we have no troubled)
-            if (!noNewWars && state != null && state >= WarState.Stalemate) {
+            // A stalemate or better (better than VP's troubled)
+            if (!noNewWars && state != null && state > WarState.Troubled) {
                 if (WarStateAi.isEasyTarget(civ, enemy) || WarStateAi.isInTerribleShapeForWar(enemy)) continue
                 if (WarIntentAi.isPhonyWar(civ, enemy, ignoreCurrentApproach = true)) continue
             }
             w[WAR] -= bias(MajorCivApproach.War) * 5
             w[HOSTILE] -= bias(MajorCivApproach.Hostile) * 5
             val (friendly, neutral, lower) = when (state) {
-                WarState.Stalemate -> Triple(0, 2, 1)
-                WarState.Defensive -> Triple(2 * theirAttackMultiplier, 0, 2 * theirAttackMultiplier)
+                WarState.Calm -> Triple(0, 2, 1)
+                WarState.Stalemate -> Triple(0, 2 * theirAttackMultiplier, theirAttackMultiplier)
+                WarState.Troubled, WarState.Defensive -> Triple(2 * theirAttackMultiplier, 0, 2 * theirAttackMultiplier)
                 WarState.NearlyDefeated -> Triple(5 * theirAttackMultiplier, 0, 5 * theirAttackMultiplier)
                 else -> Triple(0, 0, 0)
             }

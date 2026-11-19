@@ -1,10 +1,9 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.logic.automation.diplomacy.LiberationAi
 import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
-import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.unique.UniqueType
@@ -20,11 +19,10 @@ object CityConquestAutomation {
      *
      *  Liberation, when the city's founder is neither the previous owner nor us and is alive or may be brought back
      *  (CvPlayer::CanLiberatePlayerCity; Unciv keeps no record of who destroyed a civilization, so any dead founder may be; a city gained
- *  by diplomatic marriage cannot be liberated in Unciv):
-     *  - a city-state: our approach to it is friendly, or we go for a diplomatic victory (CvDiplomacyAI::DoPossibleMinorLiberation);
-     *  - a living major: we have a defensive pact with it and both of us are at war with the previous owner, or we have a declaration of
-     *    friendship with it and go for a diplomatic victory;
-     *  - a dead major that was not human: we go for a diplomatic victory.
+     *  by diplomatic marriage cannot be liberated in Unciv):
+     *  - a city-state: our approach to it is friendly, or we go for a diplomatic victory (the original's DoPossibleMinorLiberation);
+     *  - a major, alive or dead: [LiberationAi.wantsToLiberateMajor] (Vox Populi's DoPossibleMajorLiberation, which it asks only after
+     *    AI_conquerCity has decided not to keep the city; the keep decision is not ported, so the question comes first here, as BNW's did).
      *  Otherwise it razes the city if it can (CvPlayer::canRaze: not one we founded, and Unciv's raze rules) and our empire is unhappy,
      *  or the map tells the AI to raze (map hint 2: no Unciv map gives it), or it razes faster (the Huns) and has at least 3 + turn/100 cities.
      *  Otherwise it puppets the city, unless we founded it and may annex (Venice may not), then it annexes.
@@ -37,13 +35,7 @@ object CityConquestAutomation {
                 val approach = conqueror.ai.minorCivApproaches[founder.civID] ?: MinorCivApproach.Ignore
                 if (approach == MinorCivApproach.Friendly || conqueror.ai.isGoingForDiploVictory())
                     return ConquestChoice.Liberate
-            } else if (founder.isAlive()) {
-                val diplomacy = conqueror.getDiplomacyManager(founder)
-                val defensivePact = diplomacy?.diplomaticStatus == DiplomaticStatus.DefensivePact
-                if (defensivePact && conqueror.isAtWarWith(previousOwner) && founder.isAtWarWith(previousOwner)) return ConquestChoice.Liberate
-                if (diplomacy?.hasFlag(DiplomacyFlags.DeclarationOfFriendship) == true && conqueror.ai.isGoingForDiploVictory())
-                    return ConquestChoice.Liberate
-            } else if (!founder.isHuman() && conqueror.ai.isGoingForDiploVictory()) return ConquestChoice.Liberate
+            } else if (founder.isMajorCiv && LiberationAi.wantsToLiberateMajor(conqueror, city, founder)) return ConquestChoice.Liberate
         }
 
         val canRaze = founder != conqueror && city.canBeDestroyed(justCaptured = true)

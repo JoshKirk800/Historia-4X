@@ -620,6 +620,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
 
 
     fun makePeace() {
+        DiplomacyEvents.onPeaceMaking(civInfo, otherCiv)
         makePeaceOneSide()
         otherCivDiplomacy().makePeaceOneSide()
         DiplomacyEvents.onPeace(civInfo, otherCiv)

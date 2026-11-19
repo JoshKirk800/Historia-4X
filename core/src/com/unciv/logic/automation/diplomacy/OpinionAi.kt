@@ -349,11 +349,8 @@ object OpinionAi {
         }
     }
 
-    /** GetWarmongerThreatScore: the warmonger score, counted from 5 */
-    fun warmongerThreatScore(civ: Civilization, other: Civilization): Int {
-        val score = DiplomacyTurn.warmongerScore(civ, other)
-        return if (score < 5) 0 else score
-    }
+    /** GetWarmongerThreatScore (Vox Populi): the warmonger score ([WarmongerAi.warmongerScore]); BNW's counted it only from 5 */
+    fun warmongerThreatScore(civ: Civilization, other: Civilization): Int = WarmongerAi.warmongerScore(civ, other)
 
     /**
      *  GetNoSettleRequestScore / GetStopSpyingRequestScore (Vox Populi): they asked us for the promise of [kind] and we refused or

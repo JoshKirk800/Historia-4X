@@ -59,6 +59,7 @@ class OpinionTraitorsTests {
     fun `attacking a friend makes the attacker hated by that friend's friends, twice over`() {
         // b declared war on its friend c: b is untrustworthy
         c.ai.diplomacy.memoryOf(b).friendDeclaredWarOnUs = true
+        a.ai.diplomacy.memoryOf(b).untrustworthy = true // and a holds it for one (UntrustworthyAi)
         val each = rules.define(AiDefine.OPINION_WEIGHT_WAR_FRIEND_EACH)
         assertEquals(each, OpinionAi.traitorScore(a, b, rules))
         a.getDiplomacyManager(c)!!.signDeclarationOfFriendship()

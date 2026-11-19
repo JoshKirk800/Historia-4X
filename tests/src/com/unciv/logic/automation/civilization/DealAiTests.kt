@@ -150,8 +150,8 @@ class DealAiTests {
         assertEquals(base, DealAi.getTradeItemValue(a, b, offer, false, true, trade))
         feelings(a, b, MajorCivApproach.Hostile, MajorCivOpinion.Neutral)
         assertEquals("the approach does not move an embassy", base, DealAi.getTradeItemValue(a, b, offer, true, true, trade))
-        // c remembers that b declared war on its friend
-        c.ai.diplomacy.memoryOf(b).friendDeclaredWarOnUs = true
+        // a holds b for a backstabber (UntrustworthyAi)
+        a.ai.diplomacy.memoryOf(b).untrustworthy = true
         assertEquals(DealAi.NEVER, DealAi.getTradeItemValue(a, b, offer, true, true, trade))
         assertEquals(base, DealAi.getTradeItemValue(a, b, offer, false, true, trade))
     }

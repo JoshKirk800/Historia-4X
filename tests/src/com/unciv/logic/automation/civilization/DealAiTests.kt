@@ -5,6 +5,8 @@ import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.PeaceTreatyType
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.automation.strategy.StrengthLevel
+import com.unciv.logic.automation.diplomacy.WarDamageAi
+import com.unciv.logic.city.City
 import com.unciv.logic.city.GreatWorkSlot
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Proximity
@@ -16,6 +18,7 @@ import com.unciv.logic.trade.TradeEvaluation
 import com.unciv.logic.trade.TradeLogic
 import com.unciv.logic.trade.TradeOffer
 import com.unciv.logic.trade.TradeOfferType
+import com.unciv.logic.trade.TradeOffersList
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.GreatWorkInstance
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
@@ -29,6 +32,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.abs
 
 /** Decision-level checks of the CvDealAI port against the DLL formulas with the BNW XML values */
 @RunWith(GdxTestRunner::class)
@@ -227,13 +231,15 @@ class DealAiTests {
     }
 
     @Test
-    fun `a city we give is doubled at peace and multiplied by the war projection`() {
+    fun `a capital is not for sale at any price, whoever asks`() {
         val city = a.cities.first()
-        val received = DealAi.getCityValue(b, a, city, false, false)
-        val given = DealAi.getCityValue(a, b, city, true, false)
-        // Unknown projection 250%, ×2 when not at war; the original capital doubling applies to both
-        val base = received / 2
-        assertEquals(base * 250 / 100 * 2 * 2, given)
+        val offer = TradeOffer(city.id, TradeOfferType.City, 1, -1)
+        val trade = Trade()
+        trade.ourOffers.add(offer)
+        // CvDealAI::GetTradeItemValue: the buyer's price from GetCityValueForDeal, not scaled by the seller's projection or doubled at peace
+        assertEquals(DealAi.NEVER, DealAi.getTradeItemValue(a, b, offer, true, false, trade))
+        assertEquals(DealAi.NEVER, DealAi.getTradeItemValue(a, b, offer, true, true, trade))
+        assertEquals(-DealAi.NEVER, DealAi.getTradeItemValue(b, a, offer, false, false, trade.reverse()))
     }
     //endregion
 
@@ -313,17 +319,119 @@ class DealAiTests {
 
     //region Peace
 
+    /** Makes [loser] lose [winner]'s war by about [score] percent of its empire (CvPlayer::GetWarScore); returns the score that results */
+    private fun loseWar(loser: Civilization, winner: Civilization, score: Int): Int {
+        if (!loser.isAtWarWith(winner)) loser.getDiplomacyManager(winner)!!.declareWar()
+        val current = WarDamageAi.empireWarValue(loser)
+        loser.ai.diplomacy.memoryOf(winner).warValueLost = (current * score + 199) / 200
+        return abs(WarDamageAi.warScore(loser, winner))
+    }
+
+    private fun Trade.goldGiven(items: TradeOffersList) = items.filter { it.type == TradeOfferType.Gold }.sumOf { it.amount }
+
     @Test
-    fun `an armistice gives half the loser's gold, a settlement all of it`() {
-        a.getDiplomacyManager(b)!!.declareWar()
+    fun `the loser's gold is the war score in percent whatever the treaty`() {
         a.addGold(300 - a.gold)
+        val score = loseWar(a, b, 40)
+        assertTrue("setup: $score", score in 39..41)
+        for (treaty in listOf(PeaceTreatyType.Armistice, PeaceTreatyType.Settlement, PeaceTreatyType.Capitulation)) {
+            val trade = Trade()
+            DealAi.addItemsToDealForPeaceTreaty(trade, a, b, treaty, meSurrendering = true)
+            assertEquals("$treaty", 300 * score / 100, trade.goldGiven(trade.ourOffers))
+            assertEquals(0, trade.goldGiven(trade.theirOffers))
+        }
+    }
+
+    @Test
+    fun `the winner is the one who gets the items when we are the winner`() {
+        b.addGold(200 - b.gold)
+        val score = loseWar(b, a, 50)
+        val trade = Trade()
+        DealAi.addItemsToDealForPeaceTreaty(trade, a, b, PeaceTreatyType.Settlement, meSurrendering = false)
+        assertEquals(200 * score / 100, trade.goldGiven(trade.theirOffers))
+        assertEquals(0, trade.goldGiven(trade.ourOffers))
+    }
+
+    @Test
+    fun `the fill puts the peace in the deal for both and nothing below an armistice`() {
+        loseWar(a, b, 40)
         val trade = Trade()
         DealAi.addItemsToDealForPeaceTreaty(trade, a, b, PeaceTreatyType.Armistice, meSurrendering = true)
-        assertEquals(150, trade.ourOffers.first { it.type == TradeOfferType.Gold }.amount)
-        val settlement = Trade()
-        DealAi.addItemsToDealForPeaceTreaty(settlement, a, b, PeaceTreatyType.Settlement, meSurrendering = true)
-        assertEquals(300, settlement.ourOffers.first { it.type == TradeOfferType.Gold }.amount)
-        assertTrue(settlement.theirOffers.none { it.type == TradeOfferType.Gold })
+        assertTrue(trade.isPeaceTreaty())
+        assertTrue(trade.theirOffers.any { it.type == TradeOfferType.Treaty && it.name == Constants.peaceTreaty })
+        val white = Trade()
+        DealAi.addItemsToDealForPeaceTreaty(white, a, b, PeaceTreatyType.WhitePeace, meSurrendering = true)
+        assertTrue(white.ourOffers.isEmpty() && white.theirOffers.isEmpty())
+    }
+
+    /** a's second city, with two of b's warriors next to it and almost no hit points: the winner is about to take it */
+    private fun endangeredCity(): City {
+        a.getDiplomacyManager(b)!!.declareWar()
+        val second = game.addCity(a, game.getTile(HexCoord(0, 4)))
+        for (tile in second.getCenterTile().neighbors.take(2)) game.addUnit("Warrior", b, tile)
+        second.health = 10
+        return second
+    }
+
+    @Test
+    fun `a loser above 25 offers its city about to fall and the percentages use the score less 25`() {
+        a.addGold(1000 - a.gold)
+        val second = endangeredCity()
+        val score = loseWar(a, b, 60)
+        assertTrue("setup: $score", score in 58..62)
+        val trade = Trade()
+        DealAi.addItemsToDealForPeaceTreaty(trade, a, b, PeaceTreatyType.Armistice, meSurrendering = true)
+        assertEquals(listOf(second.id), trade.ourOffers.filter { it.type == TradeOfferType.City }.map { it.name })
+        assertEquals(1000 * (score - 25) / 100, trade.goldGiven(trade.ourOffers))
+    }
+
+    @Test
+    fun `a loser at 25 or less keeps its city, and the capital is never offered`() {
+        a.addGold(1000 - a.gold)
+        endangeredCity()
+        val score = loseWar(a, b, 24)
+        assertTrue("setup: $score", score in 23..25)
+        val trade = Trade()
+        DealAi.addItemsToDealForPeaceTreaty(trade, a, b, PeaceTreatyType.UnconditionalSurrender, meSurrendering = true)
+        assertTrue(trade.ourOffers.none { it.type == TradeOfferType.City })
+        assertEquals(1000 * score / 100, trade.goldGiven(trade.ourOffers))
+    }
+
+    @Test
+    fun `luxuries go above 15 as the score's share of their value, most valuable first`() {
+        a.getCapital()!!.cityConstructions.addBuilding(game.createBuilding("Provides [1] [Wine]"))
+        a.getCapital()!!.cityConstructions.addBuilding(game.createBuilding("Provides [1] [Silk]"))
+        a.cache.updateCivResources()
+        assertEquals(1, a.getResourceAmount("Wine"))
+        val score = loseWar(a, b, 60)
+        val trade = Trade()
+        DealAi.addItemsToDealForPeaceTreaty(trade, a, b, PeaceTreatyType.Armistice, meSurrendering = true)
+        // Two equal luxuries worth 2v: 60% of it covers one
+        assertEquals("score $score", 1, trade.ourOffers.count { it.type == TradeOfferType.Luxury_Resource })
+        loseWar(a, b, 14)
+        val low = Trade()
+        DealAi.addItemsToDealForPeaceTreaty(low, a, b, PeaceTreatyType.Armistice, meSurrendering = true)
+        assertEquals(0, low.ourOffers.count { it.type == TradeOfferType.Luxury_Resource })
+    }
+
+    @Test
+    fun `a loser with many cities gives a city worth its score fifth of its empire when it is not about to fall`() {
+        // Seven cities in all (the capital and six around b's capital, a ring each at least 3 apart)
+        val center = b.getCapital()!!.getCenterTile()
+        val chosen = ArrayList<com.unciv.logic.map.tile.Tile>()
+        for (tile in center.getTilesAtDistance(3)) if (chosen.none { it.aerialDistanceTo(tile) < 3 }) chosen.add(tile)
+        assertTrue("setup: ${chosen.size}", chosen.size >= 6)
+        val ring = chosen.take(6).map { game.addCity(a, it) }
+        a.addGold(1000 - a.gold)
+        val score = loseWar(a, b, 100)
+        assertEquals(100, score)
+        val trade = Trade()
+        DealAi.addItemsToDealForPeaceTreaty(trade, a, b, PeaceTreatyType.Armistice, meSurrendering = true)
+        val offered = trade.ourOffers.filter { it.type == TradeOfferType.City }.map { it.name }
+        // 20% of seven cities' value is more than one city, less than two
+        assertEquals(1, offered.size)
+        assertTrue(ring.any { it.id == offered.single() })
+        assertEquals(1000, trade.goldGiven(trade.ourOffers))
     }
 
     @Test

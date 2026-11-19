@@ -25,7 +25,7 @@ import kotlin.math.roundToInt
  *  other ports read (PrecalcYieldStats). ReweightByTurnsLeft is [WonderProductionAi.reweightByTurnsLeft], GetNumUnitsWithUnitAI [UnitAiTypes].
  *
  *  Not registered here: the trade and espionage city strategies (registered by their own port). AICITYSTRATEGY_CAPITAL_UNDER_THREAT
- *  reads CvCity::getThreatValue, the danger map's [com.unciv.logic.automation.unit.PlotDanger.cityThreat] ([CityThreat]).
+ *  reads the dominance of the capital's zones on the tactical map ([CityThreat.isCapitalUnderThreat]).
  */
 object CityStrategyAi {
     /** CityStrategyAI.cpp NO_WORKER_AFTER_DISBAND_DURATION: the lock-out of all three tile improver strategies after a scrapped worker */

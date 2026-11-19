@@ -15,8 +15,11 @@ import kotlin.math.max
 
 /**
  *  How the tactical AI moves the armies of an operation (AIOperationMovementType); [None] = the original's INVALID / STATIC type: never moved.
- *  [NavalFleet] is the original's ENEMY_TERRITORY type as the naval bombardment and pure naval city attack set it: the fleet is moved by the
- *  naval formation code ([com.unciv.logic.automation.unit.NavalOperationMoves]), which places ships on water, instead of the land army's.
+ *  [EnemyTerritory] is the land armies of Vox Populi's ARMY_TYPE_LAND (CvTacticalAI::PlotArmyMovesCombat): the attacks on a city, the pillage raids
+ *  and the land defense operations. [NavalFleet] is the original's ENEMY_TERRITORY type as the pure naval city attack and the naval superiority
+ *  set it: the fleet is moved by the naval formation code ([com.unciv.logic.automation.unit.NavalOperationMoves]), which places ships on water,
+ *  instead of the land army's. [FreeformNaval] is BNW's naval superiority movement, which no operation uses any more (Vox Populi's squadron
+ *  gathers and sails as a fleet); it stays for the tactical AI's exhaustive handling of the move types.
  */
 enum class OperationMoveType { None, SingleHex, EnemyTerritory, NavalEscort, FreeformNaval, NavalFleet }
 
@@ -38,12 +41,12 @@ enum class AiOperationType(
     SMALL_CITY_ATTACK(OperationMoveType.EnemyTerritory),
     CITY_STATE_ATTACK(OperationMoveType.EnemyTerritory),
     PILLAGE_ENEMY(OperationMoveType.EnemyTerritory),
-    CITY_CLOSE_DEFENSE(OperationMoveType.None),
-    RAPID_RESPONSE(OperationMoveType.None),
+    CITY_CLOSE_DEFENSE(OperationMoveType.EnemyTerritory),
+    RAPID_RESPONSE(OperationMoveType.EnemyTerritory),
     NAVAL_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
     NAVAL_SNEAK_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
     CITY_STATE_NAVAL_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
-    NAVAL_SUPERIORITY(OperationMoveType.FreeformNaval, tacticalMayInterrupt = true, allNaval = true),
+    NAVAL_SUPERIORITY(OperationMoveType.NavalFleet, tacticalMayInterrupt = true, allNaval = true),
     PURE_NAVAL_CITY_ATTACK(OperationMoveType.NavalFleet, tacticalMayInterrupt = true, allNaval = true),
     /** CvAIOperationNukeAttack: the original's STATIC move type, it only works with the nuke already in place */
     NUKE_ATTACK(OperationMoveType.None),
@@ -56,10 +59,12 @@ enum class AiOperationType(
 
     /** The operations CvCity-bound settlers run (CvAIEscortedOperation) */
     val isEscorted get() = this == FOUND_CITY || this == QUICK_COLONIZE
-    /** CvAIEnemyTerritoryOperation and its descendants that walk (the land ones) */
-    val isEnemyTerritory get() = moveType == OperationMoveType.EnemyTerritory
-    /** The attacks on a city by land (CvAIOperationBasicCityAttack and its subclasses) */
-    val isCityAttack get() = isEnemyTerritory && this != PILLAGE_ENEMY
+    /** CvAIOperationBasicCityAttack and its subclasses: the attacks on a city by land */
+    val isCityAttack get() = this == BASIC_CITY_ATTACK || this == SNEAK_CITY_ATTACK || this == SMALL_CITY_ATTACK || this == CITY_STATE_ATTACK
+    /** CvAIOperationDefendCity and CvAIOperationDefenseRapidResponse: the operations that defend by land */
+    val isLandDefense get() = this == CITY_CLOSE_DEFENSE || this == RAPID_RESPONSE
+    /** The operations that Vox Populi's CheckLandDefenses and CheckSeaDefenses start: the land defense operations and the naval superiority squadron */
+    val isDefense get() = isLandDefense || this == NAVAL_SUPERIORITY
     /** Retired types ([DESTROY_BARBARIAN_CAMP], [NAVAL_BOMBARDMENT]) */
     val isRetired get() = this == DESTROY_BARBARIAN_CAMP || this == NAVAL_BOMBARDMENT
     /** CvAIOperationNavalAttack and its subclasses: land units that embark, with warships, against a coastal city */
@@ -254,16 +259,22 @@ class AiOperations : IsPartOfGameInfoSerialization {
 
     //region Queries (CvPlayer::haveAIOperationOfType, numOperationsOfType, getAIOperation, CvUnit::getArmyID)
 
-    /** CvPlayer::haveAIOperationOfType: the first operation of [type] (against [enemy], with target [target]) */
+    /**
+     *  CvPlayer::getFirstAIOperationOfType: the first operation of [type] that is not aborted, against [enemy] (any when null) and, when
+     *  [target] is given, aimed less than [TARGET_LOOKUP_DISTANCE] plots from it
+     */
     fun firstOfType(type: AiOperationType, enemy: Civilization? = null, target: Tile? = null): AiOperation? =
-        operations.firstOrNull { it.type == type && (enemy == null || it.enemyCivId == enemy.civID) && (target == null || it.targetTile == target.position) }
+        operations.firstOrNull { operation ->
+            operation.type == type && operation.state != OperationState.ABORTED && (enemy == null || operation.enemyCivId == enemy.civID) &&
+                (target == null || operation.targetTile?.let { target.aerialDistanceTo(civ.gameInfo.tileMap[it]) < TARGET_LOOKUP_DISTANCE } == true)
+        }
 
     /** CvPlayer::numOperationsOfType */
     fun numOperationsOfType(type: AiOperationType) = operations.count { it.type == type }
 
     /**
      *  CvPlayer::HasAnyOffensiveOperationsAgainstPlayer (Vox Populi's getFirstOffensiveAIOperation): a military operation still running
-     *  against [enemy] whose target is outside our territory (CvAIOperation::IsOffensive; rapid response never is)
+     *  against [enemy] whose target is outside our territory (CvAIOperation::IsOffensive)
      */
     fun hasAnyOffensiveOperationsAgainst(enemy: Civilization): Boolean = operations.any { isOffensiveAgainst(it, enemy) }
 
@@ -286,9 +297,8 @@ class AiOperations : IsPartOfGameInfoSerialization {
         }
     }
 
-    /** CvAIOperation::IsOffensive: the target is outside our territory (rapid response never is) */
-    fun isOffensive(op: AiOperation): Boolean =
-        op.type != AiOperationType.RAPID_RESPONSE && op.targetTile?.let { civ.gameInfo.tileMap[it].getOwner() != civ } == true
+    /** CvAIOperation::IsOffensive: the target is not friendly territory for us (ours, or that of one who allows us in) */
+    fun isOffensive(op: AiOperation): Boolean = op.targetTile?.let { !civ.gameInfo.tileMap[it].isFriendlyTerritory(civ) } == true
 
     private fun isOffensiveAgainst(op: AiOperation, enemy: Civilization): Boolean =
         !op.type.isEscorted && op.enemyCivId == enemy.civID &&
@@ -328,6 +338,8 @@ class AiOperations : IsPartOfGameInfoSerialization {
 
     companion object {
         const val NEVER_DEPLOYED = -100
+        /** CvPlayer::getFirstAIOperationOfType's iMaxTargetDistance */
+        const val TARGET_LOOKUP_DISTANCE = 3
     }
 
     /** CvPlayer::IsCityAlreadyTargeted: an operation heading for [city] that is less than [percentToTarget] of the way (for [mixedLandNaval] or land ones) */

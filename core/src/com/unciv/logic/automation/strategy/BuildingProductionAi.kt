@@ -7,6 +7,7 @@ import com.unciv.logic.automation.strategy.ProductionSanityAi.SR_MAINTENANCE
 import com.unciv.logic.automation.strategy.ProductionSanityAi.SR_STRATEGY
 import com.unciv.logic.automation.strategy.ProductionSanityAi.SR_UNKNOWN
 import com.unciv.logic.automation.strategy.ProductionSanityAi.SR_USELESS
+import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.ReligionState
@@ -446,7 +447,7 @@ object BuildingProductionAi {
             if (civ.units.getCivUnits().count { it.isMilitary() } <= civ.cities.size * 3) penalty += 75
             if (WarStateAi.numberCivsAtWarWith(civ) > 0 && building.cityStrength <= 0 && !isPuppetAndAnnexable && !freeBuilding &&
                 happiness > rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) {
-                penalty += 50 + civ.ai.plotDanger.cityThreat(city)
+                penalty += 50 + CityThreat.threatValue(city)
                 for (other in civ.gameInfo.civilizations) {
                     if (other == civ || !other.isMajorCiv || !other.isAlive() || !civ.isAtWarWith(other)) continue
                     val state = WarStateAi.warState(civ, other)

@@ -13,7 +13,6 @@ import com.unciv.models.UnitActionType
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.unique.UniqueType
-import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.logic.automation.unit.tactical.Deployment
 import com.unciv.logic.automation.unit.tactical.TacticalTargetType
 import com.unciv.view.GameView
@@ -32,7 +31,8 @@ import kotlin.math.max
  *  and BuyFinalUnit. Operation and army data are in [AiOperations]; the units are moved by [com.unciv.logic.automation.unit.tactical.OperationalMoves].
  *
  *  Covered: CvAIOperationFoundCity, QuickColonize, BasicCityAttack, SneakCityAttack (and the Quick one), SmallCityAttack, CityStateAttack,
- *  DestroyBarbarianCamp, PillageEnemy, CityCloseDefense, RapidResponse; the naval operations and the nuke attack are [NavalOperationLogic].
+ *  DestroyBarbarianCamp, PillageEnemy; the defense operations (CvAIOperationDefendCity and DefenseRapidResponse on CvAIOperationMilitary, see
+ *  [initDefense], [preconditionsAreMet], [checkTransitionToNextStage]); the naval operations and the nuke attack are [NavalOperationLogic].
  *
  *  Deviations, with the reason: the step finder is [StepFinder]; "path length" of a unit's route (CvIgnoreUnitsPathFinder) is the unit's turns
  *  (`getShortestPath`), which respects units; the original's EnemyTerritoryOperation::Init overwrites its LOST_PATH abort when no deploy point is found
@@ -47,11 +47,12 @@ import kotlin.math.max
  *    done: the gold AI upgrades units;
  *  - a unit bought for an operation (CvAIOperation::RecruitUnit) joins by the next turn's [continueRecruiting], before any unit moves;
  *  - a slot a city has committed to is not offered to the reserves (the original lists it again, and a second city may commit to it);
- *  - only the operations the military AI launches (the attacks on cities and the pillage raids, the naval invasions and pure naval attacks)
- *    leave the units near their target alone: the "already close to the target" rule is for the tactical AI of an attack, and the settlers',
- *    the defense and the naval superiority operations recruit for their muster point alone;
- *  - an operation that found no unit at its start does not abort (SetUpArmy's NO_UNITS): the creation of operations is where the original
- *    checks the units at hand (PreconditionsAreMet) and where the limit of missing units is applied.
+ *  - the "already close to the target" rule keeps every military operation's recruits away from its target, the defense operations' too
+ *    (units within [MAX_TARGET_DISTANCE] plots of the city to defend are the tactical AI's); the settlers' operations recruit for their muster
+ *    point alone;
+ *  - an attack operation that found no unit at its start does not abort (SetUpArmy's NO_UNITS): the creation of operations is where the
+ *    original checks the units at hand (PreconditionsAreMet) and where the limit of missing units is applied. The defense operations
+ *    follow SetUpArmy ([setUpArmy]).
  */
 object AiOperationLogic {
 
@@ -186,7 +187,7 @@ object AiOperationLogic {
      *  CvPlayer::addAIOperation for the operations of the military AI: creates the operation with its army, finds its target and muster,
      *  recruits what it can from the reserves and sets its state. The operation is returned even when it aborted at once (state ABORTED;
      *  the original removes it in the next sweep, [doTurn]).
-     *  @param target the city to attack, [muster] our city it starts from (city attacks); [defend] only [enemy] for the other types
+     *  @param target the city to attack or defend, [muster] our city it starts from; only [enemy] for the other types
      */
     fun addOperation(civ: Civilization, type: AiOperationType, enemy: Civilization? = null, target: City? = null, muster: City? = null): AiOperation {
         val operations = civ.ai.operations
@@ -196,9 +197,9 @@ object AiOperationLogic {
             type == AiOperationType.PILLAGE_ENEMY -> initEnemyTerritory(civ, operation)
             type.isNavalInvasion -> NavalOperationLogic.initNavalInvasion(civ, operation, target, muster)
             type == AiOperationType.PURE_NAVAL_CITY_ATTACK -> NavalOperationLogic.initPureNavalAttack(civ, operation, target, muster)
-            type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.initFleet(civ, operation)
+            type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.initSuperiority(civ, operation, target, muster)
             type == AiOperationType.NUKE_ATTACK -> NavalOperationLogic.initNuke(civ, operation)
-            else -> initDefense(civ, operation)
+            else -> initDefense(civ, operation, target, muster)
         }
         if (operation.state != OperationState.ABORTED) logStart(civ, operation)
         else AiDecisionLog.log(civ) { "operation ${operation.type} #${operation.id} aborted at start: ${operation.abortReason}" }
@@ -258,32 +259,33 @@ object AiOperationLogic {
         startRecruiting(civ, operation)
     }
 
-    /** CvAIOperationCityCloseDefense::Init / CvAIOperationRapidResponse::Init: gather at the point to defend */
-    private fun initDefense(civ: Civilization, operation: AiOperation) {
+    /**
+     *  CvAIOperationMilitary::Init for the land defense operations (CvAIOperationDefendCity, CvAIOperationDefenseRapidResponse), which
+     *  Vox Populi launches for a city: the army musters at [muster], else our city nearest to [target] on its landmass within
+     *  [DEFENSE_MUSTER_RADIUS] plots (the city itself when it is ours), and is sent to the city. No target or no muster city ends the operation.
+     */
+    private fun initDefense(civ: Civilization, operation: AiOperation, target: City?, muster: City?) {
+        val targetTile = target?.getCenterTile() ?: run { abort(operation, OperationAbortReason.LOST_TARGET); return }
+        val musterCity = muster ?: closestCity(civ, targetTile, DEFENSE_MUSTER_RADIUS, sameLandmass = true)
+        if (musterCity == null) { abort(operation, OperationAbortReason.NO_MUSTER); return }
+        operation.startCityId = musterCity.id
         val army = civ.ai.operations.newArmy(operation, formationName(civ, operation.type))
-        val target = findBestTarget(civ, operation) ?: run { abort(operation, OperationAbortReason.LOST_TARGET); return }
-        operation.targetTile = target.position
-        army.goalTile = target.position
-        operation.musterTile = target.position // gather directly at the point we're trying to defend
-        army.position = target.position
-        operation.area = target.getContinent()
-        startRecruiting(civ, operation)
+        setUpArmy(civ, operation, army, musterCity.getCenterTile(), targetTile)
     }
 
     /** The target of the operation types that look for one themselves (the FindBestTarget functions) */
     fun findBestTarget(civ: Civilization, operation: AiOperation): Tile? = when (operation.type) {
         AiOperationType.PILLAGE_ENEMY -> findPillageTarget(civ, operation)
-        AiOperationType.CITY_CLOSE_DEFENSE, AiOperationType.RAPID_RESPONSE -> findDefenseTarget(civ, operation)
+        AiOperationType.RAPID_RESPONSE -> findRapidResponseTarget(civ, operation)
         else -> operation.targetTile?.let { tileAt(civ, it) }
     }
 
-    /** CvAIOperationCityCloseDefense/RapidResponse::FindBestTarget: the most threatened city, else our city nearest the enemy capital */
-    private fun findDefenseTarget(civ: Civilization, operation: AiOperation): Tile? {
-        CityThreat.mostThreatenedCity(civ)?.let { return it.getCenterTile() }
-        val enemy = enemy(civ, operation) ?: return null
-        val enemyCapital = enemy.getCapital() ?: return null
-        return civ.cities.minByOrNull { it.getCenterTile().aerialDistanceTo(enemyCapital.getCenterTile()) }?.getCenterTile()
-    }
+    /**
+     *  CvAIOperationDefenseRapidResponse::FindBestTarget: where the enemy's units gather around the operation's target - the best blocking
+     *  position against the current threats ([findEnemiesNearHomelandPlot] within [RAPID_RESPONSE_RETARGET_RANGE] plots of the target)
+     */
+    private fun findRapidResponseTarget(civ: Civilization, operation: AiOperation): Tile? =
+        findEnemiesNearHomelandPlot(civ, enemy(civ, operation) ?: return null, targetTile(civ, operation), RAPID_RESPONSE_RETARGET_RANGE)
 
     /** CvAIOperationPillageEnemy::FindBestTarget: the enemy city on the start city's landmass with the most improved tiles per step */
     private fun findPillageTarget(civ: Civilization, operation: AiOperation): Tile? {
@@ -634,9 +636,8 @@ object AiOperationLogic {
         }
 
         val naval = operation.type.mixedLandNaval || operation.type.allNaval
-        // see the class comment: only the operations the military AI launches leave the units near their target alone
-        val type = operation.type
-        val closeTarget = if (type.isCityAttack || type == AiOperationType.PILLAGE_ENEMY || type.isNavalInvasion || type == AiOperationType.PURE_NAVAL_CITY_ATTACK) target else null
+        // see the class comment: every military operation keeps the units near its target out of the army; the settlers' do not
+        val closeTarget = if (operation.type.isEscorted) null else target
         val crossesOcean = isAcrossOcean(civ, muster, target, naval)
         val maxTurns = maxRecruitTurns(civ, operation)
         var unfriendly: List<Civilization>? = null
@@ -695,7 +696,7 @@ object AiOperationLogic {
     }
 
     /** CvArmyAI::GetCurrentPlot: where the army's units are to be: the muster point until the army moves, then its center of mass */
-    private fun checkpointTile(civ: Civilization, operation: AiOperation, army: AiArmy): Tile? = when (army.state) {
+    internal fun checkpointTile(civ: Civilization, operation: AiOperation, army: AiArmy): Tile? = when (army.state) {
         ArmyState.WAITING_FOR_UNITS_TO_REINFORCE, ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP -> musterTile(civ, operation)
         ArmyState.MOVING_TO_DESTINATION -> centerOfMass(civ, army, operation.type.allNaval || operation.type.mixedLandNaval)
     }
@@ -746,6 +747,7 @@ object AiOperationLogic {
      *  ([finishRecruitingIfDone]), armies that have gathered move out, those at the target hand over. True if the state changed.
      */
     fun checkOnTarget(civ: Civilization, operation: AiOperation): Boolean {
+        if (operation.type.isDefense) return checkTransitionToNextStage(civ, operation)
         val recruited = finishRecruitingIfDone(civ, operation)
         val inPosition = checkInPosition(civ, operation)
         return recruited || inPosition
@@ -854,20 +856,16 @@ object AiOperationLogic {
         val type = operation.type
         return when {
             type.isNavalInvasion -> NavalOperationLogic.navalInvasionInPosition(civ, operation, army)
-            type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.superiorityInPosition(civ, operation, army)
             type == AiOperationType.PURE_NAVAL_CITY_ATTACK -> NavalOperationLogic.pureNavalAttackInPosition(civ, operation, army)
             type == AiOperationType.NUKE_ATTACK -> NavalOperationLogic.nukeInPosition(civ, operation, army)
             type.isCityAttack -> cityAttackInPosition(civ, operation, army)
             type.isEscorted -> escortedInPosition(civ, operation, army)
             type == AiOperationType.PILLAGE_ENEMY -> {
                 if (operation.state == OperationState.MOVING_TO_TARGET) {
-                    if (army.position == army.goalTile) operation.state = OperationState.SUCCESSFUL_FINISH
+                    if (army.position == army.goalTile) { operation.state = OperationState.SUCCESSFUL_FINISH; onSuccess(civ, operation) }
                     false
                 } else baseArmyInPosition(operation, army)
             }
-            type == AiOperationType.RAPID_RESPONSE ->
-                if (operation.state == OperationState.MOVING_TO_TARGET) { retargetDefensiveArmy(civ, operation, army); false }
-                else baseArmyInPosition(operation, army)
             else -> baseArmyInPosition(operation, army)
         }
     }
@@ -912,24 +910,12 @@ object AiOperationLogic {
                     // Notify tactical AI to focus on this area
                     if (target != null) civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.City)
                     operation.state = OperationState.SUCCESSFUL_FINISH
+                    onSuccess(civ, operation)
                 }
                 return false
             }
             else -> return baseArmyInPosition(operation, army)
         }
-    }
-
-    /** CvAIOperationRapidResponse::RetargetDefensiveArmy */
-    fun retargetDefensiveArmy(civ: Civilization, operation: AiOperation, army: AiArmy): Boolean {
-        val better = findBestTarget(civ, operation)
-        if (better == null) { abort(operation, OperationAbortReason.NO_TARGET); return false }
-        if (better.position != operation.targetTile) {
-            operation.targetTile = better.position
-            army.goalTile = better.position
-        }
-        army.state = ArmyState.MOVING_TO_DESTINATION
-        operation.state = OperationState.MOVING_TO_TARGET
-        return true
     }
 
     /** CvAIOperationFoundCity::ArmyInPosition: merge settler and escort and move out, found the city on arrival */
@@ -1021,6 +1007,8 @@ object AiOperationLogic {
                 if (targetTile(civ, operation)?.getOwner()?.civID != operation.enemyCivId) return true
             }
             type.isEscorted -> escortedShouldAbort(civ, operation)
+            type.isLandDefense -> verifyDefenseTarget(civ, operation)
+            type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.verifySuperiorityTarget(civ, operation)
         }
         return false
     }
@@ -1138,6 +1126,342 @@ object AiOperationLogic {
     }
     //endregion
 
+    //region Defense operations (CvAIOperationMilitary with CvAIOperationDefendCity and CvAIOperationDefenseRapidResponse)
+
+    /**
+     *  CvAIOperation::SetUpArmy for the military operations that Vox Populi launches to defend: the operation heads for [target] from
+     *  [muster] with [army] (the muster point is where the army gathers, [target] its goal), takes what the reserves have, and ends at once
+     *  (NO_UNITS) when not one unit came; an army with all it needs starts gathering, and may go straight on to move.
+     *  @return false if the operation ended
+     */
+    internal fun setUpArmy(civ: Civilization, operation: AiOperation, army: AiArmy, muster: Tile?, target: Tile?): Boolean {
+        if (muster == null || target == null) {
+            abort(operation, if (target != null) OperationAbortReason.NO_MUSTER else OperationAbortReason.NO_TARGET)
+            return false
+        }
+        operation.targetTile = target.position
+        operation.musterTile = muster.position
+        operation.area = muster.getContinent()
+        army.goalTile = target.position
+        army.position = muster.position
+        operation.state = OperationState.RECRUITING_UNITS
+        army.state = ArmyState.WAITING_FOR_UNITS_TO_REINFORCE
+        grabUnitsFromTheReserves(civ, operation)
+        // bail if there isn't a single suitable unit
+        if (army.numSlotsFilled() == 0) {
+            abort(operation, OperationAbortReason.NO_UNITS)
+            return false
+        }
+        // see if we can switch to gathering stage; maybe we can even switch to movement stage
+        if (checkTransitionToNextStage(civ, operation)) checkTransitionToNextStage(civ, operation)
+        return true
+    }
+
+    /**
+     *  CvAIOperation::PreconditionsAreMet, which CvPlayer::addAIOperation asks before it makes an operation (it does no path finding, to
+     *  keep the logs clean and the turn fast): our free units that are suitable ([isSuitableForRecruitment]; with no [muster] given, as
+     *  for the defense operations, wherever they are, and ships that cannot enter the ocean are no recruits) take the slots of the
+     *  operation's formation in order, and [maxMissingUnits] (an optional unit makes up for half a required one) may be missing.
+     */
+    fun preconditionsAreMet(civ: Civilization, type: AiOperationType, target: Tile?, muster: Tile?, maxMissingUnits: Int): Boolean {
+        val defs = civ.ai.operations.formationDef(formationName(civ, type))?.slots ?: return false
+        val naval = type.mixedLandNaval || type.allNaval
+        val crossesOcean = if (muster != null && target != null) isAcrossOcean(civ, muster, target, naval) else true
+        val maxTurns = civ.gameInfo.ruleset.ai.define(AiDefine.AI_OPERATIONAL_MAX_RECRUIT_TURNS_ENEMY_TERRITORY)
+        val free = defs.indices.toMutableList()
+        val filled = BooleanArray(defs.size)
+        for (unit in civ.units.getCivUnits()) {
+            if (free.isEmpty()) break
+            if (muster != null && unit.getTile().aerialDistanceTo(muster) > maxTurns * RECRUIT_PLOTS_PER_TURN) continue
+            if (!isSuitableForRecruitment(civ, unit, naval, target, crossesOcean)) continue
+            val index = free.indexOfFirst { slotFits(civ, unit, defs[it]) }
+            if (index < 0) continue
+            filled[free.removeAt(index)] = true
+        }
+        var presentRequired = 0
+        var presentOptional = 0
+        var freeRequired = 0
+        for ((index, def) in defs.withIndex()) when {
+            filled[index] && def.required -> presentRequired++
+            filled[index] -> presentOptional++
+            def.required -> freeRequired++
+        }
+        return presentRequired > 0 && freeRequired <= presentOptional / 2 + maxMissingUnits
+    }
+
+    /** CvPlayer::GetClosestCity: our city nearest to [tile] within [searchRadius] plots, one with access to the landmass or water of [tile] when [sameLandmass] */
+    fun closestCity(civ: Civilization, tile: Tile, searchRadius: Int, sameLandmass: Boolean): City? {
+        val area = civ.ai.tactical.map.areaOf(tile)
+        var best: City? = null
+        var bestDistance = Int.MAX_VALUE
+        for (city in civ.cities) {
+            if (sameLandmass && !hasAccessToArea(city, area)) continue
+            val distance = city.getCenterTile().aerialDistanceTo(tile)
+            if (distance < bestDistance && distance <= searchRadius) { best = city; bestDistance = distance }
+        }
+        return best
+    }
+
+    /** OperationalAIHelpers::GetClosestFriendlyCoastalCity: our coastal city nearest to [tile] that has access to its landmass or water body */
+    fun closestFriendlyCoastalCity(civ: Civilization, tile: Tile): City? {
+        val area = civ.ai.tactical.map.areaOf(tile)
+        var best: City? = null
+        var bestDistance = Int.MAX_VALUE
+        for (city in civ.cities) {
+            if (!city.isCoastal() || !hasAccessToArea(city, area)) continue
+            val distance = city.getCenterTile().aerialDistanceTo(tile)
+            if (distance < bestDistance) { best = city; bestDistance = distance }
+        }
+        return best
+    }
+
+    /** CvCity::HasAccessToLandmassOrOcean: the landmass or body of water [area] is the city's own or next to it */
+    private fun hasAccessToArea(city: City, area: Int): Boolean {
+        val map = city.civ.ai.tactical.map
+        val center = city.getCenterTile()
+        return map.areaOf(center) == area || center.neighbors.any { map.areaOf(it) == area }
+    }
+
+    /**
+     *  OperationalAIHelpers::FindEnemiesNearHomelandPlot: where [enemy]'s land units are most to be feared at home: among those we see that
+     *  stand on our land or within [HOMELAND_PATH_LENGTH] steps of one of our cities, the tile whose cluster of attackers (the power of
+     *  [enemy]'s units on tiles within two that we see; a single unit is too volatile) is the strongest, weighed down by its distance from
+     *  [reference] (full within three plots, none from [maxDistance]: we don't want to adjust our target too much). Null if there is none.
+     *  Deviation: the steps from a city are [StepFinder]'s rule (an army of ours walking against [enemy]) from our cities outwards, in place
+     *  of the original's per-plot city distance map.
+     */
+    fun findEnemiesNearHomelandPlot(civ: Civilization, enemy: Civilization, reference: Tile?, maxDistance: Int): Tile? {
+        var best: Tile? = null
+        var bestPower = 0
+        val nearOurCities by lazy { tilesNearOurCities(civ, enemy) }
+        for (unit in enemy.units.getCivUnits()) {
+            if (!unit.baseUnit.isLandUnit || !unit.isVisibleTo(civ)) continue
+            val tile = unit.getTile()
+            if (tile.getOwner() != civ && tile !in nearOurCities) continue
+            val distance = reference?.let { tile.aerialDistanceTo(it) } ?: 0
+            val power = localEnemyPower(civ, tile) * mapToPercent(distance, max(maxDistance, 3), 3)
+            if (power > bestPower) { bestPower = power; best = tile }
+        }
+        return best
+    }
+
+    /** CvPlot::GetLocalUnitPower, its enemy half over two plots with units of the plot's domain: the power of the visible attackers at war with us */
+    private fun localEnemyPower(civ: Civilization, tile: Tile): Int {
+        var power = 0
+        for (nearby in tile.getTilesInDistance(2)) {
+            if (!nearby.isVisible(civ)) continue
+            for (unit in nearby.getUnits()) {
+                if (!unit.isMilitary() || !(if (tile.isWater) unit.baseUnit.isWaterUnit else unit.baseUnit.isLandUnit)) continue
+                if (civ.isAtWarWith(unit.civ) && unit.isVisibleTo(civ)) power += unit.getAiPower()
+            }
+        }
+        return power
+    }
+
+    /** The land tiles within [HOMELAND_PATH_LENGTH] steps of one of our cities that an army of ours going for [enemy] could walk ([StepFinder.isValid]) */
+    private fun tilesNearOurCities(civ: Civilization, enemy: Civilization): Set<Tile> {
+        val steps = civ.ai.military.steps
+        val reached = HashSet<Tile>()
+        var frontier = ArrayList<Tile>()
+        for (city in civ.cities) if (reached.add(city.getCenterTile())) frontier.add(city.getCenterTile())
+        repeat(HOMELAND_PATH_LENGTH) {
+            val next = ArrayList<Tile>()
+            for (tile in frontier) for (neighbor in tile.neighbors)
+                if (neighbor !in reached && steps.isValid(civ, enemy, neighbor)) { reached.add(neighbor); next.add(neighbor) }
+            frontier = next
+        }
+        return reached
+    }
+
+    /** MapToPercent: [value] mapped linearly to 0 at [zeroAt] and 100 at [hundredAt], clamped */
+    private fun mapToPercent(value: Int, zeroAt: Int, hundredAt: Int): Int = when {
+        hundredAt != zeroAt -> ((value - zeroAt) * 100 / (hundredAt - zeroAt)).coerceIn(0, 100)
+        value > hundredAt -> 100
+        value < zeroAt -> 0
+        else -> 50
+    }
+
+    /**
+     *  The VerifyOrAdjustTarget of the land defense operations, which ShouldAbort asks of every army that has not finished. City defense: our
+     *  target city must still be ours (TARGET_ALREADY_CAPTURED). Rapid response: the best blocking position against the current threats
+     *  ([findRapidResponseTarget]), no position at all ends it (NO_TARGET), and a position more than [RAPID_RESPONSE_RETARGET_RANGE] plots from
+     *  the target becomes the new target (else the tactical AI should do the rest).
+     */
+    private fun verifyDefenseTarget(civ: Civilization, operation: AiOperation) {
+        val target = targetTile(civ, operation)
+        if (operation.type == AiOperationType.CITY_CLOSE_DEFENSE) {
+            // See if our target city is still owned by us
+            if (target?.getOwner() != civ) abort(operation, OperationAbortReason.TARGET_ALREADY_CAPTURED)
+            return
+        }
+        val better = findRapidResponseTarget(civ, operation)
+        if (better == null) { abort(operation, OperationAbortReason.NO_TARGET); return }
+        if (target == null || better.aerialDistanceTo(target) > RAPID_RESPONSE_RETARGET_RANGE) setTarget(operation, better)
+    }
+
+    /** CvAIOperation::SetTargetPlot: the armies' goal follows, and an army that had reached its target has to move again */
+    internal fun setTarget(operation: AiOperation, tile: Tile) {
+        if (operation.targetTile == tile.position) return
+        if (operation.state == OperationState.AT_TARGET) {
+            operation.state = OperationState.MOVING_TO_TARGET
+            for (army in operation.armies) army.state = ArmyState.MOVING_TO_DESTINATION
+        }
+        operation.targetTile = tile.position
+        for (army in operation.armies) army.goalTile = tile.position
+    }
+
+    /** CvArmyAI::GetCenterOfMass(bClampToUnit) and its variances: the average position of the army's units, as the tile of the unit nearest to it */
+    private class ArmyCenter(val tile: Tile, val varX: Float, val varY: Float)
+
+    /**
+     *  CvArmyAI::GetCenterOfMass with its spread: the units' average position and the variance of their coordinates (Unciv's hex coordinates,
+     *  not the original's offset grid), and the tile of the unit nearest to the average (and then to the army's goal) when [clampToUnit].
+     *  Departure as in [centerOfMass]: generals and admirals are left out.
+     */
+    private fun armyCenter(civ: Civilization, army: AiArmy, clampToUnit: Boolean): ArmyCenter? {
+        val all = armyUnits(civ, army).map { it.second }
+        val units = all.filter { !Deployment.isGeneralOrAdmiral(it) }.ifEmpty { all }
+        if (units.isEmpty()) return null
+        val map = civ.gameInfo.tileMap
+        val reference = units[0].getTile().position
+        var totalX = 0
+        var totalY = 0
+        var totalX2 = 0
+        var totalY2 = 0
+        for (unit in units) {
+            var position = unit.getTile().position
+            if (map.mapParameters.worldWrap) {
+                val unwrapped = map.getUnwrappedPosition(position)
+                if (HexMath.getDistance(unwrapped, reference) < HexMath.getDistance(position, reference)) position = unwrapped
+            }
+            val dx = position.x - reference.x
+            val dy = position.y - reference.y
+            totalX += dx; totalY += dy
+            totalX2 += dx * dx; totalY2 += dy * dy
+        }
+        val count = units.size.toFloat()
+        val averageX = totalX / count + reference.x
+        val averageY = totalY / count + reference.y
+        // rounding to nearest integer
+        val roundedX = if (averageX > 0) (averageX + 0.5f).toInt() else (averageX - 0.5f).toInt()
+        val roundedY = if (averageY > 0) (averageY + 0.5f).toInt() else (averageY - 0.5f).toInt()
+        val center = map.getOrNull(roundedX, roundedY) ?: return null
+        val varX = totalX2 / count - (totalX / count) * (totalX / count)
+        val varY = totalY2 / count - (totalY / count) * (totalY / count)
+        if (!clampToUnit) return ArmyCenter(center, varX, varY)
+        val goal = tileAt(civ, army.goalTile)
+        val nearest = units.minByOrNull { unit ->
+            unit.getTile().aerialDistanceTo(center) * 100 + (goal?.let { unit.getTile().aerialDistanceTo(it) } ?: 0)
+        } ?: return null
+        return ArmyCenter(nearest.getTile(), varX, varY)
+    }
+
+    /** CvAIOperation::SetMusterPlot: the army gathers somewhere else; the units' progress towards the muster point starts anew */
+    private fun setMuster(operation: AiOperation, army: AiArmy, tile: Tile) {
+        operation.musterTile = tile.position
+        army.position = tile.position
+        for (slot in army.slots) slot.checkpointTurns.clear()
+    }
+
+    /**
+     *  CvAIOperation::GetGatherTolerance: how far from [tile] the army's units may be for it to count as gathered - 4 plots for fewer than
+     *  5 units (else 3), one more for a naval army that cannot cross the ocean, and one more when the 19 plots around [tile] that a unit of
+     *  the army's kind may stand on are not more than its units. Deviation: CvPlot::canPlaceCombatUnit is the tactical map's
+     *  CanUseForOperationGathering.
+     */
+    fun gatherToleranceFor(civ: Civilization, operation: AiOperation, army: AiArmy, tile: Tile?): Int {
+        if (tile == null) return 1
+        val units = army.numSlotsFilled()
+        var range = if (units < 5) 4 else 3
+        val naval = operation.type.allNaval || operation.type.mixedLandNaval
+        if (naval && !(civ.tech.embarkedUnitsCanEnterOcean || civ.tech.allUnitsCanEnterOcean)) range++
+        val map = civ.ai.tactical.map
+        val oceanGoing = NavalOperationLogic.allOceanGoing(civ, army)
+        var valid = 0
+        for (nearby in tile.getTilesInDistance(2)) {
+            if (naval != nearby.isWater || (naval && !oceanGoing && nearby.isOcean)) continue
+            if (map.canUseForOperationGathering(nearby)) valid++
+        }
+        if (valid <= units) range++
+        return range
+    }
+
+    /**
+     *  CvAIOperationMilitary::CheckTransitionToNextStage by the army's state, for the operations Vox Populi's military AI defends with.
+     *  Recruiting: an army with enough units ([haveEnoughUnits]) goes to gather; an initial cluster of units owned ground nearer the target
+     *  than the muster point (more than 2 plots from it) becomes the muster point. Gathering: units that are within the tolerance of
+     *  one another make their own place the muster point, and an army whose furthest unit is within the tolerance of the muster point
+     *  moves out. Moving: an army whose center is within [DEFENSE_DEPLOY_RANGE] plots of its goal and whose furthest unit is within
+     *  twice that, has arrived: the operation succeeds and the tactical AI takes over ([onSuccess]). The original's tests that the army
+     *  is making progress and that a sneak attack has been discovered only log, or are for operations at peace, and are not here.
+     *  @return whether the state changed
+     */
+    fun checkTransitionToNextStage(civ: Civilization, operation: AiOperation): Boolean {
+        val army = operation.firstArmy ?: return false
+        val sea = operation.type.allNaval || operation.type.mixedLandNaval
+        val muster = musterTile(civ, operation)
+        return when (army.state) {
+            ArmyState.WAITING_FOR_UNITS_TO_REINFORCE -> {
+                var changed = false
+                if (haveEnoughUnits(civ, army, 0)) {
+                    army.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
+                    operation.state = OperationState.GATHERING_FORCES
+                    changed = true
+                }
+                // if we have an initial cluster of units, everyone should go there
+                val center = armyCenter(civ, army, clampToUnit = true)
+                val target = targetTile(civ, operation)
+                if (center != null && muster != null && target != null) {
+                    val tolerance = gatherToleranceFor(civ, operation, army, muster)
+                    // be a bit careful, don't have units hanging around just anywhere
+                    if (center.varX < tolerance && center.varY < tolerance &&
+                        center.tile.aerialDistanceTo(target) < muster.aerialDistanceTo(target) &&
+                        center.tile.aerialDistanceTo(muster) > 2 && center.tile.getOwner() == civ) setMuster(operation, army, center.tile)
+                }
+                changed
+            }
+            ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP -> {
+                val center = armyCenter(civ, army, clampToUnit = true) ?: return false
+                var gatherPoint = muster ?: return false
+                val tolerance = gatherToleranceFor(civ, operation, army, gatherPoint)
+                if (center.varX < tolerance && center.varY < tolerance) {
+                    // put the muster plot where our units are and go straight to movement phase
+                    setMuster(operation, army, center.tile)
+                    gatherPoint = center.tile
+                }
+                if (furthestUnitDistance(civ, army, gatherPoint) > tolerance) return false
+                army.state = ArmyState.MOVING_TO_DESTINATION
+                operation.state = OperationState.MOVING_TO_TARGET
+                true
+            }
+            ArmyState.MOVING_TO_DESTINATION -> {
+                val goal = tileAt(civ, army.goalTile) ?: return false
+                val center = centerOfMass(civ, army, sea) ?: return false
+                if (center.aerialDistanceTo(goal) > DEFENSE_DEPLOY_RANGE || furthestUnitDistance(civ, army, goal) >= 2 * DEFENSE_DEPLOY_RANGE) return false
+                // that's it: the army is disbanded next turn, its units are free for the tactical AI
+                operation.state = OperationState.SUCCESSFUL_FINISH
+                onSuccess(civ, operation)
+                true
+            }
+        }
+    }
+
+    /**
+     *  CvAIOperationMilitary::OnSuccess: the tactical AI focuses on the target for AI_TACTICAL_MAP_TEMP_ZONE_TURNS turns, within 3 plots
+     *  ([TacticalState.addFocusArea]) - on the enemy's city when the target is not a city and one of theirs is less than 4 plots away.
+     *  The nearest city is by plots, the original's by path length.
+     */
+    internal fun onSuccess(civ: Civilization, operation: AiOperation) {
+        var plot = targetTile(civ, operation) ?: return
+        val enemy = enemy(civ, operation)
+        if (!plot.isCityCenter() && enemy != null) {
+            val city = enemy.cities.minByOrNull { it.getCenterTile().aerialDistanceTo(plot) }
+            if (city != null && city.getCenterTile().aerialDistanceTo(plot) < OWN_CITY_FOCUS_DISTANCE) plot = city.getCenterTile()
+        }
+        civ.ai.tactical.addFocusArea(plot, FOCUS_AREA_RADIUS, civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_MAP_TEMP_ZONE_TURNS))
+    }
+    //endregion
+
     /** Turns a FOUND_CITY settler waits for an escort before it goes alone (CvAIOperationFoundCity::ShouldAbort) */
     private const val ESCORT_WAIT_TURNS = 15
 
@@ -1146,6 +1470,22 @@ object AiOperationLogic {
 
     /** Vox Populi's TACTICAL_COMBAT_MAX_TARGET_DISTANCE (CvTacticalAI.cpp): units less than this many plots from the target are not recruited */
     private const val MAX_TARGET_DISTANCE = 4
+
+    /** CvAIOperationMilitary::GetDeployRange: Vox Populi's 3 for every military operation (here the defense operations'; the attacks keep BNW's defines) */
+    const val DEFENSE_DEPLOY_RANGE = 3
+
+    /** CvAIOperationMilitary::Init asks CvPlayer::GetClosestCity for the muster city within this many plots */
+    private const val DEFENSE_MUSTER_RADIUS = 23
+
+    /** CvAIOperationDefenseRapidResponse::VerifyOrAdjustTarget and FindBestTarget: a new position this far from the target replaces it, the search weighs positions by distance up to it */
+    private const val RAPID_RESPONSE_RETARGET_RANGE = 5
+
+    /** OperationalAIHelpers::FindEnemiesNearHomelandPlot: enemy units off our land count within this many steps of one of our cities */
+    private const val HOMELAND_PATH_LENGTH = 6
+
+    /** CvAIOperationMilitary::OnSuccess: the focus area's radius, and how close the enemy's city must be to take the place of a target that is no city */
+    private const val FOCUS_AREA_RADIUS = 3
+    private const val OWN_CITY_FOCUS_DISTANCE = 4
 
     /** CvUnit::canUseForAIOperation looks at the plots within this range for enemies (RING3_PLOTS) */
     private const val NEARBY_ENEMY_RANGE = 3

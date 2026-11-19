@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.strategy
 
+import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.league.canContribute
@@ -77,7 +78,7 @@ object ProductionSanityAi {
             val wars = WarStateAi.numberCivsAtWarWith(civ)
             if (wars > 0) {
                 modifier -= wars * 5
-                modifier -= civ.ai.plotDanger.cityThreat(city)
+                modifier -= CityThreat.threatValue(city)
                 if (borderCity) modifier -= 25
                 if (CityDangerAi.isUnderSiege(city)) modifier -= 25
             }

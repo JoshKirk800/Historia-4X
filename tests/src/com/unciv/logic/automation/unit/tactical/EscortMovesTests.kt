@@ -16,6 +16,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.SettleTestLand
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -50,7 +51,7 @@ class EscortMovesTests {
         civ.diplomacyFunctions.makeCivilizationsMeet(enemy)
         civ.getDiplomacyManager(enemy)!!.declareWar()
         for (tile in game.gameInfo.tileMap.tileList) { tile.setExplored(civ, true); tile.setExplored(enemy, true) }
-        for (tile in game.tileMap.values) game.setTileTerrain(tile.position, "Grassland")
+        SettleTestLand.plainsWithResources(game)
         game.tileMap.assignContinents(TileMap.AssignContinentsMode.Reassign)
         civ.ai.setPersonalityFlavor(Flavor.Growth, 5)
         civ.ai.setPersonalityFlavor(Flavor.Expansion, 3)
@@ -72,7 +73,7 @@ class EscortMovesTests {
     private fun escortedSettler(): Triple<AiOperation, MapUnit, MapUnit> {
         val warrior = unit("Warrior", 1, 0)
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler)
         assertEquals(OperationState.GATHERING_FORCES, operation.state)
         assertEquals(warrior, AiOperationLogic.armyUnits(civ, operation.firstArmy!!)[1].second)
         return Triple(operation, settler, warrior)
@@ -145,7 +146,7 @@ class EscortMovesTests {
     @Test
     fun `a lone civilian walks to the end of its first turn on its path`() {
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler)
         assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
         val target = AiOperationLogic.targetTile(civ, operation)!!
         val expected = settler.movement.getShortestPath(target).first()
@@ -161,7 +162,7 @@ class EscortMovesTests {
     @Test
     fun `a lone civilian does not end its turn where an enemy can reach it`() {
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler)
         val target = AiOperationLogic.targetTile(civ, operation)!!
         val start = settler.getTile()
         val endOfTurn = settler.movement.getShortestPath(target).first()
@@ -183,7 +184,7 @@ class EscortMovesTests {
     @Test
     fun `a lone civilian takes a free defender of ours standing where it stops as its escort`() {
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler)
         val army = operation.firstArmy!!
         // no escort was to be had: the operation goes alone
         operation.escorted = false
@@ -212,7 +213,7 @@ class EscortMovesTests {
     @Test
     fun `a lone civilian with no way to its target aborts the operation`() {
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler)
         val island = tile(-9, 0)
         surround(island)
         operation.targetTile = island.position

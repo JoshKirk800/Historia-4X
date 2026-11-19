@@ -101,8 +101,8 @@ object CoopWarAi {
      *  - Our proximity to the target and the ally's (neighbors and close are worth 10 and 5, 5 and 2 for us across oceans; far -25 when either
      *    crosses oceans; else -50 across, -500 on land), a competitor (the biggest +25, another +10, none -10), a warmonger +10, going for or close to
      *    world conquest boldness x 2, diplomatic victory -DoF willingness (-25 more when close), endgame aggression +25 (+25 when close to a
-     *    victory), a reckless expander +10, a wonder spammer +5, its warmonger threat (-2 to +10), the land dispute (-5 to +15), victory dispute and
-     *    block levels (each -2: not ported, always none), a preferred attack target of ours +10 else -10.
+     *    victory), a reckless expander +10, a wonder spammer +5, its warmonger threat (-2 to +10), the land dispute (-5 to +15), the
+     *    victory dispute and block levels (each -2 for none, +2 weak, +5 strong, +10 fierce), a preferred attack target of ours +10 else -10.
      *  - The raw military strength of the target as the weaker of both: if the target is not an easy target and at least average for us, the weaker
      *    one gives +20 (pathetic) to -30 (immense), +15 when the ally has an easy target and a preferred attack target, and our common foe score with the
      *    ally; else -30 (pathetic), -20, -10 (poor), -15 more when it is an easy target and we have a preferred attack target.
@@ -113,7 +113,7 @@ object CoopWarAi {
      *    else 75% average to 200%, and badness for a hard one), by the economic value of the closest of our cities to it (10 to 200 percent of the median, x2 for
      *    an original major capital, x3 or x4 when going for or close to world conquest), and 0 for badness unless we have an offensive operation against it or
      *    avoid exchanges with it.
-     *  Not ported, as they have no input: the coop war agreement score (counted as 0), the victory dispute and block levels, vassals and teams.
+     *  Not ported, as they have no input: the coop war agreement score (counted as 0), vassals and teams.
      *  The OPINION_WEIGHT_COMMON_FOE_MAX / 25 divisors are 1, as the source takes the larger of that (negative) and 1.
      */
     fun coopWarDesireScore(civ: Civilization, ally: Civilization, target: Civilization, allyRequest: Boolean, rules: AiRuleset): Int {
@@ -128,7 +128,7 @@ object CoopWarAi {
         if (OpinionAi.isDoFAccepted(ally, target)) return 0
         if (FriendshipPlanningAi.isDoFBrokenByUs(ally, target, rules.define(AiDefine.DOF_BROKEN_BACKSTAB_TIMER))) return 0
         if (!allyRequest && hasDefensivePact(ally, target)) return 0
-        if (OpinionAi.isUntrustworthyFriend(ally)) return 0
+        if (OpinionAi.isUntrustworthyFriend(civ, ally)) return 0
         if (WarTargetAi.isRecentPeaceTreaty(civ, target, rules)) return 0
 
         var score = 0
@@ -238,8 +238,18 @@ object CoopWarAi {
             DisputeLevel.Strong -> 10
             DisputeLevel.Fierce -> 15
         }
-        score -= 2 // the victory dispute level, not ported: none
-        score -= 2 // the victory block level, likewise
+        score += when (ai.memoryOf(target).victoryDisputeLevel) {
+            DisputeLevel.None -> -2
+            DisputeLevel.Weak -> 2
+            DisputeLevel.Strong -> 5
+            DisputeLevel.Fierce -> 10
+        }
+        score += when (ai.memoryOf(target).victoryBlockLevel) {
+            BlockLevel.None -> -2
+            BlockLevel.Weak -> 2
+            BlockLevel.Strong -> 5
+            BlockLevel.Fierce -> 10
+        }
 
         val weHaveGoodTarget = civ.ai.military.havePreferredAttackTarget(target)
         val theyHaveGoodTarget = ally.isHuman() || ally.ai.military.havePreferredAttackTarget(target)
@@ -348,7 +358,7 @@ object CoopWarAi {
         val ai = civ.ai.diplomacy
         if (!OpinionAi.isDoFAccepted(civ, partner) || WarStateAi.isNoNewWars(civ)) return null
         if (ai.approachTowards(partner) <= MajorCivApproach.Guarded || ai.opinionOf(partner) <= MajorCivOpinion.Enemy) return null
-        if (OpinionAi.isUntrustworthyFriend(partner)) return null
+        if (OpinionAi.isUntrustworthyFriend(civ, partner)) return null
         var best: Civilization? = null
         var bestScore = rules.define(AiDefine.COOP_WAR_DESIRE_THRESHOLD)
         for (target in civ.gameInfo.civilizations) {

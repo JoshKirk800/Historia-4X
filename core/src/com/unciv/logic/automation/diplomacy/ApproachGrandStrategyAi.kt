@@ -117,7 +117,7 @@ object ApproachGrandStrategyAi {
                 if (civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact) factor++
                 // They are a difficult target for now: aim to build up our strength
                 if ((WarStateAi.rawTargetValue(civ, other) ?: TargetValue.Average) <= TargetValue.Difficult) factor++
-                if (WarSanityAi.isBackstabber(civ) && OpinionAi.weDeclaredWarOnFriendCount(other) > 0 && !OpinionAi.isUntrustworthyFriend(other))
+                if (WarSanityAi.isBackstabber(civ) && OpinionAi.weDeclaredWarOnFriendCount(other) > 0 && !OpinionAi.isUntrustworthyFriend(civ, other))
                     factor += 2
             }
             // Above average: friendship with the strong; below: the opposite (factor < 0)

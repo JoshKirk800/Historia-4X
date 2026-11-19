@@ -180,6 +180,17 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var recklessExpander = false
     /** CvDiplomacyAI::IsWonderSpammer (Vox Populi): set each turn by [ExpanderAi.updateWonderSpammers] */
     var wonderSpammer = false
+    /**
+     *  CvDiplomacyAI::GetVictoryDisputeLevel / GetVictoryBlockLevel / GetTechBlockLevel / GetPolicyBlockLevel (Vox Populi): how much we
+     *  compete with them for the same victory, block a different one, and mind their lead in techs and policies; set each turn by
+     *  [VictoryLevelsAi]. The block levels are [BlockLevel], the dispute level [DisputeLevel], both none to fierce.
+     */
+    var victoryDisputeLevel = DisputeLevel.None
+    var victoryBlockLevel = BlockLevel.None
+    var techBlockLevel = BlockLevel.None
+    var policyBlockLevel = BlockLevel.None
+    /** CvDiplomacyAI::IsUntrustworthyFriend (Vox Populi): we hold them for a backstabber; set each turn by [UntrustworthyAi.testUntrustworthyFriends] */
+    var untrustworthy = false
 
     // Coop wars with them as partner, by target civID
     var coopWars = HashMap<String, CoopWarEntry>()
@@ -305,6 +316,8 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.resurrectorAttackedUs = resurrectorAttackedUs
         copy.doFLevel = doFLevel; copy.doFBrokenTurn = doFBrokenTurn; copy.liberatedCitiesTurn = liberatedCitiesTurn
         copy.demandAcceptedTurn = demandAcceptedTurn; copy.recklessExpander = recklessExpander; copy.wonderSpammer = wonderSpammer
+        copy.victoryDisputeLevel = victoryDisputeLevel; copy.victoryBlockLevel = victoryBlockLevel
+        copy.techBlockLevel = techBlockLevel; copy.policyBlockLevel = policyBlockLevel; copy.untrustworthy = untrustworthy
         for ((target, entry) in coopWars) copy.coopWars[target] = entry.clone()
         copy.numDemandsMade = numDemandsMade; copy.demandMadeTurn = demandMadeTurn; copy.promiseTurns.putAll(promiseTurns)
         copy.madeMilitaryPromise = madeMilitaryPromise; copy.brokenMilitaryPromise = brokenMilitaryPromise

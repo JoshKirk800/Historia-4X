@@ -343,9 +343,10 @@ object PromiseAi {
      *  afraid of them; no when we hold a third of the original capitals and they are not a liked friend or partner, when we are close
      *  to world conquest and they lost their capital or hold others', when our approach is [refusedFrom] or worse, when they are an
      *  enemy, when [refuse] holds (the promise's own reasons), or when they are untrustworthy; yes for a friend or pact partner we keep, or
-     *  a friendly approach to allies, our most valuable friend or ally or an ally opinion; no when competing for victory against an early
-     *  competitor (before the Renaissance), our biggest competitor (from it) or one we are endgame-aggressive to. null: decide by the rest.
-     *  As none: plots and coups against us, the coop war agreement score, the league's prime competitor, victory dispute and block levels.
+     *  a friendly approach to allies, our most valuable friend or ally or an ally opinion; no when competing for victory against one in a strong
+     *  victory dispute or block with us, an early competitor (before the Renaissance), our biggest competitor (from it) or one we are
+     *  endgame-aggressive to. null: decide by the rest.
+     *  As none: plots and coups against us, the coop war agreement score, the league's prime competitor.
      */
     private fun promiseGate(civ: Civilization, other: Civilization, refusedFrom: MajorCivApproach, refuse: () -> Boolean): Boolean? {
         if (WarSanityAi.isLiberator(civ, other, onlyMajorCities = true)) return true
@@ -364,14 +365,15 @@ object PromiseAi {
         if (ApproachAi.VP_ORDER.indexOf(approach) <= ApproachAi.VP_ORDER.indexOf(refusedFrom)) return false
         if (opinion <= MajorCivOpinion.Enemy) return false
         if (refuse()) return false
-        if (OpinionAi.isUntrustworthyFriend(other)) return false
+        if (OpinionAi.isUntrustworthyFriend(civ, other)) return false
         val memory = ai.memoryOf(other)
         if ((friends && !memory.wantsToEndDoF) || (pact && !memory.wantsToEndDefensivePact)) return true
         if (approach == MajorCivApproach.Friendly && (memory.doFLevel >= DoFLevel.Allies || ai.mostValuableFriend == other.civID ||
                 ai.mostValuableAlly == other.civID || opinion == MajorCivOpinion.Ally)) return true
         if (VictoryProgressAi.isCompetingForVictory(civ)) {
             val era = civ.getEra().eraNumber
-            if ((era < 3 && CompetitorAi.isEarlyGameCompetitor(civ, other, rules)) || (era >= 3 && CompetitorAi.biggestCompetitor(civ) == other.civID) ||
+            if (memory.victoryDisputeLevel >= DisputeLevel.Strong || memory.victoryBlockLevel >= BlockLevel.Strong ||
+                (era < 3 && CompetitorAi.isEarlyGameCompetitor(civ, other, rules)) || (era >= 3 && CompetitorAi.biggestCompetitor(civ) == other.civID) ||
                 VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)) return false
         }
         return null

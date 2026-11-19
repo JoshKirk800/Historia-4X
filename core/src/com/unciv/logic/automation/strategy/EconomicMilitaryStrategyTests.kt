@@ -1,6 +1,8 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.WaterBodies
+import com.unciv.logic.automation.diplomacy.BlockLevel
+import com.unciv.logic.automation.diplomacy.DisputeLevel
 import com.unciv.logic.automation.diplomacy.WarGoal
 import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.city.GreatWorkFunctions
@@ -438,7 +440,8 @@ object EconomicMilitaryStrategyTests {
     }
 
     /**
-     *  The weight of IsTestStrategy_WarMobilization: 25 under conquest; per other major +100 if preparing war on it, else +50 if our
+     *  The weight of IsTestStrategy_WarMobilization: 25 under conquest; per other major +5 for a victory block above weak and +5 for a
+     *  victory dispute above weak, +100 if preparing war on it, else +50 if our
      *  approach is WAR, HOSTILE or AFRAID, else +25 if GUARDED or DECEPTIVE. (AT_WAR blocks the strategy, see [registerAll].) Once
      *  [MilitaryAi.armyTypeBeingBuilt] is set (never cleared) every pass of the original's loop over its [MAX_MAJOR_CIVS] player slots, empty
      *  slots and our own included, adds 100 whatever the other civ is: 2200, far above the threshold.
@@ -448,6 +451,11 @@ object EconomicMilitaryStrategyTests {
         if (civ.ai.military.armyTypeBeingBuilt != null) return weight + 100 * MAX_MAJOR_CIVS
         for (other in civ.gameInfo.civilizations) {
             if (other == civ || !other.isMajorCiv) continue
+            val memory = civ.ai.diplomacy.memories[other.civID]
+            if (memory != null) {
+                if (memory.victoryBlockLevel > BlockLevel.Weak) weight += 5
+                if (memory.victoryDisputeLevel > DisputeLevel.Weak) weight += 5
+            }
             if (civ.ai.diplomacy.warGoal(other) == WarGoal.Prepare) {
                 weight += 100
                 continue

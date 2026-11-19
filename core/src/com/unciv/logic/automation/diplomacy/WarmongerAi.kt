@@ -101,7 +101,7 @@ object WarmongerAi {
             if (side != victim && !hasDefensivePact(side, victim)) continue
             if (!observer.isHuman()) {
                 if (observer.ai.diplomacy.approachTowards(side) == MajorCivApproach.War) return
-                if (side == victim && OpinionAi.isUntrustworthyFriend(side)) return
+                if (side == victim && OpinionAi.isUntrustworthyFriend(observer, side)) return
             }
             if (CoopWarAi.isLockedIntoCoopWar(observer, side, rules)) return
         }
@@ -450,7 +450,7 @@ object WarmongerAi {
         var modifier = 0
         if (OpinionAi.isDenouncedPlayer(observer, owner)) modifier += rules.define(AiDefine.WARMONGER_THREAT_MODIFIER_NEGATIVE_SMALL)
         if (OpinionAi.isDenouncedPlayer(owner, observer)) modifier += rules.define(AiDefine.WARMONGER_THREAT_MODIFIER_NEGATIVE_SMALL)
-        if (OpinionAi.isUntrustworthyFriend(owner)) modifier += rules.define(AiDefine.WARMONGER_THREAT_MODIFIER_NEGATIVE_MEDIUM)
+        if (OpinionAi.isUntrustworthyFriend(observer, owner)) modifier += rules.define(AiDefine.WARMONGER_THREAT_MODIFIER_NEGATIVE_MEDIUM)
         return modifier
     }
 
@@ -467,7 +467,7 @@ object WarmongerAi {
         var modifier = 0
         if (OpinionAi.isDenouncedPlayer(observer, conqueror)) modifier += rules.define(AiDefine.WARMONGER_THREAT_MODIFIER_SMALL)
         if (OpinionAi.isDenouncedPlayer(conqueror, observer)) modifier += rules.define(AiDefine.WARMONGER_THREAT_MODIFIER_SMALL)
-        if (OpinionAi.isUntrustworthyFriend(conqueror)) modifier += rules.define(AiDefine.WARMONGER_THREAT_MODIFIER_LARGE)
+        if (OpinionAi.isUntrustworthyFriend(observer, conqueror)) modifier += rules.define(AiDefine.WARMONGER_THREAT_MODIFIER_LARGE)
         return modifier
     }
 
@@ -483,7 +483,7 @@ object WarmongerAi {
         var modifier = 0
         if (OpinionAi.isDenouncedPlayer(observer, liberator)) modifier -= small
         if (OpinionAi.isDenouncedPlayer(liberator, observer)) modifier -= small
-        if (OpinionAi.isUntrustworthyFriend(liberator)) modifier -= medium
+        if (OpinionAi.isUntrustworthyFriend(observer, liberator)) modifier -= medium
         return modifier
     }
 
@@ -588,7 +588,7 @@ object WarmongerAi {
                 score >= rules.define(AiDefine.WARMONGER_THREAT_MINOR_THRESHOLD) -> AiThreat.Minor
                 else -> AiThreat.None
             }
-            if ((!memory.resurrectedUs || OpinionAi.isUntrustworthyFriend(other)) && threat != AiThreat.Critical) {
+            if ((!memory.resurrectedUs || OpinionAi.isUntrustworthyFriend(civ, other)) && threat != AiThreat.Critical) {
                 val aggression = civ.ai.aggressionOf(other)
                 val killed = aggression.majorsConquered + aggression.minorsConquered / 2
                 val percent = killed * 100 / max(1, majorsEver)

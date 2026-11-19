@@ -386,7 +386,7 @@ object DealAi {
      *  untrustworthy is refused ([null]).
      */
     fun getEmbassyValue(us: Civilization, them: Civilization, fromMe: Boolean): Int? {
-        if (fromMe && OpinionAi.isUntrustworthyFriend(them)) return null
+        if (fromMe && OpinionAi.isUntrustworthyFriend(us, them)) return null
         val standardDuration = us.gameInfo.ruleset.speeds["Standard"]?.dealDuration ?: us.gameInfo.speed.dealDuration
         return 50 * us.gameInfo.speed.dealDuration / standardDuration
     }

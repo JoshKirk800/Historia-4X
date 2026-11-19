@@ -17,8 +17,7 @@ import com.unciv.models.ruleset.unique.UniqueType
  *  CvPlayerAI::AI_conquerCity). The giving back itself is [City.liberateCity].
  *
  *  Not ported, as they have no input here: war weariness (the very unhappy and war weary AI that liberates a neutral founder), a coop
- *  war agreement score above 1 (the agreement score), policies that boost liberation (POLICYMOD_LIBERATION_BONUS: none in BNW), and the
- *  victory dispute and block levels of a culture victory (DoUpdateVictoryDisputeLevels / DoUpdateVictoryBlockLevels are not ported).
+ *  war agreement score above 1 (the agreement score) and policies that boost liberation (POLICYMOD_LIBERATION_BONUS: none in BNW).
  */
 object LiberationAi {
 
@@ -40,7 +39,8 @@ object LiberationAi {
      *  - it liberated a city of ours or we one of its, our opinion is favorable or better, and it is no bad war decision (else the next case still applies);
      *  - or, if we are friends (a declaration of friendship we do not want to end, one we want, a pact, an opinion of friend or an
      *    approach of friendly): we go for or are close to a diplomatic victory; or the opinion is friend and the approach friendly and
-     *    it is no bad war decision; or we go for a culture victory, it is no bad war decision, we are not endgame aggressive to it, and
+     *    it is no bad war decision; or we go for a culture victory, it is no bad war decision, our victory dispute with it is below strong and
+     *    the block below fierce, we are not endgame aggressive to it, and
      *    (when close to the culture victory) its influence over us is popular and rising, or influential or better.
      *  A dead founder that is not human (a resurrection) is liberated when we go for or are close to a diplomatic victory, it liberated
      *  us or we it before, our friendship was allies or better, or else when it is no bad war decision.
@@ -57,7 +57,7 @@ object LiberationAi {
         if (isCityWeKeep(civ, city)) return false
 
         val alive = founder.isAlive()
-        if (alive && (opinion <= MajorCivOpinion.Enemy || approach <= MajorCivApproach.Guarded || OpinionAi.isUntrustworthyFriend(founder))) return false
+        if (alive && (opinion <= MajorCivOpinion.Enemy || approach <= MajorCivApproach.Guarded || OpinionAi.isUntrustworthyFriend(civ, founder))) return false
 
         // An unhappy empire gives back a city to a friend
         if (civ.getHappiness() < 0 && opinion >= MajorCivOpinion.Friend) return true
@@ -88,7 +88,8 @@ object LiberationAi {
             return when {
                 ai.isGoingForDiploVictory() || VictoryProgressAi.isCloseToDiploVictory(civ, rules) -> true
                 opinion >= MajorCivOpinion.Friend && approach == MajorCivApproach.Friendly -> !badWarDecision
-                ai.isGoingForCultureVictory() -> !badWarDecision && !VictoryProgressAi.isEndgameAggressiveTo(civ, founder, rules) &&
+                ai.isGoingForCultureVictory() -> !badWarDecision && memory.victoryDisputeLevel < DisputeLevel.Strong &&
+                    memory.victoryBlockLevel < BlockLevel.Fierce && !VictoryProgressAi.isEndgameAggressiveTo(civ, founder, rules) &&
                     (!VictoryProgressAi.isCloseToCultureVictory(civ, rules) || influenceIsEnough(civ, founder))
                 else -> false
             }
@@ -151,7 +152,7 @@ object LiberationAi {
         val opinion = ours.opinionOf(founder)
         val alive = founder.isAlive()
         if (alive && (opinion <= MajorCivOpinion.Enemy || ours.approachTowards(founder) <= MajorCivApproach.Guarded ||
-                OpinionAi.isUntrustworthyFriend(founder))) return false
+                OpinionAi.isUntrustworthyFriend(civ, founder))) return false
         val diplomat = civ.ai.isGoingForDiploVictory() || civ.ai.hasTraitCategory(TraitCategory.Diplomat) || civ.ai.isDiplomat()
         if (!diplomat) return false
         return !alive || (opinion >= MajorCivOpinion.Friend && (city.isHolyCity() || isOriginalMajorCapital(city)))

@@ -15,8 +15,7 @@ import com.unciv.models.ruleset.ai.TraitCategory
 /**
  *  The disputes and postures of CvDiplomacyAI: land (Vox Populi's DoUpdateLandDisputeLevels, by contested plots), the expansion and plot
  *  buying postures, wonders (DoUpdateWonderDisputeLevels), city-states (DoUpdateMinorCivDisputeLevels) and military posture
- *  (DoUpdateMilitaryAggressivePostures). The victory dispute (DoUpdateVictoryDisputeLevels) is not ported: in the original nothing but an
- *  end-of-friendship text reads it.
+ *  (DoUpdateMilitaryAggressivePostures). The victory dispute and block levels, and the tech and policy blocks, are in [VictoryLevelsAi].
  */
 object DisputeAi {
 

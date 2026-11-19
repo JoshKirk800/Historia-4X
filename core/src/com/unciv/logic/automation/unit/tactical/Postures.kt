@@ -244,7 +244,7 @@ object Postures {
             val city = zone.closestCity ?: return
             val canSeeCity = city.getCenterTile() in ctx.civ.viewableTiles
             // If we can't see the city, be careful advancing on it. We want to be sure we're not heavily outnumbered
-            if (!canSeeCity || zone.friendlyStrength > zone.enemyStrength / 2) Deployment.executeCloseOnTarget(ctx, city.getCenterTile(), zone)
+            if (!canSeeCity || zone.overallFriendlyStrength > zone.overallEnemyStrength / 2) Deployment.executeCloseOnTarget(ctx, city.getCenterTile(), zone)
         }
     }
 }

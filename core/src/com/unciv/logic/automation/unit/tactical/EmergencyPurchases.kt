@@ -26,7 +26,7 @@ object EmergencyPurchases {
     fun plot(civ: Civilization, zone: DominanceZone, map: TacticalMap, highPriorityUnits: () -> Set<MapUnit>): Result? {
         if (civ.isCityState) return null
         val city = zone.closestCity ?: return null
-        if (city.civ != civ || zone.territory != TacticalTerritory.Friendly || zone.enemyUnitCount <= 0) return null
+        if (city.civ != civ || zone.territory != TacticalTerritory.Friendly || zone.totalEnemyUnitCount <= 0) return null
 
         // Make sure the city isn't about to fall: abandon hope for it and save the money
         if (!city.isCapital()) {

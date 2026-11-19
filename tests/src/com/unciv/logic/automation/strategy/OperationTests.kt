@@ -26,12 +26,11 @@ import org.junit.runner.RunWith
 import com.unciv.logic.trade.Trade
 import com.unciv.logic.trade.TradeOffer
 import com.unciv.logic.trade.TradeOfferType
-import kotlin.math.abs
 
 /**
  *  Decision-level checks of the operation and army port (CvAIOperation, CvArmyAI, the operation side of CvMilitaryAI) against the
  *  DLL formulas with the BNW XML values: the city demand for open slots, recruiting from the reserves, the state machine, launch and abort
- *  conditions, attack readiness with the land reserve, and the target score.
+ *  conditions and attack readiness with the land reserve; where operations go is [OperationTargetsTests].
  */
 @RunWith(GdxTestRunner::class)
 class OperationTests {
@@ -331,16 +330,15 @@ class OperationTests {
         AiOperationLogic.addOperation(civ, type, enemy, enemyCity, city)
 
     @Test
-    fun `a city attack musters at the start city and heads for a few plots short of the target`() {
+    fun `a city attack musters at the start city and heads for the target city itself`() {
         civ.getDiplomacyManager(enemy)!!.declareWar()
         fillAttackReserves()
         val operation = attack()
         assertEquals(OperationState.GATHERING_FORCES, operation.state)
         assertEquals(city.getCenterTile().position, operation.musterTile)
         assertEquals(enemyCity.getCenterTile().position, operation.targetTile)
-        // GetDeployRange 5 / 2 = 2 plots from the end of the route
-        val goal = game.gameInfo.tileMap[operation.firstArmy!!.goalTile!!]
-        assertEquals(2, goal.aerialDistanceTo(enemyCity.getCenterTile()))
+        // CvAIOperation::SetUpArmy with no deploy plot: the goal is the target plot (BNW's stopped GetDeployRange / 2 = 2 plots short of it)
+        assertEquals(enemyCity.getCenterTile().position, operation.firstArmy!!.goalTile)
         assertEquals("MUFORMATION_BASIC_CITY_ATTACK_FORCE", operation.firstArmy!!.formation)
     }
 
@@ -362,26 +360,30 @@ class OperationTests {
         assertEquals(0, AiOperationLogic.percentFromMusterPointToTarget(civ, operation))
         operation.state = OperationState.MOVING_TO_TARGET
         val army = operation.firstArmy!!
-        // The goal is 6 steps from the muster: an army centered 3 steps along is half way
+        // The goal is the target city, 8 steps from the muster: an army centered 4 steps along is half way
         val units = AiOperationLogic.armyUnits(civ, army)
-        teleport(units, HexCoord(3, 0))
+        teleport(units, HexCoord(4, 0))
         assertEquals(50, AiOperationLogic.percentFromMusterPointToTarget(civ, operation))
         // Within 2 steps of the goal the army counts as there
-        teleport(units, HexCoord(5, 0))
+        teleport(units, HexCoord(6, 0))
         assertEquals(100, AiOperationLogic.percentFromMusterPointToTarget(civ, operation))
         operation.state = OperationState.AT_TARGET
         assertEquals(100, AiOperationLogic.percentFromMusterPointToTarget(civ, operation))
     }
 
     @Test
-    fun `an army that gathered moves out, and one within the deploy range of its target hands over and sets the war goal`() {
+    fun `an army that gathered moves out, and one within the deploy range of 3 of its target hands over and sets the war goal`() {
         civ.getDiplomacyManager(enemy)!!.declareWar()
         fillAttackReserves()
         val operation = attack()
         assertTrue(AiOperationLogic.checkOnTarget(civ, operation)) // all at the muster point
         assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
         assertEquals(ArmyState.MOVING_TO_DESTINATION, operation.firstArmy!!.state)
-        teleport(AiOperationLogic.armyUnits(civ, operation.firstArmy!!), HexCoord(4, 0))
+        // CvAIOperationMilitary::GetDeployRange is 3 (BNW's ruleset says 5): an army centered 6 plots from the target is not there
+        teleport(AiOperationLogic.armyUnits(civ, operation.firstArmy!!), HexCoord(2, 0))
+        assertFalse(AiOperationLogic.checkOnTarget(civ, operation))
+        assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
+        teleport(AiOperationLogic.armyUnits(civ, operation.firstArmy!!), HexCoord(6, 0))
         assertTrue(AiOperationLogic.checkOnTarget(civ, operation))
         assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
         assertTrue(civ.ai.diplomacy.memoryOf(enemy).musteringForAttack)
@@ -615,116 +617,6 @@ class OperationTests {
         civ.ai.warStates.warStates[enemy.civID] = WarState.NearlyDefeated
         MilitaryOperations.updateOperations(civ)
         assertFalse(onOther in ops.operations)
-    }
-    //endregion
-
-    //region Target selection (CvMilitaryAI::ScoreTarget, EvaluateMilitaryApproaches, ShouldAttackBySea)
-
-    private fun target(path: Int = 5, bySea: Boolean = false): MilitaryTarget {
-        val target = MilitaryTarget(city, enemyCity)
-        target.musterNearbyUnitPower = 100000
-        target.targetNearbyUnitPower = 0
-        target.pathLength = path
-        target.attackBySea = bySea
-        return target
-    }
-
-    private fun score(target: MilitaryTarget, type: AiOperationType = AiOperationType.BASIC_CITY_ATTACK) = MilitaryTargets.scoreTarget(civ, target, type)
-
-    @Test
-    fun `a shorter route scores 16, 8, 4 or 2 times the base`() {
-        val short = score(target(9))
-        assertTrue(abs(short - 2 * score(target(10))) <= 2)
-        assertTrue(abs(score(target(10)) - 2 * score(target(15))) <= 2)
-        assertTrue(abs(score(target(15)) - 2 * score(target(20))) <= 2)
-        assertTrue(short > 0)
-    }
-
-    @Test
-    fun `a muster city with an Airport doubles the score of a land target, not of one reached by sea`() {
-        val land = score(target(25))
-        val sea = score(target(25, bySea = true))
-        assertTrue(land > 0 && sea > 0)
-        city.cityConstructions.addBuilding("Airport")
-        assertTrue("land ${score(target(25))} plain $land", abs(score(target(25)) - 2 * land) <= 2)
-        assertEquals(sea, score(target(25, bySea = true)))
-    }
-
-    @Test
-    fun `a sneak attack cubes the distance factor, a recapture and the original capital multiply the score`() {
-        enemyCity.isOriginalCapital = false
-        val plain = score(target())
-        assertTrue("sneak ${score(target(9), AiOperationType.SNEAK_CITY_ATTACK)} plain ${score(target(9))}",
-            score(target(9), AiOperationType.SNEAK_CITY_ATTACK) > 100 * score(target(9)))
-        enemyCity.isOriginalCapital = true
-        assertTrue("capital ${score(target())} plain $plain", abs(score(target()) - plain * 250 / 100) <= 2)
-        enemyCity.isOriginalCapital = false
-        enemyCity.foundingCivObject = civ
-        assertTrue("recapture ${score(target())} plain $plain", abs(score(target()) - plain * 150 / 100) <= 2)
-    }
-
-    @Test
-    fun `a city another operation already heads for scores a tenth`() {
-        val plain = score(target())
-        val operation = attack()
-        assertEquals(OperationState.RECRUITING_UNITS, operation.state)
-        assertTrue(abs(score(target()) - plain / 10) <= 2)
-    }
-
-    @Test
-    fun `the force ratio is capped at ten times and weighs the score`() {
-        val strong = target(); strong.musterNearbyUnitPower = 10_000_000
-        val capped = score(strong)
-        val weak = target(); weak.musterNearbyUnitPower = 1
-        assertTrue(score(weak) < capped / 100)
-        assertTrue(capped > 0)
-    }
-
-    @Test
-    fun `approaches are counted by the unusable tiles around the city`() {
-        val center = enemyCity.getCenterTile()
-        assertEquals(CityAttackApproach.UNRESTRICTED, MilitaryTargets.evaluateMilitaryApproaches(enemyCity, true, false))
-        center.neighbors.take(3).forEach { game.setTileTerrain(it.position, "Coast") }
-        // Water is blocked unless the attack comes by sea
-        assertEquals(CityAttackApproach.NEUTRAL, MilitaryTargets.evaluateMilitaryApproaches(enemyCity, true, false))
-        assertEquals(CityAttackApproach.UNRESTRICTED, MilitaryTargets.evaluateMilitaryApproaches(enemyCity, true, true))
-        center.neighbors.drop(3).forEach { game.setTileTerrain(it.position, "Coast") }
-        assertEquals(CityAttackApproach.NONE, MilitaryTargets.evaluateMilitaryApproaches(enemyCity, true, false))
-    }
-
-    @Test
-    fun `a land route more than twice the straight distance or none at all sends the attack by sea`() {
-        civ.tech.addTechnology("Optics") // units can embark
-        val short = target(); MilitaryTargets.shouldAttackBySea(civ, short, 10)
-        assertFalse(short.attackBySea); assertEquals(10, short.pathLength)
-        val long = target(); MilitaryTargets.shouldAttackBySea(civ, long, 17) // the cities are 8 apart
-        assertTrue(long.attackBySea); assertEquals(8, long.pathLength)
-        val none = target(); MilitaryTargets.shouldAttackBySea(civ, none, -1)
-        assertTrue(none.attackBySea)
-    }
-
-    @Test
-    fun `without embarkation a missing land route calls the attack off`() {
-        val none = target(); MilitaryTargets.shouldAttackBySea(civ, none, -1)
-        assertFalse(none.attackBySea); assertEquals(-1, none.pathLength)
-    }
-
-    @Test
-    fun `the best attack target is found over the land route of the step finder`() {
-        civ.getDiplomacyManager(enemy)!!.declareWar()
-        unit("Warrior")
-        val (target, score) = MilitaryTargets.findBestAttackTarget(civ, AiOperationType.BASIC_CITY_ATTACK, enemy)!!
-        assertEquals(enemyCity, target.targetCity)
-        assertEquals(city, target.musterCity)
-        assertFalse(target.attackBySea)
-        assertEquals(8, target.pathLength)
-        assertTrue(score > 0)
-    }
-
-    @Test
-    fun `no revealed city of the enemy, no target`() {
-        for (tile in game.gameInfo.tileMap.tileList) tile.setExplored(civ, false)
-        assertNull(MilitaryTargets.findBestAttackTarget(civ, AiOperationType.BASIC_CITY_ATTACK, enemy))
     }
     //endregion
 

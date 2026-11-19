@@ -333,8 +333,10 @@ class OperationalMovesTests {
         val operation = gatheringAttack()
         val army = operation.firstArmy!!
         val target = enemyCity.getCenterTile()
-        val ring = target.getTilesAtDistance(5).filter { it.militaryUnit == null && it.getContinent() == target.getContinent() }.toList()
-        for ((index, unit) in units(operation).withIndex()) { unit.removeFromTile(); unit.putInTile(ring[index * 2]) }
+        val inArmy = units(operation)
+        // CvAIOperationMilitary::GetDeployRange: within 3 plots of the city is there
+        val near = target.getTilesAtDistance(2).filter { it.militaryUnit == null }.toList()
+        for ((index, unit) in inArmy.withIndex()) { unit.removeFromTile(); unit.putInTile(near[index * 2]) }
         operation.state = OperationState.MOVING_TO_TARGET
         army.state = ArmyState.MOVING_TO_DESTINATION
         army.position = target.position
@@ -342,6 +344,9 @@ class OperationalMovesTests {
         assertTrue(AiOperationLogic.checkOnTarget(civ, operation))
         assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
         assertTrue(civ.ai.tactical.isTemporaryZoneCity(enemyCity))
+        // the units wait further out for the tactical turn
+        val ring = target.getTilesAtDistance(5).filter { it.militaryUnit == null && it.getContinent() == target.getContinent() }.toList()
+        for ((index, unit) in inArmy.withIndex()) { unit.removeFromTile(); unit.putInTile(ring[index * 2]) }
         civ.ai.operations.sweep()
 
         val soldiers = civ.units.getCivUnits().filter { it.isMilitary() }.toList()

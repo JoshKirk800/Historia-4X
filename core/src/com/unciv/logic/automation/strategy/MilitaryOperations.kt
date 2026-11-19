@@ -102,7 +102,7 @@ object MilitaryOperations {
         val type = civ.ai.military.armyTypeBeingBuilt ?: return null
         val bySea = type == ArmyType.NavalInvasion
         val formation = civ.ai.operations.formationDef(
-            if (bySea) "MUFORMATION_NAVAL_INVASION" else AiOperationLogic.formationName(civ, AiOperationType.BASIC_CITY_ATTACK)) ?: return null
+            AiOperationLogic.formationName(civ, if (bySea) AiOperationType.NAVAL_ATTACK else AiOperationType.BASIC_CITY_ATTACK)) ?: return null
         for (secondary in listOf(false, true)) {
             val unitAi = firstSlotCityCanFill(civ, formation, bySea, city.isCoastal(), secondary) ?: continue
             ProductionAi.recommendUnit(city, unitAi)?.let { return it }
@@ -124,8 +124,7 @@ object MilitaryOperations {
         val running = civ.ai.operations.firstOfType(type)
         if (running != null && running.state != OperationState.RECRUITING_UNITS) return false
         val formation = civ.ai.operations.formationDef(formationName) ?: return false
-        val naval = formationName == "MUFORMATION_NAVAL_INVASION" || formationName == "MUFORMATION_NAVAL_SQUADRON" ||
-            formationName == "MUFORMATION_CITY_STATE_INVASION" || formationName == "MUFORMATION_PURE_NAVAL_CITY_ATTACK"
+        val naval = type.mixedLandNaval || type.allNaval
         val fillable = numberOfFillableSlots(civ, formation, naval)
         return fillable.filled >= fillable.required
     }
@@ -139,7 +138,7 @@ object MilitaryOperations {
 
     private fun sneakType(bySea: Boolean) = if (bySea) AiOperationType.NAVAL_SNEAK_ATTACK else AiOperationType.SNEAK_CITY_ATTACK
     private fun sneakFormation(civ: Civilization, bySea: Boolean) =
-        if (bySea) "MUFORMATION_NAVAL_INVASION" else AiOperationLogic.formationName(civ, AiOperationType.BASIC_CITY_ATTACK)
+        AiOperationLogic.formationName(civ, if (bySea) AiOperationType.NAVAL_SNEAK_ATTACK else AiOperationType.BASIC_CITY_ATTACK)
 
     /**
      *  CvMilitaryAI::RequestSneakAttack, with Vox Populi's targets (RequestCityAttack: [MilitaryTargets.cityAttackTargets], only the
@@ -193,7 +192,7 @@ object MilitaryOperations {
     fun requestCityStateAttack(civ: Civilization, enemy: Civilization, careful: Boolean = false): Boolean {
         val target = MilitaryTargets.cityAttackTargets(civ, enemy, careful).firstOrNull() ?: return false
         val type = if (target.attackBySea) AiOperationType.CITY_STATE_NAVAL_ATTACK else AiOperationType.CITY_STATE_ATTACK
-        val formation = if (target.attackBySea) "MUFORMATION_CITY_STATE_INVASION" else AiOperationLogic.formationName(civ, AiOperationType.CITY_STATE_ATTACK)
+        val formation = AiOperationLogic.formationName(civ, type)
         if (isAttackReady(civ, formation, type)) AiOperationLogic.addOperation(civ, type, enemy, target.targetCity, target.musterCity)
         else requestUnits(civ, target.attackBySea)
         return true
@@ -232,7 +231,7 @@ object MilitaryOperations {
      *  land units they use fit into the reserves ([landReservesAvailable]).
      */
     fun requestSpecificAttack(civ: Civilization, target: MilitaryTarget, numUnitsWillingToBuild: Int): Boolean {
-        val formationName = if (target.pureNaval) "MUFORMATION_PURE_NAVAL_CITY_ATTACK" else sneakFormation(civ, target.attackBySea)
+        val formationName = AiOperationLogic.formationName(civ, attackType(target))
         val formation = civ.ai.operations.formationDef(formationName) ?: return false
         val fillable = numberOfFillableSlots(civ, formation, target.attackBySea)
         if (fillable.required - fillable.filled > numUnitsWillingToBuild) return false

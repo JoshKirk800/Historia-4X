@@ -1,11 +1,12 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.civilization.AutomationCache
-import com.unciv.logic.automation.unit.NavalOperationMoves
+import com.unciv.logic.automation.unit.tactical.OperationalMoves
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
+import com.unciv.logic.map.tile.Tile
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
@@ -13,6 +14,7 @@ import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -61,6 +63,7 @@ class NavalOperationTests {
     }
 
     private fun tile(x: Int, y: Int = 0) = game.getTile(HexCoord(x, y))
+    private fun tile(position: HexCoord) = game.getTile(position)
 
     /** Putting units on the map recomputes what we see: after placing them, we see all of it again */
     private fun seeAll() {
@@ -80,15 +83,20 @@ class NavalOperationTests {
 
     // region Pure naval city attack
 
+    /** CvAIOperationCityAttackNaval::Init: the fleet musters on the coastal water next to our port and its goal is the coastal water next to the enemy city */
     @Test
     fun `a pure naval attack starts when all but the number of units we are willing to build of the required slots are filled`() {
         val ships = fleet()
         assertTrue(requestNavalAttack(0))
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
-        assertEquals(OperationState.GATHERING_FORCES, operation.state)
+        // the ships stand within the gather tolerance of the muster, so SetUpArmy's second transition takes the fleet straight on to move
+        assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
         assertTrue(ships.all { ops.armyOf(it) != null })
-        assertEquals("the target is the enemy city", enemyCity.getCenterTile().position, operation.targetTile)
-        assertTrue("it musters on water next to our port", game.gameInfo.tileMap[operation.musterTile!!].isWater)
+        val target = tile(operation.targetTile!!)
+        assertTrue("the goal is water next to the enemy city, not the city: ${target.position}", target.isWater && target.aerialDistanceTo(enemyCity.getCenterTile()) <= 2)
+        assertEquals(target.position, operation.firstArmy!!.goalTile)
+        // SetMusterPlot: the army has gathered where its ships were, within the tolerance of one another
+        assertEquals(city.id, operation.startCityId)
         // no city trains units for it: its area is the water at the muster
         assertEquals(-1, operation.area)
     }
@@ -102,6 +110,8 @@ class NavalOperationTests {
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
         assertEquals(1, operation.slotsToBuild.size)
+        val muster = tile(operation.musterTile!!)
+        assertTrue("while recruiting it musters on water next to our port: ${muster.position}", muster.isWater && muster.aerialDistanceTo(city.getCenterTile()) <= 2)
         assertEquals(3, ships.count { ops.armyOf(it) != null })
         // the one more slot is bought in the start city
         assertTrue(operation.hasOneMoreSlotToFill())
@@ -110,18 +120,22 @@ class NavalOperationTests {
         assertFalse("two short", requestNavalAttack(1))
     }
 
+    /** CvAIOperationMilitary::CheckTransitionToNextStage: within the deploy range of its goal the fleet has arrived; OnSuccess focuses the tactical AI on the city */
     @Test
-    fun `a pure naval attack ends in success once the fleet is within a tile of the city, the tactical AI gets a zone there`() {
-        fleet()
+    fun `a pure naval attack ends in success once the fleet is within the deploy range of its goal, the tactical AI gets a zone and a focus there`() {
+        val ships = fleet()
         requestNavalAttack(0)
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         val army = operation.firstArmy!!
         operation.state = OperationState.MOVING_TO_TARGET
         army.state = ArmyState.MOVING_TO_DESTINATION
-        army.position = tile(13).position // next to the city
-        AiOperationLogic.armyInPosition(civ, operation, army)
+        val goal = tile(army.goalTile!!)
+        val places = goal.getTilesInDistance(2).filter { it.isWater && it.militaryUnit == null }.toList()
+        for ((ship, place) in ships.zip(places)) { ship.removeFromTile(); ship.putInTile(place) }
+        assertTrue(AiOperationLogic.checkOnTarget(civ, operation))
         assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
         assertTrue(civ.ai.tactical.temporaryZones.any { it.position == enemyCity.getCenterTile().position })
+        assertTrue(civ.ai.tactical.isInFocusArea(enemyCity.getCenterTile()))
     }
 
     @Test
@@ -232,33 +246,67 @@ class NavalOperationTests {
 
     // region Invasions
 
-    /** The five required slots of the naval invasion: a bombard unit, a second one, a melee unit and two ships */
-    private fun invasionForce(): List<MapUnit> = listOf(
-        game.addUnit("Catapult", civ, tile(0, 1)), game.addUnit("Spearman", civ, tile(0, -1)), game.addUnit("Swordsman", civ, tile(-1, 0)),
-        ship("Quinquereme", 2, 0), ship("Galleass", 2, 1),
-    )
+    /**
+     *  One unit for each required slot of the formation [formationName] (with the CP data), the first unit of the ruleset's units that may take
+     *  the slot's unit AI, its secondary one if none takes the primary: land units on land by our port, ships on the water east of it
+     */
+    private fun forceFor(formationName: String, leaveOut: Int = 0): List<MapUnit> {
+        val rules = game.ruleset.ai
+        val candidates = game.ruleset.units.values.filter {
+            (it.isLandUnit || it.isWaterUnit) && (it.strength > 0 || it.rangedStrength > 0) && it.uniqueTo == null && !it.isGreatPerson &&
+                it.name !in listOf("Atomic Bomb", "Nuclear Missile", "Guided Missile", "Missile Cruiser")
+        }
+        val land = ArrayDeque(listOf(tile(0, 1), tile(0, -1), tile(-1, 0), tile(-1, 1), tile(-1, -1), tile(-2, 0), tile(-2, 1), tile(-2, -1), tile(0, 2), tile(0, -2)))
+        val sea = ArrayDeque((2..3).flatMap { x -> (-2..2).map { y -> tile(x, y) } })
+        val units = ArrayList<MapUnit>()
+        for (slot in civ.ai.operations.formationDef(formationName)!!.slots.filter { it.required }.dropLast(leaveOut)) {
+            fun fits(unitAi: String, unit: com.unciv.models.ruleset.unit.BaseUnit) =
+                UnitAiType.ofXmlName(unitAi)?.let { UnitAiTypes.canHave(unit, it, rules) } == true
+            val base = candidates.firstOrNull { fits(slot.primaryUnitAi, it) } ?: candidates.first { fits(slot.secondaryUnitAi, it) }
+            units += game.addUnit(base.name, civ, if (base.isWaterUnit) sea.removeFirst() else land.removeFirst())
+        }
+        seeAll()
+        return units
+    }
 
     private fun invade(type: AiOperationType = AiOperationType.NAVAL_ATTACK): AiOperation =
         AiOperationLogic.addOperation(civ, type, enemy, enemyCity, city)
 
+    /** CvAIOperationCityAttackCombined::Init: the army musters on the coastal water next to our port and its goal is the coastal water next to the enemy city */
     @Test
-    fun `an invasion fills its slots from ships and land units that can embark and gathers at our port`() {
-        val force = invasionForce()
+    fun `an invasion takes ships and land units that can embark, musters on the water next to our port and goes to the water next to the enemy city`() {
+        val force = forceFor("MUFORMATION_NAVAL_INVASION", leaveOut = 1)
         val operation = invade()
-        assertEquals(OperationState.GATHERING_FORCES, operation.state)
+        assertEquals("one required slot is empty", OperationState.RECRUITING_UNITS, operation.state)
         assertTrue(force.all { ops.armyOf(it) != null })
-        assertEquals(city.getCenterTile().position, operation.musterTile)
-        assertEquals("the area is the target's landmass", enemyCity.getCenterTile().getContinent(), operation.area)
+        val muster = tile(operation.musterTile!!)
+        assertTrue("it musters on water next to our port: ${muster.position}", muster.isWater && muster.aerialDistanceTo(city.getCenterTile()) <= 2)
+        val target = tile(operation.targetTile!!)
+        assertTrue("it goes to the water next to the enemy city: ${target.position}", target.isWater && target.aerialDistanceTo(enemyCity.getCenterTile()) <= 2)
+        assertEquals(target.position, operation.firstArmy!!.goalTile)
+        assertEquals(city.id, operation.startCityId)
+        assertEquals("no city lies on the water: its area is none", -1, operation.area)
         assertEquals("MUFORMATION_NAVAL_INVASION", operation.firstArmy!!.formation)
+    }
+
+    /** SetUpArmy: an army with all it needs gathers, and where its units already stand within the gather tolerance of one another it goes straight on to move */
+    @Test
+    fun `an invasion with all its required units is under way at once`() {
+        val force = forceFor("MUFORMATION_NAVAL_INVASION")
+        val operation = invade()
+        assertTrue("under way: ${operation.state}", operation.state == OperationState.GATHERING_FORCES || operation.state == OperationState.MOVING_TO_TARGET)
+        assertTrue(force.all { ops.armyOf(it) != null })
     }
 
     @Test
     fun `land units that cannot embark do not fill an invasion`() {
         civ.tech.unitsCanEmbark = false
-        invasionForce()
+        val force = forceFor("MUFORMATION_NAVAL_INVASION")
         val operation = invade()
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
-        assertEquals(3, operation.slotsToBuild.size) // only the two ships are there
+        assertTrue(force.filter { it.baseUnit.isLandUnit }.all { ops.armyOf(it) == null })
+        assertTrue(force.filter { it.baseUnit.isWaterUnit }.all { ops.armyOf(it) != null })
+        assertEquals(force.count { it.baseUnit.isLandUnit }, operation.slotsToBuild.size)
     }
 
     /** Vox Populi (GrabUnitsFromTheReserves): ships that cannot enter the ocean are no recruits when muster point and target are on different waters */
@@ -278,80 +326,155 @@ class NavalOperationTests {
         assertNotNull("on one sea the formation takes it", ops.armyOf(coastal))
     }
 
+    /** Puts the units of [force] on the water tiles of column x [x] (and the next column), the first on y=0, the others around */
+    private fun sail(force: List<MapUnit>, x: Int) {
+        val places = listOf(0, 1, -1, 2, -2).flatMap { y -> listOf(tile(x, y), tile(x + 1, y)) }
+        val moving = force.zip(places)
+        for ((unit, _) in moving) unit.removeFromTile()
+        for ((unit, place) in moving) unit.putInTile(place)
+        seeAll()
+    }
+
+    private fun centerDistance(operation: AiOperation, to: Tile): Int =
+        AiOperationLogic.centerOfMass(civ, operation.firstArmy!!, sea = true)!!.aerialDistanceTo(to)
+
+    /** Vox Populi's PlotArmyMovesCombat (CvTacticalAI.cpp 2517) moves the combined army: ExecuteGatherMoves puts every unit around the target of the turn, ships and embarked land units alike */
     @Test
-    fun `an invasion gathering at the port puts its ships on water and its land units on land, one unit to a tile`() {
-        val force = invasionForce()
+    fun `an invasion on the move puts ships and the land units that embark on water around the turn target`() {
+        val force = forceFor("MUFORMATION_NAVAL_INVASION")
         val operation = invade()
-        val cache = AutomationCache()
-        NavalOperationMoves.moveOperation(civ, operation, cache)
-        assertTrue(force.all { it in cache.processedUnits })
-        assertEquals(force.size, force.map { it.getTile() }.toSet().size)
-        for (unit in force) assertEquals(unit.name, unit.baseUnit.isWaterUnit, unit.getTile().isWater)
+        seeAll()
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+        assertTrue("every unit stays in reach of the others: ${force.map { it.name + it.getTile().position }}", force.all { unit -> force.any { it !== unit && it.getTile().aerialDistanceTo(unit.getTile()) <= 6 } })
+        for (unit in force.filter { it.baseUnit.isWaterUnit }) assertTrue(unit.name, unit.getTile().isWater)
+        assertTrue("land units embarked with the fleet", force.any { it.baseUnit.isLandUnit && it.getTile().isWater })
     }
 
     @Test
-    fun `the army moves to the waters next to the enemy city at the pace of its slowest ship`() {
-        val force = invasionForce()
+    fun `the army sails the sea route to the coastal water next to the enemy city`() {
+        val force = forceFor("MUFORMATION_NAVAL_INVASION")
         val operation = invade()
         val army = operation.firstArmy!!
         operation.state = OperationState.MOVING_TO_TARGET
         army.state = ArmyState.MOVING_TO_DESTINATION
         // everyone embarks and sails: put the force on water at our end of the channel
-        val start = listOf(tile(1, 0), tile(1, 1), tile(1, -1), tile(2, 0), tile(2, 1))
-        for ((unit, tile) in force.zip(start)) { unit.removeFromTile(); unit.putInTile(tile) }
-        val before = force.map { it.getTile().aerialDistanceTo(enemyCity.getCenterTile()) }
-        NavalOperationMoves.moveOperation(civ, operation, AutomationCache())
-        val after = force.map { it.getTile().aerialDistanceTo(enemyCity.getCenterTile()) }
-        assertTrue("the force advanced: $before -> $after", after.sum() < before.sum() && before.zip(after).all { (b, a) -> a <= b })
-        assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
+        sail(force, 1)
+        val goal = tile(army.goalTile!!)
+        val before = centerDistance(operation, goal)
+        val (turnTarget, _) = OperationalMoves.computeCenterOfMassForTurn(civ, operation, army)!!
+        assertTrue("the turn target is on the sea route: ${turnTarget.position}", turnTarget.isWater && turnTarget.aerialDistanceTo(goal) < before)
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+        assertEquals("on its way", OperationState.MOVING_TO_TARGET, operation.state)
+        assertTrue("the force advanced: $before -> ${centerDistance(operation, goal)}", centerDistance(operation, goal) < before)
+        assertTrue(force.filter { it.baseUnit.isWaterUnit }.all { it.getTile().isWater })
     }
 
+    /** CvAIOperationMilitary::CheckTransitionToNextStage: within the deploy range of the goal the army has arrived; the city is a focus of the tactical AI, a naval invasion zone lets the landing units close on it */
     @Test
-    fun `an invasion within twice the city attack range of its target hands over to the tactical AI with a naval invasion zone`() {
-        val force = invasionForce()
+    fun `an invasion within the deploy range of its goal succeeds, with a naval invasion zone and a focus area at the city`() {
+        val force = forceFor("MUFORMATION_NAVAL_INVASION")
         val operation = invade()
         val army = operation.firstArmy!!
         operation.state = OperationState.MOVING_TO_TARGET
         army.state = ArmyState.MOVING_TO_DESTINATION
-        val near = listOf(tile(9, 0), tile(9, 1), tile(9, -1), tile(10, 0), tile(10, 1))
-        for ((unit, tile) in force.zip(near)) { unit.removeFromTile(); unit.putInTile(tile) }
+        sail(force, 11)
         assertTrue(AiOperationLogic.checkOnTarget(civ, operation))
         assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
         assertTrue(civ.ai.tactical.temporaryZones.single { it.position == enemyCity.getCenterTile().position }.navalInvasion)
+        assertTrue(civ.ai.tactical.isInFocusArea(enemyCity.getCenterTile()))
     }
 
     @Test
-    fun `an invasion still far from its target keeps moving`() {
-        val force = invasionForce()
+    fun `an invasion still far from its goal keeps moving`() {
+        val force = forceFor("MUFORMATION_NAVAL_INVASION")
         val operation = invade()
         val army = operation.firstArmy!!
         operation.state = OperationState.MOVING_TO_TARGET
         army.state = ArmyState.MOVING_TO_DESTINATION
-        val far = listOf(tile(1, 0), tile(1, 1), tile(1, -1), tile(2, 0), tile(2, 1))
-        for ((unit, tile) in force.zip(far)) { unit.removeFromTile(); unit.putInTile(tile) }
+        sail(force, 1)
         assertFalse(AiOperationLogic.checkOnTarget(civ, operation))
         assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
     }
 
+    /** CvTacticalAI::CheckForEnemiesNearArmy: ships in contact with the enemy fleet fight it with the combat simulation instead of sailing on */
     @Test
-    fun `a city-state invasion and a sneak invasion use their own formations`() {
-        assertEquals("MUFORMATION_CITY_STATE_INVASION", AiOperationLogic.formationName(civ, AiOperationType.CITY_STATE_NAVAL_ATTACK))
-        assertEquals("MUFORMATION_NAVAL_INVASION", AiOperationLogic.formationName(civ, AiOperationType.NAVAL_SNEAK_ATTACK))
+    fun `a fleet in contact with an enemy ship attacks it instead of sailing on`() {
+        val ships = fleet()
+        requestNavalAttack(0)
+        val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
+        val army = operation.firstArmy!!
+        operation.state = OperationState.MOVING_TO_TARGET
+        army.state = ArmyState.MOVING_TO_DESTINATION
+        // closer to our city than to theirs: the original does not follow a contact into the water zone of the enemy's city
+        val victim = game.addUnit("Trireme", enemy, tile(5, 0))
+        seeAll()
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+        assertTrue("the enemy ship was attacked: health ${victim.health}", victim.isDestroyed || victim.health < 100)
+    }
+
+    /** A fleet of ranged ships takes no city, so the want of a melee unit that ends a land army's march does not end its sail */
+    @Test
+    fun `a fleet of ranged ships goes on sailing`() {
+        val ships = fleet()
+        requestNavalAttack(0)
+        val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
+        // the two Quinquereme, the fleet's melee ships, leave: two Galleass remain
+        ops.removeFromArmy(ships[0])
+        ops.removeFromArmy(ships[1])
+        operation.state = OperationState.MOVING_TO_TARGET
+        operation.firstArmy!!.state = ArmyState.MOVING_TO_DESTINATION
+        seeAll()
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+        assertNotEquals(OperationAbortReason.HALF_STRENGTH, operation.abortReason)
+        assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
+    }
+
+    /** MilitaryAIHelpers::GetCurrentBestFormationTypeForCombinedAttack and ...ForPureNavalAttack: the late-game formations come after the Medieval era */
+    @Test
+    fun `every combined army and pure naval fleet uses the late game formation after the Medieval era`() {
+        for (type in listOf(AiOperationType.NAVAL_ATTACK, AiOperationType.NAVAL_SNEAK_ATTACK, AiOperationType.CITY_STATE_NAVAL_ATTACK))
+            assertEquals("MUFORMATION_NAVAL_INVASION", AiOperationLogic.formationName(civ, type))
+        assertEquals("MUFORMATION_PURE_NAVAL_CITY_ATTACK", AiOperationLogic.formationName(civ, AiOperationType.PURE_NAVAL_CITY_ATTACK))
+        for (each in listOf(civ, enemy)) each.tech.era = game.ruleset.eras["Industrial era"]!!
+        for (type in listOf(AiOperationType.NAVAL_ATTACK, AiOperationType.NAVAL_SNEAK_ATTACK, AiOperationType.CITY_STATE_NAVAL_ATTACK))
+            assertEquals("a city-state's too", "MUFORMATION_LATE_GAME_INVASION_FORCE", AiOperationLogic.formationName(civ, type))
+        assertEquals("MUFORMATION_LATE_GAME_PURE_NAVAL_FORCE", AiOperationLogic.formationName(civ, AiOperationType.PURE_NAVAL_CITY_ATTACK))
         assertTrue(AiOperationType.NAVAL_ATTACK.isNavalInvasion && AiOperationType.NAVAL_ATTACK.mixedLandNaval)
     }
 
-    /** CvMilitaryAI::GetCoastalPlotAdjacentToTarget: the original's path check ignores units and borders, so neither hides the goal */
+    /** CvAIOperationCityAttackCombined::Init: the goal is coastal water the original does not path to, so closed borders and the defender's ships do not hide it */
     @Test
     fun `an invasion's goal is the water next to the city even inside closed borders where the defender's ships stand`() {
         civ.getDiplomacyManager(enemy)!!.makePeace()
         // closed borders three tiles out, as a grown city has them, and its fleet on the waters next to it
         for (tile in enemyCity.getCenterTile().getTilesInDistance(3)) if (tile.getOwner() == null) enemyCity.expansion.takeOwnership(tile)
         for (water in enemyCity.getCenterTile().neighbors.filter { it.isWater }) game.addUnit("Quinquereme", enemy, water)
-        invasionForce()
-        val army = invade(AiOperationType.NAVAL_SNEAK_ATTACK).firstArmy!!
-        val goal = NavalOperationLogic.coastalPlotAdjacentToTarget(civ, enemyCity.getCenterTile(), army)
-        assertNotNull("a goal tile", goal)
-        assertTrue(goal!! in enemyCity.getCenterTile().neighbors)
+        forceFor("MUFORMATION_NAVAL_INVASION")
+        val operation = invade(AiOperationType.NAVAL_SNEAK_ATTACK)
+        assertNotEquals(OperationState.ABORTED, operation.state)
+        val goal = tile(operation.targetTile!!)
+        assertTrue("goal ${goal.position}", goal.isWater && goal.aerialDistanceTo(enemyCity.getCenterTile()) <= 2)
+        assertEquals(goal.position, operation.firstArmy!!.goalTile)
+    }
+
+    /** CvPlayer::GetClosestCoastalCityPair: for a target that is no coastal city the closest coastal cities of us and the enemy are used */
+    @Test
+    fun `a pure naval attack on an inland city goes for the closest pair of coastal cities`() {
+        val inland = game.addCity(enemy, tile(16, 0))
+        assertFalse(inland.isCoastal())
+        forceFor("MUFORMATION_PURE_NAVAL_CITY_ATTACK")
+        val operation = AiOperationLogic.addOperation(civ, AiOperationType.PURE_NAVAL_CITY_ATTACK, enemy, inland, city)
+        assertNotEquals(OperationState.ABORTED, operation.state)
+        val goal = tile(operation.targetTile!!)
+        assertTrue("the water by the coastal city at x=14, not by the inland one: ${goal.position}", goal.isWater && goal.aerialDistanceTo(enemyCity.getCenterTile()) <= 2)
+    }
+
+    /** CvAIOperation::CheckTransitionToNextStage's naval arrival: the enemy city is what the Intrigue and the tactical AI see as the target */
+    @Test
+    fun `the city an invasion goes for is found from the water it sails to`() {
+        forceFor("MUFORMATION_NAVAL_INVASION")
+        val operation = invade()
+        assertEquals(enemyCity, AiOperationLogic.attackedCity(civ, operation))
     }
     // endregion
 

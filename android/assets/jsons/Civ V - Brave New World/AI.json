@@ -435,6 +435,8 @@
     "DIGGING_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN": 50,
     "DIGGING_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN": 30,
     "DOF_BROKEN_BACKSTAB_TIMER": 10,
+    "DOF_BROKEN_TURNS_UNTIL_FORGIVEN": 50,
+    "DOF_BROKEN_TURNS_UNTIL_FORGIVEN_FRIENDS": 10,
     "DOF_THRESHOLD": 12,
     "DOF_TURN_BUFFER": 50,
     "DOF_TURN_BUFFER_REDUCTION_PER_ERA": -5,
@@ -967,6 +969,10 @@
     "OPINION_WEIGHT_PAID_TRIBUTE": 30,
     "OPINION_WEIGHT_PER_NEGATIVE_CONVERSION": 1,
     "OPINION_WEIGHT_PER_VOTE_PERCENT": 2,
+    "OPINION_WEIGHT_POLICY_FIERCE": 30,
+    "OPINION_WEIGHT_POLICY_NONE": -5,
+    "OPINION_WEIGHT_POLICY_STRONG": 20,
+    "OPINION_WEIGHT_POLICY_WEAK": 10,
     "OPINION_WEIGHT_PTP_SAME_MINOR_DIPLOMAT_MULTIPLIER": 200,
     "OPINION_WEIGHT_PTP_SAME_MINOR_EACH": -3,
     "OPINION_WEIGHT_PTP_SAME_MINOR_MIN": -12,
@@ -986,6 +992,10 @@
     "OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR": 10,
     "OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR_AGGRESSIVE_MOD": 10,
     "OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR_NUM_TURNS_UNTIL_FORGIVEN": 10,
+    "OPINION_WEIGHT_TECH_FIERCE": 30,
+    "OPINION_WEIGHT_TECH_NONE": -5,
+    "OPINION_WEIGHT_TECH_STRONG": 20,
+    "OPINION_WEIGHT_TECH_WEAK": 10,
     "OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL": 10,
     "OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_DIPLOMAT_MULTIPLIER": 167,
     "OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_MAX": 60,
@@ -1005,10 +1015,16 @@
     "OPINION_WEIGHT_THEY_UNSANCTIONED_US_DIPLOMAT_MULTIPLIER": 200,
     "OPINION_WEIGHT_THEY_UNSANCTIONED_US_FAILURE_DIVISOR": 200,
     "OPINION_WEIGHT_TRADE_MAX": -40,
-    "OPINION_WEIGHT_VICTORY_FIERCE": 30,
-    "OPINION_WEIGHT_VICTORY_NONE": -6,
-    "OPINION_WEIGHT_VICTORY_STRONG": 20,
-    "OPINION_WEIGHT_VICTORY_WEAK": 10,
+    "OPINION_WEIGHT_VICTORY_BLOCK_FIERCE": 40,
+    "OPINION_WEIGHT_VICTORY_BLOCK_PER_ERA": 4,
+    "OPINION_WEIGHT_VICTORY_BLOCK_STRONG": 30,
+    "OPINION_WEIGHT_VICTORY_BLOCK_WEAK": 20,
+    "OPINION_WEIGHT_VICTORY_FIERCE": 40,
+    "OPINION_WEIGHT_VICTORY_NONE": 0,
+    "OPINION_WEIGHT_VICTORY_NONE_PER_ERA": 0,
+    "OPINION_WEIGHT_VICTORY_PER_ERA": 4,
+    "OPINION_WEIGHT_VICTORY_STRONG": 30,
+    "OPINION_WEIGHT_VICTORY_WEAK": 20,
     "OPINION_WEIGHT_VOTING_HISTORY_DIPLOMAT_MULTIPLIER": 200,
     "OPINION_WEIGHT_VOTING_HISTORY_MAX": 60,
     "OPINION_WEIGHT_WAR_FRIEND_EACH": 75,
@@ -1098,6 +1114,9 @@
     "PLOT_BUYING_POSTURE_MEDIUM_THRESHOLD": 5,
     "PLOT_UNIT_LIMIT": 1,
     "PLOT_VISIBILITY_RANGE": 1,
+    "POLICY_BLOCK_FIERCE_THRESHOLD": 24,
+    "POLICY_BLOCK_STRONG_THRESHOLD": 16,
+    "POLICY_BLOCK_WEAK_THRESHOLD": 8,
     "POLICY_WEIGHT_PERCENT_DROP_NEW_BRANCH": 78,
     "POLICY_WEIGHT_PROPAGATION_LEVELS": 2,
     "POLICY_WEIGHT_PROPAGATION_PERCENT": 25,
@@ -1215,6 +1234,9 @@
     "TARGET_NEIGHBORS_DIVISOR": 4,
     "TARGET_SOFT_THRESHOLD": 33,
     "TARGET_VALUE_REDUCTION_PER_BOLDNESS": -3,
+    "TECH_BLOCK_FIERCE_THRESHOLD": 30,
+    "TECH_BLOCK_STRONG_THRESHOLD": 20,
+    "TECH_BLOCK_WEAK_THRESHOLD": 10,
     "TECH_PRIORITY_MAYA_CALENDAR_BONUS": 50,
     "TECH_PRIORITY_UNIQUE_ITEM": 5,
     "TECH_WEIGHT_PROPAGATION_LEVELS": 3,
@@ -1224,10 +1246,16 @@
     "UNKNOWN_EXPLORE_TILE_VALUE": 25,
     "UNSANCTIONED_US_TURNS_UNTIL_FORGOTTEN": 50,
     "VERY_UNHAPPY_THRESHOLD": -10,
+    "VICTORY_BLOCK_FIERCE_THRESHOLD": 40,
+    "VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_LIKELY": 15,
+    "VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_POSITIVE": 20,
+    "VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_UNSURE": 5,
+    "VICTORY_BLOCK_STRONG_THRESHOLD": 30,
+    "VICTORY_BLOCK_WEAK_THRESHOLD": 20,
     "VICTORY_DISPUTE_FIERCE_THRESHOLD": 80,
-    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_LIKELY": 10,
-    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_POSITIVE": 14,
-    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_UNSURE": 6,
+    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_LIKELY": 15,
+    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_POSITIVE": 25,
+    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_UNSURE": 5,
     "VICTORY_DISPUTE_OTHER_PLAYER_FIERCE_THRESHOLD": 70,
     "VICTORY_DISPUTE_OTHER_PLAYER_GRAND_STRATEGY_MATCH_LIKELY": 5,
     "VICTORY_DISPUTE_OTHER_PLAYER_GRAND_STRATEGY_MATCH_POSITIVE": 7,
@@ -9755,7 +9783,13 @@
         "HumanOpinionChange": -10,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 1,
+        "VictoryBlockMod": 2,
+        "TechBlockPercent": 50,
+        "TechBlockMod": 2,
+        "PolicyBlockPercent": 50,
+        "PolicyBlockMod": 1
       }
     },
     {
@@ -9803,7 +9837,13 @@
         "HumanOpinionChange": -5,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 1,
+        "VictoryBlockMod": 2,
+        "TechBlockPercent": 60,
+        "TechBlockMod": 2,
+        "PolicyBlockPercent": 60,
+        "PolicyBlockMod": 1
       }
     },
     {
@@ -9851,7 +9891,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 2,
+        "VictoryBlockMod": 2,
+        "TechBlockPercent": 80,
+        "TechBlockMod": 2,
+        "PolicyBlockPercent": 80,
+        "PolicyBlockMod": 2
       }
     },
     {
@@ -9899,7 +9945,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 2,
+        "VictoryBlockMod": 3,
+        "TechBlockPercent": 90,
+        "TechBlockMod": 3,
+        "PolicyBlockPercent": 90,
+        "PolicyBlockMod": 2
       }
     },
     {
@@ -9947,7 +9999,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 2,
+        "VictoryBlockMod": 3,
+        "TechBlockPercent": 110,
+        "TechBlockMod": 3,
+        "PolicyBlockPercent": 110,
+        "PolicyBlockMod": 2
       }
     },
     {
@@ -9995,7 +10053,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 2,
+        "VictoryBlockMod": 4,
+        "TechBlockPercent": 125,
+        "TechBlockMod": 4,
+        "PolicyBlockPercent": 125,
+        "PolicyBlockMod": 2
       }
     },
     {
@@ -10043,7 +10107,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 3,
+        "VictoryBlockMod": 4,
+        "TechBlockPercent": 134,
+        "TechBlockMod": 4,
+        "PolicyBlockPercent": 134,
+        "PolicyBlockMod": 3
       }
     },
     {
@@ -10091,7 +10161,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 3,
+        "VictoryBlockMod": 5,
+        "TechBlockPercent": 150,
+        "TechBlockMod": 5,
+        "PolicyBlockPercent": 150,
+        "PolicyBlockMod": 3
       }
     },
     {
@@ -10139,7 +10215,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 0,
+        "VictoryBlockMod": 0,
+        "TechBlockPercent": 100,
+        "TechBlockMod": 0,
+        "PolicyBlockPercent": 100,
+        "PolicyBlockMod": 0
       }
     }
   ],

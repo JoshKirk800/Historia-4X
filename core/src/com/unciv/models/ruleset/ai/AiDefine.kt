@@ -699,6 +699,9 @@ enum class AiDefine(val default: Float) {
     WAR_MAJOR_MINIMUM_TURNS(5f),
     // CanBackstab and IsWillingToAttackFriend (Vox Populi): turns after we broke a DoF with someone in which attacking them is backstabbing
     DOF_BROKEN_BACKSTAB_TIMER(10f),
+    // CvDiplomacyAI::TestBackstabbingPenalties (Vox Populi): a broken DoF counts as a betrayal for this many turns (x the game speed's opinion duration), or this many once we are friends again
+    DOF_BROKEN_TURNS_UNTIL_FORGIVEN(50f),
+    DOF_BROKEN_TURNS_UNTIL_FORGIVEN_FRIENDS(10f),
     TURNS_SINCE_PEACE_WEIGHT_DAMPENER(25f),
     // CvDiplomacyAIHelpers::GetWarmongerTriggerPenalty, GetCityWarmongerValue and GetCityLiberationValue, CvDiplomacyAI::DoUpdateWarmongerThreats
     // (WarmongerAi; Vox Populi's values: the amounts are in hundredths, the thresholds apply to amount x warmonger hate / 20; BNW: 40, 250, 50, 125, 50, 20, 10, -5, 25, 100)
@@ -1048,6 +1051,46 @@ enum class AiDefine(val default: Float) {
     VICTORY_PURSUIT_FEW_CITY_STATES_PENALTY(-20f),
     VICTORY_PURSUIT_MAX_RANDOMNESS(18f),
     VICTORY_PURSUIT_DIFFERENTIAL_DIVISOR(200f),
+    // CvDiplomacyAI::DoUpdateVictoryDisputeLevels / DoUpdateVictoryBlockLevels / DoUpdateTechBlockLevels / DoUpdatePolicyBlockLevels (VictoryLevelsAi;
+    // BNW: the dispute match weights 14, 10, 6; the others do not exist there)
+    VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_POSITIVE(25f),
+    VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_LIKELY(15f),
+    VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_UNSURE(5f),
+    VICTORY_DISPUTE_FIERCE_THRESHOLD(80f),
+    VICTORY_DISPUTE_STRONG_THRESHOLD(50f),
+    VICTORY_DISPUTE_WEAK_THRESHOLD(30f),
+    VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_POSITIVE(20f),
+    VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_LIKELY(15f),
+    VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_UNSURE(5f),
+    VICTORY_BLOCK_FIERCE_THRESHOLD(40f),
+    VICTORY_BLOCK_STRONG_THRESHOLD(30f),
+    VICTORY_BLOCK_WEAK_THRESHOLD(20f),
+    TECH_BLOCK_FIERCE_THRESHOLD(30f),
+    TECH_BLOCK_STRONG_THRESHOLD(20f),
+    TECH_BLOCK_WEAK_THRESHOLD(10f),
+    POLICY_BLOCK_FIERCE_THRESHOLD(24f),
+    POLICY_BLOCK_STRONG_THRESHOLD(16f),
+    POLICY_BLOCK_WEAK_THRESHOLD(8f),
+    // CvDiplomacyAI::GetTechBlockLevelScore, GetPolicyBlockLevelScore, GetVictoryDisputeLevelScore, GetVictoryBlockLevelScore (OpinionAi;
+    // VP database values; BNW's victory weights are 30, 20, 10 and -6 for none, and it has no tech or policy weights)
+    OPINION_WEIGHT_TECH_FIERCE(30f),
+    OPINION_WEIGHT_TECH_STRONG(20f),
+    OPINION_WEIGHT_TECH_WEAK(10f),
+    OPINION_WEIGHT_TECH_NONE(-5f),
+    OPINION_WEIGHT_POLICY_FIERCE(30f),
+    OPINION_WEIGHT_POLICY_STRONG(20f),
+    OPINION_WEIGHT_POLICY_WEAK(10f),
+    OPINION_WEIGHT_POLICY_NONE(-5f),
+    OPINION_WEIGHT_VICTORY_FIERCE(40f),
+    OPINION_WEIGHT_VICTORY_STRONG(30f),
+    OPINION_WEIGHT_VICTORY_WEAK(20f),
+    OPINION_WEIGHT_VICTORY_NONE(0f),
+    OPINION_WEIGHT_VICTORY_PER_ERA(4f),
+    OPINION_WEIGHT_VICTORY_NONE_PER_ERA(0f),
+    OPINION_WEIGHT_VICTORY_BLOCK_FIERCE(40f),
+    OPINION_WEIGHT_VICTORY_BLOCK_STRONG(30f),
+    OPINION_WEIGHT_VICTORY_BLOCK_WEAK(20f),
+    OPINION_WEIGHT_VICTORY_BLOCK_PER_ERA(4f),
     // Vox Populi's opinion deeds (OpinionAi, phaseE/vp-opinion-plan.md O2; VP database values)
     OPINION_WEIGHT_RETURNED_CIVILIAN_SUBSEQUENT(-5f),
     RETURNED_CIVILIAN_TURNS_UNTIL_FORGOTTEN(50f),

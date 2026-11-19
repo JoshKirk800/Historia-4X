@@ -41,9 +41,8 @@ class ZonePosture : IsPartOfGameInfoSerialization {
 }
 
 /**
- *  The tactical AI state of a civilization (`civ.ai.tactical`): the part of CvTacticalAI that lives across turns - the postures chosen
- *  for each dominance zone (m_Postures, remembered so that a posture is kept while it is only "less stringent" true) and the temporary zones
- *  operations register (m_TempZones) - and the per-turn [map] (CvTacticalAnalysisMap::RefreshDataForNextPlayer).
+ *  The tactical AI state of a civilization (`civ.ai.tactical`): the current postures consumed by tactical moves, the temporary zones
+ *  operations register (m_TempZones), and the per-turn [map] (CvTacticalAnalysisMap).
  *
  *  Old saves have neither postures nor zones.
  */

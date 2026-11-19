@@ -436,6 +436,7 @@ enum class AiDefine(val default: Float) {
     BROKEN_EXPANSION_PROMISE_PER_OPINION_WEIGHT(1f),
     COMMON_FOE_VALUE_PER_OPINION_WEIGHT(50f),
     COMMON_FOE_VALUE_PER_TURN_DECAY(25f),
+    COOP_WAR_DESIRE_THRESHOLD(40f), // Vox Populi's: the score a coop war must beat (CvDiplomacyAI::DoTestCoopWarDesire, RespondToCoopWarRequest)
     COOP_WAR_LOCKED_LENGTH(15f),
     COOP_WAR_LOCKED_TURNS(20f),
     COOP_WAR_LOCKED_TURNS_WAR_WEIGHT(1000f),

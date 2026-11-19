@@ -144,11 +144,11 @@ object DiplomacyAutomation {
     }
 
     /**
-     *  CvDiplomacyAI::DoCoopWarStatement: only while at war with no major, ask [other] to join a war on our best target. An AI answers at
-     *  once ([CoopWarAi.requestCoopWar]); a human gets an alert ([CoopWarAi.askHuman]) and answers it there ([CoopWarAi.onHumanAnswered]).
+     *  CvDiplomacyAI::DoCoopWarStatement: ask [other] to join a war on our best target ([CoopWarAi.coopWarTarget]; Vox Populi has no
+     *  condition on our wars, BNW asked only while at war with no major). An AI answers at once ([CoopWarAi.requestCoopWar]); a human gets an
+     *  alert ([CoopWarAi.askHuman]) and answers it there ([CoopWarAi.onHumanAnswered]).
      */
     private fun doCoopWarStatement(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
-        if (civ.getCivsAtWarWith().any { it.isMajorCiv }) return false
         val target = CoopWarAi.coopWarTarget(civ, other, rules) ?: return false
         val memory = civ.ai.diplomacy.memoryOf(other)
         if (turnsSinceStatement(civ, memory, DiploStatement.CoopWarRequest) < 10) return false

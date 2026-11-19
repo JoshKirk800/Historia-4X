@@ -18,8 +18,9 @@ import com.unciv.models.ruleset.unique.UniqueType
  *  first, in the XML order among equals): emergency purchases and defensive airlifts (once per dominance zone), the attack moves (civilians, camps,
  *  pillaging (by paradrop too), plundering and parking on trade routes, safe bombards - [TacticalMoves], [TradeMoves], [TacticalBombards]),
  *  the moves of the dominance zones' postures (the attacks on units and cities by [TacticalSimulation], shore bombardment, hedgehog, withdrawing,
- *  closing on the target - [Postures], [Deployment]), the armies of the operations ([OperationalMoves]), moves to safety and healing, garrisons,
- *  bastions, guarding improvements, repositioning. A unit a move commands is added to [AutomationCache.processedUnits]; the other units, tactical
+ *  closing on the target - [Postures], [Deployment]), the armies of the operations ([OperationalMoves]), moves to safety ([SafestPlot]) and healing
+ *  ([TacticalHealing]), garrisons ([GarrisonMoves]), bastions, guarding improvements, ruins and camps ([GuardMoves]), repositioning.
+ *  The order of the list is BNW's `AI.json` priorities, not Vox Populi's hardcoded sequence of CvTacticalAI::ProcessDominanceZones (not ported). A unit a move commands is added to [AutomationCache.processedUnits]; the other units, tactical
  *  or not, go on to the rest of the unit AI.
  *
  *  Not ported (their rows of AI.json's `tacticalMoves` have no code behind them): naval blockades, and the BNW moves that Vox Populi dropped for the
@@ -133,20 +134,15 @@ object TacticalAi {
             Step("TACTICAL_ATTACK_MEDIUM_PRIORITY_CIVILIAN") { TacticalMoves.plotCivilianAttackMoves(ctx, TacticalTargetType.MediumPriorityCivilian) },
             Step("TACTICAL_PILLAGE_RESOURCE") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, true) },
             Step("TACTICAL_ATTACK_LOW_PRIORITY_CIVILIAN") { TacticalMoves.plotCivilianAttackMoves(ctx, TacticalTargetType.LowPriorityCivilian) },
-            Step("TACTICAL_ANCIENT_RUINS") { TacticalMoves.plotAncientRuinMoves(ctx, 1) },
+            Step("TACTICAL_ANCIENT_RUINS") { GuardMoves.plotGrabGoodyMoves(ctx) },
             Step("TACTICAL_PILLAGE_CITADEL_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Citadel, false) },
-            Step("TACTICAL_GARRISON_TO_ALLOW_BOMBARD") { TacticalMoves.plotGarrisonMoves(ctx, 1, true) },
             Step("TACTICAL_PILLAGE_RESOURCE_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, false) },
             Step(TO_SAFETY) { SafestPlot.plotMovesToSafety(ctx, true) },
-            Step("TACTICAL_BARBARIAN_CAMP") { TacticalMoves.plotBarbarianCampMoves(ctx) },
             Step("TACTICAL_PILLAGE_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, false) },
             Step(HEAL) { TacticalHealing.plotHealMoves(ctx, false) },
-            Step("TACTICAL_BASTION_ALREADY_THERE") { TacticalMoves.plotBastionMoves(ctx, 0) },
-            Step("TACTICAL_GARRISON_ALREADY_THERE") { TacticalMoves.plotGarrisonMoves(ctx, 0) },
-            Step("TACTICAL_BASTION_1_TURN") { TacticalMoves.plotBastionMoves(ctx, 1) },
-            Step("TACTICAL_GARRISON_1_TURN") { TacticalMoves.plotGarrisonMoves(ctx, 1) },
-            Step("TACTICAL_GUARD_IMPROVEMENT_ALREADY_THERE") { TacticalMoves.plotGuardImprovementMoves(ctx, 0) },
-            Step("TACTICAL_GUARD_IMPROVEMENT_1_TURN") { TacticalMoves.plotGuardImprovementMoves(ctx, 1) },
+            Step("TACTICAL_BASTION_ALREADY_THERE") { GuardMoves.plotBastionMoves(ctx, 2) },
+            Step("TACTICAL_GARRISON_ALREADY_THERE") { GarrisonMoves.plotGarrisonMoves(ctx, 2) },
+            Step("TACTICAL_GUARD_IMPROVEMENT_ALREADY_THERE") { GuardMoves.plotGuardImprovementMoves(ctx, 2) },
             Step("TACTICAL_REPOSITION") { TacticalMoves.plotRepositionMoves(ctx) },
             Step("TACTICAL_AIR_SWEEP") { AirMoves.plotAirSweepMoves(ctx) },
             Step("TACTICAL_AIR_INTERCEPT") { AirMoves.plotAirInterceptMoves(ctx) },

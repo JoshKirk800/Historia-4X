@@ -102,6 +102,20 @@ object UseGoldAutomation {
         }
         return UpgradeMoves(0, candidates.first().unit)
     }
+
+    /**
+     *  CvUnit::DoUpgrade for CvTacticalAI's garrison, guard and bastion moves: [unit] upgrades to its normal upgrade now if the tech, the
+     *  resources, the gold, its movement and its tile (our land) allow it; [free] (the barbarians' camp defenders) needs only the tech and resources.
+     *  The supply check of the original is not made.
+     *  @return the upgraded unit (a new instance on the same tile), null if it did not upgrade
+     */
+    fun upgradeNow(unit: MapUnit, free: Boolean = false): MapUnit? {
+        val upgrade = upgradeFor(unit) ?: return null
+        if (!unit.upgrade.canPerformUpgrade(upgrade, isFree = free)) return null
+        val tile = unit.getTile()
+        unit.upgrade.performUpgrade(upgrade, isFree = free)
+        return tile.militaryUnit?.takeIf { it.baseUnit == upgrade.upgradedUnit } ?: tile.civilianUnit
+    }
     //endregion
 
     /**

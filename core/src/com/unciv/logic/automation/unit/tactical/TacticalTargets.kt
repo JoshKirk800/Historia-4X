@@ -126,8 +126,11 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
                 val zoneId = map?.zoneOf(tile)?.id ?: -1
                 val city = if (tile.isCityCenter()) tile.getCity() else null
                 if (city != null) {
-                    if (city.civ == civ) targets.add(TacticalTarget(TacticalTargetType.CityToDefend, tile, zoneId, city = city, aux = danger.cityThreat(city)))
-                    else if (civ.isAtWarWith(city.civ)) targets.add(TacticalTarget(TacticalTargetType.City, tile, zoneId, city.civ, city = city))
+                    // A friendly city is a target only if the zones around it threaten it: its border score is above 0 (the sort key)
+                    if (city.civ == civ) {
+                        val borderScore = if (map != null) CityThreat.borderScore(city) else 0
+                        if (borderScore > 0) targets.add(TacticalTarget(TacticalTargetType.CityToDefend, tile, zoneId, city = city, aux = borderScore))
+                    } else if (civ.isAtWarWith(city.civ)) targets.add(TacticalTarget(TacticalTargetType.City, tile, zoneId, city.civ, city = city))
                     continue
                 }
                 val target = targetOfTile(civ, map, danger, trade, tile, zoneId)

@@ -29,6 +29,12 @@ object CityThreat {
     fun threatValue(city: City): Int = valuesOf(city.civ).value(city)
 
     /**
+     *  The border score of [city] as the friendly-city target of CvTacticalAI::FindTacticalTargets has it: the border scores of its land zone and its
+     *  water zone (CvTacticalDominanceZone::GetBorderScore), 0 for a city that no zone of another party touches
+     */
+    fun borderScore(city: City): Int = valuesOf(city.civ).borderScoreOf(city)
+
+    /**
      *  CvPlayer::GetThreatenedCities: every city of [civ] (the coastal ones when [coastalOnly]), the most threatened first; cities of equal
      *  threat stay in the order of the player's cities. The most threatened city of a civilization at peace is thus still the first.
      */
@@ -66,6 +72,8 @@ object CityThreat {
         private val rules = civ.gameInfo.ruleset.ai
 
         fun value(city: City): Int = values.getOrPut(city.id) { compute(city) }
+
+        fun borderScoreOf(city: City): Int = listOf(false, true).sumOf { water -> map.zoneByCity(city, water)?.let { borderScore(it, water) } ?: 0 }
 
         private fun compute(city: City): Int {
             var threat = 0

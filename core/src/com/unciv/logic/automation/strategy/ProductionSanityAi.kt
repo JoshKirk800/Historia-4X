@@ -4,6 +4,7 @@ import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.league.canContribute
+import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.MilestoneType
 import com.unciv.models.ruleset.PerpetualConstruction
@@ -213,15 +214,16 @@ object ProductionSanityAi {
      *  CvCity::isBorderCity (CvPlot::IsBorderLand) for a major: the city is within AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT of a city of a
      *  living major we are not friendly towards, or next to its territory
      */
-    fun isBorderCity(city: City): Boolean {
-        val civ = city.civ
-        val center = city.getCenterTile()
+    fun isBorderCity(city: City): Boolean = isBorderLand(city.civ, city.getCenterTile())
+
+    /** CvPlot::IsBorderLand(player): [tile] is within AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT of a city of a living major [civ] is not friendly towards, or next to its territory */
+    fun isBorderLand(civ: Civilization, tile: Tile): Boolean {
         val range = civ.gameInfo.ruleset.ai.define(AiDefine.AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT)
         val unfriendly = civ.gameInfo.civilizations.filter { other ->
             other != civ && other.isMajorCiv && other.isAlive() && other.cities.isNotEmpty() &&
                 (civ.isCityState || civ.ai.diplomacy.approachTowards(other) != MajorCivApproach.Friendly)
         }
-        if (unfriendly.any { other -> other.cities.any { it.getCenterTile().aerialDistanceTo(center) <= range } }) return true
-        return center.neighbors.any { neighbor -> neighbor.getOwner()?.let { it in unfriendly } == true && !neighbor.isImpassible() }
+        if (unfriendly.any { other -> other.cities.any { it.getCenterTile().aerialDistanceTo(tile) <= range } }) return true
+        return tile.neighbors.any { neighbor -> neighbor.getOwner()?.let { it in unfriendly } == true && !neighbor.isImpassible() }
     }
 }

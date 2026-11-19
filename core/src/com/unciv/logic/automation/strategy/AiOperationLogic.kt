@@ -469,7 +469,7 @@ object AiOperationLogic {
      *  TacticalAIHelpers::IsCloseToContestedBorder: a land tile two plots away is owned by someone we are at war with, and its zone is
      *  not one we dominate.
      */
-    private fun isCloseToContestedBorder(civ: Civilization, map: TacticalMap, tile: Tile): Boolean = tile.getTilesAtDistance(2).any { other ->
+    fun isCloseToContestedBorder(civ: Civilization, map: TacticalMap, tile: Tile): Boolean = tile.getTilesAtDistance(2).any { other ->
         val owner = other.getOwner()
         owner != null && civ.isAtWarWith(owner) && !other.isWater && map.zoneOf(other)?.dominance != TacticalDominance.Friendly
     }

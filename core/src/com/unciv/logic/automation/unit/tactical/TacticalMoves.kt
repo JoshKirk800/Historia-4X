@@ -10,17 +10,13 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.unique.UniqueType
 
 /**
- *  The target moves of CvTacticalAI, run in the order of the tactical priority list ([TacticalAi]): each looks at the targets of one type and
- *  commands the units that fit them. Ported: PlotCivilianAttackMoves, PlotBarbarianCampMoves, PlotPillageMoves,
- *  PlotAncientRuinMoves, PlotSafeBombardMoves, PlotGarrisonMoves, PlotBastionMoves, PlotGuardImprovementMoves, PlotRepositionMoves and
- *  the execution helpers they share (ExecuteMoveToTarget, ExecuteMoveToPlot, ExecuteMoveOfBlockingUnit, MoveToEmptySpaceNearTarget,
- *  FindUnitsForThisMove, FindNearbyTarget). The attacks on units and cities are [TacticalSimulation]'s (ExecuteDestroyEnemyUnits,
- *  ExecuteCaptureCityMoves): [destroyEnemyUnits] is what the postures' loops over the unit targets do.
+ *  The target moves of CvTacticalAI that are still BNW's or shared, run in the order of the tactical priority list ([TacticalAi]): each looks at the targets of
+ *  one type and commands the units that fit them. Ported: PlotCivilianAttackMoves, PlotPillageMoves, PlotSafeBombardMoves, PlotRepositionMoves and
+ *  the execution helpers they share (ExecuteMoveToTarget, ExecuteMoveToPlot, ExecuteMoveOfBlockingUnit, MoveToEmptySpaceNearTarget, FindNearbyTarget).
+ *  The attacks on units and cities are [TacticalSimulation]'s (ExecuteDestroyEnemyUnits, ExecuteCaptureCityMoves): [destroyEnemyUnits] is what the
+ *  postures' loops over the unit targets do. Garrisons, bastions, guarded improvements, ruins and camps are [GarrisonMoves] and [GuardMoves].
  *
- *  Deviations: [plotRepositionMoves] measures the path to the 5 nearest targets only;
- *  a unit's promotions that raise its attack, defense or strength are the unconditional and "when attacking" / "when defending"
- *  [UniqueType.Strength] uniques of its promotions (the original's attack, defense and extra combat modifiers); a unit "is a fast mover" when
- *  its type may have the unit AI FAST_ATTACK.
+ *  Deviations: [plotRepositionMoves] measures the path to the 5 nearest targets only.
  */
 object TacticalMoves {
 
@@ -63,17 +59,6 @@ object TacticalMoves {
             val striker = TacticalAttacks.findUnits(ctx, target.tile, 1, targetUndefended = true).firstOrNull() ?: continue
             ctx.log { "attacking $type ${victim.name}, ${target.tile.position}" }
             moveAndFinish(ctx, striker.unit, target.tile)
-        }
-    }
-
-    /** CvTacticalAI::PlotBarbarianCampMoves: a unit that can move onto an undefended barbarian camp does, and clears it */
-    fun plotBarbarianCampMoves(ctx: TacticalContext) {
-        for (target in TacticalTargets.ofType(ctx.currentTargets, TacticalTargetType.BarbarianCamp)) {
-            if (!target.tile.isBarbarianEncampment() || target.tile.militaryUnit != null) continue
-            val striker = TacticalAttacks.findUnits(ctx, target.tile, 1, targetUndefended = true).firstOrNull() ?: continue
-            ctx.log { "removing barbarian camp, ${target.tile.position}" }
-            moveAndFinish(ctx, striker.unit, target.tile)
-            ctx.state.deleteTemporaryZone(target.tile)
         }
     }
 
@@ -129,55 +114,8 @@ object TacticalMoves {
         }.map { Striker(it, TacticalAttacks.maxAttackStrength(it), it.health) }
             .sortedByDescending { it.attackPriority }
 
-    /** CvTacticalAI::PlotAncientRuinMoves: a unit that can attack (a fast one first) and is [turnsAway] turns from a ruin goes to pop it */
-    fun plotAncientRuinMoves(ctx: TacticalContext, turnsAway: Int) {
-        for (target in TacticalTargets.ofType(ctx.currentTargets, TacticalTargetType.AncientRuins)) {
-            val (high, regular) = findUnitsForThisMove(ctx, MoveKind.Ruins, target.tile, turnsAway)
-            if (high.isEmpty() && regular.isEmpty()) continue
-            ctx.log { "moving to goody hut, ${target.tile.position}, turns away $turnsAway" }
-            moveToTarget(ctx, target.tile, high, regular)
-        }
-    }
-
     //endregion
     //region Defense
-
-    /**
-     *  CvTacticalAI::PlotGarrisonMoves: for each of our cities (the most threatened first) that has no garrison assigned this turn, a unit
-     *  [turnsAway] turns away goes in or, if it is there, fortifies; ranged units are preferred. [mustAllowRangedAttack]: only ranged units.
-     */
-    fun plotGarrisonMoves(ctx: TacticalContext, turnsAway: Int, mustAllowRangedAttack: Boolean = false) {
-        for (target in TacticalTargets.ofType(ctx.currentTargets, TacticalTargetType.CityToDefend)) {
-            val city = target.city!!
-            if (ctx.state.lastTurnGarrisonAssigned(city) >= ctx.turn) continue
-            // Grab units that make sense for this move type
-            val (high, regular) = findUnitsForThisMove(ctx, MoveKind.Garrison, target.tile, turnsAway, mustAllowRangedAttack)
-            if (high.isEmpty() && regular.isEmpty()) continue
-            ctx.log { "garrison ${city.name}, priority ${target.aux}, turns away $turnsAway${if (mustAllowRangedAttack) ", allows bombard" else ""}" }
-            moveToTarget(ctx, target.tile, high, regular)
-            ctx.state.setLastTurnGarrisonAssigned(city, ctx.turn)
-        }
-    }
-
-    /** CvTacticalAI::PlotBastionMoves: a unit that does not shoot goes to a defensible tile next to a threatened city, to hold it */
-    fun plotBastionMoves(ctx: TacticalContext, turnsAway: Int) {
-        for (target in TacticalTargets.ofType(ctx.currentTargets, TacticalTargetType.DefensiveBastion)) {
-            val (high, regular) = findUnitsForThisMove(ctx, MoveKind.Defender, target.tile, turnsAway)
-            if (high.isEmpty() && regular.isEmpty()) continue
-            ctx.log { "bastion ${target.tile.position}, priority ${target.aux}, turns away $turnsAway" }
-            moveToTarget(ctx, target.tile, high, regular)
-        }
-    }
-
-    /** CvTacticalAI::PlotGuardImprovementMoves: a unit that does not shoot goes to stand on one of our improvements (it looks for units as for a bastion) */
-    fun plotGuardImprovementMoves(ctx: TacticalContext, turnsAway: Int) {
-        for (target in TacticalTargets.ofType(ctx.currentTargets, TacticalTargetType.ImprovementToDefend)) {
-            val (high, regular) = findUnitsForThisMove(ctx, MoveKind.Defender, target.tile, turnsAway)
-            if (high.isEmpty() && regular.isEmpty()) continue
-            ctx.log { "guard improvement ${target.tile.position}, turns away $turnsAway" }
-            moveToTarget(ctx, target.tile, high, regular)
-        }
-    }
 
     /**
      *  CvTacticalAI::PlotRepositionMoves / ExecuteRepositionMoves: every land unit still free, but great generals, goes to an empty tile next
@@ -232,71 +170,8 @@ object TacticalMoves {
     //endregion
     //region Finding and moving units for a move
 
-    /** What a move wants of its units (the move types FindUnitsForThisMove tells apart) */
-    enum class MoveKind { Garrison, Defender, Ruins }
-
     /** A unit that can do a move, [turns] turns from it (CvTacticalUnit with its moves to target) */
     class MoveCandidate(val unit: MapUnit, val turns: Int)
-
-    /**
-     *  CvTacticalAI::FindUnitsForThisMove: the combat units of the tactical AI of the target's domain that suit the move of [kind] and can be
-     *  at [tile] within [turnsAway] turns (0: already there, or there this turn with movement left), as (high priority, regular) lists in
-     *  the order of the unit list. Garrisons: ranged units are high priority, others only if no promotion raises their attack, defense or
-     *  strength (their bonus is lost in a city), [rangedOnly] allows only ranged ones. Defenders (bastions, improvements): no ranged units
-     *  and none without a defensive terrain bonus, those with a defensive promotion are high priority. Ruins: units that attack, fast
-     *  ones first.
-     */
-    fun findUnitsForThisMove(ctx: TacticalContext, kind: MoveKind, tile: Tile, turnsAway: Int, rangedOnly: Boolean = false): Pair<List<MoveCandidate>, List<MoveCandidate>> {
-        val high = ArrayList<MoveCandidate>()
-        val regular = ArrayList<MoveCandidate>()
-        for (unit in ctx.liveUnits()) {
-            val base = unit.baseUnit
-            if (base.isAirUnit() || !unit.isMilitary()) continue
-            // Make sure domain matches
-            if (base.isWaterUnit && !tile.isWater || base.isLandUnit && tile.isWater) continue
-            var suitable = false
-            var highPriority = false
-            when (kind) {
-                MoveKind.Garrison ->
-                    // Want to put ranged units in cities to give them a ranged attack
-                    if (base.isRanged()) { suitable = true; highPriority = true }
-                    else if (rangedOnly) continue
-                    else if (!hasStrengthPromotion(unit, attacking = true, defending = true)) suitable = true
-                MoveKind.Defender ->
-                    // No ranged units or units without defensive bonuses as plot defenders
-                    if (!base.isRanged() && !unit.hasUnique(UniqueType.NoDefensiveTerrainBonus, checkCivInfoUniques = true)) {
-                        suitable = true
-                        // Units with defensive promotions are especially valuable
-                        if (hasStrengthPromotion(unit, attacking = false, defending = true)) highPriority = true
-                    }
-                MoveKind.Ruins ->
-                    if (UnitAiTypes.canHave(base, UnitAiType.FAST_ATTACK, ctx.rules)) { suitable = true; highPriority = true }
-                    else if (TacticalAttacks.canAttack(unit)) suitable = true
-            }
-            if (!suitable || unit.getMaxMovement() <= 0) continue
-            // Is it even possible for the unit to reach in the number of requested turns
-            val leastTurns = (unit.getTile().aerialDistanceTo(tile) + unit.getMaxMovement() - 1) / unit.getMaxMovement()
-            if (leastTurns > turnsAway) continue
-            val turns = TacticalAttacks.turnsToReach(unit, tile)
-            if (turns == Int.MAX_VALUE || !(turns <= turnsAway || (turnsAway == 0 && unit.getTile() == tile))) continue
-            if (turns < 2 && unit.getTile() != tile && !unit.movement.canMoveTo(tile)) continue
-            (if (highPriority) high else regular).add(MoveCandidate(unit, turns))
-        }
-        return high to regular
-    }
-
-    /**
-     *  Whether a promotion of the unit adds strength: an unconditional [UniqueType.Strength] unique, or one that applies when attacking
-     *  ([attacking]) or when defending ([defending]) (CvUnit::getAttackModifier / getDefenseModifier / getExtraCombatPercent)
-     */
-    private fun hasStrengthPromotion(unit: MapUnit, attacking: Boolean, defending: Boolean): Boolean =
-        unit.promotions.getPromotions().any { promotion ->
-            promotion.uniqueObjects.any { unique ->
-                unique.type == UniqueType.Strength && unique.params[0].toInt() > 0 && unique.modifiers.all {
-                    attacking && it.type == UniqueType.ConditionalAttacking || defending && it.type == UniqueType.ConditionalDefending
-                }
-            }
-        }
 
     /**
      *  CvTacticalAI::ExecuteMoveToTarget: one unit goes to [tile] and is done for the turn (the one there fortifies): the first of the high

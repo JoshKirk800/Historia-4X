@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.unit.tactical
 
+import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.strategy.MilitaryAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
@@ -39,17 +40,50 @@ object BarbarianMoves {
     //region Camps
 
     /**
-     *  CvTacticalAI::PlotCampDefenseMoves: the strongest unit that can be on a barbarian camp this turn goes there (or fortifies if it is
-     *  there already); "no ranged units" only switches off the shooting branch of the search, units that shoot still count as movers there,
-     *  as in the original.
+     *  CvTacticalAI::PlotBarbarianCampDefense: for each camp, its barbarian defender - which upgrades for free if it is healthy and can, else a shooter
+     *  shoots what it can without leaving the camp, else a melee unit first captures an unprotected civilian next to the camp if it can be back this turn, and
+     *  attacks an enemy next to it without leaving - stays and is done. A camp without a defender gets the nearest barbarian land unit within 5 turns
+     *  ([UnitSelection.findUnitsForHarassing]) that is not in a camp itself, which goes there.
      */
     fun plotCampDefenseMoves(ctx: TacticalContext) {
         for (target in TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp)) {
-            val striker = TacticalAttacks.findUnits(ctx, target.tile, 1, noRanged = true).firstOrNull() ?: continue
-            ctx.log { "moving to protect camp, ${target.tile.position}" }
-            TacticalMoves.moveToPlot(ctx, striker.unit, target.tile)
+            val camp = target.tile
+            val defender = camp.militaryUnit?.takeIf { it.civ == ctx.civ && !it.isDestroyed }
+            if (defender != null) {
+                val upgraded = if (defender.health >= MAX_HEALTH) UseGoldAutomation.upgradeNow(defender, free = true) else null
+                if (upgraded != null) {
+                    ctx.unitProcessed(upgraded)
+                    continue
+                }
+                if (defender.baseUnit.isRanged()) {
+                    // Don't leave camp
+                    TacticalSimulation.performRangedOpportunityAttack(ctx, defender)
+                } else {
+                    defender.movement.clearPathfindingCache() // other units have moved since its reach was cached
+                    // Capture unprotected civilians if we can return to camp in the same turn
+                    val prey = camp.neighbors.firstOrNull { n ->
+                        TacticalTargets.visibleEnemyDefender(ctx.civ, n) == null && n.getUnits().any { it.civ != ctx.civ && ctx.civ.isAtWarWith(it.civ) && !TacticalSafety.canDefend(it) }
+                            && defender.movement.canMoveTo(n) && TacticalAttacks.turnsToReach(defender, n) == 0
+                    }
+                    if (prey != null && defender.movement.canReachInCurrentTurn(prey)) {
+                        defender.movement.moveToTile(prey)
+                        defender.movement.clearPathfindingCache()
+                        if (defender.hasMovement() && defender.getTile() != camp && defender.movement.canReachInCurrentTurn(camp)) defender.movement.moveToTile(camp)
+                    }
+                    // Melee may attack but never leave camp (because they won't return then)
+                    if (!defender.isDestroyed) OpportunityAttacks.perform(ctx, defender, false)
+                }
+                if (!defender.isDestroyed) ctx.unitProcessed(defender)
+            } else {
+                val unit = UnitSelection.findUnitsForHarassing(ctx, camp, CAMP_DEFENSE_TURNS, 0, 0, false, false, 1).firstOrNull() ?: continue
+                ctx.log { "moving to protect camp, ${camp.position}" }
+                if (Deployment.headTowards(unit, camp)) ctx.unitProcessed(unit)
+            }
         }
     }
+
+    private const val MAX_HEALTH = 100
+    private const val CAMP_DEFENSE_TURNS = 5
     //endregion
 
     //region Land and sea moves

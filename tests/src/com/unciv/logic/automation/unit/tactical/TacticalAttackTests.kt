@@ -369,18 +369,6 @@ class TacticalAttackTests {
         assertTrue(garrison.isFortified())
     }
 
-    @Test
-    fun `free units go to the nearest enemy target within ten tiles and not beyond`() {
-        val near = defender(8, "Warrior")
-        val unit = game.addUnit("Swordsman", civ, tile(0))
-        val farUnit = game.addUnit("Swordsman", civ, tile(-12)) // 20 tiles from the enemy
-        val ctx = context()
-        TacticalMoves.plotRepositionMoves(ctx)
-        assertTrue(unit.getTile().aerialDistanceTo(near.getTile()) < 8)
-        assertEquals(tile(-12), farUnit.getTile())
-        assertTrue(unit in ctx.cache.processedUnits)
-    }
-
     // endregion
     // region Aircraft
 

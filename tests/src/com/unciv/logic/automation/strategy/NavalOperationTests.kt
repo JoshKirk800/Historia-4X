@@ -357,22 +357,43 @@ class NavalOperationTests {
 
     // region Escorting embarked units
 
-    @Test
-    fun `a warship goes beside the embarked unit that is alone and out of moves, the most endangered one`() {
-        val safe = game.addUnit("Warrior", civ, tile(3, 0))
-        val endangered = game.addUnit("Warrior", civ, tile(3, 4))
-        safe.currentMovement = 0f
-        endangered.currentMovement = 0f
-        game.addUnit("Trireme", enemy, tile(5, 5)) // threatens the one at (3, 4)
-        val escort = ship("Quinquereme", 5, 2)
+    private fun escortContext(vararg ships: com.unciv.logic.map.mapunit.MapUnit): com.unciv.logic.automation.unit.tactical.TacticalContext {
         seeAll()
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
-        val ctx = com.unciv.logic.automation.unit.tactical.TacticalContext(
-            civ, map, danger, AutomationCache(), listOf(escort), com.unciv.logic.automation.unit.tactical.TacticalTargets.find(civ, map, danger))
+        return com.unciv.logic.automation.unit.tactical.TacticalContext(
+            civ, map, danger, AutomationCache(), ships.toList(), com.unciv.logic.automation.unit.tactical.TacticalTargets.find(civ, map, danger))
+    }
+
+    @Test
+    fun `a warship goes beside the embarked unit that the enemy can attack, whether or not it has moved`() {
+        val safe = game.addUnit("Warrior", civ, tile(3, 0))
+        val endangered = game.addUnit("Warrior", civ, tile(3, 4))
+        safe.currentMovement = 0f
+        game.addUnit("Trireme", enemy, tile(5, 5)) // threatens the one at (3, 4)
+        val escort = ship("Quinquereme", 5, 2)
+        val ctx = escortContext(escort)
         com.unciv.logic.automation.unit.tactical.NavalMoves.plotEscortEmbarkedMoves(ctx)
         assertEquals(1, escort.getTile().aerialDistanceTo(endangered.getTile()))
         assertTrue(escort in ctx.cache.processedUnits)
+    }
+
+    @Test
+    fun `the first embarked unit goes first when none is in danger, and a warship that has to heal stays`() {
+        val first = game.addUnit("Warrior", civ, tile(3, 0))
+        val second = game.addUnit("Warrior", civ, tile(3, 4))
+        val hurt = ship("Quinquereme", 5, 2)
+        hurt.health = 30
+        val ctx = escortContext(hurt)
+        com.unciv.logic.automation.unit.tactical.NavalMoves.plotEscortEmbarkedMoves(ctx)
+        assertEquals("it needs to heal", tile(5, 2), hurt.getTile())
+        assertFalse(hurt in ctx.cache.processedUnits)
+
+        val escort = ship("Quinquereme", 5, 1)
+        val ctx2 = escortContext(escort)
+        com.unciv.logic.automation.unit.tactical.NavalMoves.plotEscortEmbarkedMoves(ctx2)
+        assertEquals("the first embarked unit of the list is the one it protects", 1, escort.getTile().aerialDistanceTo(first.getTile()))
+        assertTrue(second.getTile().aerialDistanceTo(escort.getTile()) > 1)
     }
 
     // endregion

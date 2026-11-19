@@ -64,15 +64,22 @@ class AirMovesTests {
     // region Counting and sweep targets
 
     @Test
-    fun `enemy air units within 10 tiles count as fighters or bombers`() {
-        game.addUnit("Fighter", enemy, enemyEast.getCenterTile())
-        game.addUnit("Bomber", enemy, enemyEast.getCenterTile())
-        game.addUnit("Bomber", enemy, enemyWest.getCenterTile()) // 14 away
+    fun `enemy air units count within their own range, at most 12, plus half the range of the unit that asks`() {
+        game.addUnit("Fighter", enemy, enemyEast.getCenterTile()) // 10 from home: its range 8
+        game.addUnit("Bomber", enemy, enemyEast.getCenterTile()) // its range 10
+        game.addUnit("Bomber", enemy, enemyWest.getCenterTile()) // 14 from home
         game.addUnit("Fighter", civ, home.getCenterTile())
         val center = home.getCenterTile()
-        assertEquals(1, AirMoves.numEnemyAirUnitsInRange(civ, center, countFighters = true, countBombers = false))
-        assertEquals(1, AirMoves.numEnemyAirUnitsInRange(civ, center, countFighters = false, countBombers = true))
-        assertEquals(2, AirMoves.numEnemyAirUnitsInRange(civ, center, countFighters = true, countBombers = true))
+        // a range of 0: the fighter needs 8, the bomber 10
+        assertEquals(0, AirMoves.numEnemyAirUnitsInRange(civ, center, 0, countFighters = true, countBombers = false))
+        assertEquals(1, AirMoves.numEnemyAirUnitsInRange(civ, center, 0, countFighters = false, countBombers = true))
+        // a range of 5 adds 2: the fighter at 10 is in (10), the bomber at 10 is in (12), the other bomber at 14 is out
+        assertEquals(1, AirMoves.numEnemyAirUnitsInRange(civ, center, 5, countFighters = true, countBombers = false))
+        assertEquals(1, AirMoves.numEnemyAirUnitsInRange(civ, center, 5, countFighters = false, countBombers = true))
+        // a range of 10 adds 5: the western bomber at 14 is in (15)
+        assertEquals(1, AirMoves.numEnemyAirUnitsInRange(civ, center, 10, countFighters = true, countBombers = false))
+        assertEquals(2, AirMoves.numEnemyAirUnitsInRange(civ, center, 10, countFighters = false, countBombers = true))
+        assertEquals(3, AirMoves.numEnemyAirUnitsInRange(civ, center, 10, countFighters = true, countBombers = true))
     }
 
     @Test
@@ -208,17 +215,62 @@ class AirMovesTests {
     }
 
     @Test
-    fun `a fighter stays to intercept when enemy bombers are near and does nothing when only fighters are`() {
+    fun `a fighter goes on patrol when enemy bombers are near and not when only a few fighters are`() {
         val fighter = game.addUnit("Fighter", civ, forward.getCenterTile())
         game.addUnit("Fighter", enemy, enemyEast.getCenterTile())
         var ctx = context()
-        AirMoves.plotAirInterceptMoves(ctx)
-        assertFalse("only fighters near", fighter in ctx.cache.processedUnits)
+        AirMoves.plotAirPatrolMoves(ctx)
+        assertFalse("one fighter is a quarter of an interceptor, which rounds down to none", fighter in ctx.cache.processedUnits)
         game.addUnit("Bomber", enemy, enemyEast.getCenterTile())
         ctx = context()
-        AirMoves.plotAirInterceptMoves(ctx)
+        AirMoves.plotAirPatrolMoves(ctx)
         assertTrue(fighter in ctx.cache.processedUnits)
         assertTrue("it keeps its movement to intercept", fighter.hasMovement())
+    }
+
+    @Test
+    fun `air patrol wants half the bombers and a quarter of the fighters in range as interceptors from one tile, and one bomber counts as two`() {
+        // Fighter range 8: enemy aircraft count within their own range (a Bomber's 10, a Fighter's 8) plus half of 8
+        val ours = List(4) { game.addUnit("Fighter", civ, forward.getCenterTile()) }
+        game.addUnit("Bomber", enemy, enemyEast.getCenterTile())
+        var ctx = context()
+        AirMoves.plotAirPatrolMoves(ctx)
+        assertEquals("one bomber: counts as two, so one interceptor", 1, ours.count { it in ctx.cache.processedUnits })
+
+        val eastNear = game.addCity(enemy, tile(6, 4))
+        game.addUnit("Bomber", enemy, enemyEast.getCenterTile())
+        for (fighter in ours) game.addUnit("Fighter", enemy, eastNear.getCenterTile())
+        ctx = context()
+        AirMoves.plotAirPatrolMoves(ctx)
+        assertEquals("2 bombers and 4 fighters: 1 + 1", 2, ours.count { it in ctx.cache.processedUnits })
+    }
+
+    @Test
+    fun `air patrol is not for a bomber or a fighter that was used`() {
+        val fighter = game.addUnit("Fighter", civ, forward.getCenterTile())
+        val bomber = game.addUnit("Bomber", civ, forward.getCenterTile())
+        game.addUnit("Bomber", enemy, enemyEast.getCenterTile())
+        game.addUnit("Bomber", enemy, enemyEast.getCenterTile())
+        val ctx = context()
+        ctx.unitProcessed(fighter, markTacticalMap = false)
+        AirMoves.plotAirPatrolMoves(ctx)
+        assertFalse("a bomber has no intercept chance", bomber in ctx.cache.processedUnits)
+        assertEquals("the used fighter is the only interceptor there is", setOf(fighter), ctx.cache.processedUnits)
+    }
+
+    @Test
+    fun `air patrol is not for a fighter out of the bombers' reach`() {
+        // The western city is 14 from home and 20 from forward: a Bomber's range 10 plus half of the Fighter's 8 is 14
+        game.addUnit("Bomber", enemy, enemyWest.getCenterTile())
+        game.addUnit("Bomber", enemy, enemyWest.getCenterTile())
+        val forwardFighter = game.addUnit("Fighter", civ, forward.getCenterTile())
+        val ctx = context()
+        AirMoves.plotAirPatrolMoves(ctx)
+        assertFalse(forwardFighter in ctx.cache.processedUnits)
+        val homeFighter = game.addUnit("Fighter", civ, home.getCenterTile())
+        val ctx2 = context()
+        AirMoves.plotAirPatrolMoves(ctx2)
+        assertTrue(homeFighter in ctx2.cache.processedUnits)
     }
     // endregion
 

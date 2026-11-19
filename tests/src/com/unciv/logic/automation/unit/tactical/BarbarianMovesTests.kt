@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.unit.tactical
 
 import com.unciv.Constants
+import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.civilization.BarbarianAutomation
 import com.unciv.logic.automation.civilization.BarbarianEncampment
@@ -23,7 +24,7 @@ import org.junit.runner.RunWith
 
 /**
  *  The barbarian tactical AI (CvTacticalAI as it runs for the barbarian player) with Brave New World data: the target ranges by difficulty
- *  (HandicapInfos.BarbarianLandTargetRange / BarbarianSeaTargetRange), the move priorities (AI_TACTICAL_BARBARIAN_PRIORITY_*), hunting, sea
+ *  (HandicapInfos.BarbarianLandTargetRange / BarbarianSeaTargetRange), the fixed order of AssignBarbarianMoves, hunting, sea
  *  raids, camp defense, escorting captured civilians, and a whole turn.
  */
 @RunWith(BaseTestRunner::class)
@@ -73,16 +74,42 @@ class BarbarianMovesTests {
         }
     }
 
+    /** What [BarbarianAutomation.automate] logged for the barbarians, in order */
+    private fun logOfTurn(): List<String> {
+        val log = ArrayList<String>()
+        AiDecisionLog.sink = { civilization, message -> if (civilization == barbarians) log.add(message) }
+        try {
+            BarbarianAutomation(barbarians).automate()
+        } finally {
+            AiDecisionLog.sink = null
+        }
+        return log
+    }
+
     @Test
-    fun `the move list is ordered by base priority plus a die roll, escorting captives first and a negative priority never`() {
-        val moves = BarbarianAutomation.establishPriorities(barbarians)
-        assertEquals("escorting a captured civilian is 30..35, nothing else reaches it", BarbarianAutomation.Move.ESCORT_CIVILIAN, moves.first())
-        assertFalse("the passive move has priority -1", BarbarianAutomation.Move.PASSIVE_MOVE in moves)
-        assertEquals(BarbarianAutomation.Move.entries.size - 1, moves.size)
-        // 16..21 against 9..14 and 0..5 against 3..8: the rolls never reverse these
-        assertTrue(moves.indexOf(BarbarianAutomation.Move.DESTROY_HIGH_PRIORITY_UNIT) < moves.indexOf(BarbarianAutomation.Move.CAPTURE_CITY))
-        assertTrue(moves.indexOf(BarbarianAutomation.Move.CAPTURE_CITY) < moves.indexOf(BarbarianAutomation.Move.AGGRESSIVE_MOVE))
-        assertTrue(moves.indexOf(BarbarianAutomation.Move.CAMP_DEFENSE) < moves.indexOf(BarbarianAutomation.Move.DESPERATE_ATTACK))
+    fun `the moves run in Vox Populi's fixed order, capturing civilians before the roaming of the units that are left`() {
+        game.addUnit("Worker", civ, tile(-3))
+        game.addUnit("Warrior", barbarians, tile(-2)) // next to the worker
+        game.addUnit("Archer", barbarians, tile(14)) // nothing to do but roam
+        val log = logOfTurn()
+        val capture = log.indexOfFirst { it.contains("attacking") && it.contains("Worker") }
+        val roam = log.indexOfFirst { it.contains("no target for Archer") || it.contains("moved to an empty space near target") }
+        assertTrue("the capture logged: $log", capture >= 0)
+        assertTrue("the roaming logged: $log", roam >= 0)
+        assertTrue("the capture, then the roaming: $log", capture < roam)
+    }
+
+    @Test
+    fun `barbarians do not pillage citadels, only resources and improvements`() {
+        val owner = game.addCity(civ, tile(3))
+        val citadel = tile(1)
+        owner.expansion.takeOwnership(citadel)
+        citadel.setImprovementBasic("Citadel")
+        val raider = game.addUnit("Warrior", barbarians, tile(0))
+        assertEquals("the citadel is the civilization's land", civ, citadel.getOwner())
+        BarbarianAutomation(barbarians).automate()
+        assertFalse("Vox Populi's barbarians pillage the resource and the improvement targets only", citadel.isPillaged())
+        assertEquals(0, raider.attacksThisTurn)
     }
     // endregion
 
@@ -298,8 +325,7 @@ class BarbarianMovesTests {
 
     @Test
     fun `a barbarian next to a unit of ours that it can kill attacks it`() {
-        // A unit it can only wound is an attrition target (priority 6 plus a roll of 0-5), which the aggressive move (3 plus 0-5) outranks
-        // in 3 of 36 die rolls, as in EstablishBarbarianPriorities; a unit it can kill is a destroy target (14 plus 0-5), always first here
+        // The attacks on units come before everything but camp defense and the escort of captives (PlotBarbarianAttacks, AL_BRAVEHEART)
         val raider = game.addUnit("Swordsman", barbarians, tile(0))
         val victim = game.addUnit("Warrior", civ, tile(1))
         victim.health = 30

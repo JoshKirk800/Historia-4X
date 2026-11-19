@@ -68,7 +68,7 @@ class PosturesTests {
     // region ProcessDominanceZones
 
     @Test
-    fun `a zone move runs for the zones of its posture that are worth using, with the zone's targets`() {
+    fun `a zone move runs for the zones that are worth using, with the zone's targets and its posture`() {
         val city = enemyCity()
         unit("Swordsman", civ, 0, -3)
         unit("Warrior", enemy, 0, 1)
@@ -76,16 +76,24 @@ class PosturesTests {
         val ctx = context()
         val zone = ctx.map.zoneByCity(city, false)!!
 
-        val seen = ArrayList<List<TacticalTarget>>()
-        Postures.forEachZone(ctx, { z, posture -> z == zone && posture == TacticalPosture.Hedgehog }) { _, _ -> seen.add(ctx.currentTargets) }
-        assertEquals(1, seen.size)
-        assertEquals("the zone's targets", ctx.targets.forZone(zone), seen.single())
-        assertTrue(seen.single().any { it.type == TacticalTargetType.City })
+        val seen = ArrayList<Triple<DominanceZone, TacticalPosture, List<TacticalTarget>>>()
+        Postures.processZones(ctx, moves = { z, posture -> seen.add(Triple(z, posture, ctx.currentTargets)) })
+        val ours = seen.single { it.first == zone }
+        assertEquals(TacticalPosture.Hedgehog, ours.second)
+        assertEquals("the zone's targets", ctx.targets.forZone(zone), ours.third)
+        assertTrue(ours.third.any { it.type == TacticalTargetType.City })
         assertEquals("all of them again afterwards", ctx.targets.all, ctx.currentTargets)
+    }
 
-        var other = 0
-        Postures.forEachZone(ctx, { z, posture -> z == zone && posture == TacticalPosture.Counterattack }) { _, _ -> other++ }
-        assertEquals("the posture does not match", 0, other)
+    @Test
+    fun `the zones are asked for their emergency purchases first, all of them, in the order of their value`() {
+        val city = enemyCity()
+        unit("Warrior", enemy, 0, 1)
+        val ctx = context()
+        val before = ArrayList<DominanceZone>()
+        Postures.processZones(ctx, beforeZone = { before.add(it) }, moves = { _, _ -> })
+        assertEquals(ctx.map.zones, before)
+        assertTrue(city.getCenterTile() in before.mapNotNull { it.closestCity?.getCenterTile() })
     }
 
     @Test
@@ -97,7 +105,7 @@ class PosturesTests {
         val intruder = unit("Warrior", enemy, 0, 2)
         val ctx = context()
         val seen = ArrayList<List<TacticalTarget>>()
-        Postures.forEachZone(ctx, { _, posture -> posture == TacticalPosture.Counterattack }) { _, _ -> seen.add(ctx.currentTargets) }
+        Postures.processZones(ctx, moves = { _, posture -> if (posture == TacticalPosture.Counterattack) seen.add(ctx.currentTargets) })
         assertEquals(1, seen.size)
         assertTrue(seen.single().any { it.unit == intruder })
     }
@@ -113,7 +121,7 @@ class PosturesTests {
         setPosture(city, TacticalPosture.SitAndBombard)
         val ctx = context()
         val before = city.health
-        Postures.offensivePostureMoves(ctx)
+        Postures.processZones(ctx)
         assertTrue("the archer shot at the city", city.health < before)
         assertEquals(1, archer.attacksThisTurn)
         assertTrue("and the army closes in", swordsman in ctx.cache.processedUnits && swordsman.getTile().aerialDistanceTo(city.getCenterTile()) < 5)
@@ -126,7 +134,7 @@ class PosturesTests {
         state.postures = arrayListOf(ZonePosture().also { it.posture = TacticalPosture.AttritFromRange }) // unclaimed land
         val ctx = context()
         assertFalse("out of the warrior's reach", ctx.map.isSubjectToAttack(artillery.getTile()))
-        Postures.offensivePostureMoves(ctx)
+        Postures.processZones(ctx)
         assertTrue("the warrior was shot", warrior.health < 100)
         assertEquals(tile(0, -3), artillery.getTile())
     }
@@ -151,7 +159,7 @@ class PosturesTests {
         val archer = unit("Archer", civ, 0, -2)
         setPosture(city, TacticalPosture.Steamroll)
         val ctx = context()
-        Postures.offensivePostureMoves(ctx)
+        Postures.processZones(ctx)
         assertTrue("the defender is dead", defender.isDestroyed)
         assertTrue("the army has moved on", (swordsmen + archer).any { it.getTile().aerialDistanceTo(city.getCenterTile()) < 4 })
     }
@@ -163,7 +171,7 @@ class PosturesTests {
         val swordsmen = listOf(unit("Swordsman", civ, 0, -1), unit("Swordsman", civ, -1, -1))
         setPosture(city, TacticalPosture.SurgicalCityStrike)
         val ctx = context()
-        Postures.offensivePostureMoves(ctx)
+        Postures.processZones(ctx)
         assertEquals("the city is ours", civ, city.civ)
         assertTrue(swordsmen.any { it.attacksThisTurn > 0 })
     }
@@ -180,25 +188,26 @@ class PosturesTests {
             it.posture = TacticalPosture.Counterattack
         })
         val ctx = context()
-        Postures.offensivePostureMoves(ctx)
+        Postures.processZones(ctx)
         assertTrue("the invader was attacked", invader.isDestroyed || invader.health < 40)
         assertTrue(defender.attacksThisTurn > 0)
     }
 
     @Test
-    fun `a hedgehog around our city kills what it can, then ranged units take the safe hexes and melee units the rest of the ring`() {
+    fun `a hedgehog kills what it can, then asks for the reinforcements of its zone`() {
         val city = game.addCity(civ, tile(0, 0))
         unit("Warrior", enemy, 0, 5)
-        val archer = unit("Archer", civ, 0, -4)
-        val swordsman = unit("Swordsman", civ, 1, -4)
+        val archer = unit("Archer", civ, 0, -5)
+        val swordsman = unit("Swordsman", civ, 1, -5)
         state.postures = arrayListOf(ZonePosture().also {
             it.ownerId = civ.civName
             it.cityId = city.id
             it.posture = TacticalPosture.Hedgehog
         })
         val ctx = context()
-        Postures.hedgehogZones(ctx)
-        assertTrue(listOf(archer, swordsman).all { it in ctx.cache.processedUnits && it.getTile().aerialDistanceTo(city.getCenterTile()) <= 3 })
+        val zone = ctx.map.zoneByCity(city, false)!!
+        Postures.plotPostureMoves(ctx, zone, TacticalPosture.Hedgehog)
+        assertTrue("they came closer", listOf(archer, swordsman).all { it.getTile().aerialDistanceTo(city.getCenterTile()) < 5 })
         assertFalse(archer.getTile() == swordsman.getTile())
     }
 
@@ -210,35 +219,42 @@ class PosturesTests {
         setPosture(city, TacticalPosture.ShoreBombardment, isWater = true)
         val ctx = context()
         val before = city.health
-        Postures.shoreBombardmentZones(ctx)
+        Postures.processZones(ctx)
         assertTrue("the ship shot", city.health < before)
         assertEquals(1, frigate.attacksThisTurn)
     }
 
     // endregion
-    // region PlotCloseOnTarget
+    // region PlotCloseOnTarget (the temporary zones')
 
     @Test
-    fun `close on target moves in only on a city we see unless we are outmatched by more than half, and never where the enemy dominates`() {
+    fun `closing in on an operation's city moves in only on a city we see unless we are outmatched by more than half`() {
         val city = enemyCity(0, 0)
         val swordsman = unit("Swordsman", civ, 0, -4)
         val ctx = context()
         val zone = ctx.map.zoneByCity(city, false)!!
-        zone.dominance = TacticalDominance.Even
         zone.friendlyMeleeStrength = 0
         zone.friendlyRangedStrength = 100
         zone.enemyMeleeStrength = 0
         zone.enemyRangedStrength = 1000 // less than half of the enemy's: stay away
-        Postures.plotCloseOnTarget(ctx, zone, true)
+        Postures.plotCloseOnTarget(ctx, zone)
         assertEquals(tile(0, -4), swordsman.getTile())
 
         zone.enemyRangedStrength = 199 // more than half
-        zone.dominance = TacticalDominance.Enemy
-        Postures.plotCloseOnTarget(ctx, zone, true)
-        assertEquals("the enemy dominates", tile(0, -4), swordsman.getTile())
-
-        Postures.plotCloseOnTarget(ctx, zone, false) // steamroll does not ask
+        Postures.plotCloseOnTarget(ctx, zone)
         assertTrue(swordsman.getTile().aerialDistanceTo(city.getCenterTile()) < 4)
+    }
+
+    @Test
+    fun `no posture of an ordinary zone closes in, the units come in the second pass`() {
+        val city = game.addCity(enemy, tile(0, 3)) // not an operation's target
+        val swordsman = unit("Swordsman", civ, 0, -4)
+        setPosture(city, TacticalPosture.Steamroll)
+        val ctx = context()
+        val zone = ctx.map.zoneByCity(city, false)!!
+        Postures.plotPostureMoves(ctx, zone, TacticalPosture.Steamroll)
+        Postures.plotPostureMoves(ctx, zone, TacticalPosture.SurgicalCityStrike)
+        assertEquals(tile(0, -4), swordsman.getTile())
     }
 
     // endregion

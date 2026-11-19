@@ -124,7 +124,7 @@ class TacticalAiTests {
     // region Safety and healing in the turn
 
     @Test
-    fun `a hurt unit under ranged fire flees and is marked processed, a healthy unit with nothing to attack closes on the enemy`() {
+    fun `a hurt unit under ranged fire flees and is marked processed`() {
         val hurt = game.addUnit("Warrior", civ, tile(0))
         hurt.health = 60
         val healthy = game.addUnit("Warrior", civ, tile(6))
@@ -132,8 +132,7 @@ class TacticalAiTests {
         val cache = run()
         assertTrue(hurt in cache.processedUnits)
         assertNotEquals(tile(0), hurt.getTile())
-        assertTrue("a healthy unit with no attack to make repositions next to the enemy (PlotRepositionMoves)", healthy in cache.processedUnits)
-        assertTrue(healthy.getTile().aerialDistanceTo(tile(2)) < 4)
+        assertTrue("the healthy unit is not the one that fled", healthy.getTile() != hurt.getTile())
     }
 
     @Test

@@ -12,15 +12,14 @@ import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- *  The placing of units around a target (CvTacticalAI::ScoreCloseOnPlots, ScoreHedgehogPlots, AssignDeployingUnits, PerformChosenMoves,
- *  ExecuteCloseOnTarget, ExecuteHedgehogDefense, MoveGreatGeneral, ScoreGreatGeneralPlot) with the formulas of the original and BNW data.
+ *  The placing of units around a target (CvTacticalAI::ScoreCloseOnPlots, AssignDeployingUnits, PerformChosenMoves,
+ *  ExecuteCloseOnTarget, MoveGreatGeneral, ScoreGreatGeneralPlot) with the formulas of the original and BNW data.
  *  The map is desert, so no hex has a defense bonus unless a test gives it one.
  */
 @RunWith(BaseTestRunner::class)
@@ -120,39 +119,6 @@ class DeploymentTests {
     }
 
     // endregion
-    // region ScoreHedgehogPlots
-
-    @Test
-    fun `hedgehog hexes score 600 less 150 per hex, plus 100 where the enemy can attack, 50 where it can pass, 100 in our city, else 4 times the defense`() {
-        val city = game.addCity(civ, tile(0, 0))
-        game.addUnit("Warrior", enemy, tile(0, 4)) // attacks hexes within 2 of it, passes those within 1
-        game.setTileTerrain(HexCoord(0, -2), "Hill")
-        val ctx = context()
-        val plots = Deployment.scoreHedgehogPlots(ctx, city.getCenterTile())
-
-        assertEquals("our city: 600 + 100", 700, plotAt(plots, city.getCenterTile()).score)
-        assertTrue(plotAt(plots, city.getCenterTile()).forRanged)
-        assertEquals("a hill 2 away, no enemy near: 300 + 4 x defense", 300 + 4 * ctx.map.defenseModifier(tile(0, -2)), plotAt(plots, tile(0, -2)).score)
-        assertTrue(ctx.map.defenseModifier(tile(0, -2)) > 0)
-        val attackable = plotAt(plots, tile(0, 2)) // 2 from the warrior: it can attack there, not pass
-        assertEquals(600 - 2 * 150 + 100 + 0, attackable.score)
-        assertFalse("hexes an enemy can attack are not for ranged units", attackable.forRanged)
-        val passable = plotAt(plots, tile(0, 3)) // 1 from the warrior: attack and pass
-        assertEquals(600 - 3 * 150 + 100 + 50, passable.score)
-    }
-
-    @Test
-    fun `hedgehog hexes leave out water and enemy hexes`() {
-        val city = game.addCity(civ, tile(0, 0))
-        game.setTileTerrain(HexCoord(0, 1), "Ocean")
-        game.addUnit("Warrior", enemy, tile(0, -1))
-        val tiles = Deployment.scoreHedgehogPlots(context(), city.getCenterTile()).map { it.tile }
-        assertFalse(tile(0, 1) in tiles)
-        assertFalse(tile(0, -1) in tiles)
-        assertTrue(city.getCenterTile() in tiles)
-    }
-
-    // endregion
     // region AssignDeployingUnits
 
     private fun blocks(tile: Tile, vararg units: Pair<MapUnit, Int>) =
@@ -226,22 +192,6 @@ class DeploymentTests {
         Deployment.executeCloseOnTarget(ctx, enemyCity.getCenterTile(), zoneOf(ctx, enemyCity))
         assertEquals(tile(0, -14), far.getTile())
         assertFalse(far in ctx.cache.processedUnits)
-    }
-
-    @Test
-    fun `a hedgehog puts ranged units out of the enemy's reach and melee units on the best hexes of the ring`() {
-        val city = game.addCity(civ, tile(0, 0))
-        game.addUnit("Warrior", enemy, tile(0, 5)) // can attack within 2 of it
-        val archer = game.addUnit("Archer", civ, tile(0, -4))
-        val swordsman = game.addUnit("Swordsman", civ, tile(1, -4))
-        val ctx = context()
-        val zone = ctx.map.zoneByCity(city, false)!!
-        val plots = Deployment.scoreHedgehogPlots(ctx, city.getCenterTile())
-        Deployment.executeHedgehogDefense(ctx, city.getCenterTile(), zone)
-        assertTrue("the archer stands where no enemy attacks", plotAt(plots, archer.getTile()).forRanged)
-        assertNotEquals(archer.getTile(), swordsman.getTile())
-        assertTrue(listOf(archer, swordsman).all { it.getTile().aerialDistanceTo(city.getCenterTile()) <= 3 })
-        assertTrue(listOf(archer, swordsman).all { it in ctx.cache.processedUnits })
     }
 
     private val state get() = civ.ai.tactical

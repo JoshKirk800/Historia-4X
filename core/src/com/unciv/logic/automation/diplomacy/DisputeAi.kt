@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.civilization.CityStateAi
+import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.automation.civilization.MinorCivHelpers
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.city.City
@@ -25,8 +26,9 @@ object DisputeAi {
      *  far, the contested plot score of our cities ([contestedPlotScore]) x (100 + multiplier) / 100, the multiplier LAND_DISPUTE_CRAMPED_MULTIPLIER
      *  when we are cramped, +50 when bold (boldness above 7, the warmonger or expansionist trait, competing for victory by world conquest,
      *  or an expansion flavor with the grand strategy above 7), +100 in the Ancient era, +50 to the Classical, +25 to the Medieval
-     *  (our era); then LAND_DISPUTE_FIERCE / STRONG / WEAK_THRESHOLD. VP's settle-spot thief (the player who settled near the best city
-     *  site VP's GetBestSettlePlot had found, raising the level) needs VP's settle plot search, which is not ported: none.
+     *  (our era); then LAND_DISPUTE_FIERCE / STRONG / WEAK_THRESHOLD. The settle-spot thief (the player who settled near the best city
+     *  site we had found, [SettleAreas.playerWhoStoleMyFavoriteCitySite]) raises the level: for a bold civilization to Strong at least, to
+     *  Fierce from Weak; else one step (None to Weak, Weak to Strong, Strong to Fierce).
      */
     fun updateLandDisputes(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
         if (civ.isHuman()) return
@@ -35,6 +37,7 @@ object DisputeAi {
         val bold = ai.diplomacyValue(DiplomacyPersonality.Boldness) > 7 || ai.hasTraitCategory(TraitCategory.Warmonger) ||
             ai.hasTraitCategory(TraitCategory.Expansionist) || (VictoryProgressAi.isCompetingForVictory(civ) && ai.isGoingForWorldConquest()) ||
             ai.personalityAndGrandStrategy(Flavor.Expansion) > 7
+        val settleSpotThief = SettleAreas.playerWhoStoleMyFavoriteCitySite(civ)
         var multiplier = if (ai.isCramped) rules.define(AiDefine.LAND_DISPUTE_CRAMPED_MULTIPLIER) else 0
         if (bold) multiplier += 50
         multiplier += when {
@@ -51,12 +54,21 @@ object DisputeAi {
                 continue
             }
             val score = civ.cities.sumOf { contestedPlotScore(it, other) } * (100 + multiplier) / 100
-            memory.landDispute = when {
+            var level = when {
                 score >= rules.define(AiDefine.LAND_DISPUTE_FIERCE_THRESHOLD) -> DisputeLevel.Fierce
                 score >= rules.define(AiDefine.LAND_DISPUTE_STRONG_THRESHOLD) -> DisputeLevel.Strong
                 score >= rules.define(AiDefine.LAND_DISPUTE_WEAK_THRESHOLD) -> DisputeLevel.Weak
                 else -> DisputeLevel.None
             }
+            // Did this player steal "our" favorite city settling spot? We should get mad!
+            if (other == settleSpotThief) level =
+                if (bold) { if (level >= DisputeLevel.Weak) DisputeLevel.Fierce else DisputeLevel.Strong }
+                else when {
+                    level >= DisputeLevel.Strong -> DisputeLevel.Fierce
+                    level == DisputeLevel.Weak -> DisputeLevel.Strong
+                    else -> DisputeLevel.Weak
+                }
+            memory.landDispute = level
         }
     }
 

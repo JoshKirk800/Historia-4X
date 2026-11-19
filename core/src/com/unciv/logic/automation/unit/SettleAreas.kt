@@ -16,6 +16,7 @@ import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActionsFromUniques
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import java.util.WeakHashMap
 import kotlin.math.max
@@ -261,6 +262,45 @@ object SettleAreas {
             if (tile == unitTile) return tile
             val path = unit.movement.getShortestPath(tile)
             if (path.isNotEmpty() && path.size <= MAX_PATH_TURNS) return tile
+        }
+        return null
+    }
+
+    /**
+     *  CvPlayer::GetPlayerWhoStoleMyFavoriteCitySite: the player who settled close to the best site we had found the last time we asked (an
+     *  AI's land dispute level goes up with it, [com.unciv.logic.automation.diplomacy.DisputeAi.updateLandDisputes]). Only while we want
+     *  to found cities (not ENOUGH_EXPANSION). When the previous favorite has a foreign city within 5 and the best settle plot ([bestSettlePlot])
+     *  changed, the owner of that city is the thief if our path distance to the old site is less than our boldness plus
+     *  AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT. Remembers the new favorite ([com.unciv.logic.automation.strategy.CivAi.previousBestSettlePlot]).
+     */
+    fun playerWhoStoleMyFavoriteCitySite(civ: Civilization): Civilization? {
+        val ai = civ.ai
+        if (ai.isEconomicStrategyActive("ECONOMICAISTRATEGY_ENOUGH_EXPANSION")) {
+            ai.previousBestSettlePlot = -1
+            return null
+        }
+        // Maybe our old favorite is no longer available?
+        val tiles = civ.gameInfo.tileMap.tileList
+        val previous = tiles.getOrNull(ai.previousBestSettlePlot)
+        // Did somebody else settle close? Search from the inside out
+        var stressor: Civilization? = null
+        if (previous != null) {
+            for (tile in previous.getTilesInDistance(5)) {
+                if (tile.isCityCenter() && tile.getOwner() != civ) { stressor = tile.getOwner(); break }
+            }
+            // Assume our favorite is still good
+            if (stressor == null) return null
+        }
+        // Looking up the best settle plot is expensive, so do this only if we really need it
+        val current = bestSettlePlot(civ, null, null)
+        // No problem, the spot is still the best
+        if (current == previous) return null
+        ai.previousBestSettlePlot = current?.zeroBasedIndex ?: -1
+        // Get triggered if the settle spot was close to one of our cities
+        if (previous != null && stressor != null) {
+            val triggerDistance = civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) +
+                civ.gameInfo.ruleset.ai.define(AiDefine.AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT)
+            if (CityDistances.cityDistancePathLength(civ, previous) < triggerDistance) return stressor
         }
         return null
     }

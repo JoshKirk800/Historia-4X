@@ -142,6 +142,25 @@ class PostureSelectionTests {
         assertEquals(TacticalPosture.Steamroll, select(zone(TacticalTerritory.Enemy, TacticalDominance.Even, city = enemyCity)))
     }
 
+    @Test
+    fun `an enemy zone withdraws to support a threatened neighboring city unless it is falling`() {
+        val friendlyCity = game.addCity(civ, game.tileMap[0, 0])
+        civ.viewableTiles = game.tileMap.values.toSet()
+        civ.ai.invalidateTurnCaches()
+        val map = state.map
+        val friendly = map.zoneOf(friendlyCity.getCenterTile())!!
+        val hostile = map.zoneOf(enemyCity.getCenterTile())!!
+        assertTrue(hostile.neighbors.contains(friendly))
+        friendly.dominance = TacticalDominance.Enemy
+        hostile.dominance = TacticalDominance.Friendly
+        hostile.friendlyLandUnitCount = 2
+        PostureSelection.updatePostures(civ, state, map)
+        assertEquals(TacticalPosture.Withdraw, state.findPosture(enemy.civName, false, enemyCity.id))
+        friendlyCity.damageTakenLastTurn = friendlyCity.health + 1
+        PostureSelection.updatePostures(civ, state, map)
+        assertEquals(TacticalPosture.Steamroll, state.findPosture(enemy.civName, false, enemyCity.id))
+    }
+
     // endregion
     // region Which zones count and what is remembered
 

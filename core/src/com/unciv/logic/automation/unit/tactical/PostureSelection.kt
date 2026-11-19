@@ -33,10 +33,27 @@ object PostureSelection {
             entry.ownerId = ownerId
             entry.isWater = zone.isWater
             entry.cityId = cityId
-            entry.posture = selectPosture(civ, state, zone)
+            entry.posture = coordinateWithNeighbors(zone, selectPosture(civ, state, zone))
             newPostures.add(entry)
         }
         state.postures = newPostures
+    }
+
+    /** CvTacticalDominanceZone::SelectPostureMultiZone: support threatened friendly neighbors and avoid exposed naval advances. */
+    private fun coordinateWithNeighbors(zone: DominanceZone, initial: TacticalPosture): TacticalPosture {
+        if (zone.owner == null) return initial
+        var posture = initial
+        for (neighbor in zone.neighbors) {
+            if (zone.isWater && posture == TacticalPosture.Steamroll && !neighbor.isWater &&
+                neighbor.dominance == TacticalDominance.Enemy && neighbor.enemyRangedStrength > zone.friendlyNavalRangedStrength)
+                posture = TacticalPosture.ExploitFlanks
+            if (zone.territory != TacticalTerritory.Friendly && zone.isWater == neighbor.isWater &&
+                neighbor.territory == TacticalTerritory.Friendly && neighbor.dominance == TacticalDominance.Enemy) {
+                val city = neighbor.closestCity
+                if (city == null || !CityDangerAi.isInDangerOfFalling(city, false)) posture = TacticalPosture.Withdraw
+            }
+        }
+        return posture
     }
 
     /**

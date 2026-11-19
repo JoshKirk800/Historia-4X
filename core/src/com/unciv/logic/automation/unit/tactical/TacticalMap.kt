@@ -58,6 +58,8 @@ class DominanceZone(
     var neutralUnitCount = 0
     /** How many of the counted friendly land and naval units attack at range */
     var friendlyRangedUnitCount = 0
+    /** Adjacent revealed zones, populated by CvTacticalAnalysisMap::EstablishZoneNeighborhood. */
+    val neighbors = ArrayList<DominanceZone>()
 
     var dominance = TacticalDominance.NoUnitsVisible
     /** CvTacticalDominanceZone::GetDominanceZoneValue, set by [TacticalMap]'s PrioritizeZones */
@@ -116,8 +118,8 @@ class DominanceZone(
  *  dominance zones ([zones], most valuable first) with their strengths, dominance flag and value. Also, per tile, whether an enemy can
  *  attack it next turn ([isSubjectToAttack]) or move past it ([enemyCanMovePast]), worked out on first use.
  *
- *  Source: CvTacticalAnalysisMap::RefreshDataForNextPlayer, PopulateCell, AddToDominanceZones, FindExistingZone, PrioritizeZones, MarkCellsNearEnemy
- *  and Vox Populi 5.4.8's CalculateMilitaryStrengths and CvTacticalDominanceZone::SetOverallDominance (the strengths and who dominates a zone).
+ *  Source: CvTacticalAnalysisMap::PopulateCell, PrioritizeZones, MarkCellsNearEnemy and Vox Populi 5.4.8's CreateDominanceZones,
+ *  EstablishZoneNeighborhood, CalculateMilitaryStrengths and CvTacticalDominanceZone::SetOverallDominance.
  *
  *  Deviations:
  *  - units of the cells are only recorded on visible tiles (the original reads every tile); the strength sums see every unit, those we
@@ -126,10 +128,9 @@ class DominanceZone(
  *    original's GetMaxAttackStrength and GetMaxRangedCombatStrength add the promotions, terrain, great generals and the rest;
  *  - a citadel is an improvement of the unit's owner that damages adjacent enemy units for more than [ENEMY_HEAL_RATE] and defends at
  *    [CITADEL_MIN_DEFENSE]% or more; "units at war with us are enemies" is as the original, one team being one civilization;
- *  - the zones are Brave New World's (per owner, kind of territory, landmass and closest city, and unclaimed or neutral land per landmass),
- *    not Vox Populi's per city land and water zones with neighbors, so the "zone of a unit" and the "city of a zone" are those;
+ *  - closest cities are chosen by hex distance within five tiles; equal-distance ties use civilization/city iteration order. Existing
+ *    temporary operation zones remain until operations use VP focus areas, and all adjacent hexes define zone neighbors;
  *  - the game's era is the average of the living civilizations' eras (CvGame::getCurrentEra);
- *  - enemy territory is where the owner is at war with us (the original compares the plot's team with itself, so never sets it);
  *  - "an enemy can reach the plot" is the hex distance within the unit's base moves on its landmass or body of water instead of the
  *    ignore-units path finder (as in [PlotDanger]); the not-visible-to-enemy flag is not kept;
  *  - the dynamic flags of the attack routines (friendly turn end tile, within range of target, flank bonus) are here; the deployment
@@ -177,11 +178,8 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
     private val enemyUnits = ArrayList<MapUnit>()
 
     private val tempZones = ArrayList<DominanceZone>()
-    private val lumpedZones = HashMap<Int, DominanceZone>()
-    private val exactZones = HashMap<ZoneKey, DominanceZone>()
     private val state = state
 
-    private data class ZoneKey(val territory: TacticalTerritory, val owner: String?, val area: Int, val cityId: String?)
 
     init {
         val era = gameEra()
@@ -195,7 +193,9 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
         addTemporaryZones()
         val visible = BooleanArray(numTiles)
         for (tile in civ.viewableTiles) visible[tile.zeroBasedIndex] = true
-        for (tile in tileList) if (populateCell(tile, visible[tile.zeroBasedIndex])) addToDominanceZones(tile)
+        for (tile in tileList) populateCell(tile, visible[tile.zeroBasedIndex])
+        createDominanceZones()
+        establishZoneNeighborhood()
         calculateMilitaryStrengths()
         prioritizeZones()
         buildEnemyUnitList()
@@ -241,11 +241,11 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
     /** The landmass or body of water of the tile (CvPlot::getArea): land tiles by continent, water tiles by connected body of water */
     fun areaOf(tile: Tile) = areas[tile.zeroBasedIndex]
 
-    /** The zone a tile belongs to (CvTacticalAnalysisCell::GetDominanceZone), null for unrevealed or impassable tiles */
+    /** The zone a tile belongs to, null when it is unrevealed. */
     fun zoneOf(tile: Tile): DominanceZone? = zoneIds[tile.zeroBasedIndex].let { if (it < 0) null else zonesById[it] }
 
     /** CvTacticalAnalysisMap::IsInEnemyDominatedZone */
-    fun isInEnemyDominatedZone(tile: Tile) = zoneOf(tile)?.dominance == TacticalDominance.Enemy
+    fun isInEnemyDominatedZone(tile: Tile) = zoneOf(tile)?.let { it.closestCity != null && it.dominance == TacticalDominance.Enemy } == true
 
     /** CvTacticalAnalysisMap::GetZoneByCity: the zone [city] is the closest city of, on land or on water */
     fun zoneByCity(city: City, isWater: Boolean): DominanceZone? = sortedZones.firstOrNull { it.closestCity == city && it.isWater == isWater }
@@ -352,8 +352,8 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
         }
     }
 
-    /** CvTacticalAnalysisMap::PopulateCell: false if the tile does not belong in a dominance zone */
-    private fun populateCell(tile: Tile, visible: Boolean): Boolean {
+    /** Populate the per-tile flags independently of the tactical zone assignment. */
+    private fun populateCell(tile: Tile, visible: Boolean) {
         val index = tile.zeroBasedIndex
         var flag = 0
         val revealed = tile.isExplored(civ)
@@ -386,7 +386,6 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
             tile.militaryUnit?.let { place(it, friendlyMilitary, enemyMilitary, neutralMilitary, index) }
             tile.civilianUnit?.let { place(it, friendlyCivilian, enemyCivilian, neutralCivilian, index) }
         }
-        return !(impassableTerrain || impassableTerritory || !revealed)
     }
 
     private fun place(unit: MapUnit, friendly: Array<MapUnit?>, enemy: Array<MapUnit?>, neutral: Array<MapUnit?>, index: Int) {
@@ -397,51 +396,93 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
         }
     }
 
-    /** CvTacticalAnalysisMap::AddToDominanceZones */
-    private fun addToDominanceZones(tile: Tile) {
-        val index = tile.zeroBasedIndex
-        val owner = tile.getOwner()
-        val area = areas[index]
-        val territory = when {
-            owner == null -> TacticalTerritory.NoOwner
-            owner == civ -> TacticalTerritory.Friendly
-            isAtWarWith(owner) -> TacticalTerritory.Enemy
-            else -> TacticalTerritory.Neutral
-        }
-        val closestCity = if (owner != null) closestCityOf(owner, tile) else null
-        val isUnowned = territory == TacticalTerritory.NoOwner || territory == TacticalTerritory.Neutral
-
-        val zone = findExistingZone(tile, territory, owner, area, closestCity, isUnowned)
-            ?: DominanceZone(zonesById.size, territory, owner, area, tile.isWater, closestCity).also {
-                zonesById.add(it)
-                if (isUnowned) lumpedZones[area] = it
-                else exactZones[ZoneKey(territory, owner?.civName, area, closestCity?.id)] = it
-            }
-
-        zoneIds[index] = zone.id
-    }
-
-    /** CvTacticalAnalysisMap::FindExistingZone: a temporary zone takes unclaimed tiles near its center, unclaimed and neutral land is one zone per area */
-    private fun findExistingZone(tile: Tile, territory: TacticalTerritory, owner: Civilization?, area: Int, city: City?, isUnowned: Boolean): DominanceZone? {
-        if (isUnowned) {
-            for (zone in tempZones)
-                if (tile.aerialDistanceTo(zone.tempZoneCenter!!) <= tacticalRange) return zone
-            return lumpedZones[area]
-        }
-        return exactZones[ZoneKey(territory, owner?.civName, area, city?.id)]
-    }
-
-    private fun closestCityOf(owner: Civilization, tile: Tile): City? {
-        var best: City? = null
-        var bestDistance = Int.MAX_VALUE
-        for (city in owner.cities) {
-            val distance = city.getCenterTile().aerialDistanceTo(tile)
-            if (distance < bestDistance) {
-                bestDistance = distance
-                best = city
+    /**
+     * CvTacticalAnalysisMap::CreateDominanceZones: each revealed plot within five tiles of its nearest city belongs to that city's
+     * land or water zone. Remaining revealed plots form connected non-city zones; small areas can join an adjacent area.
+     * Legacy temporary zones retain priority over unowned plots until operation focus areas replace them.
+     */
+    private fun createDominanceZones() {
+        val nearest = arrayOfNulls<City>(numTiles)
+        val distances = IntArray(numTiles) { Int.MAX_VALUE }
+        for (other in civ.gameInfo.civilizations) {
+            if (other.isBarbarian || other.isSpectator || !other.isAlive()) continue
+            for (city in other.cities) {
+                val center = city.getCenterTile()
+                for (tile in center.getTilesInDistance(5)) {
+                    val index = tile.zeroBasedIndex
+                    val distance = center.aerialDistanceTo(tile)
+                    if (distance < distances[index]) {
+                        distances[index] = distance
+                        nearest[index] = city
+                    }
+                }
             }
         }
-        return best
+
+        val landCityZones = HashMap<String, DominanceZone>()
+        val waterCityZones = HashMap<String, DominanceZone>()
+        val areaSizes = HashMap<Int, Int>()
+        for (tile in tileList) areaSizes.merge(areas[tile.zeroBasedIndex], 1, Int::plus)
+        for (tile in tileList) {
+            if (!tile.isExplored(civ)) continue
+            val index = tile.zeroBasedIndex
+            if (tile.getOwner() == null) {
+                val temporary = tempZones.firstOrNull { tile.aerialDistanceTo(it.tempZoneCenter!!) <= tacticalRange }
+                if (temporary != null) {
+                    zoneIds[index] = temporary.id
+                    continue
+                }
+            }
+            val city = nearest[index] ?: continue
+            val owner = city.civ
+            val territory = when {
+                owner == civ -> TacticalTerritory.Friendly
+                isAtWarWith(owner) -> TacticalTerritory.Enemy
+                else -> TacticalTerritory.Neutral
+            }
+            val cityZones = if (tile.isWater) waterCityZones else landCityZones
+            val zone = cityZones.getOrPut(city.id) {
+                DominanceZone(zonesById.size, territory, owner, areas[index], tile.isWater, city).also { zonesById.add(it) }
+            }
+            zoneIds[index] = zone.id
+        }
+
+        val pending = ArrayDeque<Tile>()
+        for (tile in tileList) {
+            val index = tile.zeroBasedIndex
+            if (!tile.isExplored(civ) || zoneIds[index] >= 0) continue
+            val zone = DominanceZone(zonesById.size, TacticalTerritory.NoOwner, null, areas[index], tile.isWater, null)
+            zonesById.add(zone)
+            zoneIds[index] = zone.id
+            pending.add(tile)
+            while (pending.isNotEmpty()) {
+                val current = pending.removeLast()
+                val currentArea = areas[current.zeroBasedIndex]
+                for (neighbor in current.neighbors) {
+                    val next = neighbor.zeroBasedIndex
+                    if (!neighbor.isExplored(civ) || zoneIds[next] >= 0) continue
+                    val nextArea = areas[next]
+                    if (currentArea != nextArea && areaSizes.getValue(currentArea) >= 4 && areaSizes.getValue(nextArea) >= 4) continue
+                    zoneIds[next] = zone.id
+                    pending.add(neighbor)
+                }
+            }
+        }
+    }
+
+    /** EstablishZoneNeighborhood: adjacent revealed zones are neighbors in both directions. */
+    private fun establishZoneNeighborhood() {
+        for (tile in tileList) {
+            val zoneId = zoneIds[tile.zeroBasedIndex]
+            if (zoneId < 0) continue
+            val zone = zonesById[zoneId]
+            for (neighbor in tile.neighbors) {
+                val neighborId = zoneIds[neighbor.zeroBasedIndex]
+                if (neighborId < 0 || neighborId == zoneId) continue
+                val adjacent = zonesById[neighborId]
+                if (adjacent !in zone.neighbors) zone.neighbors.add(adjacent)
+            }
+        }
     }
 
     private fun noteFriendlyRange(unit: MapUnit) {

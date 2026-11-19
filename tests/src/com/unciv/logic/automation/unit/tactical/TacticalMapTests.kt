@@ -55,6 +55,23 @@ class TacticalMapTests {
     private fun cityStrength() = CityCombatant(city).getCityStrength() * 100 * city.health / game.ruleset.ai.define(AiDefine.MAX_CITY_HIT_POINTS)
     private fun zone() = map().zoneOf(city.getCenterTile())!!
 
+    @Test
+    fun `unclaimed land near a city belongs to that city tactical zone`() {
+        val unclaimed = tile(3)
+        assertNull(unclaimed.getOwner())
+        val tactical = map()
+        assertSame(tactical.zoneOf(city.getCenterTile()), tactical.zoneOf(unclaimed))
+    }
+
+    @Test
+    fun `unclaimed plots use the nearest city even across opposing territory`() {
+        val other = game.addCity(enemy, tile(9))
+        val tactical = map()
+        assertSame(tactical.zoneOf(city.getCenterTile()), tactical.zoneOf(tile(4)))
+        assertSame(tactical.zoneOf(other.getCenterTile()), tactical.zoneOf(tile(5)))
+        assertEquals(TacticalTerritory.Enemy, tactical.zoneOf(tile(5))!!.territory)
+    }
+
     /** The enemy melee strength of our city's zone with one unit of [name] [distance] tiles from the city, which is removed again */
     private fun enemyMeleeOf(name: String, distance: Int, health: Int = 100): Int {
         val unit = game.addUnit(name, enemy, tile(distance))
@@ -118,12 +135,12 @@ class TacticalMapTests {
     fun `units within the recruit range of a city count in its zone even outside it, those beyond only in their own zone`() {
         game.addUnit("Warrior", enemy, tile(4))
         assertEquals("half of 8 plus the era", 1, zone().enemyLandUnitCount)
-        game.addUnit("Warrior", enemy, tile(5))
+        game.addUnit("Warrior", enemy, tile(6))
         val map = map()
         assertEquals(1, map.zoneOf(city.getCenterTile())!!.enemyLandUnitCount)
-        val unclaimed = map.zoneOf(tile(5))!!
+        val unclaimed = map.zoneOf(tile(6))!!
         assertEquals(TacticalTerritory.NoOwner, unclaimed.territory)
-        assertEquals(2, unclaimed.enemyLandUnitCount)
+        assertEquals(1, unclaimed.enemyLandUnitCount)
     }
 
     @Test
@@ -240,8 +257,8 @@ class TacticalMapTests {
     @Test
     fun `our city alone makes its zone ours, one enemy unit against our city is an even match, a siege is not`() {
         assertEquals(TacticalDominance.Friendly, zone().dominance)
-        game.addUnit("Warrior", enemy, tile(5))
-        assertEquals("beyond the recruit range", TacticalDominance.Friendly, zone().dominance)
+        game.addUnit("Warrior", enemy, tile(6))
+        assertEquals("outside the city zone and recruit range", TacticalDominance.Friendly, zone().dominance)
         game.addUnit("Warrior", enemy, tile(3))
         assertEquals("one enemy unit may tip the balance", TacticalDominance.Even, zone().dominance)
         for (tile in freeTilesAroundCity().take(8)) game.addUnit("Swordsman", enemy, tile)
@@ -366,6 +383,15 @@ class TacticalMapTests {
         assertEquals(strength("Warrior") * 150, zone.enemyMeleeStrength)
         assertEquals(1, zone.friendlyLandUnitCount)
         assertEquals(1, zone.enemyLandUnitCount)
+    }
+
+    @Test
+    fun `enemy dominance in open land does not mark it as an enemy city zone`() {
+        game.addUnit("Warrior", enemy, tile(9))
+        game.addUnit("Warrior", enemy, tile(10))
+        val map = map()
+        assertEquals(TacticalDominance.Enemy, map.zoneOf(tile(9))!!.dominance)
+        assertFalse(map.isInEnemyDominatedZone(tile(9)))
     }
 
     @Test

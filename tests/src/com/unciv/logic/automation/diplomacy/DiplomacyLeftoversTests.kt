@@ -344,10 +344,21 @@ class DiplomacyLeftoversTests {
         a.ai.diplomacy.setApproach(target, MajorCivApproach.War)
         a.ai.diplomacy.setOpinion(target, MajorCivOpinion.Unforgivable)
         a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
+        // Vox Populi's coop war desire: a potential target with an attack target on it, an easy win, and a friend to ask
+        a.ai.diplomacy.potentialWarTargets.add(target.civID)
+        a.ai.warStates.targetValues[target.civID] = com.unciv.logic.automation.strategy.TargetValue.Soft
+        a.proximity[target.civID] = com.unciv.logic.civilization.Proximity.Neighbors
+        human.proximity[target.civID] = com.unciv.logic.civilization.Proximity.Neighbors
+        a.getDiplomacyManager(human)!!.setFlag(DiplomacyFlags.DeclarationOfFriendship, 50)
+        human.getDiplomacyManager(a)!!.setFlag(DiplomacyFlags.DeclarationOfFriendship, 50)
+        a.ai.diplomacy.setApproach(human, MajorCivApproach.Friendly)
+        a.ai.diplomacy.setOpinion(human, MajorCivOpinion.Friend)
+        for (tile in game.tileMap.values) tile.setExplored(a, true)
+        a.ai.military.updateAttackTargets(a)
     }
 
     @Test
-    fun `an AI at war with no major asks a human to join its war with an alert, once`() {
+    fun `an AI that wants a coop war asks a human to join it with an alert, once`() {
         val target = target()
         wantWarOn(target)
         DiplomacyAutomation.contactMajorCivs(a)

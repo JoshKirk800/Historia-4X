@@ -20,8 +20,8 @@ import com.unciv.view.GameView
 import com.unciv.logic.automation.diplomacy.ApproachPart6Ai
 import com.unciv.logic.automation.unit.tactical.TacticalDominance
 import com.unciv.logic.automation.unit.tactical.TacticalMap
+import com.unciv.logic.automation.unit.tactical.TacticalHealing
 import com.unciv.logic.automation.unit.tactical.TacticalSafety
-import com.unciv.logic.battle.TargetHelper
 import com.unciv.models.ruleset.ai.FormationSlotDef
 import kotlin.math.max
 
@@ -42,7 +42,7 @@ import kotlin.math.max
  *  Recruiting (Vox Populi, Release-5.4.8) deviates where Unciv has no counterpart, each once here:
  *  - the reach test is a unit's own route to the muster point in turns ([turnsToReach], not "approximate target ring 2") within
  *    [maxRecruitTurns], after a cheap test of the distance on the map (the original's step finder `GetPlotsInReach`);
- *  - CvUnit::shouldHeal has no "damage taken last turn" (a unit next to an enemy flees by the danger alone) and no conditional promotions;
+ *  - CvUnit::shouldHeal ([TacticalHealing.shouldHeal]) has no conditional promotions;
  *  - no formation of the data has a slot without a unit AI, so the original's wildcard slot is not ported;
  *  - the units' AI-type reset on release is [AiOperations.removeFromArmy]'s; the upgrade of a unit joining an army (CvArmyAI::AddUnit) is not
  *    done: the gold AI upgrades units;
@@ -475,41 +475,6 @@ object AiOperationLogic {
     }
 
     /**
-     *  CvUnit::shouldHeal(false): a hurt unit that can heal at all heals when next to an enemy unit or city only if the danger of its plot
-     *  exceeds its health plus what it heals; else when its damage is above 20 (50 if it fights well damaged, or cannot heal in our
-     *  capital). Departure: the original also asks whether the unit took more damage last turn than it has health left, which is not recorded.
-     */
-    private fun shouldHeal(civ: Civilization, unit: MapUnit): Boolean {
-        if (unit.health >= MAX_HEALTH || unit.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true)) return false
-        val tile = unit.getTile()
-        val enemyAdjacent = tile.neighbors.any { neighbor ->
-            neighbor.getUnits().any { it.civ != civ && civ.isAtWarWith(it.civ) } ||
-                (neighbor.isCityCenter() && neighbor.getOwner()?.let { civ.isAtWarWith(it) } == true)
-        }
-        if (enemyAdjacent) return civ.ai.plotDanger.get(tile) > unit.health + max(0, unit.healingAmountForTile(tile, noTerrainDamage = true))
-        val capital = civ.getCapital(firstCityIfNoCapital = false)
-        val maxHealRate = when {
-            capital == null -> unit.healingAmountForTile(tile, noTerrainDamage = true)
-            unit.baseUnit.isWaterUnit && !capital.isCoastal() -> 0
-            else -> unit.healingAmountForTile(capital.getCenterTile(), noTerrainDamage = true)
-        }
-        val allowMoreDamage = civ.isBarbarian || unit.hasUnique(UniqueType.NoDamagePenaltyWoundedUnits, checkCivInfoUniques = true)
-        val acceptableDamage = if (allowMoreDamage || maxHealRate <= 0) 50 else 20
-        return MAX_HEALTH - unit.health > acceptableDamage
-    }
-
-    /**
-     *  CvUnit::shouldHeal(true): the unit leaves its army to heal when badly hurt - below 13 health always, below a third if it can heal
-     *  where it is and has nothing to attack.
-     */
-    private fun shouldHealBeforeAttacks(unit: MapUnit): Boolean {
-        if (unit.health >= MAX_HEALTH || unit.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true)) return false
-        if (unit.health < HARD_HEALTH_LIMIT) return true
-        return unit.health < MAX_HEALTH / 3 && unit.getHealAmountForCurrentTile() > 0 &&
-            TargetHelper.getAttackableEnemies(unit, unit.movement.getDistanceToTiles()).isEmpty()
-    }
-
-    /**
      *  Whether [unit] is free for an operation in general (the counting of the fillable slots in [MilitaryOperations] shares it with the
      *  recruiting): [isSuitableForRecruitment] with no target and no deep water.
      */
@@ -521,7 +486,7 @@ object AiOperationLogic {
      *  not exploring or settling (own unit AI), no paratrooper (the tactical AI drops them on pillage targets), at least
      *  AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION health, not deployed from an operation within the last AI_TACTICAL_MAP_TEMP_ZONE_TURNS
      *  turns, not already within less than 4 plots of [target], no ship that cannot enter the ocean if [mustBeDeepWater], a land unit able to
-     *  embark if [mustEmbark], [canUseForAiOperation] and not [shouldHeal].
+     *  embark if [mustEmbark], [canUseForAiOperation] and not [TacticalHealing.shouldHeal].
      */
     private fun isSuitableForRecruitment(civ: Civilization, unit: MapUnit, mustEmbark: Boolean, target: Tile?, mustBeDeepWater: Boolean): Boolean {
         val unitAi = UnitAiTypes.current(unit)
@@ -533,7 +498,7 @@ object AiOperationLogic {
         if (target != null && unit.getTile().aerialDistanceTo(target) < MAX_TARGET_DISTANCE) return false
         if (mustBeDeepWater && unit.baseUnit.isWaterUnit && unit.cache.cannotEnterOceanTiles) return false
         if (mustEmbark && !unit.baseUnit.isWaterUnit && (unit.cache.cannotEmbark || !civ.tech.unitsCanEmbark)) return false
-        return canUseForAiOperation(civ, unit) && !shouldHeal(civ, unit)
+        return canUseForAiOperation(civ, unit) && !TacticalHealing.shouldHeal(civ, unit, beforeAttacks = false)
     }
 
     /** A free slot of an army being built, with its formation entry */
@@ -727,7 +692,7 @@ object AiOperationLogic {
 
     /**
      *  CvArmyAI::UpdateCheckpointTurnsAndRemoveBadUnits: an offensive operation (CvAIOperation::IsOffensive) drops the units that are
-     *  [shouldHealBeforeAttacks]; every unit not within the gather tolerance of the army's checkpoint ([checkpointTile]) records the turns it
+     *  [TacticalHealing.shouldHeal] before the attacks; every unit not within the gather tolerance of the army's checkpoint ([checkpointTile]) records the turns it
      *  needs to get there ([ArmySlot.checkpointTurns], [Int.MAX_VALUE] if it needs more than [maxRecruitTurns]), and one that has made no
      *  progress over the last three records ([ArmySlot.isMakingProgress]) is dropped. Generals and admirals are not judged: they follow the
      *  army by their own scoring ([centerOfMass]).
@@ -736,7 +701,7 @@ object AiOperationLogic {
         val operations = civ.ai.operations
         if (operations.isOffensive(operation)) {
             for ((_, unit) in armyUnits(civ, army)) {
-                if (!shouldHealBeforeAttacks(unit)) continue
+                if (!TacticalHealing.shouldHeal(civ, unit, beforeAttacks = true)) continue
                 AiDecisionLog.log(civ) { "operation ${operation.type} #${operation.id}: ${unit.name} leaves the army to heal" }
                 operations.removeFromArmy(unit)
             }
@@ -1538,8 +1503,4 @@ object AiOperationLogic {
     private const val BASE_RECRUIT_SCORE = 10000
     private const val RECRUIT_SCORE_PER_TURN = 30
     private const val CITADEL_GUARD_SCORE = 42
-
-    /** CvUnit::GetMaxHitPoints in Unciv's health scale, and shouldHeal(true)'s hard limit */
-    private const val MAX_HEALTH = 100
-    private const val HARD_HEALTH_LIMIT = 13
 }

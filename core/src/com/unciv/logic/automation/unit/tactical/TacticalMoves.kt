@@ -334,6 +334,20 @@ object TacticalMoves {
         ctx.unitProcessed(unit, unit.isMilitary())
     }
 
+    /**
+     *  The unit goes to [tile] as far as it gets this turn; where a unit of ours holds the tile and the two can change places, they do (the original
+     *  pushes the unit out, CvUnit::PushBlockingUnitOutOfPlot). The unit keeps what movement is left.
+     *  @return whether the unit got to the tile (or is on its way: the tile cannot be reached this turn)
+     */
+    fun moveSwapping(unit: MapUnit, tile: Tile): Boolean {
+        if (unit.getTile() == tile) return true
+        if (!unit.movement.canMoveTo(tile) && unit.movement.canMoveTo(tile, allowSwap = true)) {
+            unit.movement.swapMoveToTile(tile)
+            return unit.getTile() == tile
+        }
+        return Deployment.headTowards(unit, tile)
+    }
+
     /** ExecuteBarbarianCampMove, ExecuteCivilianCapture: the unit moves onto the tile (capturing what is on it) and is done for the turn */
     private fun moveAndFinish(ctx: TacticalContext, unit: MapUnit, tile: Tile) {
         unit.movement.moveToTile(tile)

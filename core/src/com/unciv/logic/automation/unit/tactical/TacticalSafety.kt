@@ -11,8 +11,11 @@ import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
 
 /**
- *  How units get out of harm's way: CvTacticalAI::PlotMovesToSafety / ExecuteMovesToSafestPlot (combat units), PlotHealMoves / ExecuteHeals,
- *  and the checks they share (CvUnit::IsCanDefend, IsUnderEnemyRangedAttack). Civilians' counterpart is [com.unciv.logic.automation.unit.CivilianSafety].
+ *  The checks the safety and heal moves share (CvUnit::IsCanDefend, ActualHealRate, IsUnderEnemyRangedAttack, IsKnownVisibleToEnemy, IsCoveringFriendlyCivilian)
+ *  and the simple form of CvTacticalAI::PlotMovesToSafety / ExecuteMovesToSafestPlot (combat units) and PlotHealMoves / ExecuteHeals
+ *  ([wantsToFlee], [safestPlot], [moveToSafety], [heal]) that CvHomelandAI's own versions of these moves still use ([com.unciv.logic.automation.unit.HomelandAi],
+ *  [com.unciv.logic.automation.unit.CivilianUnitAutomation]). The tactical AI's are [SafestPlot] and [TacticalHealing]. Civilians' counterpart
+ *  is [com.unciv.logic.automation.unit.CivilianSafety].
  *
  *  Deviation: [isUnderEnemyRangedAttack] only counts what we can see (the original reads every enemy unit) and takes no line of sight into account.
  */
@@ -32,6 +35,23 @@ object TacticalSafety {
         if (unit.isDestroyed || unit.isEmbarkedAt(tile) || unit.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true)) return 0
         if (checkMovement && unit.hasUnitMovedThisTurn() && !unit.hasUnique(UniqueType.HealsEvenAfterAction)) return 0
         return maxOf(unit.healingAmountForTile(tile, noTerrainDamage = true), 0)
+    }
+
+    /** CvPlot::IsKnownVisibleToEnemy: a civilization at war with [civ] sees the tile */
+    fun isKnownVisibleToEnemy(civ: Civilization, tile: Tile): Boolean = civ.getCivsAtWarWith().any { tile in it.viewableTiles }
+
+    /**
+     *  CvUnit::IsCoveringFriendlyCivilian: the unit protects a unit of ours that cannot defend itself and has finished its turn, outside a city,
+     *  on a tile enemies can attack ([UnitDanger.possibleAttackers]).
+     */
+    fun isCoveringFriendlyCivilian(ctx: TacticalContext, unit: MapUnit): Boolean {
+        val tile = unit.getTile()
+        if (tile.isCityCenter()) return false
+        for (other in tile.getUnits()) {
+            if (other == unit || other.civ != unit.civ) continue
+            if (!canDefend(other) && other in ctx.cache.processedUnits) return unit.civ.ai.unitDanger.possibleAttackers(tile).isNotEmpty()
+        }
+        return false
     }
 
     /**

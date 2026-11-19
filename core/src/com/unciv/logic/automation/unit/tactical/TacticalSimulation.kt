@@ -195,17 +195,6 @@ object TacticalSimulation {
     //endregion
 
     //region Units and targets
-    /** CvUnit::IsCoveringFriendlyCivilian: the unit protects a finished civilian outside a city that enemies can reach */
-    private fun isCoveringFriendlyCivilian(ctx: TacticalContext, unit: MapUnit): Boolean {
-        val tile = unit.getTile()
-        if (tile.isCityCenter()) return false
-        for (other in tile.getUnits()) {
-            if (other == unit || other.civ != unit.civ) continue
-            if (!TacticalSafety.canDefend(other) && other in ctx.cache.processedUnits) return ctx.danger.get(tile) > 0
-        }
-        return false
-    }
-
     /** CvPlot::getBestDefender for a plot of the enemy, as far as the damage numbers are concerned: the city, else the defending unit */
     private fun defenderOn(civ: Civilization, tile: Tile) = Battle.getMapCombatantOfTile(tile)?.takeIf {
         it.getCivInfo() != civ && civ.isAtWarWith(it.getCivInfo())
@@ -233,7 +222,7 @@ object TacticalSimulation {
             val distance = unit.getTile().aerialDistanceTo(tile)
             // Do not bother if we are very far away
             if (!air && distance > unit.baseUnit.movement.coerceAtLeast(1) * 4) continue
-            if (isCoveringFriendlyCivilian(ctx, unit)) continue
+            if (TacticalSafety.isCoveringFriendlyCivilian(ctx, unit)) continue
             var canReach = false
             if (air) canReach = distance <= unit.getRange()
             else if (unit.baseUnit.isRanged()) {

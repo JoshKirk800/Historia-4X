@@ -6,7 +6,7 @@ import com.unciv.logic.automation.unit.tactical.AggressionLevel
 import com.unciv.logic.automation.unit.tactical.BarbarianMoves
 import com.unciv.logic.automation.unit.tactical.TacticalContext
 import com.unciv.logic.automation.unit.tactical.TacticalMoves
-import com.unciv.logic.automation.unit.tactical.TacticalSafety
+import com.unciv.logic.automation.unit.tactical.SafestPlot
 import com.unciv.logic.automation.unit.tactical.TacticalSimulation
 import com.unciv.logic.automation.unit.tactical.TacticalTargetType
 import com.unciv.logic.automation.unit.tactical.TacticalTargets
@@ -43,7 +43,7 @@ class BarbarianAutomation(val civInfo: Civilization) {
             { TacticalMoves.destroyEnemyUnits(it, AggressionLevel.Braveheart, TacticalTargetType.MediumPriorityUnit) }),
         DESTROY_LOW_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESTROY_LOW_UNIT,
             { TacticalMoves.destroyEnemyUnits(it, AggressionLevel.Braveheart, TacticalTargetType.LowPriorityUnit) }),
-        MOVE_TO_SAFETY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_TO_SAFETY, { moveToSafety(it) }),
+        MOVE_TO_SAFETY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_TO_SAFETY, { SafestPlot.plotMovesToSafety(it, true); SafestPlot.plotMovesToSafety(it, false) }),
         /** Vox Populi has no attrition attacks for barbarians: the units were sent against every target above */
         ATTRIT_HIGH_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_HIGH_UNIT, { }),
         ATTRIT_MEDIUM_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_MEDIUM_UNIT, { }),
@@ -105,14 +105,6 @@ class BarbarianAutomation(val civInfo: Civilization) {
                 prioritized.add(move to priority)
             }
             return prioritized.sortedByDescending { it.second }.map { it.first }
-        }
-
-        /** PlotMovesToSafety(true): combat units that want to flee (a barbarian only a damaged ship) go to the safest tile in reach */
-        private fun moveToSafety(ctx: TacticalContext) {
-            for (unit in ctx.liveUnits()) {
-                if (!unit.isMilitary() || !unit.hasMovement()) continue
-                if (TacticalSafety.moveToSafety(unit, ctx.danger)) ctx.unitProcessed(unit)
-            }
         }
     }
 }

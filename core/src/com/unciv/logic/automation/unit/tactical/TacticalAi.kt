@@ -6,7 +6,6 @@ import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.AirMoves
-import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
@@ -123,8 +122,8 @@ object TacticalAi {
             Step(Postures.SHORE_BOMBARDMENT) { Postures.shoreBombardmentZones(ctx) },
             Step("TACTICAL_ATTACK_HIGH_PRIORITY_CIVILIAN") { TacticalMoves.plotCivilianAttackMoves(ctx, TacticalTargetType.HighPriorityCivilian) },
             Step(POSTURE_WITHDRAW) {
-                // CvTacticalAI::PlotWithdrawMoves: land zones
-                Postures.forEachZone(ctx, { zone, posture -> posture == TacticalPosture.Withdraw && !zone.isWater }) { zone, _ -> withdrawMoves(ctx, zone) }
+                // CvTacticalAI::PlotWithdrawMoves
+                Postures.forEachZone(ctx, { _, posture -> posture == TacticalPosture.Withdraw }) { zone, _ -> WithdrawMoves.plotWithdrawMoves(ctx, zone) }
             },
             Step(MOVE_OPERATIONS) { OperationalMoves.plotOperationalArmyMoves(ctx) },
             Step("TACTICAL_SAFE_BOMBARDS") { TacticalMoves.plotSafeBombardMoves(ctx) },
@@ -138,18 +137,10 @@ object TacticalAi {
             Step("TACTICAL_PILLAGE_CITADEL_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Citadel, false) },
             Step("TACTICAL_GARRISON_TO_ALLOW_BOMBARD") { TacticalMoves.plotGarrisonMoves(ctx, 1, true) },
             Step("TACTICAL_PILLAGE_RESOURCE_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, false) },
-            Step(TO_SAFETY) {
-                for (unit in ctx.liveUnits()) {
-                    if (!unit.hasMovement() || !TacticalSafety.wantsToFlee(unit, danger)) continue
-                    shootBeforeFleeing(ctx, unit, danger)
-                    if (!unit.isDestroyed && unit.hasMovement() && TacticalSafety.moveToSafety(unit, danger)) ctx.unitProcessed(unit)
-                }
-            },
+            Step(TO_SAFETY) { SafestPlot.plotMovesToSafety(ctx, true) },
             Step("TACTICAL_BARBARIAN_CAMP") { TacticalMoves.plotBarbarianCampMoves(ctx) },
             Step("TACTICAL_PILLAGE_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, false) },
-            Step(HEAL) {
-                for (unit in ctx.liveUnits()) if (unit.hasMovement() && TacticalSafety.heal(unit)) ctx.unitProcessed(unit)
-            },
+            Step(HEAL) { TacticalHealing.plotHealMoves(ctx, false) },
             Step("TACTICAL_BASTION_ALREADY_THERE") { TacticalMoves.plotBastionMoves(ctx, 0) },
             Step("TACTICAL_GARRISON_ALREADY_THERE") { TacticalMoves.plotGarrisonMoves(ctx, 0) },
             Step("TACTICAL_BASTION_1_TURN") { TacticalMoves.plotBastionMoves(ctx, 1) },
@@ -200,85 +191,5 @@ object TacticalAi {
         }
         for (unit in airlifted) ctx.unitProcessed(unit)
         return airlifted
-    }
-
-    /**
-     *  CvTacticalAI::PlotWithdrawMoves / ExecuteWithdrawMoves for one zone: units of the right domain that stand in the zone, or within the
-     *  tactical recruit range of its city on a tile that is in danger and not ours, or (in unclaimed land) in danger outside our land,
-     *  fall back to the nearest of our cities on their landmass, the nearest to it first, onto an empty tile next to the city. Only land zones.
-     *  @return the units that moved
-     */
-    fun withdrawMoves(ctx: TacticalContext, zone: DominanceZone): List<MapUnit> {
-        val civ = ctx.civ
-        val map = ctx.map
-        val danger = ctx.danger
-        val recruitRange = civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_RECRUIT_RANGE)
-        val withdrawing = ArrayList<MapUnit>()
-        for (unit in ctx.liveUnits()) {
-            if (zone.isWater && !unit.baseUnit.isWaterUnit || !zone.isWater && !unit.baseUnit.isLandUnit) continue
-            val tile = unit.getTile()
-            val city = zone.closestCity
-            val inZone = map.zoneOf(tile)?.id == zone.id
-            val retreat = when {
-                inZone -> true
-                city != null -> city.getCenterTile().aerialDistanceTo(tile) <= recruitRange && danger.get(tile) > 0 && tile.getOwner() != civ
-                zone.territory == TacticalTerritory.NoOwner -> danger.get(tile) > 0 && tile.getOwner() != civ
-                else -> false
-            }
-            if (retreat) withdrawing.add(unit)
-        }
-        if (withdrawing.isEmpty()) return emptyList()
-
-        class Withdrawal(val unit: MapUnit, val city: Tile, val turns: Int)
-        val plan = ArrayList<Withdrawal>()
-        for (unit in withdrawing) {
-            val city = nearestCityInArea(civ, unit, map) ?: continue
-            val path = unit.movement.getShortestPath(city)
-            plan.add(Withdrawal(unit, city, if (path.isEmpty()) Int.MAX_VALUE else path.size))
-        }
-        val moved = ArrayList<MapUnit>()
-        for (withdrawal in plan.sortedBy { it.turns }) {
-            val unit = withdrawal.unit
-            val target = TacticalMoves.emptyTileNextTo(unit, withdrawal.city) ?: continue
-            AiDecisionLog.log(civ) { "Tactical: ${unit.name} withdraws from zone ${zone.id} (${zone.closestCity?.name}) toward ${target.position}" }
-            unit.movement.tryHeadTowards(target)
-            // CvTacticalAI::ExecuteWithdrawMoves: a shooter that withdrew shoots what it can from where it ends up
-            if (!unit.isDestroyed) TacticalSimulation.performRangedOpportunityAttack(ctx, unit)
-            unit.currentMovement = 0f
-            ctx.unitProcessed(unit)
-            moved.add(unit)
-        }
-        return moved
-    }
-
-    /**
-     *  CvTacticalAI::ExecuteMovesToSafestPlot: "try to do some damage if we have movement points to spare": a shooter that can move after attacking
-     *  and has more than a movement point left after the walk to the safest tile shoots first, from where it stands, and keeps enough movement
-     *  for the walk ([TacticalSimulation.performRangedOpportunityAttack]).
-     */
-    private fun shootBeforeFleeing(ctx: TacticalContext, unit: MapUnit, danger: PlotDanger) {
-        if (!unit.baseUnit.isRanged() || !unit.hasUnique(UniqueType.CanMoveAfterAttacking)) return
-        val safe = TacticalSafety.safestPlot(unit, danger) ?: return
-        val needed = unit.movement.getDistanceToTiles()[safe]?.totalMovement ?: return
-        if (unit.currentMovement - needed <= 1f) return
-        TacticalSimulation.performRangedOpportunityAttack(ctx, unit, false, needed)
-    }
-
-    /** CvMap::findCity(x, y, owner, NO_TEAM, bSameArea): the nearest of our cities on the same landmass or sea as the unit */
-    private fun nearestCityInArea(civ: Civilization, unit: MapUnit, map: TacticalMap): Tile? {
-        val tile = unit.getTile()
-        val area = map.areaOf(tile)
-        var best: Tile? = null
-        var bestDistance = Int.MAX_VALUE
-        for (city in civ.cities) {
-            val cityTile = city.getCenterTile()
-            if (map.areaOf(cityTile) != area) continue
-            val distance = cityTile.aerialDistanceTo(tile)
-            if (distance < bestDistance) {
-                bestDistance = distance
-                best = cityTile
-            }
-        }
-        return best
     }
 }

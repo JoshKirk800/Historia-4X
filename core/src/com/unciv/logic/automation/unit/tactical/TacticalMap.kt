@@ -539,7 +539,7 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
         player.getCivsAtWarWith().filterTo(HashSet()) { !it.isBarbarian && it.isAlive() }
 
     /** TacticalAIHelpers::IsPlayerCitadel: an improvement of the unit's owner, not pillaged, that hurts adjacent enemies for more than a unit heals and defends at 50% or more */
-    private fun isPlayerCitadel(tile: Tile, owner: Civilization): Boolean {
+    internal fun isPlayerCitadel(tile: Tile, owner: Civilization): Boolean {
         if (tile.getOwner() != owner) return false
         val improvement = tile.getUnpillagedTileImprovement() ?: return false
         return PlotDefense.nearbyEnemyDamage(improvement) > ENEMY_HEAL_RATE && PlotDefense.defenseModifier(improvement) >= CITADEL_MIN_DEFENSE

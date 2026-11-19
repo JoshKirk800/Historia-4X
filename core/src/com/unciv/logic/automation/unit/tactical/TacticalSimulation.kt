@@ -27,12 +27,11 @@ import kotlin.math.min
  *  survives or dies unexpectedly): CvTacticalAI.cpp's FindAndExecuteBestUnitAssignments and ExecuteUnitAssignments.
  *
  *  The callers: ExecuteAttackWithUnits (with its air attack and spotter move), ExecuteDestroyEnemyUnits, ExecuteCaptureCityMoves (for the posture moves,
- *  [TacticalMoves] and barbarians), CheckForEnemiesNearArmy ([OperationalMoves]) and PerformRangedOpportunityAttack (garrisons, units that heal,
- *  withdraw or flee and units that arrive somewhere; its melee counterpart and KillLoneEnemyIfPossible are [OpportunityAttacks]).
+ *  [TacticalMoves] and barbarians), CheckForEnemiesNearArmy ([OperationalMoves]), PositionUnitsAroundTarget ([ReinforcementMoves]: the AL_LOW plan that
+ *  places units around a friendly or distant target, [planAndExecute] gives it the distances of the plan) and PerformRangedOpportunityAttack
+ *  (garrisons, units that heal, withdraw or flee and units that arrive somewhere; its melee counterpart and KillLoneEnemyIfPossible are [OpportunityAttacks]).
  *
  *  What is not ported, and why:
- *  - PositionUnitsAroundTarget (the AL_LOW plan that places units around a friendly or distant target) belongs to the deployment code of the armies;
- *    the plan itself can place units without enemies (a target and [AggressionLevel.Low]) but nothing calls it for that;
  *  - the support pass (CvSupportPosition, AddSupportMoves: generals, admirals and siege towers) and citadels, repair fleet and the other powers
  *    (A_USE_POWER): the units that use them have their own moves ([Deployment.moveGreatGenerals]); their bonus is not in the plan;
  *  - air sweeps and naval embarkation plans (MS_EMBARKED);
@@ -51,13 +50,32 @@ object TacticalSimulation {
      *  units that spoiled it or with the changed situation, up to four times.
      *  @return whether a plan was carried out completely
      */
-    fun findAndExecuteBestUnitAssignments(ctx: TacticalContext, units: List<MapUnit>, target: Tile, aggression: AggressionLevel): Boolean {
+    fun findAndExecuteBestUnitAssignments(ctx: TacticalContext, units: List<MapUnit>, target: Tile, aggression: AggressionLevel): Boolean =
+        planAndExecute(ctx, units, target, aggression).success
+
+    /**
+     *  What [planAndExecute] did: whether a plan was carried out completely, and the distances to the target the last plan was made with
+     *  (the original keeps them in a global, TacticalAIHelpers::gDistanceToTargetPlots, read by GetPlotDistanceToTarget)
+     */
+    class PlanOutcome(val success: Boolean, private val world: SimWorld?, private val target: Tile) {
+        /** TacticalAIHelpers::GetPlotDistanceToTarget for [unit] on [tile]: steps to the target for its domain, [Int.MAX_VALUE] if it cannot get there */
+        fun distanceToTarget(unit: MapUnit, tile: Tile): Int {
+            if (world == null) return tile.aerialDistanceTo(target)
+            val domain = if (unit.baseUnit.isWaterUnit) SimDomain.Sea else SimDomain.Land
+            return world.distanceToTarget(tile, domain)
+        }
+    }
+
+    /** [findAndExecuteBestUnitAssignments] with the distances of the last plan, for the callers that place the units it left out (PositionUnitsAroundTarget) */
+    fun planAndExecute(ctx: TacticalContext, units: List<MapUnit>, target: Tile, aggression: AggressionLevel): PlanOutcome {
         var current = units
         var success = false
         var attempts = 0
+        var world: SimWorld? = null
         do {
             attempts++
             val result = TacticalSimSearch.findBestUnitAssignments(ctx, current, target, aggression, targetDistanceRelevant = true)
+            world = result.world
             if (result.isEmpty) {
                 if (result.unusable.isNotEmpty() && current.size > result.unusable.size) current = current.filter { it !in result.unusable }
                 else break // give up
@@ -68,7 +86,7 @@ object TacticalSimulation {
                 success = executeUnitAssignments(ctx, result)
             }
         } while (!success && attempts < MAX_ATTEMPTS)
-        return success
+        return PlanOutcome(success, world, target)
     }
 
     private fun isEnemyTile(civ: Civilization, tile: Tile): Boolean {
@@ -280,13 +298,15 @@ object TacticalSimulation {
      *  CvTacticalAI::ExecuteSpotterMove: if the target is not visible, a fast attacker or tank moves to where it sees it, keeping some movement to
      *  retreat. @return false if nobody can: the attack is called off
      */
-    private fun executeSpotterMove(ctx: TacticalContext, units: List<MapUnit>, target: Tile): Boolean {
+    fun executeSpotterMove(ctx: TacticalContext, units: List<MapUnit>, target: Tile): Boolean {
         if (target in ctx.civ.viewableTiles) return true
         var best: Triple<MapUnit, Tile, Float>? = null
         for (unit in units.sortedBy { it.id }) {
-            if (!unit.hasMovement() || unit.baseUnit.isRanged()) continue
+            if (unit.isDestroyed || !unit.hasMovement() || unit.baseUnit.isRanged()) continue
             val aiType = UnitAiTypes.current(unit)
             if (aiType != UnitAiType.FAST_ATTACK && aiType != UnitAiType.ATTACK_SEA && aiType != UnitAiType.ATTACK && aiType != UnitAiType.COUNTER) continue
+            // Other units have moved since the reach of this one was cached
+            unit.movement.clearPathfindingCache()
             for ((tile, move) in unit.movement.getDistanceToTiles().entries.sortedBy { it.key.zeroBasedIndex }) {
                 val left = unit.currentMovement - move.totalMovement
                 // Some movement left to retreat

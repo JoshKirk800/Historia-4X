@@ -10,13 +10,13 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.unique.UniqueType
 
 /**
- *  The target moves of CvTacticalAI that are still BNW's or shared, run in the order of the tactical priority list ([TacticalAi]): each looks at the targets of
- *  one type and commands the units that fit them. Ported: PlotCivilianAttackMoves, PlotPillageMoves, PlotSafeBombardMoves, PlotRepositionMoves and
+ *  The target moves of CvTacticalAI that are still BNW's or shared, run by [TacticalAi] in Vox Populi's order of ProcessDominanceZones: each looks at the targets
+ *  of one type and commands the units that fit them. Ported: PlotCivilianAttackMoves, PlotPillageMoves and
  *  the execution helpers they share (ExecuteMoveToTarget, ExecuteMoveToPlot, ExecuteMoveOfBlockingUnit, MoveToEmptySpaceNearTarget, FindNearbyTarget).
  *  The attacks on units and cities are [TacticalSimulation]'s (ExecuteDestroyEnemyUnits, ExecuteCaptureCityMoves): [destroyEnemyUnits] is what the
- *  postures' loops over the unit targets do. Garrisons, bastions, guarded improvements, ruins and camps are [GarrisonMoves] and [GuardMoves].
- *
- *  Deviations: [plotRepositionMoves] measures the path to the 5 nearest targets only.
+ *  postures' loops over the unit targets do. Garrisons, bastions, guarded improvements, ruins and camps are [GarrisonMoves] and [GuardMoves]; the units
+ *  that are not in a fight come to the zones by [ReinforcementMoves]. Gone with Vox Populi's combat simulation and reinforcement: Brave New World's safe
+ *  bombard and reposition moves (PlotRepositionMoves is no longer called by the original).
  */
 object TacticalMoves {
 
@@ -31,17 +31,6 @@ object TacticalMoves {
         for (target in ctx.currentTargets) {
             if (!target.isUnitTarget || type != null && target.type != type || target.lastAggressionLevel >= aggression) continue
             TacticalSimulation.executeDestroyEnemyUnits(ctx, target, aggression)
-        }
-    }
-
-    /** CvTacticalAI::PlotSafeBombardMoves: safe bombards on the high, then medium, then low priority units */
-    fun plotSafeBombardMoves(ctx: TacticalContext) {
-        for (type in listOf(TacticalTargetType.HighPriorityUnit, TacticalTargetType.MediumPriorityUnit, TacticalTargetType.LowPriorityUnit)) {
-            // The original stops at the first target that is gone
-            for (target in TacticalTargets.ofType(ctx.currentTargets, type)) {
-                if (!target.isAlive(ctx.civ)) break
-                TacticalBombards.safeBombardTarget(ctx, target)
-            }
         }
     }
 
@@ -115,30 +104,7 @@ object TacticalMoves {
             .sortedByDescending { it.attackPriority }
 
     //endregion
-    //region Defense
-
-    /**
-     *  CvTacticalAI::PlotRepositionMoves / ExecuteRepositionMoves: every land unit still free, but great generals, goes to an empty tile next
-     *  to the nearest target (unit, city or improvement of the enemy) within AI_TACTICAL_REPOSITION_RANGE tiles on its landmass.
-     */
-    fun plotRepositionMoves(ctx: TacticalContext) {
-        val range = ctx.rules.define(AiDefine.AI_TACTICAL_REPOSITION_RANGE)
-        val wanted = setOf(
-            TacticalTargetType.HighPriorityUnit, TacticalTargetType.MediumPriorityUnit, TacticalTargetType.LowPriorityUnit,
-            TacticalTargetType.City, TacticalTargetType.Improvement
-        )
-        val targets = ctx.currentTargets.filter { it.type in wanted }
-        for (unit in ctx.liveUnits()) {
-            // Never use this (default) move for Great Admirals or Generals
-            if (unit.baseUnit.isGreatPerson || !unit.baseUnit.isLandUnit || !unit.hasMovement()) continue
-            val destination = findNearbyTarget(ctx, unit, range, targets) ?: continue
-            if (moveToEmptySpaceNearTarget(ctx, unit, destination)) {
-                unit.currentMovement = 0f
-                ctx.unitProcessed(unit)
-                ctx.log { "${unit.name} moved to an empty space near target ${destination.position}, now at ${unit.getTile().position}" }
-            }
-        }
-    }
+    //region Nearby targets
 
     /**
      *  CvTacticalAI::FindNearbyTarget: the target within [range] of the unit on its landmass that it reaches soonest (the tile it stands on first of all);

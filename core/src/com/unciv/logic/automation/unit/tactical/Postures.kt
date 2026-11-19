@@ -4,74 +4,70 @@ import com.unciv.logic.city.City
 
 /**
  *  What the units around a dominance zone do in the posture [PostureSelection] chose for it: CvTacticalAI::ProcessDominanceZones (the loop over
- *  the zones that the zone moves of the priority list run), PlotAttritionAttacks, PlotExploitFlanksMoves, PlotSteamrollMoves,
- *  PlotSurgicalCityStrikeMoves, PlotHedgehogMoves, PlotCounterattackMoves and PlotCloseOnTarget. The attacks are Vox Populi's: every unit target
- *  of the zone gets one combat simulation ([TacticalSimulation.executeDestroyEnemyUnits] through [TacticalMoves.destroyEnemyUnits]) with the
- *  aggression of the posture ([AggressionLevel.Low] for attrition and the hedgehog, [AggressionLevel.Medium] for exploiting flanks, surgical city
- *  strikes and counterattacks, [AggressionLevel.High] for the steamroll) and the cities are taken by [TacticalSimulation.executeCaptureCityMoves].
- *  Shore bombardment and the sit-and-bombard posture of the temporary operation zones are BNW's ([TacticalBombards]); the placing of units is
- *  [Deployment].
+ *  the zones, [processZones], with the switch on the posture, [plotPostureMoves]), PlotAttritionAttacks, PlotExploitFlanksMoves, PlotSteamrollMoves,
+ *  PlotSurgicalCityStrikeMoves, PlotHedgehogMoves, PlotCounterattackMoves and PlotWithdrawMoves ([WithdrawMoves]). The attacks are Vox Populi's:
+ *  every unit target of the zone gets one combat simulation ([TacticalSimulation.executeDestroyEnemyUnits] through [TacticalMoves.destroyEnemyUnits])
+ *  with the aggression of the posture ([AggressionLevel.Low] for attrition and the hedgehog, [AggressionLevel.Medium] for exploiting flanks, surgical
+ *  city strikes and counterattacks, [AggressionLevel.High] for the steamroll) and the cities are taken by [TacticalSimulation.executeCaptureCityMoves];
+ *  the units that are not in the fight come to the zone in the second pass ([ReinforcementMoves]), the hedgehog asks for it early.
+ *
+ *  Not Vox Populi's: shore bombardment and the sit-and-bombard posture of the temporary operation zones are BNW's ([TacticalBombards]), as is
+ *  the closing in on a temporary zone's target ([Deployment.executeCloseOnTarget]); they stay until the operations use Vox Populi's focus areas.
  */
 object Postures {
 
-    const val OFFENSIVE_POSTURE_MOVES = "TACTICAL_OFFENSIVE_POSTURE_MOVES"
-    const val SHORE_BOMBARDMENT = "TACTICAL_POSTURE_SHORE_BOMBARDMENT"
-    const val HEDGEHOG = "TACTICAL_POSTURE_HEDGEHOG"
-    const val CLOSE_ON_TARGET = "TACTICAL_CLOSE_ON_TARGET"
-
-    private val offensivePostures = setOf(
-        TacticalPosture.SitAndBombard, TacticalPosture.AttritFromRange, TacticalPosture.ExploitFlanks,
-        TacticalPosture.Steamroll, TacticalPosture.SurgicalCityStrike, TacticalPosture.Counterattack
-    )
-
     /**
-     *  The zone loop of CvTacticalAI::ProcessDominanceZones for one zone move: [move] is run for each zone in the order of their value whose
-     *  posture [matches] and that has targets (or is a temporary zone or land around an enemy city, which are always processed, there may be an
-     *  operation aiming at them), with the zone's targets as the current ones. Every zone with targets is processed, as in Vox Populi 5.4.8: the
-     *  barbarians, whom the strengths of the zones ignore, are fought in the zone they stand in.
+     *  The zone loop of CvTacticalAI::ProcessDominanceZones: for each zone in the order of their value, [beforeZone] (PlotEmergencyPurchases, asked
+     *  of every zone), then, if the zone has targets (or is a temporary zone or land around an enemy city, which are always processed, there may be
+     *  an operation aiming at them), [moves] (the moves of its posture, [plotPostureMoves]) with the zone's targets as the current ones. Every zone
+     *  with targets is processed, as in Vox Populi 5.4.8: the barbarians, whom the strengths of the zones ignore, are fought in the zone they stand in.
      */
-    fun forEachZone(ctx: TacticalContext, matches: (DominanceZone, TacticalPosture) -> Boolean, move: (DominanceZone, TacticalPosture) -> Unit) {
-        val state = ctx.state
+    fun processZones(
+        ctx: TacticalContext,
+        beforeZone: (DominanceZone) -> Unit = {},
+        moves: (DominanceZone, TacticalPosture) -> Unit = { zone, posture -> plotPostureMoves(ctx, zone, posture) },
+    ) {
         for (zone in ctx.map.zones) {
-            val posture = state.findPosture(zone.owner?.civName, zone.isWater, zone.closestCity?.id)
-            if (!matches(zone, posture)) continue
+            beforeZone(zone)
             val targets = ctx.targets.forZone(zone)
             // Must have some moves to continue or it must be land around an enemy city (which we always want to process because we might
             // have an operation targeting it)
             if (targets.isEmpty() && zone.territory != TacticalTerritory.TempZone && (zone.territory != TacticalTerritory.Enemy || zone.isWater)) continue
             ctx.currentTargets = targets
             try {
-                move(zone, posture)
+                moves(zone, ctx.postureOf(zone))
             } finally {
                 ctx.currentTargets = ctx.targets.all
             }
         }
     }
 
-    /** TACTICAL_OFFENSIVE_POSTURE_MOVES: every zone whose posture is an offensive one runs that posture's move, the zones in the order of their value */
-    fun offensivePostureMoves(ctx: TacticalContext) =
-        forEachZone(ctx, { _, posture -> posture in offensivePostures }) { zone, posture ->
-            when (posture) {
-                TacticalPosture.SitAndBombard -> sitAndBombardMoves(ctx, zone)
-                TacticalPosture.AttritFromRange -> attritFromRangeMoves(ctx)
-                TacticalPosture.ExploitFlanks -> exploitFlanksMoves(ctx)
-                TacticalPosture.Steamroll -> steamrollMoves(ctx, zone)
-                TacticalPosture.SurgicalCityStrike -> surgicalCityStrikeMoves(ctx, zone)
-                TacticalPosture.Counterattack -> counterattackMoves(ctx)
-                else -> Unit
-            }
+    /** The switch of CvTacticalAI::ProcessDominanceZones: the moves of [posture] for [zone], the targets of the zone being the current ones */
+    fun plotPostureMoves(ctx: TacticalContext, zone: DominanceZone, posture: TacticalPosture) {
+        when (posture) {
+            // No posture assigned so do nothing
+            TacticalPosture.None -> Unit
+            // Give up
+            TacticalPosture.Withdraw -> WithdrawMoves.plotWithdrawMoves(ctx, zone)
+            // Defend
+            TacticalPosture.Hedgehog -> hedgehogMoves(ctx, zone)
+            // Low risk attacks on units
+            TacticalPosture.AttritFromRange -> attritFromRangeMoves(ctx)
+            // Try to kill enemy units
+            TacticalPosture.ExploitFlanks -> exploitFlanksMoves(ctx)
+            // Attack everything including cities
+            TacticalPosture.Steamroll -> steamrollMoves(ctx)
+            // Go for the city first
+            TacticalPosture.SurgicalCityStrike -> surgicalCityStrikeMoves(ctx)
+            // Concentrated fire on enemy units
+            TacticalPosture.Counterattack -> counterattackMoves(ctx)
+            // Brave New World's, for the temporary zones of the operations
+            TacticalPosture.SitAndBombard -> sitAndBombardMoves(ctx, zone)
+            TacticalPosture.ShoreBombardment -> shoreBombardmentMoves(ctx)
         }
-
-    /** TACTICAL_POSTURE_SHORE_BOMBARDMENT */
-    fun shoreBombardmentZones(ctx: TacticalContext) =
-        forEachZone(ctx, { _, posture -> posture == TacticalPosture.ShoreBombardment }) { _, _ -> shoreBombardmentMoves(ctx) }
-
-    /** TACTICAL_POSTURE_HEDGEHOG */
-    fun hedgehogZones(ctx: TacticalContext) =
-        forEachZone(ctx, { _, posture -> posture == TacticalPosture.Hedgehog }) { zone, _ -> hedgehogMoves(ctx, zone) }
-
-    /** TACTICAL_CLOSE_ON_TARGET: okay for all zones */
-    fun closeOnTargetZones(ctx: TacticalContext) = forEachZone(ctx, { _, _ -> true }) { zone, _ -> plotCloseOnTarget(ctx, zone, true) }
+        // Brave New World's, for the temporary zones of the operations: the army closes in on the target
+        if (zone.territory == TacticalTerritory.TempZone) plotCloseOnTarget(ctx, zone)
+    }
 
     private fun cityTarget(zone: DominanceZone, city: City) =
         TacticalTarget(TacticalTargetType.City, city.getCenterTile(), zone.id, city.civ, city = city)
@@ -92,7 +88,7 @@ object Postures {
 
     /**
      *  The BNW posture of the temporary operation zones, win an attrition campaign with bombardments: the zone's city is shot at from safe tiles,
-     *  taken if the units that reach it can, shot at from protected tiles; the units near it are bombarded; then the army closes in.
+     *  taken if the units that reach it can, shot at from protected tiles; the units near it are bombarded.
      */
     fun sitAndBombardMoves(ctx: TacticalContext, zone: DominanceZone) {
         val city = zone.closestCity ?: return
@@ -109,8 +105,6 @@ object Postures {
 
         // Attack ancillary target (nearby units)
         for (unitTarget in unitTargets(ctx)) if (unitTarget.isAlive(ctx.civ)) bombard(ctx, unitTarget)
-
-        plotCloseOnTarget(ctx, zone, true)
     }
 
     /** CvTacticalAI::PlotAttritionAttacks, win an attrition campaign: low risk attacks on units (the plan only attacks where it does more damage than it takes) */
@@ -125,27 +119,27 @@ object Postures {
         TacticalSimulation.executeCaptureCityMoves(ctx)
     }
 
-    /** CvTacticalAI::PlotSteamrollMoves, we have more overall strength than the enemy, defeat his army first: attacks that survive a counterattack, then the city; then close in */
-    fun steamrollMoves(ctx: TacticalContext, zone: DominanceZone) {
+    /** CvTacticalAI::PlotSteamrollMoves, we have more overall strength than the enemy, defeat his army first: attacks that survive a counterattack, then the city */
+    fun steamrollMoves(ctx: TacticalContext) {
         TacticalMoves.destroyEnemyUnits(ctx, AggressionLevel.High)
         TacticalSimulation.executeCaptureCityMoves(ctx)
-        plotCloseOnTarget(ctx, zone, false)
     }
 
-    /** CvTacticalAI::PlotSurgicalCityStrikeMoves, we should be strong enough to take out the city before the enemy can whittle us down with ranged attacks: the city first, then any other really good attacks; then close in */
-    fun surgicalCityStrikeMoves(ctx: TacticalContext, zone: DominanceZone) {
+    /** CvTacticalAI::PlotSurgicalCityStrikeMoves, we should be strong enough to take out the city before the enemy can whittle us down with ranged attacks: the city first, then any other really good attacks */
+    fun surgicalCityStrikeMoves(ctx: TacticalContext) {
         TacticalSimulation.executeCaptureCityMoves(ctx)
         TacticalMoves.destroyEnemyUnits(ctx, AggressionLevel.Medium)
-        plotCloseOnTarget(ctx, zone, false)
     }
 
-    /** CvTacticalAI::PlotHedgehogMoves, build a defensive shell around this city: careful attacks on the units around it, then the shell */
+    /**
+     *  CvTacticalAI::PlotHedgehogMoves, build a defensive shell around this city: careful attacks on the units around it, then the early
+     *  reinforcement before the attacks in other zones are considered ([ReinforcementMoves.plotReinforcementMoves]; the second pass asks for it again)
+     */
     fun hedgehogMoves(ctx: TacticalContext, zone: DominanceZone) {
         // Be careful with our units, we do not have so many
         TacticalMoves.destroyEnemyUnits(ctx, AggressionLevel.Low)
-        // After the best attacks are exhausted go right to playing defense
-        val city = zone.closestCity ?: return
-        Deployment.executeHedgehogDefense(ctx, city.getCenterTile(), zone)
+        // Exception: early reinforcement before attacks in other zones are considered
+        ReinforcementMoves.plotReinforcementMoves(ctx, zone)
     }
 
     /** CvTacticalAI::PlotCounterattackMoves, try to push back the invader: attacks that accept slightly more damage than they deal */
@@ -170,22 +164,12 @@ object Postures {
     }
 
     /**
-     *  CvTacticalAI::PlotCloseOnTarget, close units in on the primary target of the dominance zone: the camp a temporary zone is about, or the
-     *  city of an enemy zone if we cannot see it or are not outmatched by more than half. Not in a zone the enemy dominates if [checkDominance].
-     *  Closing in is BNW's, not Vox Populi's, and only for a zone that is worth it: an operation's target (temporary zone) or an enemy city that
-     *  units of ours are near (BNW's CvTacticalAnalysisMap::UseThisDominanceZone), not a far-away one that merely has targets.
+     *  Brave New World's CvTacticalAI::PlotCloseOnTarget for the temporary zone of an operation (Vox Populi has none: the units come to a zone in the
+     *  second pass, [ReinforcementMoves]): units close in on the target the zone is about, the camp or city of the operation, unless the enemy
+     *  dominates the zone.
      */
-    fun plotCloseOnTarget(ctx: TacticalContext, zone: DominanceZone, checkDominance: Boolean) {
-        if (checkDominance && zone.dominance == TacticalDominance.Enemy) return
-        // Flank attacks done; if in an enemy zone, close in on target
-        if (zone.territory == TacticalTerritory.TempZone) {
-            Deployment.executeCloseOnTarget(ctx, zone.tempZoneCenter ?: return, zone)
-        } else if (zone.territory == TacticalTerritory.Enemy) {
-            val city = zone.closestCity ?: return
-            if (zone.totalFriendlyUnitCount == 0 && !ctx.state.isTemporaryZoneCity(city)) return
-            val canSeeCity = city.getCenterTile() in ctx.civ.viewableTiles
-            // If we can't see the city, be careful advancing on it. We want to be sure we're not heavily outnumbered
-            if (!canSeeCity || zone.overallFriendlyStrength > zone.overallEnemyStrength / 2) Deployment.executeCloseOnTarget(ctx, city.getCenterTile(), zone)
-        }
+    fun plotCloseOnTarget(ctx: TacticalContext, zone: DominanceZone) {
+        if (zone.dominance == TacticalDominance.Enemy) return
+        Deployment.executeCloseOnTarget(ctx, zone.tempZoneCenter ?: return, zone)
     }
 }

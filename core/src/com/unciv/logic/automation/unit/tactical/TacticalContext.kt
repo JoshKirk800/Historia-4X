@@ -12,7 +12,9 @@ import com.unciv.models.ruleset.ai.AiDefine
  *  What the moves of one tactical turn share (the members of CvTacticalAI that are not state across turns): the analysis [map], the
  *  [danger], this turn's [targets], and the [units] the tactical AI still may command (m_CurrentTurnUnits). A routine that commands a unit
  *  calls [unitProcessed] (CvTacticalAI::UnitProcessed): the unit leaves the list, is in [AutomationCache.processedUnits] for the rest of the
- *  unit AI, and its tile is marked as one a unit finished on.
+ *  unit AI, and its tile is marked as one a unit finished on. [allUnits] are the units the turn was given, commandeered or not: where the original's
+ *  reinforcement finds any unit of the player on the plots around a zone's city, here it finds them among these (a player's automated unit asks
+ *  for a turn of its own, and must not command the rest of his army).
  */
 class TacticalContext(
     val civ: Civilization,
@@ -21,6 +23,7 @@ class TacticalContext(
     val cache: AutomationCache,
     units: Collection<MapUnit>,
     val targets: TacticalTargets,
+    val allUnits: Collection<MapUnit> = units,
 ) {
     /** The analysis map; barbarians have none (CvTacticalAnalysisMap is not built for them), their moves use [isEnemyCity] and [sameArea] */
     val map: TacticalMap get() = analysisMap ?: error("${civ.civName} has no tactical analysis map")
@@ -32,8 +35,8 @@ class TacticalContext(
     /** CvTacticalAI::m_ZoneTargets: the targets the move being run looks at (ExtractTargetsForZone: all of them, or those of one dominance zone) */
     var currentTargets: List<TacticalTarget> = targets.all
 
-    /** CvTacticalAI::TurnOffMove: moves a posture disabled for the rest of the turn (TacticalMoveDef names) */
-    val disabledMoves = HashSet<String>()
+    /** CvTacticalAI::FindPosture: the posture last chosen for [zone] ([TacticalPosture.None] if none) */
+    fun postureOf(zone: DominanceZone): TacticalPosture = state.findPosture(zone.owner?.civName, zone.isWater, zone.closestCity?.id)
 
     /** CheckForEnemiesNearArmy: [unit] joins this turn's tactical units (CvTacticalAI::m_CurrentTurnUnits) if it is not one yet */
     fun addUnit(unit: MapUnit) {

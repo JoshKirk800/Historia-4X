@@ -1462,8 +1462,8 @@ object AiOperationLogic {
     /** Turns after which any operation aborts (Vox Populi's CvAIOperation::ShouldAbort: `iTurns > 42`) */
     const val TIMEOUT_TURNS = 42
 
-    /** Vox Populi's TACTICAL_COMBAT_MAX_TARGET_DISTANCE (CvTacticalAI.cpp): units less than this many plots from the target are not recruited */
-    private const val MAX_TARGET_DISTANCE = 4
+    /** Vox Populi's TACTICAL_COMBAT_MAX_TARGET_DISTANCE (CvTacticalAI.cpp): units less than this many plots from the target are not recruited; the tactical AI's units this close have arrived */
+    const val MAX_TARGET_DISTANCE = 4
 
     /** MOVEFLAG_APPROX_TARGET_RING2 ([turnsToReach]): the plots this far from the target count as the target, and the nearest [RING_CANDIDATES] of them are tried */
     private const val RING_TWO = 2

@@ -3,6 +3,7 @@ package com.unciv.logic.automation.unit.tactical
 import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.civilization.AutomationCache
+import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.AirMoves
@@ -13,29 +14,20 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.unique.UniqueType
 
 /**
- *  CvTacticalAI::Update for one civilization's turn: the units under tactical control ([commandeerUnits]), the targets
- *  ([TacticalTargets]), then the moves of the tactical priority list (`tacticalMoves` of AI.json, [com.unciv.models.ruleset.ai.TacticalMoveDef.priority]
- *  first, in the XML order among equals): emergency purchases and defensive airlifts (once per dominance zone), the attack moves (civilians, camps,
- *  pillaging (by paradrop too), plundering and parking on trade routes, safe bombards - [TacticalMoves], [TradeMoves], [TacticalBombards]),
- *  the moves of the dominance zones' postures (the attacks on units and cities by [TacticalSimulation], shore bombardment, hedgehog, withdrawing,
- *  closing on the target - [Postures], [Deployment]), the armies of the operations ([OperationalMoves]), moves to safety ([SafestPlot]) and healing
- *  ([TacticalHealing]), garrisons ([GarrisonMoves]), bastions, guarding improvements, ruins and camps ([GuardMoves]), repositioning.
- *  The order of the list is BNW's `AI.json` priorities, not Vox Populi's hardcoded sequence of CvTacticalAI::ProcessDominanceZones (not ported). A unit a move commands is added to [AutomationCache.processedUnits]; the other units, tactical
- *  or not, go on to the rest of the unit AI.
+ *  CvTacticalAI::Update for one civilization's turn: the units under tactical control ([commandeerUnits]), the targets ([TacticalTargets]), then the
+ *  moves in the hardcoded order of Vox Populi's ProcessDominanceZones ([automate]): healing, the armies of the operations ([OperationalMoves]) and the
+ *  garrisons ([GarrisonMoves]); for each dominance zone the emergency purchases and the moves of its posture (the attacks on units and cities by
+ *  [TacticalSimulation], hedgehog, withdrawing - [Postures], [WithdrawMoves]); the reinforcements ([ReinforcementMoves]); air patrols ([AirMoves]), ruins,
+ *  capturing civilians, pillaging and plundering ([TacticalMoves], [TradeMoves], [GuardMoves]); bastions and moves to safety ([SafestPlot]); guarding
+ *  improvements; escorting embarked units ([NavalMoves]); and the review of the units nothing moved. The order is no longer the `tacticalMoves` priority
+ *  list of Brave New World's AI.json. A unit a move commands is added to [AutomationCache.processedUnits]; the other units, tactical or not, go on to the
+ *  rest of the unit AI.
  *
- *  Not ported (their rows of AI.json's `tacticalMoves` have no code behind them): naval blockades, and the BNW moves that Vox Populi dropped for the
- *  combat simulation of the postures: capturing and damaging cities, destroying and attriting units (TACTICAL_CAPTURE_CITY, TACTICAL_DAMAGE_CITY,
- *  TACTICAL_DESTROY_*_UNIT, TACTICAL_ATTRIT_*_UNIT).
+ *  Not ported: naval blockades (PlotBlockadeMoves: its targets are the barbarians' blockade points, which [TacticalTargets] does not make) and Vox Populi's
+ *  recruiting of every unit that is not in an army for the turn: Brave New World's [commandeerUnits] stays, the reinforcements look at all the units given
+ *  to the turn. Kept from Brave New World, where Vox Populi has nothing: the air sweep, the defensive airlift and parking on trade routes.
  */
 object TacticalAi {
-
-    private const val EMERGENCY_PURCHASES = "TACTICAL_EMERGENCY_PURCHASES"
-    private const val DEFENSIVE_AIRLIFT = "TACTICAL_DEFENSIVE_AIRLIFT"
-    private const val MOVE_OPERATIONS = "TACTICAL_MOVE_OPERATIONS"
-    private const val POSTURE_WITHDRAW = "TACTICAL_POSTURE_WITHDRAW"
-    private const val TO_SAFETY = "TACTICAL_TO_SAFETY"
-    private const val HEAL = "TACTICAL_HEAL"
-
     /**
      *  CvTacticalAI::CommandeerUnits: the units that are the tactical AI's this turn. Not units that cannot move, are processed, have the
      *  unit AI UNKNOWN or EXPLORE (explorers are the homeland AI's, however near the enemy), are not combat units or Great Generals. Of the
@@ -92,8 +84,16 @@ object TacticalAi {
     private fun nearAny(tile: Tile, others: List<Tile>, range: Int): Boolean = others.any { it.aerialDistanceTo(tile) <= range }
 
     /**
-     *  The tactical turn (CvTacticalAI::Update, ProcessDominanceZones): find the targets, then run the moves of the priority list one after
-     *  the other, each commanding the units it needs. [units] are the civilization's units in the order they would move.
+     *  The tactical turn (CvTacticalAI::Update, ProcessDominanceZones): find the targets, then run the moves in Vox Populi's hardcoded order, each
+     *  commanding the units it needs. [units] are the civilization's units in the order they would move.
+     *
+     *  AssignGlobalHighPrioMoves: healing before the attacks (to make space near the front line), the armies of the operations, the garrisons (they
+     *  sometimes make a sortie and have to get back; the sweeps of the aircraft are Brave New World's, Vox Populi sweeps in its attack plans).
+     *  Then for each dominance zone, the most valuable first: the emergency purchases, and the moves of its posture ([Postures.processZones]).
+     *  The second pass brings in the reinforcements ([ReinforcementMoves]; with them Brave New World's defensive airlift). AssignGlobalMidPrioMoves:
+     *  air patrols, ruins, capturing civilians, the bastions, moving to safety (the combat units, those not in an army), healing again now that
+     *  units have moved out of the way, and harassing the enemy (pillaging and plundering trade routes). AssignGlobalLowPrioMoves: guarding improvements
+     *  for the next turn, escorting embarked units, the civilians out of harm's way last. Then the failsafe, [reviewUnassignedUnits].
      */
     fun automate(civ: Civilization, units: List<MapUnit>, cache: AutomationCache) = timeThis("AI.Tactical") {
         val state = civ.ai.tactical
@@ -102,68 +102,106 @@ object TacticalAi {
         val map = state.map
         PostureSelection.updatePostures(civ, state, map)
         val danger = civ.ai.plotDanger
-        val ctx = TacticalContext(civ, map, danger, cache, tacticalUnits, TacticalTargets.find(civ, map, danger))
+        val ctx = TacticalContext(civ, map, danger, cache, tacticalUnits, TacticalTargets.find(civ, map, danger), units)
         val highPriority by lazy { ctx.targets.all.filter { it.type == TacticalTargetType.HighPriorityUnit }.mapNotNullTo(HashSet()) { it.unit } }
 
-        class Step(val name: String, val run: () -> Unit) { val span = "AI.Tactical.$name" }
-        val steps = listOf(
-            Step(EMERGENCY_PURCHASES) {
-                if (civ.isAIOrAutoPlaying()) Postures.forEachZone(ctx, { zone, _ -> zone.dominance != TacticalDominance.Friendly && zone.territory == TacticalTerritory.Friendly }) { zone, _ ->
+        // CvTacticalAI::ExtractTargetsForZone(NULL) before each of the global groups: all the targets are the current ones
+        fun globally(name: String, move: () -> Unit) = timeThis("AI.Tactical.$name") { ctx.currentTargets = ctx.targets.all; move() }
+
+        // AssignGlobalHighPrioMoves
+        globally("Heal1") { TacticalHealing.plotHealMoves(ctx, true) }
+        globally("Operations") { OperationalMoves.plotOperationalArmyMoves(ctx) }
+        globally("Garrison2") { GarrisonMoves.plotGarrisonMoves(ctx, 2) }
+        globally("AirSweep") { AirMoves.plotAirSweepMoves(ctx) }
+
+        // Then confront the enemy in each tactical zone
+        timeThis("AI.Tactical.Zones") {
+            Postures.processZones(ctx) { zone ->
+                if (civ.isAIOrAutoPlaying() && zone.dominance != TacticalDominance.Friendly && zone.territory == TacticalTerritory.Friendly)
                     EmergencyPurchases.plot(civ, zone, map) { highPriority }
-                }
-            },
-            Step(DEFENSIVE_AIRLIFT) {
-                Postures.forEachZone(ctx, { zone, _ -> zone.dominance != TacticalDominance.Friendly && zone.territory == TacticalTerritory.Friendly }) { zone, _ ->
-                    plotDefensiveAirlifts(ctx, zone)
-                }
-            },
-            Step("TACTICAL_ATTACK_VERY_HIGH_PRIORITY_CIVILIAN") { TacticalMoves.plotCivilianAttackMoves(ctx, TacticalTargetType.VeryHighPriorityCivilian) },
-            Step("TACTICAL_PILLAGE_CITADEL") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Citadel, true) },
-            Step(Postures.OFFENSIVE_POSTURE_MOVES) { Postures.offensivePostureMoves(ctx) },
-            Step(Postures.SHORE_BOMBARDMENT) { Postures.shoreBombardmentZones(ctx) },
-            Step("TACTICAL_ATTACK_HIGH_PRIORITY_CIVILIAN") { TacticalMoves.plotCivilianAttackMoves(ctx, TacticalTargetType.HighPriorityCivilian) },
-            Step(POSTURE_WITHDRAW) {
-                // CvTacticalAI::PlotWithdrawMoves
-                Postures.forEachZone(ctx, { _, posture -> posture == TacticalPosture.Withdraw }) { zone, _ -> WithdrawMoves.plotWithdrawMoves(ctx, zone) }
-            },
-            Step(MOVE_OPERATIONS) { OperationalMoves.plotOperationalArmyMoves(ctx) },
-            Step("TACTICAL_SAFE_BOMBARDS") { TacticalMoves.plotSafeBombardMoves(ctx) },
-            Step(Postures.HEDGEHOG) { Postures.hedgehogZones(ctx) },
-            Step(Postures.CLOSE_ON_TARGET) { Postures.closeOnTargetZones(ctx) },
-            Step("TACTICAL_PILLAGE") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, true) },
-            Step("TACTICAL_ATTACK_MEDIUM_PRIORITY_CIVILIAN") { TacticalMoves.plotCivilianAttackMoves(ctx, TacticalTargetType.MediumPriorityCivilian) },
-            Step("TACTICAL_PILLAGE_RESOURCE") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, true) },
-            Step("TACTICAL_ATTACK_LOW_PRIORITY_CIVILIAN") { TacticalMoves.plotCivilianAttackMoves(ctx, TacticalTargetType.LowPriorityCivilian) },
-            Step("TACTICAL_ANCIENT_RUINS") { GuardMoves.plotGrabGoodyMoves(ctx) },
-            Step("TACTICAL_PILLAGE_CITADEL_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Citadel, false) },
-            Step("TACTICAL_PILLAGE_RESOURCE_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, false) },
-            Step(TO_SAFETY) { SafestPlot.plotMovesToSafety(ctx, true) },
-            Step("TACTICAL_PILLAGE_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, false) },
-            Step(HEAL) { TacticalHealing.plotHealMoves(ctx, false) },
-            Step("TACTICAL_BASTION_ALREADY_THERE") { GuardMoves.plotBastionMoves(ctx, 2) },
-            Step("TACTICAL_GARRISON_ALREADY_THERE") { GarrisonMoves.plotGarrisonMoves(ctx, 2) },
-            Step("TACTICAL_GUARD_IMPROVEMENT_ALREADY_THERE") { GuardMoves.plotGuardImprovementMoves(ctx, 2) },
-            Step("TACTICAL_REPOSITION") { TacticalMoves.plotRepositionMoves(ctx) },
-            Step("TACTICAL_AIR_SWEEP") { AirMoves.plotAirSweepMoves(ctx) },
-            Step("TACTICAL_AIR_INTERCEPT") { AirMoves.plotAirInterceptMoves(ctx) },
-            Step("TACTICAL_ESCORT_EMBARKED_UNIT") { NavalMoves.plotEscortEmbarkedMoves(ctx) },
-            Step("TACTICAL_PLUNDER_TRADE_UNIT") { TradeMoves.plotPlunderTradeUnitMoves(ctx) },
-            Step("TACTICAL_PARK_ON_TRADE_ROUTE") { TradeMoves.plotParkOnTradeRouteMoves(ctx) },
-        )
-        // CvTacticalAI::EstablishTacticalPriorities: every move with a priority of 0 or more, the highest first, stable in XML order
-        val stepByName = steps.associateBy { it.name }
-        for (move in civ.gameInfo.ruleset.ai.tacticalMoves.filter { it.priority >= 0 }.sortedByDescending { it.priority }) {
-            // A posture may have turned a move off for the rest of the turn (CvTacticalAI::TurnOffMove)
-            if (move.name in ctx.disabledMoves) continue
-            ctx.currentTargets = ctx.targets.all
-            stepByName[move.name]?.let { step -> timeThis(step.span) { step.run() } }
+            }
         }
+
+        // Second pass: bring in reinforcements
+        timeThis("AI.Tactical.Reinforcements") {
+            for (zone in map.zones) {
+                ctx.currentTargets = ctx.targets.all
+                if (zone.dominance != TacticalDominance.Friendly && zone.territory == TacticalTerritory.Friendly) plotDefensiveAirlifts(ctx, zone)
+                ReinforcementMoves.plotReinforcementMoves(ctx, zone)
+            }
+        }
+
+        // AssignGlobalMidPrioMoves
+        globally("AirPatrol") { AirMoves.plotAirPatrolMoves(ctx) }
+        globally("Goodies") { GuardMoves.plotGrabGoodyMoves(ctx) }
+        globally("Civilians") {
+            for (type in civilianTargetTypes) TacticalMoves.plotCivilianAttackMoves(ctx, type)
+        }
+        globally("Bastion2") { GuardMoves.plotBastionMoves(ctx, 2) }
+        // Now all attacks are done, try to move any unprocessed units out of harm's way
+        globally("Safety1") { SafestPlot.plotMovesToSafety(ctx, true) }
+        // Try again now that other blocking units might have moved
+        globally("Heal2") { TacticalHealing.plotHealMoves(ctx, false) }
+        // Harass the enemy (plundering also happens during the combat simulation)
+        globally("Pillage") {
+            TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Citadel, true)
+            TradeMoves.plotPlunderTradeUnitMoves(ctx)
+            TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, true)
+            TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, true)
+            TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Citadel, false)
+            TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, false)
+            TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, false)
+            TradeMoves.plotParkOnTradeRouteMoves(ctx)
+        }
+
+        // AssignGlobalLowPrioMoves: defense preparation for next turn
+        globally("Guard2") { GuardMoves.plotGuardImprovementMoves(ctx, 2) }
+        // Do this last after the units in need have already moved
+        globally("NavalEscort") { NavalMoves.plotEscortEmbarkedMoves(ctx) }
+        // Civilians move out of harm's way last, when all potential defenders are set in place
+        globally("Safety2") { SafestPlot.plotMovesToSafety(ctx, false) }
+
+        // Failsafe
+        globally("Review") { reviewUnassignedUnits(ctx) }
         AiDecisionLog.log(civ) {
             "Tactical: $commandeered units commandeered, ${commandeered - ctx.units.size} commanded, ${ctx.targets.all.size} targets; postures " +
                 state.postures.filter { it.posture != TacticalPosture.None }.groupingBy { "${it.posture}${if (it.isWater) " (sea)" else ""}" }.eachCount()
                     .entries.joinToString { if (it.value > 1) "${it.key} x${it.value}" else it.key }.ifEmpty { "-" }
         }
     }
+
+    /**
+     *  PlotCivilianAttackMoves' target types, the most valuable first: Vox Populi has two classes of civilian targets (high and low priority) which
+     *  its ExecuteCivilianAttackMoves takes in that order; ours has four (generals and admirals, captured settlers and workers...) in the order of Brave New World's priorities
+     */
+    val civilianTargetTypes = listOf(
+        TacticalTargetType.VeryHighPriorityCivilian, TacticalTargetType.HighPriorityCivilian,
+        TacticalTargetType.MediumPriorityCivilian, TacticalTargetType.LowPriorityCivilian
+    )
+
+    /**
+     *  CvTacticalAI::ReviewUnassignedUnits: the units of the tactical AI that nothing moved and that stand where the danger is more than they heal
+     *  in a turn go to the safest plot in reach ([SafestPlot.find], embarking allowed), upgrading there if they are not hurt; one that cannot move
+     *  on is done. The rest are left to the homeland AI, with their movement.
+     *  Not ported: the cities' fallback shot at a unit in range, whose target the tactical targets suppressed (the cities shoot in the unit AI).
+     */
+    fun reviewUnassignedUnits(ctx: TacticalContext) {
+        val danger = ctx.civ.ai.unitDanger
+        for (unit in ctx.liveUnits()) {
+            if (!unit.hasMovement() || unit.baseUnit.isAirUnit()) continue
+            // There should not be any danger but just in case
+            if (danger.get(unit) <= TacticalSafety.actualHealRate(unit)) continue
+            unit.movement.clearPathfindingCache()
+            val safePlot = SafestPlot.find(ctx, unit, allowEmbark = true)?.tile ?: continue
+            if (safePlot != unit.getTile()) TacticalMoves.moveSwapping(unit, safePlot)
+            var current = unit
+            // Do not upgrade a hurt unit
+            if (!current.isDestroyed && current.health >= MAX_HEALTH) UseGoldAutomation.upgradeNow(current)?.let { current = it }
+            if (!current.isDestroyed && !current.hasMovement()) ctx.unitProcessed(current)
+        }
+    }
+
+    private const val MAX_HEALTH = 100
 
     /**
      *  CvTacticalAI::PlotDefensiveAirlifts for one zone: not for city-states. In the zone around one of our cities that allows airlifts

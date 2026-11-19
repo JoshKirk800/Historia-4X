@@ -29,7 +29,8 @@ class OperationUnit(val unit: MapUnit, val position: FormationPosition)
 class PotentialBlock(val unit: MapUnit, val tile: Tile, val distance: Int, var choices: Int)
 
 /**
- *  Putting the units around a target: CvTacticalAI::ExecuteCloseOnTarget, ExecuteHedgehogDefense, ScoreCloseOnPlots, ScoreHedgehogPlots,
+ *  Putting the units around a target: CvTacticalAI::ExecuteCloseOnTarget (Brave New World's; the temporary zones of the operations use it, the
+ *  other zones are [ReinforcementMoves]'), ScoreCloseOnPlots,
  *  ScoreDeploymentPlots, ScoreFormationPlots, FindClosestOperationUnit, AssignDeployingUnits, PerformChosenMoves, MoveToUsingSafeEmbark,
  *  MoveToEmptySpaceTwoFromTarget, MoveGreatGeneral and ScoreGreatGeneralPlot. The army moves that use them are [OperationalMoves]'.
  *
@@ -282,7 +283,7 @@ object Deployment {
     private fun isFree(tile: Tile, unit: MapUnit) = if (unit.isMilitary()) tile.militaryUnit == null else tile.civilianUnit == null
 
     //endregion
-    //region Close on target and hedgehog
+    //region Close on target
 
     /**
      *  CvTacticalAI::ExecuteCloseOnTarget: the units of the zone's domain within the tactical range of [target] (or within 3 times the deploy
@@ -318,28 +319,7 @@ object Deployment {
     }
 
     /**
-     *  CvTacticalAI::ExecuteHedgehogDefense: the units of the zone's domain within the tactical range of the city [target] take the hexes
-     *  [scoreHedgehogPlots] finds around it: ranged units those the enemy cannot attack, the others the rest; generals with moves follow.
-     */
-    fun executeHedgehogDefense(ctx: TacticalContext, target: Tile, zone: DominanceZone) {
-        val radius = ctx.map.tacticalRange
-        val operationUnits = ArrayList<OperationUnit>()
-        val generals = ArrayList<MapUnit>()
-        var ranged = 0
-        var melee = 0
-        for (unit in ctx.liveUnits()) {
-            if (!(zone.isWater && unit.baseUnit.isWaterUnit || !zone.isWater && unit.baseUnit.isLandUnit)) continue
-            if (unit.getTile().aerialDistanceTo(target) > radius) continue
-            if (isGeneralOrAdmiral(unit) && !unit.baseUnit.isWaterUnit) { if (unit.hasMovement()) generals.add(unit) }
-            else if (unit.baseUnit.isRanged()) { operationUnits.add(OperationUnit(unit, FormationPosition.BOMBARD)); ranged++ }
-            else { operationUnits.add(OperationUnit(unit, FormationPosition.FRONT_LINE)); melee++ }
-        }
-        if (operationUnits.isNotEmpty()) deployUnits(ctx, operationUnits, scoreHedgehogPlots(ctx, target), ranged, melee)
-        if (generals.isNotEmpty()) moveGreatGenerals(ctx, generals, null)
-    }
-
-    /**
-     *  The two passes ExecuteCloseOnTarget and ExecuteHedgehogDefense share: the ranged units take the hexes marked for them, then everyone who
+     *  The two passes ExecuteCloseOnTarget makes: the ranged units take the hexes marked for them, then everyone who
      *  is left (the remaining ranged units too) the other hexes, in the order of the hexes' scores.
      */
     private fun deployUnits(ctx: TacticalContext, units: List<OperationUnit>, plots: List<DeployPlot>, rangedUnits: Int, meleeUnits: Int) {
@@ -393,26 +373,6 @@ object Deployment {
             if (map.enemyCanMovePast(tile)) score -= 30
             score += if (tile.isCityCenter() && tile.getOwner() == ctx.civ) 100 else map.defenseModifier(tile)
             plots.add(DeployPlot(tile, score, bombardSpot))
-        }
-        return plots.sortedByDescending { it.score }
-    }
-
-    /**
-     *  CvTacticalAI::ScoreHedgehogPlots: the land hexes within 3 of the city [target] that units may gather on, scored 600 - 150 per hex of
-     *  distance, +100 if an enemy can attack it, +50 if one can pass it, +100 in a city of ours, else + 4 times the terrain's defense.
-     *  Those no enemy can attack are for ranged units. Best first.
-     */
-    fun scoreHedgehogPlots(ctx: TacticalContext, target: Tile): List<DeployPlot> {
-        val map = ctx.map
-        val plots = ArrayList<DeployPlot>()
-        for (tile in target.getTilesInDistance(CITY_PLOT_RADIUS)) {
-            if (!map.canUseForOperationGatheringCheckWater(tile, false)) continue
-            var score = 600 - tile.aerialDistanceTo(target) * 150
-            val subjectToAttack = map.isSubjectToAttack(tile)
-            if (subjectToAttack) score += 100
-            if (map.enemyCanMovePast(tile)) score += 50
-            score += if (tile.isCityCenter() && tile.getOwner() == ctx.civ) 100 else map.defenseModifier(tile) * 4
-            plots.add(DeployPlot(tile, score, !subjectToAttack))
         }
         return plots.sortedByDescending { it.score }
     }

@@ -79,6 +79,23 @@ class DominanceZone(
     val enemyDomainRangedStrength get() = if (isWater) enemyNavalRangedStrength else enemyRangedStrength
 
     /**
+     *  CvTacticalDominanceZone::GetRangedDominanceFlag: the land ranged strengths (whatever the zone's domain) against each other; Friendly with none
+     *  of theirs and some of ours or more than 100 + [percentage] percent of theirs, Enemy below 100 - [percentage] percent, else Even
+     */
+    fun rangedDominance(percentage: Int): TacticalDominance {
+        if (enemyRangedStrength == 0 && friendlyRangedStrength > 0) return TacticalDominance.Friendly
+        val ratio = (0.5f + 100 * (friendlyRangedStrength.toFloat() / maxOf(1, enemyRangedStrength))).toInt()
+        return when {
+            ratio > 100 + percentage -> TacticalDominance.Friendly
+            ratio < 100 - percentage -> TacticalDominance.Enemy
+            else -> TacticalDominance.Even
+        }
+    }
+
+    /** CvTacticalDominanceZone::HasNeighborZone: a zone next to this one belongs to [civ] (its city is the neighbor's owner) */
+    fun hasNeighborZone(civ: Civilization): Boolean = neighbors.any { it.closestCity?.civ == civ }
+
+    /**
      *  CvTacticalDominanceZone::SetOverallDominance: [TacticalDominance.NoUnitsVisible] when neither side has any strength (a city counts),
      *  Friendly when only we have, Even when one enemy unit faces at most one of ours (one unit may tip the balance); otherwise the ratio of
      *  the overall strengths decides: we need more than 100 + [dominancePercentage] (at least 10, and 30 more in enemy territory, where

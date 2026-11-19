@@ -15,20 +15,21 @@ import com.unciv.models.ruleset.unique.UniqueType
 
 /**
  *  The air moves of the original: CvMilitaryAI::WillAirUnitRebase, GetNumEnemyAirUnitsInRange and GetBestAirSweepTarget; the tactical moves
- *  PlotAirSweepMoves / ExecuteAirSweepMoves and PlotAirInterceptMoves; CvHomelandAI::PlotAircraftMoves / ExecuteAircraftMoves (rebasing
+ *  PlotAirSweepMoves / ExecuteAirSweepMoves and PlotAirPatrolMoves; CvHomelandAI::PlotAircraftMoves / ExecuteAircraftMoves (rebasing
  *  to the base with the highest plot danger, with the carriers' free slots). Aircraft strikes are not here: combat-ready aircraft are strikers of
  *  [com.unciv.logic.automation.unit.tactical.TacticalAttacks] like any shooter, and what the tactical AI leaves of an aircraft is only [plotAircraftMove].
  *
  *  Deviations, with the reason: Unciv has no air patrol action - interception is automatic for a fighter that still has its movement -
- *  so the intercept move only keeps the fighter where it is, unmoved, for the turn; a carrier's free slot is [MapUnit.canTransport] (the
+ *  so the patrol move only keeps the fighter where it is, unmoved, for the turn; a carrier's free slot is [MapUnit.canTransport] (the
  *  CarryAirUnits uniques of the ruleset, which carry what the original's SpecialUnit_CarrierUnitAI says), rebasing needs the target within
- *  [MapUnit.getAirUnitMovementRange] and [com.unciv.logic.map.mapunit.movement.UnitMovement.canMoveTo]; CvUnit::canAirSweepAt is the sweep range;
- *  the original counts every enemy air unit within 10 tiles of a base, seen or not, as here.
+ *  [MapUnit.getAirUnitMovementRange] and [com.unciv.logic.map.mapunit.movement.UnitMovement.canMoveTo]; CvUnit::canAirSweepAt is the sweep range.
+ *  The original's sweep of the combat simulation (ExecuteAirSweep, FindAirUnitsToAirSweep in ExecuteAttackWithUnits) is not ported: the stand-alone
+ *  sweep of Brave New World's PlotAirSweepMoves stays in its place.
  */
 object AirMoves {
 
-    /** CvMilitaryAI::GetNumEnemyAirUnitsInRange counts enemy air units within this many tiles */
-    private const val ENEMY_AIR_RANGE = 10
+    /** CvMilitaryAI::GetNumEnemyAirUnitsInRange: an enemy air unit counts within its own range, at most this many tiles, plus half the asking unit's */
+    private const val MAX_ACCEPTABLE_RANGE = 12
 
     /** The share of hit points a base may lose before the aircraft in it want to leave (MAX_HIT_POINTS / 5) */
     private const val BASE_DAMAGE_DIVISOR = 5
@@ -57,13 +58,14 @@ object AirMoves {
             .flatMap { it.units.getCivUnits() }.filter { it.baseUnit.isAirUnit() }
 
     /**
-     *  CvMilitaryAI::GetNumEnemyAirUnitsInRange: the air units of players at war with [civ] within 10 tiles of [center]: fighters (units that
-     *  sweep or intercept) if [countFighters], the rest if [countBombers].
+     *  CvMilitaryAI::GetNumEnemyAirUnitsInRange (Vox Populi): the air units of players at war with [civ] that are within min(their range, 12) plus half
+     *  of [range] tiles of [center] (the caller's range, the fighter's own: fighters stay closer to the bombers that can reach them): fighters (units that
+     *  sweep or intercept) if [countFighters], the rest if [countBombers]. Seen or not, as the original.
      */
-    fun numEnemyAirUnitsInRange(civ: Civilization, center: Tile, countFighters: Boolean, countBombers: Boolean): Int {
+    fun numEnemyAirUnitsInRange(civ: Civilization, center: Tile, range: Int, countFighters: Boolean, countBombers: Boolean): Int {
         var result = 0
         for (unit in enemyAirUnits(civ)) {
-            if (center.aerialDistanceTo(unit.getTile()) > ENEMY_AIR_RANGE) continue
+            if (center.aerialDistanceTo(unit.getTile()) > minOf(unit.getRange(), MAX_ACCEPTABLE_RANGE) + range / 2) continue
             if (isAirSweepCapable(unit) || canAirDefend(unit)) { if (countFighters) result++ } else if (countBombers) result++
         }
         return result
@@ -113,7 +115,7 @@ object AirMoves {
         else carrierOf(unit)?.let { if (carrierDamaged(it)) needsToMove = true }
         // Is this a fighter that doesn't have any useful missions nearby
         if (canAirDefend(unit) || canAirSweep(unit)) {
-            if (numEnemyAirUnitsInRange(civ, tile, countFighters = true, countBombers = true) == 0 && bestAirSweepTarget(civ, unit) == null) needsToMove = true
+            if (numEnemyAirUnitsInRange(civ, tile, unit.getRange(), countFighters = true, countBombers = true) == 0 && bestAirSweepTarget(civ, unit) == null) needsToMove = true
         }
         if (!needsToMove) return false
         return civ.units.getCivUnits().any { carrier -> usableCarrier(unit, carrier) } ||
@@ -279,16 +281,25 @@ object AirMoves {
     }
 
     /**
-     *  CvTacticalAI::PlotAirInterceptMoves: a fighter that will not rebase, on a carrier or in a city where we do not dominate, with enemy
-     *  bombers in range, stays unmoved so that it intercepts (the original sets AIRPATROL).
+     *  CvTacticalAI::PlotAirPatrolMoves / ExecuteAirPatrolMoves: a fighter of the tactical AI (they will not rebase, [TacticalAi.commandeerUnits]) that
+     *  can intercept (CvUnit::canAirPatrol: an air unit with an intercept chance) goes on air patrol when fewer fighters than wanted already patrol
+     *  from its tile this turn: half the enemy bombers in its range (at least one interception if one bomber is there) plus a quarter of their
+     *  fighters ([numEnemyAirUnitsInRange] of the unit's own range). Going on patrol is staying where it is: it keeps its movement to intercept,
+     *  and the tactical AI is done with it.
      */
-    fun plotAirInterceptMoves(ctx: TacticalContext) {
+    fun plotAirPatrolMoves(ctx: TacticalContext) {
+        val patrolling = HashMap<Tile, Int>()
         for (unit in ctx.liveUnits()) {
-            if (!unit.baseUnit.isAirUnit() || !canAirDefend(unit) || willAirUnitRebase(unit)) continue
-            val dominance = cityZoneDominance(ctx, unit)
-            if (unit.getTile().isCityCenter() && dominance != null && dominance == TacticalDominance.Friendly) continue
-            if (numEnemyAirUnitsInRange(ctx.civ, unit.getTile(), countFighters = false, countBombers = true) == 0) continue
-            ctx.log { "${unit.name} at ${unit.getTile().position} ready to intercept enemy air units" }
+            if (!unit.baseUnit.isAirUnit() || !canAirDefend(unit)) continue
+            val tile = unit.getTile()
+            var bombers = numEnemyAirUnitsInRange(ctx.civ, tile, unit.getRange(), countFighters = false, countBombers = true)
+            val fighters = numEnemyAirUnitsInRange(ctx.civ, tile, unit.getRange(), countFighters = true, countBombers = false)
+            // To at least intercept once if only one bomber found
+            if (bombers == 1) bombers++
+            val wanted = bombers / 2 + fighters / 4
+            if ((patrolling[tile] ?: 0) >= wanted) continue
+            patrolling.merge(tile, 1, Int::plus)
+            ctx.log { "starting air patrol at ${tile.position} with ${unit.name}" }
             ctx.unitProcessed(unit, markTacticalMap = false)
         }
     }

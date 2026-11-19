@@ -4,71 +4,33 @@ import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.unit.tactical.AggressionLevel
 import com.unciv.logic.automation.unit.tactical.BarbarianMoves
+import com.unciv.logic.automation.unit.tactical.SafestPlot
+import com.unciv.logic.automation.unit.tactical.TacticalAi
 import com.unciv.logic.automation.unit.tactical.TacticalContext
 import com.unciv.logic.automation.unit.tactical.TacticalMoves
-import com.unciv.logic.automation.unit.tactical.SafestPlot
 import com.unciv.logic.automation.unit.tactical.TacticalSimulation
 import com.unciv.logic.automation.unit.tactical.TacticalTargetType
 import com.unciv.logic.automation.unit.tactical.TacticalTargets
 import com.unciv.logic.automation.unit.tactical.TradeMoves
 import com.unciv.logic.civilization.Civilization
-import com.unciv.models.ruleset.ai.AiDefine
 
 /**
  *  The barbarians' turn, CvTacticalAI as it runs for the barbarian player (ProcessDominanceZones' barbarian branch): all their units are
  *  tactical, there is no analysis map and no dominance zone; the targets are found ([TacticalTargets.find], with
- *  IdentifyPriorityBarbarianTargets) and one list of moves is run in the order of AI_TACTICAL_BARBARIAN_PRIORITY_* plus a die roll of up to
- *  AI_TACTICAL_MOVE_PRIORITY_RANDOMNESS per move (EstablishBarbarianPriorities, once a turn; a negative base priority never runs):
- *  capture city 9, damage city 5, destroy high/medium/low priority units 16/15/14, civilian attacks 13, camp defense 13, pillaging 12/14/4,
- *  escorting captured civilians 30, plundering trade units 20, attrition 10/7/6, move to safety 10, aggressive move 3, desperate attack 0
- *  (BNW data). The attacks on units and cities are [TacticalSimulation]'s with AL_BRAVEHEART (Vox Populi's PlotBarbarianAttacks: every unit
- *  target, then the cities; the damage city, attrition and desperate attack rows have no code of their own), pillaging and the capture of
- *  civilians are [TacticalMoves], the trade unit plunder is [TradeMoves], the
- *  hunting, sea raids, camp defense and captive escort are [BarbarianMoves]. Replaces the per-unit chain (pillage to heal, upgrade, attack
- *  nearby, pillage, wander).
+ *  IdentifyPriorityBarbarianTargets) and the moves of AssignBarbarianMoves are run in Vox Populi's fixed order ([assignBarbarianMoves]): camp
+ *  defense, the attacks on every unit and city (the attacks on units and cities are [TacticalSimulation]'s with AL_BRAVEHEART, PlotBarbarianAttacks),
+ *  capturing civilians, pillaging resources and improvements, plundering trade units and then moves to safety, the combat units first. The
+ *  hunting, sea raids, camp defense and captive escort are [BarbarianMoves], pillaging and the capture of civilians are [TacticalMoves], the trade
+ *  unit plunder is [TradeMoves]. Replaces the per-unit chain (pillage to heal, upgrade, attack nearby, pillage, wander) and, since the original no
+ *  longer has it, the list in the order of AI_TACTICAL_BARBARIAN_PRIORITY_* with a die roll of AI_TACTICAL_MOVE_PRIORITY_RANDOMNESS per move.
  *
- *  Not here: the blockade move (commented out in the
- *  original), the barbarian release turn (Unciv's spawner has its own start).
+ *  Deviations: the roaming of the units that are left is Brave New World's PlotBarbarianMove ([BarbarianMoves.executeMoves]: it ends the turn of
+ *  every unit it handles, where Vox Populi's ExecuteBarbarianRoaming leaves a unit that still can move), so it comes after the moves to
+ *  safety, not before them; the captive civilians' escort to a camp (Brave New World's, Vox Populi's roaming moves them) goes first.
+ *  Not here: ExecuteBarbarianTheft (stealing from or taking over a city-state next to a unit: CvBarbarians::DoStealFromCity and DoTakeOverCityState
+ *  have no counterpart), the blockade move (also commented out in Brave New World), the barbarian release turn (Unciv's spawner has its own start).
  */
 class BarbarianAutomation(val civInfo: Civilization) {
-
-    /** AIBarbarianTacticalMove: the moves of the barbarian list with their base priority and what they do */
-    enum class Move(val define: AiDefine, internal val run: (TacticalContext) -> Unit) {
-        CAPTURE_CITY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_CAPTURE_CITY, { TacticalSimulation.executeCaptureCityMoves(it) }),
-        /** Vox Populi has no damaging of cities: ExecuteCaptureCityMoves attacks them when it is time */
-        DAMAGE_CITY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DAMAGE_CITY, { }),
-        DESTROY_HIGH_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESTROY_HIGH_UNIT,
-            { TacticalMoves.destroyEnemyUnits(it, AggressionLevel.Braveheart, TacticalTargetType.HighPriorityUnit) }),
-        DESTROY_MEDIUM_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESTROY_MEDIUM_UNIT,
-            { TacticalMoves.destroyEnemyUnits(it, AggressionLevel.Braveheart, TacticalTargetType.MediumPriorityUnit) }),
-        DESTROY_LOW_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESTROY_LOW_UNIT,
-            { TacticalMoves.destroyEnemyUnits(it, AggressionLevel.Braveheart, TacticalTargetType.LowPriorityUnit) }),
-        MOVE_TO_SAFETY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_TO_SAFETY, { SafestPlot.plotMovesToSafety(it, true); SafestPlot.plotMovesToSafety(it, false) }),
-        /** Vox Populi has no attrition attacks for barbarians: the units were sent against every target above */
-        ATTRIT_HIGH_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_HIGH_UNIT, { }),
-        ATTRIT_MEDIUM_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_MEDIUM_UNIT, { }),
-        ATTRIT_LOW_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_LOW_UNIT, { }),
-        PILLAGE(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PILLAGE, { TacticalMoves.plotPillageMoves(it, TacticalTargetType.ImprovementResource, true) }),
-        PILLAGE_CITADEL(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PILLAGE_CITADEL, { TacticalMoves.plotPillageMoves(it, TacticalTargetType.Citadel, true) }),
-        PILLAGE_NEXT_TURN(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PILLAGE_NEXT_TURN, {
-            TacticalMoves.plotPillageMoves(it, TacticalTargetType.Citadel, false)
-            TacticalMoves.plotPillageMoves(it, TacticalTargetType.ImprovementResource, false)
-        }),
-        /** The original's PlotBlockadeImprovementMoves call is commented out: the move does nothing */
-        BLOCKADE_RESOURCE(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_BLOCKADE_RESOURCE, { }),
-        CIVILIAN_ATTACK(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_CIVILIAN_ATTACK, {
-            for (type in listOf(TacticalTargetType.VeryHighPriorityCivilian, TacticalTargetType.HighPriorityCivilian,
-                TacticalTargetType.MediumPriorityCivilian, TacticalTargetType.LowPriorityCivilian))
-                TacticalMoves.plotCivilianAttackMoves(it, type)
-        }),
-        AGGRESSIVE_MOVE(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_AGGRESSIVE_MOVE, { BarbarianMoves.executeMoves(it, true) }),
-        PASSIVE_MOVE(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PASSIVE_MOVE, { BarbarianMoves.executeMoves(it, false) }),
-        CAMP_DEFENSE(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_CAMP_DEFENSE, { BarbarianMoves.plotCampDefenseMoves(it) }),
-        /** Vox Populi has no such move: PlotBarbarianAttacks attacks every unit target with AL_BRAVEHEART and goes for the cities, the attrition and the desperate attack are the same plan */
-        DESPERATE_ATTACK(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESPERATE_ATTACK, { }),
-        ESCORT_CIVILIAN(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ESCORT_CIVILIAN, { BarbarianMoves.executeCivilianEscortMoves(it) }),
-        PLUNDER_TRADE_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PLUNDER_TRADE_UNIT, { TradeMoves.plotPlunderTradeUnitMoves(it) });
-    }
 
     fun automate() = timeThis("AI.Barbarians") {
         val cache = AutomationCache()
@@ -80,31 +42,31 @@ class BarbarianAutomation(val civInfo: Civilization) {
         state.unitDestinations.keys.retainAll(alive)
         if (units.isNotEmpty()) {
             val ctx = TacticalContext(civInfo, null, danger, cache, units, TacticalTargets.find(civInfo, null, danger))
-            for (move in establishPriorities(civInfo)) move.run(ctx)
+            assignBarbarianMoves(ctx)
             AiDecisionLog.log(civInfo) { "Barbarians: ${units.size} units, ${units.size - ctx.units.size} commanded, ${ctx.targets.all.size} targets" }
         }
         // fix buildup of alerts - to shrink saves and ease debugging
         civInfo.popupAlerts.clear()
     }
 
-    companion object {
-        /**
-         *  CvTacticalAI::EstablishBarbarianPriorities: the moves with a base priority of 0 or more, each with a die roll of
-         *  AI_TACTICAL_MOVE_PRIORITY_RANDOMNESS added, the highest first (stable in the order of [Move]).
-         */
-        fun establishPriorities(civ: Civilization): List<Move> {
-            val rules = civ.gameInfo.ruleset.ai
-            val random = civ.ai.random("BarbarianPriorities")
-            val randomness = rules.define(AiDefine.AI_TACTICAL_MOVE_PRIORITY_RANDOMNESS)
-            val prioritized = ArrayList<Pair<Move, Int>>()
-            for (move in Move.entries) {
-                var priority = rules.define(move.define)
-                // Make sure base priority is not negative
-                if (priority < 0) continue
-                if (randomness > 0) priority += random.nextInt(randomness)
-                prioritized.add(move to priority)
-            }
-            return prioritized.sortedByDescending { it.second }.map { it.first }
-        }
+    /** CvTacticalAI::AssignBarbarianMoves: all the targets are the current ones, there are no zones */
+    fun assignBarbarianMoves(ctx: TacticalContext) {
+        ctx.currentTargets = ctx.targets.all
+        BarbarianMoves.executeCivilianEscortMoves(ctx)
+        // Even barbarians like their camps
+        BarbarianMoves.plotCampDefenseMoves(ctx)
+        // Barbarians do not have tactical zones, they just attack everything that moves (PlotBarbarianAttacks)
+        TacticalMoves.destroyEnemyUnits(ctx, AggressionLevel.Braveheart)
+        TacticalSimulation.executeCaptureCityMoves(ctx)
+        for (type in TacticalAi.civilianTargetTypes) TacticalMoves.plotCivilianAttackMoves(ctx, type)
+        // Barbarians like to plunder as well
+        TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, true)
+        TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, true)
+        TradeMoves.plotPlunderTradeUnitMoves(ctx)
+        // Safety comes last for the barbarians...
+        SafestPlot.plotMovesToSafety(ctx, true)
+        SafestPlot.plotMovesToSafety(ctx, false)
+        // ...and the roaming to find targets for the units that did not attack or flee
+        BarbarianMoves.executeMoves(ctx, true)
     }
 }

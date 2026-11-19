@@ -50,8 +50,6 @@ class AiRuleset {
     var gameSpeedDiplomacy = ArrayList<GameSpeedDiplomacyDef>()
     var worldSizes = ArrayList<WorldSizeDef>()
     var multiUnitFormations = ArrayList<MultiUnitFormationDef>()
-    /** TacticalMoves rows by Type name, in XML order (CvTacticalAI::EstablishTacticalPriorities) */
-    var tacticalMoves = ArrayList<TacticalMoveDef>()
     /** The UnitPromotions CvUnit::AI_promotionValue reads, in XML order */
     var promotionAi = ArrayList<PromotionAiDef>()
     /** CvUnitEntry::GetPower (DoUpdatePower, promotion modifiers included) by Unciv unit name, computed from the XML; units without an entry use [BaseUnit.getAiPower]'s fallback */
@@ -117,7 +115,6 @@ class AiRuleset {
         mergeByName(gameSpeedDiplomacy, other.gameSpeedDiplomacy)
         mergeByName(worldSizes, other.worldSizes)
         mergeByName(multiUnitFormations, other.multiUnitFormations)
-        mergeByName(tacticalMoves, other.tacticalMoves)
         mergeByName(promotionAi, other.promotionAi)
         for (entry in other.itemFlavors) {
             val index = itemFlavors.indexOfFirst { it.kind == entry.kind && it.name == entry.name }
@@ -147,7 +144,6 @@ class AiRuleset {
         gameSpeedDiplomacy.clear()
         worldSizes.clear()
         multiUnitFormations.clear()
-        tacticalMoves.clear()
         promotionAi.clear()
         unitPower.clear()
         lastEra = NO_LAST_ERA

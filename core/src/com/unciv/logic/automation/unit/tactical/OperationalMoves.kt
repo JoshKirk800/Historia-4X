@@ -1,6 +1,5 @@
 package com.unciv.logic.automation.unit.tactical
 
-import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.strategy.AiArmy
@@ -21,7 +20,7 @@ import kotlin.math.min
 
 /**
  *  The movement of the armies of the AI operations: CvTacticalAI::PlotOperationalArmyMoves (the TACTICAL_MOVE_OPERATIONS move) with
- *  PlotSingleHexOperationMoves (a settler and its escort), PlotEnemyTerritoryOperationMoves (armies against a city or camp), ExecuteGatherMoves,
+ *  PlotArmyMovesEscort ([EscortMoves]: a settler and its escort), PlotEnemyTerritoryOperationMoves (armies against a city or camp), ExecuteGatherMoves,
  *  ExecuteFormationMoves, ClearEnemiesNearArmy, MoveWithFormation, and the army's part of CvAIOperation::ComputeCenterOfMassForTurn and
  *  CvArmyAI (movement rate, checkpoint turns). The operation model is [com.unciv.logic.automation.strategy.AiOperations]; the hexes the units
  *  take are scored by [Deployment]. Armies of the naval move types move by [NavalOperationMoves], which U6 adds as the `when` of [moveOperation].
@@ -37,8 +36,8 @@ import kotlin.math.min
  *  - the original's attack operations move only their first army, as here;
  *  - the route of the center of mass is [com.unciv.logic.automation.strategy.StepFinder]'s (own and allowed land, units ignored);
  *  - TurnsToReachTarget(unit, muster) for the checkpoint turns is [AiOperationLogic.turnsToReach] (the unit's path, units not ignored);
- *  - for a settler's escort the original asks the settler for the end of the escort's path (a slip: it reads the settler's own path);
- *    the end of the escort's path is used;
+ *  - a settler and its escort move as Vox Populi's PlotArmyMovesEscort says ([EscortMoves]; its deviations are listed there), BNW's
+ *    PlotSingleHexOperationMoves and its retargeting of the civilian are gone;
  *  - CvAIOperation::ArmyMoved is never called by the original and is not either;
  *  - a unit that has been placed is marked processed.
  */
@@ -101,107 +100,10 @@ object OperationalMoves {
     /** CvUnit::TurnProcessed: something already decided this unit's moves */
     private fun isProcessed(ctx: TacticalContext, unit: MapUnit) = unit in ctx.cache.processedUnits
 
-    //region Single hex: settlers and their escort (PlotSingleHexOperationMoves)
+    //region Single hex: settlers and their escort (PlotArmyMovesEscort)
 
-    /** CvTacticalAI::PlotSingleHexOperationMoves: a civilian and its escort meet, then move to the target together, one hex stack */
-    private fun moveSingleHex(ctx: TacticalContext, operation: AiOperation) {
-        val civ = ctx.civ
-        val army = operation.firstArmy ?: return
-        val units = AiOperationLogic.armyUnits(civ, army)
-        val civilian = units.firstOrNull()?.second ?: return
-        val escort = units.getOrNull(1)?.second
-        val target = AiOperationLogic.targetTile(civ, operation) ?: return
-
-        // ESCORT AND CIVILIAN MEETING UP
-        if (army.state == ArmyState.WAITING_FOR_UNITS_TO_REINFORCE || army.state == ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP) {
-            // Escort died or was poached for other tactical action, the operation will clean itself up in CheckOnTarget
-            if (escort == null || isProcessed(ctx, escort)) return
-            val meeting = civilian.getTile()
-            // Check to make sure escort can get to civilian
-            if (escort.getTile() == meeting || escort.movement.canReach(meeting)) {
-                // He can, so have civilian remain in place
-                Deployment.executeMoveToPlot(ctx, civilian, meeting)
-                if (army.numSlotsFilled() > 1) {
-                    Deployment.executeMoveToPlot(ctx, escort, meeting)
-                    ctx.log { "moving escorting ${escort.name} to civilian ${civilian.name} for operation, ${meeting.position}" }
-                }
-                return
-            }
-            // Find a new place to meet up, look at all hexes adjacent to civilian: somewhere both can move and be empty of other units
-            for (place in meeting.neighbors) {
-                if (place.getUnits().any() || !escort.movement.canMoveTo(place)) continue
-                if (escort.movement.canReach(place) && civilian.movement.canReach(place)) {
-                    Deployment.executeMoveToPlot(ctx, escort, place)
-                    Deployment.executeMoveToPlot(ctx, civilian, place)
-                    ctx.log { "moving ${escort.name} and ${civilian.name} to open hex ${place.position}" }
-                    return
-                }
-            }
-            // Didn't find an alternative, must abort operation
-            retarget(ctx, operation, army, civilian, escort, "no empty tile adjacent to civilian to meet")
-            return
-        }
-
-        // MOVING TO TARGET: if we're not there yet, we have work to do (otherwise CheckOnTarget will finish the operation for us)
-        if (civilian.getTile() == target) return
-        // Handle the case of no path found at all for the civilian
-        val civilianPath = civilian.movement.getShortestPath(target)
-        if (civilianPath.isEmpty()) {
-            retarget(ctx, operation, army, civilian, escort, "path lost to target")
-            return
-        }
-        val civilianMove = civilianPath.first()
-        var saveMoves = civilianMove == target
-        if (army.numSlotsFilled() == 1 || escort == null) {
-            // The original's path finder sees danger only for automated (human) units: the AI's civilian keeps to its path
-            Deployment.executeMoveToPlot(ctx, civilian, civilianMove, saveMoves)
-            ctx.log { "moving ${civilian.name} without escort to ${civilian.getTile().position}" }
-            return
-        }
-
-        // See if escort can move to the same location in one turn
-        if (Deployment.turnsToReachTile(escort, civilianMove) <= 1) {
-            Deployment.executeMoveToPlot(ctx, civilian, civilianMove, saveMoves)
-            Deployment.executeMoveToPlot(ctx, escort, civilianMove)
-            ctx.log { "moving ${civilian.name} and escort ${escort.name} to ${civilianMove.position}" }
-            return
-        }
-        val blocking = civilianMove.militaryUnit?.takeIf { it.civ == civ }
-        // See if friendly blocking unit is ending the turn there, or if no blocking unit (which indicates this is somewhere the civilian can
-        // move that the escort can't - like minor civ territory), then find a new path based on moving the escort
-        if (ctx.map.isFriendlyTurnEndTile(civilianMove) || blocking == null) {
-            val escortPath = escort.movement.getShortestPath(target)
-            if (escortPath.isEmpty()) {
-                retarget(ctx, operation, army, civilian, escort, "path lost to target for the escort")
-                return
-            }
-            val escortMove = escortPath.first()
-            saveMoves = escortMove == target
-            // See if civilian can move to the same location in one turn
-            if (Deployment.turnsToReachTile(civilian, escortMove) <= 1) {
-                Deployment.executeMoveToPlot(ctx, escort, escortMove)
-                Deployment.executeMoveToPlot(ctx, civilian, escortMove, saveMoves)
-                ctx.log { "moving escort ${escort.name} and ${civilian.name} to ${escortMove.position}" }
-            } else retarget(ctx, operation, army, civilian, escort, "too many blocking units")
-            return
-        }
-        // Looks like we should be able to move the blocking unit out of the way
-        if (TacticalMoves.executeMoveOfBlockingUnit(ctx, blocking)) {
-            Deployment.executeMoveToPlot(ctx, escort, civilianMove)
-            Deployment.executeMoveToPlot(ctx, civilian, civilianMove, saveMoves)
-            ctx.log { "moving escort ${escort.name} and ${civilian.name} to ${civilianMove.position}" }
-        } else retarget(ctx, operation, army, civilian, escort, "could not move blocking unit")
-    }
-
-    /** CvAIEscortedOperation::RetargetCivilian, and both units are done for the turn */
-    private fun retarget(ctx: TacticalContext, operation: AiOperation, army: AiArmy, civilian: MapUnit, escort: MapUnit?, reason: String) {
-        AiDecisionLog.log(ctx.civ) { "operation ${operation.type} #${operation.id}: retargeting the civilian, $reason (${operation.targetTile})" }
-        AiOperationLogic.retargetCivilian(ctx.civ, operation, army, civilian)
-        civilian.currentMovement = 0f
-        escort?.currentMovement = 0f
-        ctx.unitProcessed(civilian, false)
-        escort?.let { ctx.unitProcessed(it) }
-    }
+    /** CvTacticalAI::PlotArmyMovesEscort: a civilian and its escort meet, then move to the target together, one hex stack: [EscortMoves] */
+    private fun moveSingleHex(ctx: TacticalContext, operation: AiOperation) = EscortMoves.plotArmyMovesEscort(ctx, operation)
     //endregion
 
     //region Armies against a city or camp (PlotEnemyTerritoryOperationMoves)

@@ -406,6 +406,23 @@ class AiOperations : IsPartOfGameInfoSerialization {
         }
     }
 
+    /**
+     *  CvArmyAI::RemoveUnit with bTempOnly: [unit] leaves its army and gets its own unit AI back, the operation is not told (a unit that is
+     *  replaced at once, CvTacticalAI's SwitchEscort, must not end the operation).
+     *  @return the slot [unit] left, -1 if it was in no army
+     */
+    fun removeFromArmyTemporarily(unit: MapUnit): Int {
+        for (operation in operations) for (army in operation.armies) {
+            val index = army.slots.indexOfFirst { it.unitId == unit.id }
+            if (index < 0) continue
+            army.slots[index].unitId = -1
+            army.slots[index].checkpointTurns.clear()
+            releaseUnitAi(unit.id)
+            return index
+        }
+        return -1
+    }
+
     /** CvArmyAI::RemoveUnit's AI_setUnitAIType(default): a unit that leaves an army is no longer what its slot made of it */
     private fun releaseUnitAi(unitId: Int) {
         val unit = civ.units.getUnitById(unitId) ?: return

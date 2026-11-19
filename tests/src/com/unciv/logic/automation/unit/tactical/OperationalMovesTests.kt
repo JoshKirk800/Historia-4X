@@ -293,7 +293,7 @@ class OperationalMovesTests {
     }
 
     // endregion
-    // region ClearEnemiesNearArmy
+    // region CheckForEnemiesNearArmy
 
     @Test
     fun `enemies next to the army's position are attacked by the army's units, which then count as the tactical AI's for the turn`() {
@@ -307,22 +307,10 @@ class OperationalMovesTests {
         for ((index, unit) in units(operation).withIndex()) { unit.removeFromTile(); unit.putInTile(placed[index]) }
         val army3 = units(operation)
         val ctx = context()
-        OperationalMoves.clearEnemiesNearArmy(ctx, army)
+        assertTrue("the army fought", OperationalMoves.checkForEnemiesNearArmy(ctx, army))
         assertTrue("the victim is hit or dead", victim.isDestroyed || victim.health < 20)
         assertTrue(army3.any { it.attacksThisTurn > 0 })
         assertTrue("army units joined this turn's units", army3.all { it in ctx.units || it in ctx.cache.processedUnits })
-    }
-
-    @Test
-    fun `enemies farther than one hex from the army's position are not its business`() {
-        val operation = gatheringAttack()
-        val army = operation.firstArmy!!
-        army.position = tile(0, 0).position
-        val victim = unit("Warrior", 3, 3, enemy)
-        val ctx = context()
-        OperationalMoves.clearEnemiesNearArmy(ctx, army)
-        assertEquals(100, victim.health)
-        assertTrue(ctx.units.isEmpty())
     }
 
     // endregion

@@ -4,6 +4,7 @@ import com.unciv.logic.automation.unit.CivilianSafety
 import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
+import com.unciv.logic.map.mapunit.UnitTurnManager
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.BaseTestRunner
@@ -198,12 +199,14 @@ class TacticalSafetyTests {
     // region Healing
 
     @Test
-    fun `a hurt unit outside a city fortifies to heal and its turn is over`() {
+    fun `a hurt unit outside a city fortifies to heal and keeps its movement, so that it does heal at the end of the turn`() {
         val unit = game.addUnit("Warrior", civ, tile(0))
         unit.health = 60
         assertTrue(TacticalSafety.heal(unit))
         assertTrue(unit.isFortified())
-        assertEquals(0f, unit.currentMovement, 0f)
+        assertFalse("a unit with its movement used up counts as having moved and does not heal", unit.hasUnitMovedThisTurn())
+        UnitTurnManager(unit).endTurn()
+        assertEquals(70, unit.health)
     }
 
     @Test

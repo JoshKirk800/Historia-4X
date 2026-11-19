@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.json.json
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.city.managers.CityConquestFunctions
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.metadata.BaseRuleset
@@ -10,6 +11,8 @@ import com.unciv.models.ruleset.ai.EconomicStrategyDef
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.GrandStrategyDef
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.nation.Nation
+import com.unciv.models.ruleset.nation.Personality
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stats
 import com.unciv.testing.GdxTestRunner
@@ -55,31 +58,182 @@ class GrandStrategyAiTests {
         assertEquals(27, GrandStrategyAi.baseGrandStrategyPriority(civ, def(GrandStrategyAi.CONQUEST)))
     }
 
+    private fun conquest(civ: Civilization) = GrandStrategyAi.conquestPriority(civ, def(GrandStrategyAi.CONQUEST))
+
+    /** A tile no city's territory touches */
+    private fun farTile() = game.tileMap.values.first { it.getOwner() == null && it.neighbors.none { n -> n.getOwner() != null } }
+
+    /**
+     *  [count] majors with a city each, that nobody has met (founding a city within sight meets the neighbors, so that is undone): enough
+     *  capitals around for no civilization to be close to world conquest
+     */
+    private fun bystanders(count: Int) = List(count) {
+        val bystander = neutralCiv()
+        game.addCity(bystander, farTile())
+        for (other in game.gameInfo.civilizations) {
+            other.diplomacy.remove(bystander.civID)
+            bystander.diplomacy.remove(other.civID)
+        }
+        bystander
+    }
+
     @Test
-    fun `conquest priority scales boldness and approach biases by the era`() {
+    fun `conquest priority scales boldness, the approach biases and meanness by the era from 10`() {
         val civ = neutralCiv()
         civ.ai.setDiplomacyValue(DiplomacyPersonality.Boldness, 8)
+        civ.ai.setDiplomacyValue(DiplomacyPersonality.Meanness, 6)
         civ.ai.setMajorCivApproachBias(MajorCivApproach.War, 7)
         civ.ai.setMajorCivApproachBias(MajorCivApproach.Hostile, 4)
         civ.ai.setMajorCivApproachBias(MajorCivApproach.Deceptive, 9)
         civ.ai.setMajorCivApproachBias(MajorCivApproach.Friendly, 5)
-        // (boldness + max(deceptive, hostile, war) - friendly) * (12 - era 0)
-        assertEquals((8 + 9 - 5) * 12, GrandStrategyAi.conquestPriority(civ, def(GrandStrategyAi.CONQUEST)))
+        // GetConquestPriority: (boldness + max(deceptive, hostile, war) - friendly + meanness) * (10 - era), the era at least 1
+        assertEquals(0, civ.getAiEraNumber())
+        assertEquals((8 + 9 - 5 + 6) * 9, conquest(civ))
+        civ.tech.era = game.ruleset.eras["Medieval era"]!!
+        assertEquals((8 + 9 - 5 + 6) * (10 - civ.getAiEraNumber()), conquest(civ))
+    }
+
+    @Test
+    fun `being close to world conquest adds 9000`() {
+        val civ = neutralCiv()
+        game.addCity(civ, game.getTile(0, 0))
+        assertTrue(VictoryProgressAi.isCloseToWorldConquest(civ, game.ruleset.ai))
+        assertEquals(9000, conquest(civ))
+        bystanders(2)
+        assertEquals(0, conquest(civ))
+    }
+
+    @Test
+    fun `a conquered major adds 50 and each of several 125, also when its capital is not held`() {
+        val civ = neutralCiv()
+        game.addCity(civ, game.getTile(0, 0))
+        bystanders(4)
+        val first = neutralCiv()
+        val firstCapital = game.addCity(first, farTile())
+        val second = neutralCiv()
+        val secondCapital = game.addCity(second, farTile())
+        assertEquals(0, conquest(civ))
+
+        CityConquestFunctions(firstCapital).puppetCity(civ)
+        assertEquals("the original capital of a major we took", 50, conquest(civ))
+        CityConquestFunctions(secondCapital).puppetCity(civ)
+        assertEquals(2 * 125, conquest(civ))
+    }
+
+    @Test
+    fun `a major killed without taking its capital counts as conquered`() {
+        val civ = neutralCiv()
+        game.addCity(civ, game.getTile(0, 0))
+        bystanders(3)
+        val victim = neutralCiv()
+        val city = game.addCity(victim, farTile())
+        city.isOriginalCapital = false // the capital was lost long ago: only the kill is left
+        victim.hasEverOwnedOriginalCapital = true
+        assertEquals(0, conquest(civ))
+        CityConquestFunctions(city).puppetCity(civ)
+        assertTrue(victim.isDefeated())
+        assertEquals(50, conquest(civ))
+        // somebody else's kill is not ours
+        assertEquals(0, conquest(bystanders(1).first()))
+    }
+
+    @Test
+    fun `the world military average shrinks by a tenth for each major conquered`() {
+        val civ = neutralCiv()
+        game.addCity(civ, game.getTile(0, 0))
+        val others = bystanders(4)
+        civ.diplomacyFunctions.makeCivilizationsMeet(others[0])
+        for (i in 1..3) game.addUnit("Warrior", civ, game.getTile(i, -1))
+        for (other in others) // the rest of the world has more might than we have: not close to world conquest
+            for (tile in other.cities.first().getCenterTile().neighbors.take(4)) game.addUnit("Warrior", other, tile)
+        val victim = neutralCiv()
+        val capital = game.addCity(victim, farTile())
+        CityConquestFunctions(capital).puppetCity(civ)
+        game.gameInfo.turns = 60 // AI_GS_CONQUEST_MILITARY_STRENGTH_FIRST_TURN
+        val might = civ.ai.militaryMight()
+        val average = GrandStrategyAi.worldMilitaryStrengthAverage(civ) * 100 / 110
+        assertTrue(might > 0 && average > 0)
+        var ratio = (might - average) * 100 / average
+        if (ratio > 0) ratio /= 2
+        assertEquals(50 + ratio, conquest(civ))
+    }
+
+    @Test
+    fun `more met land per player than ours adds the cramped weight, five times it when cramped`() {
+        val civ = neutralCiv()
+        game.addCity(civ, game.getTile(0, 0))
+        val rich = neutralCiv()
+        val richCity = game.addCity(rich, farTile())
+        bystanders(1)
+        civ.diplomacyFunctions.makeCivilizationsMeet(rich)
+        assertEquals(0, conquest(civ))
+        for (tile in game.tileMap.values.filter { it.getOwner() == null }.take(30)) tile.setOwningCity(richCity)
+        // AI_GRAND_STRATEGY_CONQUEST_CRAMPED_WEIGHT 20
+        assertEquals(20, conquest(civ))
+        civ.ai.isCramped = true
+        assertEquals(100, conquest(civ))
+    }
+
+    @Test
+    fun `the flavors of policies and buildings add an eighth`() {
+        val civ = neutralCiv()
+        val city = game.addCity(civ, game.getTile(0, 0))
+        bystanders(2)
+        // Discipline: Offense 10, Defense 5 (not counted), Mobile 5; Barracks: Military Training 20; Statue of Zeus: Offense 25 counted twice
+        civ.policies.getAdoptedPolicies().add("Discipline")
+        city.cityConstructions.addBuilding("Barracks")
+        city.cityConstructions.addBuilding("Statue of Zeus")
+        assertEquals((10 + 5 + 20 + 2 * 25) / 8, conquest(civ))
+    }
+
+    @Test
+    fun `a warmonger leader adds 100 and a smaller one takes 100`() {
+        for ((category, amount) in listOf("Warmonger" to 100, "Smaller" to -100, "Expansionist" to 50)) {
+            val personality = Personality().apply { name = "Test $category"; traitCategories = linkedMapOf(category to 1) }
+            game.ruleset.personalities[personality.name] = personality
+            val nation = Nation().apply { name = "Nation $category"; this.personality = personality.name; cities = arrayListOf("The Capital") }
+            game.ruleset.nations[nation.name] = nation
+            val civ = game.addCiv(nation)
+            for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
+            for (value in DiplomacyPersonality.entries) civ.ai.setDiplomacyValue(value, 0)
+            for (approach in MajorCivApproach.entries) civ.ai.setMajorCivApproachBias(approach, 0)
+            assertEquals(category, amount, conquest(civ))
+        }
+    }
+
+    @Test
+    fun `an ideology and another civilization close to a victory add the danger times the era`() {
+        val civ = neutralCiv()
+        game.addCity(civ, game.getTile(0, 0))
+        val rival = neutralCiv()
+        val rivalCity = game.addCity(rival, farTile())
+        bystanders(1)
+        civ.diplomacyFunctions.makeCivilizationsMeet(rival)
+        rival.tech.techsResearched.addAll(game.ruleset.technologies.keys)
+        rivalCity.cityConstructions.addBuilding("Apollo Program")
+        assertTrue(VictoryProgressAi.isCloseToSpaceshipVictory(rival, game.ruleset.ai))
+        assertEquals("no ideology of ours: the rival's progress is not counted", 0, conquest(civ))
+        civ.policies.getAdoptedPolicies().add("Freedom")
+        assertTrue(civ.policies.getIdeology() != null)
+        // desperate (we are close to nothing and the rival is): 25, times the era (at least 1)
+        assertEquals(25, conquest(civ))
     }
 
     @Test
     fun `a met major that is dead still counts as met`() {
         val civ = neutralCiv()
         game.addCity(civ, game.getTile(0, 0))
+        bystanders(2) // so that holding the only met capital is not close to world conquest
         game.gameInfo.turns = 30
         // AI_GRAND_STRATEGY_CONQUEST_NOBODY_MET_WEIGHT -50 from turn AI_GS_CONQUEST_NOBODY_MET_FIRST_TURN 20 when no major has been met
         assertEquals(-50, GrandStrategyAi.conquestPriority(civ, def(GrandStrategyAi.CONQUEST)))
         val other = neutralCiv()
-        game.addCity(other, game.getTile(3, 0))
+        val otherCity = game.addCity(other, game.getTile(3, 0))
         civ.diplomacyFunctions.makeCivilizationsMeet(other)
         assertEquals(0, GrandStrategyAi.conquestPriority(civ, def(GrandStrategyAi.CONQUEST)))
         // the original loops over the teams: the dead one has still been met
         other.cities = listOf()
+        for (tile in otherCity.getTiles().toList()) tile.setOwningCity(null) // a dead civilization owns no land
         other.hasEverOwnedOriginalCapital = true
         assertTrue(other.isDefeated())
         assertEquals(0, GrandStrategyAi.conquestPriority(civ, def(GrandStrategyAi.CONQUEST)))
@@ -173,6 +327,7 @@ class GrandStrategyAiTests {
     fun `an active grand strategy is kept for 10 turns before it can change`() {
         val civ = neutralCiv()
         game.addCity(civ, game.tileMap[0, 0])
+        bystanders(2) // holding the only capital would be close to world conquest
         civ.ai.setPersonalityFlavor(Flavor.Culture, 20) // culture: 200 base + 400 flavor term, far above anything else
         civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         civ.ai.turnsSinceGrandStrategySet = 8

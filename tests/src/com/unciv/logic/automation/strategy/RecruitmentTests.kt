@@ -78,7 +78,7 @@ class RecruitmentTests {
     @Test
     fun `a unit with more power than 30 per extra turn of its way outranks the nearer one`() {
         val spearman = unit("Spearman", 0, 0)
-        val pikeman = unit("Pikeman", 2, 0)
+        val pikeman = unit("Pikeman", 1, 0)
         val army = closeDefense().firstArmy!!
         // Spearman power 45 at the muster point, Pikeman power 81 one turn away: 10045 against 10051
         assertEquals(pikeman.id, army.slots[0].unitId)

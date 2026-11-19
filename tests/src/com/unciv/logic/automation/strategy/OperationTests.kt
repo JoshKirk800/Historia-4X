@@ -545,7 +545,7 @@ class OperationTests {
         // Not ready: the land army for the first target is requested
         assertFalse(MilitaryOperations.requestSneakAttack(civ, enemy))
         assertEquals(1, civ.ai.military.numLandAttacksRequested)
-        fillAttackReserves()
+        fillAttackReserves(archers = 2) // one archer remains garrisoned and is not available for operations
         repeat(6) { unit("Warrior") }
         civ.ai.military.updateBaseData(civ)
         assertTrue(MilitaryOperations.requestSneakAttack(civ, enemy))

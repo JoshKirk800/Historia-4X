@@ -422,14 +422,20 @@ class NavalOperationTests {
         assertFalse("at peace", MilitaryOperations.shouldLaunchNuke(civ, enemy))
     }
 
+    /** DoNuke reads the military strength without our boldness (VP's GetRawMilitaryStrengthComparedToUs) */
+    private fun setStrength(level: StrengthLevel) {
+        civ.ai.warStates.militaryStrengths[enemy.civID] = level
+        civ.ai.warStates.rawMilitaryStrengths[enemy.civID] = level
+    }
+
     /** CvMilitaryAI::DoNuke (Vox Populi): a war we will surely lose launches without a roll */
     @Test
     fun `a nuke is launched without a roll when the enemy is immense or we are nearly defeated`() {
         atWarWithNukes()
         civ.ai.setPersonalityFlavor(Flavor.UseNuke, 0)
-        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Immense
+        setStrength(StrengthLevel.Immense)
         assertTrue(MilitaryOperations.shouldLaunchNuke(civ, enemy))
-        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Average
+        setStrength(StrengthLevel.Average)
         civ.ai.warStates.warStates[enemy.civID] = WarState.NearlyDefeated
         assertTrue(MilitaryOperations.shouldLaunchNuke(civ, enemy))
     }
@@ -439,14 +445,14 @@ class NavalOperationTests {
     fun `a war that goes badly, a hated enemy, a conquest or an enemy close to victory rolls for the nuke`() {
         atWarWithNukes()
         civ.ai.setPersonalityFlavor(Flavor.UseNuke, 10) // 0..9 is always at most 10
-        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Strong
+        setStrength(StrengthLevel.Strong)
         civ.ai.warStates.warStates[enemy.civID] = WarState.Stalemate
         civ.ai.diplomacy.setOpinion(enemy, com.unciv.logic.automation.diplomacy.MajorCivOpinion.Competitor)
         assertFalse("no reason to roll", MilitaryOperations.shouldLaunchNuke(civ, enemy))
 
-        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Powerful
+        setStrength(StrengthLevel.Powerful)
         assertTrue("powerful enemy", MilitaryOperations.shouldLaunchNuke(civ, enemy))
-        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Strong
+        setStrength(StrengthLevel.Strong)
 
         civ.ai.warStates.warStates[enemy.civID] = WarState.Defensive
         assertTrue("defensive war", MilitaryOperations.shouldLaunchNuke(civ, enemy))
@@ -464,7 +470,7 @@ class NavalOperationTests {
     @Test
     fun `the roll uses the use nuke flavor on a scale of 1 to 10`() {
         atWarWithNukes()
-        civ.ai.warStates.militaryStrengths[enemy.civID] = StrengthLevel.Powerful
+        setStrength(StrengthLevel.Powerful)
         civ.ai.setPersonalityFlavor(Flavor.UseNuke, 0)
         assertEquals(1, MilitaryOperations.useNukeFlavorForDiplomacy(civ))
         civ.ai.setPersonalityFlavor(Flavor.UseNuke, 14)

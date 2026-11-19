@@ -548,9 +548,11 @@ object ApproachAi {
         when (WarStateAi.targetValue(civ, other)) {
             TargetValue.Impossible -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_IMPOSSIBLE else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_IMPOSSIBLE
             TargetValue.Bad -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_BAD else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_BAD
+            TargetValue.Difficult -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_DIFFICULT else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_DIFFICULT
             TargetValue.Average -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_AVERAGE else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_AVERAGE
             TargetValue.Favorable -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_FAVORABLE else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_FAVORABLE
             TargetValue.Soft -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_SOFT else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_SOFT
+            TargetValue.Cakewalk -> if (wantsConquest) AiDefine.CONQUEST_WAR_MULTIPLIER_TARGET_CAKEWALK else AiDefine.MAJOR_WAR_MULTIPLIER_TARGET_CAKEWALK
             null -> null
         }?.let { warAndHostile(rules.define(it)) }
         val ours = DiplomacyTurn.proximity(civ, other)
@@ -1053,7 +1055,7 @@ object ApproachAi {
             val likelihood = when {
                 other.isHuman() -> 100
                 timesNukedByThem > 0 || (other.ai.diplomacy.memories[civ.civID]?.numTimesNuked ?: 0) > 0 -> 100
-                WarStateAi.militaryStrengthComparedToUs(other, civ) == StrengthLevel.Immense
+                WarStateAi.rawMilitaryStrengthComparedToUs(other, civ) == StrengthLevel.Immense
                     || WarStateAi.warState(other, civ) == WarState.NearlyDefeated -> 100
                 else -> other.ai.personalityFlavorVector()[Flavor.UseNuke.ordinal] * 10
             }
@@ -1180,7 +1182,7 @@ object ApproachAi {
      *  dispute and block levels and its tech and policy blocks have no input here.
      */
     fun victoryConcern(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
-        if (VictoryProgressAi.isCloseToWorldConquest(other, rules) || VictoryProgressAi.capitalsConquered(other) >= 3) return true
+        if (VictoryProgressAi.isCloseToWorldConquest(other, rules) || VictoryProgressAi.numMajorsConquered(other) >= 3) return true
         if (!VictoryProgressAi.isCompetingForVictory(civ)) return false
         val memory = civ.ai.diplomacy.memories[other.civID] ?: return VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)
         return VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)

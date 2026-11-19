@@ -72,6 +72,7 @@ class WarSituationApproachTests {
     fun `a powerful neighbour deters war and draws fear and guard`() {
         a.proximity[c.civID] = Proximity.Neighbors
         a.ai.warStates.militaryStrengths[c.civID] = StrengthLevel.Powerful
+        a.ai.warStates.rawMilitaryStrengths[c.civID] = StrengthLevel.Powerful // IsPotentialMilitaryTargetOrThreat reads the raw one
         val delta = stageDelta("Dangerous neighbours")
         // (proximity 2 + strength 2) x 100%: bias 5 x 4
         assertEquals(-20, delta[MajorCivApproach.War.ordinal])
@@ -94,7 +95,9 @@ class WarSituationApproachTests {
     fun `a conqueror not yet close to victory seeks friendship with the strong`() {
         a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         a.ai.warStates.militaryStrengths[b.civID] = StrengthLevel.Powerful
+        a.ai.warStates.rawMilitaryStrengths[b.civID] = StrengthLevel.Powerful
         a.ai.warStates.targetValues[b.civID] = TargetValue.Average
+        a.ai.warStates.rawTargetValues[b.civID] = TargetValue.Average // the grand strategy part reads the raw one
         val delta = stageDelta("Grand strategy: domination")
         // (powerful - average) x 2 = 4 times the bias; war also gains the flavors (boldness + work-against) / 2
         assertEquals(20, delta[MajorCivApproach.Friendly.ordinal])

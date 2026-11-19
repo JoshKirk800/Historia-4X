@@ -65,7 +65,7 @@ object PeaceAi {
                 CoopWarAi.globalState(civ, third) == CoopWarState.Soon) return true
         }
         if (civ.cities.isNotEmpty() && other.cities.isEmpty() &&
-            (WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average) < StrengthLevel.Poor) return true
+            (WarStateAi.rawMilitaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average) < StrengthLevel.Poor) return true
         val theirCapture = other.ai.diplomacy.memories[civ.civID]?.lastCityCaptureTurn ?: -1
         if (WarDamageAi.warScore(civ, other) > -100 && theirCapture >= 0 && civ.gameInfo.turns - theirCapture <= 1 &&
             unitsAroundEnemyCities(civ, other, 3) > 1) {
@@ -197,7 +197,7 @@ object PeaceAi {
 
         // Part 8
         if (civ.cities.isNotEmpty() && other.cities.isEmpty() &&
-            (WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average) < StrengthLevel.Poor) return false
+            (WarStateAi.rawMilitaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average) < StrengthLevel.Poor) return false
         val strength = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
         val theyAreTerrible = WarStateAi.isInTerribleShapeForWar(other)
         var score = when {
@@ -268,7 +268,7 @@ object PeaceAi {
         if (endgameAggressive) score -= 20
         if (score > 0) {
             if (!terrible) {
-                val target = WarStateAi.targetValue(civ, other) ?: TargetValue.Average
+                val target = WarStateAi.rawTargetValue(civ, other) ?: TargetValue.Average
                 if (warScore >= 0 || (warScore > negativeThreshold / 2 && target >= TargetValue.Average && state > WarState.Defensive)) {
                     score = when {
                         capturedAnyFromUs -> if (warScore > duration / 2) score / 2 else score * 75 / 100
@@ -279,6 +279,7 @@ object PeaceAi {
                                 !capitalTaken -> score * 75 / 100
                                 (civ.ai.diplomacy.memoryOf(other).economicStrength ?: StrengthLevel.Average) <= StrengthLevel.Weak ||
                                     target <= TargetValue.Bad -> score * 2
+                                WarStateAi.targetValue(civ, other) == TargetValue.Difficult -> score * 3 / 2
                                 else -> score
                             }
                         }

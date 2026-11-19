@@ -57,8 +57,10 @@ class EasyTargetTests {
     fun `a pathetic army in a stalemate makes them an easy target, a defensive war never`() {
         a.getDiplomacyManager(b)!!.declareWar()
         a.ai.warStates.militaryStrengths[b.civID] = StrengthLevel.Pathetic
+        a.ai.warStates.rawMilitaryStrengths[b.civID] = StrengthLevel.Pathetic // held back (no new wars or deterrents), the raw values count
         a.ai.warStates.warStates[b.civID] = WarState.Stalemate
         a.ai.warStates.targetValues[b.civID] = TargetValue.Average // not a bad target, which VP's table rejects first
+        a.ai.warStates.rawTargetValues[b.civID] = TargetValue.Average
         update()
         assertTrue(WarStateAi.isEasyTarget(a, b))
         a.ai.warStates.warStates[b.civID] = WarState.Defensive

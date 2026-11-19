@@ -1,12 +1,16 @@
 package com.unciv.logic.automation.strategy
 
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
+import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
+import com.unciv.models.ruleset.PolicyBranch
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.GrandStrategyDef
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import kotlin.math.max
@@ -24,6 +28,8 @@ import kotlin.math.min
  *  - getNumNukeUnits: the civilization's units with the nuclear weapon unique.
  *  - CvTeam::GetNumMinorCivsAttacked: Unciv's count of direct war declarations on city-states ([Civilization.numMinorCivsAttacked]).
  *  - CvDiplomacyAI::GetOtherPlayerNum{Minors,Majors}{Attacked,Conquered}: [CivAi.aggressionMemory], fed by [onWarDeclared] and [onCivDestroyed].
+ *  - CvDiplomacyAI::GetPlayerNumMajorsConquered (our own, for the conquest priority): [VictoryProgressAi.numMajorsConquered], from
+ *    [Civilization.killedBy] and the original capitals held.
  *  - League votes: Unciv's World Congress ([com.unciv.logic.league.League.getDelegates], votes needed = getVotesNeededForWorldLeader);
  *    "no active league" = no World Congress founded yet.
  *  - Traits: CityStateFriendshipModifier = 100 for the unique "City-State Influence recovers at twice the normal rate" (the original's +100%
@@ -119,7 +125,16 @@ object GrandStrategyAi {
     private fun isVictoryValid(civ: Civilization, def: GrandStrategyDef): Boolean =
         civ.victoryManager.getAvailableVictories().any { it.name == def.victoryType }
 
-    /** CvGrandStrategyAI::GetConquestPriority */
+    /**
+     *  CvGrandStrategyAI::GetConquestPriority (Vox Populi 5.4.8; the file's one MOD_BALANCE_VP use is the paper resource of
+     *  GetUnitedNationsPriority). Boldness, the approach biases and meanness weigh (10 - era), the era at least 1; +9000 when close to world
+     *  conquest; -50 with nobody met; +50 for one major conquered, 125 for each when more ([VictoryProgressAi.numMajorsConquered]); the
+     *  military ratio against the world average, which is reduced by 10 % per major conquered; +10 at war; land: more met land per player than
+     *  ours adds the cramped weight, five times it when cramped; the danger of others' victories and an ideology of our own (the late game
+     *  tree), times the era; -50 when others have nuclear weapons and we do not; and the bonus of [conquestFlavorBonus].
+     *  The player's own blocked policies and the belief effects of the state religion (combat bonuses in enemy lands and cities, faith from
+     *  kills, yields from conquest and kills) map to none: Unciv has no blocked policies and keeps belief effects as uniques without those columns.
+     */
     fun conquestPriority(civ: Civilization, def: GrandStrategyDef): Int {
         if (!isVictoryValid(civ, def) && civ.victoryManager.getAvailableVictories().isNotEmpty()) return -100
         val ai = civ.ai
@@ -128,17 +143,27 @@ object GrandStrategyAi {
         val elapsedTurns = gameInfo.turns
         var priority = 0
 
+        val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
+        if (closeToConquest) priority += 9000
+
         val approachModifier = max(max(ai.majorCivApproachBias(MajorCivApproach.Deceptive), ai.majorCivApproachBias(MajorCivApproach.Hostile)),
             ai.majorCivApproachBias(MajorCivApproach.War)) - ai.majorCivApproachBias(MajorCivApproach.Friendly)
-        priority += (ai.diplomacyValue(DiplomacyPersonality.Boldness) + approachModifier) * (12 - civ.getAiEraNumber())
+        val era = max(1, civ.getAiEraNumber())
+        priority += (ai.diplomacyValue(DiplomacyPersonality.Boldness) + approachModifier + ai.diplomacyValue(DiplomacyPersonality.Meanness)) * (10 - era)
 
         // CvGrandStrategyAI::GetConquestPriority loops over the teams, so a major that has been met counts whether or not it is still alive
         if (elapsedTurns >= rules.define(AiDefine.AI_GS_CONQUEST_NOBODY_MET_FIRST_TURN)
             && gameInfo.civilizations.none { it.isMajorCiv && !it.isSpectator && it != civ && civ.knows(it) })
             priority += rules.define(AiDefine.AI_GRAND_STRATEGY_CONQUEST_NOBODY_MET_WEIGHT)
 
+        val numConquests = VictoryProgressAi.numMajorsConquered(civ)
+        if (numConquests == 1) priority += 50
+        else if (numConquests > 1) priority += numConquests * 125
+
         if (elapsedTurns >= rules.define(AiDefine.AI_GS_CONQUEST_MILITARY_STRENGTH_FIRST_TURN)) {
-            val worldMilitaryStrength = worldMilitaryStrengthAverage(civ)
+            var worldMilitaryStrength = worldMilitaryStrengthAverage(civ)
+            // Reduce the world average if we are rocking multiple capitals
+            if (numConquests > 0) worldMilitaryStrength = worldMilitaryStrength * 100 / (100 + numConquests * 10)
             if (worldMilitaryStrength > 0) {
                 var militaryRatio = (ai.militaryMight() - worldMilitaryStrength) *
                     rules.define(AiDefine.AI_GRAND_STRATEGY_CONQUEST_POWER_RATIO_MULTIPLIER) / worldMilitaryStrength
@@ -150,20 +175,26 @@ object GrandStrategyAi {
 
         if (civ.isAtWar()) priority += rules.define(AiDefine.AI_GRAND_STRATEGY_CONQUEST_AT_WAR_WEIGHT)
 
-        if (ai.isCramped && isCrampedByMetPlayers(civ)) priority += rules.define(AiDefine.AI_GRAND_STRATEGY_CONQUEST_CRAMPED_WEIGHT)
+        val hasIdeology = civ.policies.getIdeology() != null
+        val desperate = hasIdeology && !closeToConquest && !VictoryProgressAi.isCloseToCultureVictory(civ, rules) &&
+            !VictoryProgressAi.isCloseToDiploVictory(civ, rules) && !VictoryProgressAi.isCloseToSpaceshipVictory(civ, rules)
+        var numDangerPlayers = 0
+        var numPlayersMet = 1 // Include 1 for me!
+        for (other in gameInfo.civilizations) {
+            if (other == civ || !other.isMajorCiv || !other.isAlive() || !civ.knows(other)) continue
+            numPlayersMet++
+            if (!hasIdeology) continue
+            numDangerPlayers += if (VictoryProgressAi.isCloseToCultureVictory(other, rules) || VictoryProgressAi.isCloseToDiploVictory(other, rules) ||
+                VictoryProgressAi.isCloseToSpaceshipVictory(other, rules)) {
+                // Close to nothing, and someone else is? Eek! Someone else is close, but we are too? Keep an eye on domination as an option
+                if (desperate) 25 else 5
+            } else if (desperate) 5 else 0 // They have an ideology, and we don't? Uh-oh
+        }
 
-        if (numNukes(civ) == 0 && civ.gameInfo.civilizations.any { it != civ && it.isMajorCiv && it.isAlive() && civ.knows(it) && numNukes(it) > 0 })
-            priority -= 50
-
-        return priority
-    }
-
-    /** The land comparison of GetConquestPriority when cramped: the average land of the met majors (us included) is at least ours */
-    private fun isCrampedByMetPlayers(civ: Civilization): Boolean {
-        val numPlayersMet = 1 + civ.gameInfo.civilizations.count { it != civ && it.isMajorCiv && it.isAlive() && civ.knows(it) }
+        // If our neighbors are cramping our style, consider less... scrupulous means of obtaining more land
         var landMe = 0
         var landPlayersMet = 0
-        for (tile in civ.gameInfo.tileMap.values) {
+        for (tile in gameInfo.tileMap.values) {
             val owner = tile.getOwner() ?: continue
             if (owner == civ) {
                 landPlayersMet++
@@ -171,7 +202,71 @@ object GrandStrategyAi {
             } else if (!owner.isCityState && civ.knows(owner)) landPlayersMet++
         }
         landPlayersMet /= numPlayersMet
-        return landMe > 0 && landPlayersMet / landMe > 0
+        if (landMe > 0 && landPlayersMet / landMe > 1) {
+            val crampedWeight = rules.define(AiDefine.AI_GRAND_STRATEGY_CONQUEST_CRAMPED_WEIGHT)
+            priority += if (ai.isCramped) crampedWeight * 5 else crampedWeight
+        }
+        if (numDangerPlayers > 0) priority += numDangerPlayers * era
+
+        if (numNukes(civ) == 0 && gameInfo.civilizations.any { it != civ && it.isMajorCiv && it.isAlive() && civ.knows(it) && numNukes(it) > 0 })
+            priority -= 50
+
+        return priority + conquestFlavorBonus(civ)
+    }
+
+    /**
+     *  The priority bonus at the end of GetConquestPriority: the Offense, Mobile, Military Training, Naval, Naval Recon, Ranged and Air
+     *  flavors of the adopted policies, a tenth of the production in each city's current construction, and of each building Offense twice,
+     *  Military Training and Naval; an eighth of it; plus the leader's trait categories. The unit flavors that MOD_AI_UNIT_PRODUCTION adds
+     *  (Archer, Siege, ...) are off in Community Patch and Vox Populi.
+     */
+    private fun conquestFlavorBonus(civ: Civilization): Int {
+        var bonus = adoptedPolicyFlavors(civ, CONQUEST_POLICY_FLAVORS)
+        for (city in civ.cities) {
+            bonus += city.cityConstructions.getWorkDone(city.cityConstructions.currentConstructionName()) / 10
+            bonus += builtBuildingFlavors(city, CONQUEST_BUILDING_FLAVORS)
+        }
+        return bonus / 8 + traitBonus(civ, warmonger = 100, smaller = -100, tourism = 25, diplomat = -25, nerd = 25, religious = 25, expansionist = 50)
+    }
+
+    private val CONQUEST_POLICY_FLAVORS = FlavorWeights(Flavor.Offense to 1, Flavor.Mobile to 1, Flavor.MilitaryTraining to 1, Flavor.Naval to 1,
+        Flavor.NavalRecon to 1, Flavor.Ranged to 1, Flavor.Air to 1)
+    private val CONQUEST_BUILDING_FLAVORS = FlavorWeights(Flavor.Offense to 2, Flavor.MilitaryTraining to 1, Flavor.Naval to 1)
+
+    /** Flavors with the multiplier the grand strategy's priority gives each */
+    private class FlavorWeights(vararg val weights: Pair<Flavor, Int>) {
+        fun of(flavors: IntArray) = weights.sumOf { (flavor, weight) -> flavors[flavor.ordinal] * weight }
+    }
+
+    /** The weighted flavors of the policies the civilization adopted (not its branches: the original loops over the policies, whose blocked ones map to none) */
+    private fun adoptedPolicyFlavors(civ: Civilization, weights: FlavorWeights): Int {
+        val rules = civ.ai.rules
+        var sum = 0
+        for (policyName in civ.policies.getAdoptedPolicies()) {
+            val policy = civ.gameInfo.ruleset.policies[policyName]?.takeIf { it !is PolicyBranch } ?: continue
+            sum += weights.of(rules.flavorsOf(policy))
+        }
+        return sum
+    }
+
+    /** The weighted flavors of the buildings in [city] */
+    private fun builtBuildingFlavors(city: City, weights: FlavorWeights): Int {
+        val rules = city.civ.ai.rules
+        return city.cityConstructions.getBuiltBuildings().sumOf { weights.of(rules.flavorsOf(it)) }
+    }
+
+    /** The trait category terms every priority of the original ends with: the amount of each category the leader has (0 for the others) */
+    private fun traitBonus(civ: Civilization, warmonger: Int, smaller: Int, tourism: Int, diplomat: Int, nerd: Int, religious: Int, expansionist: Int): Int {
+        val ai = civ.ai
+        var bonus = 0
+        if (ai.hasTraitCategory(TraitCategory.Warmonger)) bonus += warmonger
+        if (ai.hasTraitCategory(TraitCategory.Smaller)) bonus += smaller
+        if (ai.hasTraitCategory(TraitCategory.Tourism)) bonus += tourism
+        if (ai.hasTraitCategory(TraitCategory.Diplomat)) bonus += diplomat
+        if (ai.hasTraitCategory(TraitCategory.Nerd)) bonus += nerd
+        if (ai.hasTraitCategory(TraitCategory.Religious)) bonus += religious
+        if (ai.hasTraitCategory(TraitCategory.Expansionist)) bonus += expansionist
+        return bonus
     }
 
     private fun numNukes(civ: Civilization) = civ.units.getCivUnits().count { it.isNuclearWeapon() }
@@ -188,14 +283,25 @@ object GrandStrategyAi {
         return if (count > 0) sum / count else 0
     }
 
-    /** CvGrandStrategyAI::GetCulturePriority */
+    /**
+     *  CvGrandStrategyAI::GetCulturePriority: +8000 when close to a culture victory; era (at least 1) times the culture flavor times 1.5;
+     *  the lead over the other living majors in culture per turn (the culture lead weight per ahead minus behind over those alive) and
+     *  in tourism (the tourism weight, and the same taken off when behind in more); the civilizations we are influential over; and an
+     *  eighth of the culture stored over 30, the tourism over 130, ten less per effective city (not puppets) and the Great People, Culture,
+     *  Wonder and Happiness flavors of the policies and buildings, plus the leader's trait categories. The state religion's beliefs (faith
+     *  purchase of all great people, tourism from buildings and faith buildings, yields from policy unlocks) map to none.
+     */
     fun culturePriority(civ: Civilization, def: GrandStrategyDef): Int {
         if (!isVictoryValid(civ, def)) return -100
         val ai = civ.ai
         val rules = ai.rules
-        var priority = (10 - civ.getAiEraNumber()) * ai.personality(Flavor.Culture) * 200 / 100
+        var priority = 0
+        if (VictoryProgressAi.isCloseToCultureVictory(civ, rules)) priority += 8000
 
-        val ourCulture = culturePerTurn(civ)
+        // Before tourism kicks in, add weight based on flavor
+        priority += max(1, civ.getAiEraNumber()) * ai.personality(Flavor.Culture) * 150 / 100
+
+        val ourCulture = culturePerTurnTimes100(civ)
         val ourTourism = ai.tourism()
         var aheadCulture = 0
         var behindCulture = 0
@@ -204,28 +310,54 @@ object GrandStrategyAi {
         var alive = 0
         for (other in civ.gameInfo.civilizations) {
             if (other == civ || !other.isMajorCiv || !other.isAlive()) continue
-            if (ourCulture > culturePerTurn(other)) aheadCulture++ else behindCulture++
+            if (ourCulture > culturePerTurnTimes100(other)) aheadCulture++ else behindCulture++
             if (ourTourism > other.ai.tourism()) aheadTourism++ else behindTourism++
             alive++
         }
+        val tourismWeight = rules.define(AiDefine.AI_GS_CULTURE_TOURISM_AHEAD_WEIGHT)
         if (alive > 0 && aheadCulture > behindCulture)
             priority += rules.define(AiDefine.AI_GS_CULTURE_AHEAD_WEIGHT) * (aheadCulture - behindCulture) / alive
-        if (alive > 0 && aheadTourism > behindTourism)
-            priority += rules.define(AiDefine.AI_GS_CULTURE_TOURISM_AHEAD_WEIGHT) * (aheadTourism - behindTourism) / alive
+        if (alive > 0 && aheadTourism > behindTourism) priority += tourismWeight * (aheadTourism - behindTourism) / alive
+        if (alive > 0 && aheadTourism < behindTourism) priority -= tourismWeight * (behindTourism - aheadTourism) / alive
 
+        // For every civ we are influential over increase this
         priority += civ.culture.getNumCivsInfluentialOn() * rules.define(AiDefine.AI_GS_CULTURE_INFLUENTIAL_CIV_MOD)
-        return priority
+
+        var bonus = civ.policies.storedCulture * 100 / 3000
+        bonus += ourTourism / 130
+        bonus += civ.cities.count { !it.isPuppet }.coerceAtLeast(1) * -10
+        bonus += adoptedPolicyFlavors(civ, CULTURE_FLAVORS)
+        for (city in civ.cities) bonus += builtBuildingFlavors(city, CULTURE_FLAVORS)
+        return priority + bonus / 8 + traitBonus(civ, warmonger = -50, smaller = 50, tourism = 100, diplomat = 25, nerd = 25, religious = 25, expansionist = -50)
     }
 
-    /** CvPlayer::GetTotalJONSCulturePerTurn */
-    private fun culturePerTurn(civ: Civilization) = civ.stats.statsForNextTurn.culture.toInt()
+    private val CULTURE_FLAVORS = FlavorWeights(Flavor.GreatPeople to 1, Flavor.Culture to 1, Flavor.Wonder to 1, Flavor.Happiness to 1)
 
-    /** CvGrandStrategyAI::GetUnitedNationsPriority */
+    /** CvPlayer::GetTotalJONSCulturePerTurnTimes100 */
+    private fun culturePerTurnTimes100(civ: Civilization) = (civ.stats.statsForNextTurn.culture * 100).toInt()
+
+    /**
+     *  CvGrandStrategyAI::GetUnitedNationsPriority: +7000 when close to a diplomatic victory; a tenth of the net gold (a twenty-fifth) and of
+     *  the Gold, Diplomacy (3 for policies, 2 for buildings), Production and Religion flavors of the policies and buildings, plus the leader's
+     *  trait categories; before the World Congress, the diplomacy flavor weighs (10 - era); the priority is multiplied by 15, 10 or 5
+     *  with all, three quarters or half of the delegates a World Leader vote needs; more delegates than any rival add at least 100 (20 each),
+     *  otherwise the unallied city-states that could make up the difference add 20 or 5 each, and a shortfall at most -100 (50 each), and the
+     *  city-state modifiers of the leader count twice. Not ported: the paper from city-state alliances (MOD_BALANCE_VP, Vox Populi only),
+     *  the belief effects of the state religion (extra votes, city-state influence, yields from hosting and proposing), the alliance
+     *  defense and strength of the traits and the yields from city-state allies and friends (Unciv has none of these columns). Before a
+     *  league exists VP's votes needed is 0 until its first update: no victory is within reach here.
+     */
     fun unitedNationsPriority(civ: Civilization, def: GrandStrategyDef): Int {
         if (!isVictoryValid(civ, def)) return -100
         val ai = civ.ai
         val rules = ai.rules
-        var priority = civ.numMinorCivsAttacked * rules.define(AiDefine.AI_GRAND_STRATEGY_UN_EACH_MINOR_ATTACKED_WEIGHT)
+        var priority = 0
+        if (VictoryProgressAi.isCloseToDiploVictory(civ, rules)) priority += 7000
+
+        var bonus = civ.stats.statsForNextTurn.gold.toInt() / 25
+        bonus += adoptedPolicyFlavors(civ, UN_POLICY_FLAVORS)
+        for (city in civ.cities) bonus += builtBuildingFlavors(city, UN_BUILDING_FLAVORS)
+        priority += bonus / 10 + traitBonus(civ, warmonger = -100, smaller = 25, tourism = 25, diplomat = 100, nerd = 25, religious = 50, expansionist = 50)
 
         val league = civ.gameInfo.league
         var votesNeeded = Int.MAX_VALUE
@@ -234,7 +366,7 @@ object GrandStrategyAi {
         var unalliedCityStates = 0
         if (league == null) {
             // Before the World Congress, weight by flavor
-            priority += (10 - civ.getAiEraNumber()) * ai.personality(Flavor.Diplomacy) * 150 / 100
+            priority += (10 - civ.getAiEraNumber()) * ai.personality(Flavor.Diplomacy) * 125 / 100
         } else {
             votesNeeded = league.getVotesNeededForWorldLeader()
             votesControlled = league.getDelegates(civ)
@@ -248,22 +380,30 @@ object GrandStrategyAi {
             votesControlledDelta = votesControlled - highestOtherVotes
         }
 
-        if (votesControlled >= votesNeeded) return 1000
-        else if (votesControlled >= votesNeeded * 3 / 4) priority += 40
-
-        if (votesControlledDelta > 0) priority += max(40, votesControlledDelta * 5)
+        // Are we close to winning?
+        if (league != null) {
+            if (votesControlled >= votesNeeded) priority *= 15
+            else if (votesControlled >= votesNeeded * 3 / 4) priority *= 10
+            else if (votesControlled >= votesNeeded * 2 / 4) priority *= 5
+        }
+        if (votesControlledDelta > 0) priority += max(100, votesControlledDelta * 20) // We have the most votes
         else {
-            // Could the unallied city-states make up the difference?
+            // Could we make up the difference with currently unallied city-states?
             val potentialVotesDelta = unalliedCityStates * 2 + votesControlledDelta
             if (potentialVotesDelta > 0) priority += max(20, potentialVotesDelta * 5)
-            else if (potentialVotesDelta < 0) priority += min(-40, potentialVotesDelta * -5)
+            else if (potentialVotesDelta < 0) priority += min(-100, potentialVotesDelta * -50)
         }
 
-        priority += cityStateFriendshipModifier(civ)
-        priority += cityStateBonusModifier(civ)
-        priority -= cityStateCombatModifier(civ)
+        // Factor in some traits that could be useful (or harmful): the player's own city-state combat modifier (policies) counts once
+        priority += cityStateFriendshipModifier(civ) * 2
+        priority += cityStateBonusModifier(civ) * 2
+        priority -= nationCityStateCombatModifier(civ) * 2
+        priority -= cityStateCombatModifier(civ) - nationCityStateCombatModifier(civ)
         return priority
     }
+
+    private val UN_POLICY_FLAVORS = FlavorWeights(Flavor.Gold to 1, Flavor.Diplomacy to 3, Flavor.Production to 1, Flavor.Religion to 1)
+    private val UN_BUILDING_FLAVORS = FlavorWeights(Flavor.Gold to 1, Flavor.Diplomacy to 2, Flavor.Production to 1, Flavor.Religion to 1)
 
     /** CvPlayerTraits::GetCityStateFriendshipModifier: +100 % influence rate, Unciv's "recovers at twice the normal rate" */
     fun cityStateFriendshipModifier(civ: Civilization): Int =
@@ -286,14 +426,55 @@ object GrandStrategyAi {
         return sum
     }
 
-    /** CvGrandStrategyAI::GetSpaceshipPriority */
+    /** The sum of the "[x]% Strength <vs [City-States]>" of the civilization's nation (the leader's traits, CvPlayerTraits::GetCityStateCombatModifier) alone */
+    private fun nationCityStateCombatModifier(civ: Civilization): Int {
+        var sum = 0
+        civ.nation.forEachMatchingUnique(UniqueType.Strength, GameContext.IgnoreConditionals) { unique ->
+            if (unique.modifiers.any { it.type == UniqueType.ConditionalVsCombatant && it.params[0] == "City-States" })
+                sum += unique.params[0].toInt()
+        }
+        return sum
+    }
+
+    /**
+     *  CvGrandStrategyAI::GetSpaceshipPriority: +10000 when close to a spaceship victory, era squared times the science flavor (at least 1)
+     *  times 3; the share of living majors we are ahead of in techs known (the weight of the culture lead per ahead minus behind over those
+     *  alive, and per civilization alive when ahead of all), the Apollo Program, and a tenth of the science per turn (a twenty-fifth) and of the
+     *  Spaceship, Science, Growth and Tile Improvement flavors of the policies and buildings, plus the leader's trait categories. The state
+     *  religion's beliefs (science per follower of other religions, yields at an era and per science) map to none.
+     */
     fun spaceshipPriority(civ: Civilization, def: GrandStrategyDef): Int {
         if (!isVictoryValid(civ, def)) return -100
         val ai = civ.ai
-        var priority = civ.getAiEraNumber() * ai.personality(Flavor.Science) * 150 / 100
-        if (hasApolloProgram(civ)) priority += ai.rules.define(AiDefine.AI_GS_SS_HAS_APOLLO_PROGRAM)
-        return priority
+        val rules = ai.rules
+        var priority = 0
+        if (VictoryProgressAi.isCloseToSpaceshipVictory(civ, rules)) priority += 10000
+
+        // The later the game the greater the chance
+        val era = civ.getAiEraNumber()
+        priority += era * era * max(1, ai.personality(Flavor.Science)) * 300 / 100
+
+        var aheadScience = 0
+        var behindScience = 0
+        var alive = 0
+        for (other in civ.gameInfo.civilizations) {
+            if (other == civ || !other.isMajorCiv || !other.isAlive()) continue
+            if (civ.tech.techsResearched.size > other.tech.techsResearched.size) aheadScience++ else behindScience++
+            alive++
+        }
+        val aheadWeight = rules.define(AiDefine.AI_GS_CULTURE_AHEAD_WEIGHT)
+        if (alive > 0 && aheadScience > behindScience) priority += aheadWeight * (aheadScience - behindScience) / alive
+        // Are we in first overall? Bump it!
+        if (aheadScience == alive) priority += aheadWeight * alive
+        if (hasApolloProgram(civ)) priority += rules.define(AiDefine.AI_GS_SS_HAS_APOLLO_PROGRAM)
+
+        var bonus = civ.stats.statsForNextTurn.science.toInt() / 25
+        bonus += adoptedPolicyFlavors(civ, SPACESHIP_FLAVORS)
+        for (city in civ.cities) bonus += builtBuildingFlavors(city, SPACESHIP_FLAVORS)
+        return priority + bonus / 10 + traitBonus(civ, warmonger = -25, smaller = 50, tourism = 25, diplomat = 25, nerd = 100, religious = 50, expansionist = -50)
     }
+
+    private val SPACESHIP_FLAVORS = FlavorWeights(Flavor.Spaceship to 1, Flavor.Science to 1, Flavor.Growth to 1, Flavor.TileImprovement to 1)
 
     /** GetTeam()->getProjectCount(PROJECT_APOLLO_PROGRAM) > 0: counts from the turn it was built, even if the city is lost later */
     fun hasApolloProgram(civ: Civilization) = civ.ai.apolloProgramBuilt || civ.hasUnique(UniqueType.EnablesConstructionOfSpaceshipParts)

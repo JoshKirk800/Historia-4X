@@ -882,13 +882,6 @@ object OpinionAi {
         livingMajor(civ, CompetitorAi.biggestCompetitor(civ))?.takeIf { isDenouncedPlayer(civ, it) || civ.isAtWarWith(it) }
 
     /**
-     *  GetPlayerNumMajorsConquered for ourselves (DoUpdateConquestStats): the majors whose original capital we hold. VP also counts
-     *  the majors we killed whose capital is gone; Unciv keeps no killer: none.
-     */
-    private fun numMajorsConquered(civ: Civilization): Int =
-        civ.cities.count { city -> city.isOriginalCapital && city.foundingCivObject.let { it != null && it != civ && it.isMajorCiv } }
-
-    /**
      *  GetDOFAcceptedScore: with a DoF OPINION_WEIGHT_DOF, plus _DOF_MOST_VALUED_FRIEND for our most valuable friend; without one, the
      *  weight of the friendship level we had (friends, allies, battle brothers); scaled by inverted DoF willingness
      */
@@ -962,7 +955,7 @@ object OpinionAi {
             weight += rules.define(AiDefine.OPINION_WEIGHT_DP)
             if (civ.ai.diplomacy.mostValuableAlly == other.civID) weight += rules.define(AiDefine.OPINION_WEIGHT_DP_MOST_VALUED_ALLY)
         }
-        if (numMajorsConquered(civ) > 0) return weight * rules.define(AiDefine.OPINION_WEIGHT_DP_CONQUEROR_MULTIPLIER) / 100
+        if (VictoryProgressAi.numMajorsConquered(civ) > 0) return weight * rules.define(AiDefine.OPINION_WEIGHT_DP_CONQUEROR_MULTIPLIER) / 100
         return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.WarmongerHate))
     }
 

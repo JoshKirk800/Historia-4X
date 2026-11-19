@@ -155,10 +155,28 @@ object VictoryProgressAi {
         return isCompetingForVictory(civ) && isCloseToAnyVictoryCondition(other, rules)
     }
 
-    /** CvPlayer::GetNumCapitalCities and CvDiplomacyAI::GetPlayerNumMajorsConquered: the original capitals of other majors [civ] holds */
+    /** CvPlayer::GetNumCapitalCities: the original capitals of other majors [civ] holds */
     @Readonly
     fun capitalsConquered(civ: Civilization): Int =
         civ.cities.count { it.isOriginalCapital && it.foundingCivObject?.isMajorCiv == true && it.foundingCivObject != civ }
+
+    /**
+     *  CvDiplomacyAI::GetPlayerNumMajorsConquered (DoUpdateConquestStats): the other majors [civ] killed (they are dead and their last
+     *  city fell to [civ], [Civilization.killedBy]) or whose original capital [civ] holds. Counted over every major, not only those the
+     *  counting civilization knows (VP's "known players" are the ones met or seen holding or founding a revealed city; Unciv records no
+     *  such set), and the forced vassals of VP do not exist (D3).
+     */
+    @Readonly
+    fun numMajorsConquered(civ: Civilization): Int {
+        val conquered = HashSet<String>()
+        for (city in civ.cities) {
+            val founder = city.foundingCivObject
+            if (city.isOriginalCapital && founder != null && founder != civ && founder.isMajorCiv && !founder.isSpectator) conquered += founder.civID
+        }
+        for (other in civ.gameInfo.civilizations)
+            if (other != civ && other.isMajorCiv && !other.isSpectator && !other.isAlive() && other.killedBy == civ.civID) conquered += other.civID
+        return conquered.size
+    }
 
     /** CvGame::IsAIAggressiveMode: no Diplomatic, Science or Culture victory is open (by their milestones), so only conquest can end the game */
     @Readonly

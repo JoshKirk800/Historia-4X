@@ -135,13 +135,6 @@ object WarAi {
         }
     }
 
-    /** BNW's target value on VP's TargetValueTypes scale (VP adds Difficult and Cakewalk); none = NO_TARGET_VALUE, -1 */
-    private fun vpTargetValue(value: TargetValue?): Int = when (value) {
-        null -> -1
-        TargetValue.Impossible -> 0
-        TargetValue.Bad -> 1
-        TargetValue.Average -> 3
-        TargetValue.Favorable -> 4
-        TargetValue.Soft -> 5
-    }
+    /** The target value on VP's TargetValueTypes scale (our enum has its order); none = NO_TARGET_VALUE, -1 */
+    private fun vpTargetValue(value: TargetValue?): Int = value?.ordinal ?: -1
 }

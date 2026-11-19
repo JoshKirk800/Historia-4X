@@ -333,7 +333,7 @@ object FriendshipPlanningAi {
         val weDenouncedFriendCount = OpinionAi.weDenouncedFriendCount(civ) + 1
         val majorsEver = civ.gameInfo.civilizations.count { it.isMajorCiv }
         val majorsAlive = civ.gameInfo.civilizations.count { it.isMajorCiv && it.isAlive() }
-        val dangerous = majorsAlive <= majorsEver / 2 || VictoryProgressAi.capitalsConquered(civ) >= majorsEver / 3
+        val dangerous = majorsAlive <= majorsEver / 2 || VictoryProgressAi.numMajorsConquered(civ) >= majorsEver / 3
         for (third in civ.gameInfo.civilizations) {
             if (!third.isMajorCiv || !third.isAlive() || third.cities.isEmpty() || third == other || third == civ) continue
             if (OpinionAi.isUntrustworthyFriend(civ)) continue

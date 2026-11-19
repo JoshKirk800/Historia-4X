@@ -163,7 +163,7 @@ object ApproachPart6Ai {
         val friends = OpinionAi.isDoFAccepted(civ, other) || civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
         if (DiplomacyTurn.proximity(civ, other) < DiplomacyTurn.PROXIMITY_CLOSE && DiplomacyTurn.proximity(other, civ) < DiplomacyTurn.PROXIMITY_CLOSE &&
             memory.militaryPosture < AggressivePosture.Medium) return false
-        val military = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
+        val military = WarStateAi.rawMilitaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
         val stronger = military > StrengthLevel.Average || (memory.economicStrength ?: StrengthLevel.Average) > StrengthLevel.Strong ||
             civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe
         if (stronger && !friends) return true

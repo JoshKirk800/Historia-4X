@@ -112,7 +112,7 @@ object CompetitorAi {
         val memory = civ.ai.diplomacy.memoryOf(other)
         if (competing && game.civilizations.count { it.isMajorCiv && it.isAlive() } == 2) return true
         if (fractionOriginalCapitalsUnderControl(other, majorsEver) >= 33) return true
-        if (VictoryProgressAi.capitalsConquered(other) >= majorsEver * 33 / 100) return true
+        if (VictoryProgressAi.numMajorsConquered(other) >= majorsEver * 33 / 100) return true
         if (VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)) return true
         if (OpinionAi.isCapitalCapturedBy(civ, other) || isHolyCityCapturedBy(civ, other)) return true
         if (memory.numTimesNuked > 0 || other.units.getCivUnits().any { it.isNuclearWeapon() }) return true

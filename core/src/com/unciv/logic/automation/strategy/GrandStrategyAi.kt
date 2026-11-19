@@ -283,14 +283,25 @@ object GrandStrategyAi {
         return if (count > 0) sum / count else 0
     }
 
-    /** CvGrandStrategyAI::GetCulturePriority */
+    /**
+     *  CvGrandStrategyAI::GetCulturePriority: +8000 when close to a culture victory; era (at least 1) times the culture flavor times 1.5;
+     *  the lead over the other living majors in culture per turn (the culture lead weight per ahead minus behind over those alive) and
+     *  in tourism (the tourism weight, and the same taken off when behind in more); the civilizations we are influential over; and an
+     *  eighth of the culture stored over 30, the tourism over 130, ten less per effective city (not puppets) and the Great People, Culture,
+     *  Wonder and Happiness flavors of the policies and buildings, plus the leader's trait categories. The state religion's beliefs (faith
+     *  purchase of all great people, tourism from buildings and faith buildings, yields from policy unlocks) map to none.
+     */
     fun culturePriority(civ: Civilization, def: GrandStrategyDef): Int {
         if (!isVictoryValid(civ, def)) return -100
         val ai = civ.ai
         val rules = ai.rules
-        var priority = (10 - civ.getAiEraNumber()) * ai.personality(Flavor.Culture) * 200 / 100
+        var priority = 0
+        if (VictoryProgressAi.isCloseToCultureVictory(civ, rules)) priority += 8000
 
-        val ourCulture = culturePerTurn(civ)
+        // Before tourism kicks in, add weight based on flavor
+        priority += max(1, civ.getAiEraNumber()) * ai.personality(Flavor.Culture) * 150 / 100
+
+        val ourCulture = culturePerTurnTimes100(civ)
         val ourTourism = ai.tourism()
         var aheadCulture = 0
         var behindCulture = 0
@@ -299,28 +310,54 @@ object GrandStrategyAi {
         var alive = 0
         for (other in civ.gameInfo.civilizations) {
             if (other == civ || !other.isMajorCiv || !other.isAlive()) continue
-            if (ourCulture > culturePerTurn(other)) aheadCulture++ else behindCulture++
+            if (ourCulture > culturePerTurnTimes100(other)) aheadCulture++ else behindCulture++
             if (ourTourism > other.ai.tourism()) aheadTourism++ else behindTourism++
             alive++
         }
+        val tourismWeight = rules.define(AiDefine.AI_GS_CULTURE_TOURISM_AHEAD_WEIGHT)
         if (alive > 0 && aheadCulture > behindCulture)
             priority += rules.define(AiDefine.AI_GS_CULTURE_AHEAD_WEIGHT) * (aheadCulture - behindCulture) / alive
-        if (alive > 0 && aheadTourism > behindTourism)
-            priority += rules.define(AiDefine.AI_GS_CULTURE_TOURISM_AHEAD_WEIGHT) * (aheadTourism - behindTourism) / alive
+        if (alive > 0 && aheadTourism > behindTourism) priority += tourismWeight * (aheadTourism - behindTourism) / alive
+        if (alive > 0 && aheadTourism < behindTourism) priority -= tourismWeight * (behindTourism - aheadTourism) / alive
 
+        // For every civ we are influential over increase this
         priority += civ.culture.getNumCivsInfluentialOn() * rules.define(AiDefine.AI_GS_CULTURE_INFLUENTIAL_CIV_MOD)
-        return priority
+
+        var bonus = civ.policies.storedCulture * 100 / 3000
+        bonus += ourTourism / 130
+        bonus += civ.cities.count { !it.isPuppet }.coerceAtLeast(1) * -10
+        bonus += adoptedPolicyFlavors(civ, CULTURE_FLAVORS)
+        for (city in civ.cities) bonus += builtBuildingFlavors(city, CULTURE_FLAVORS)
+        return priority + bonus / 8 + traitBonus(civ, warmonger = -50, smaller = 50, tourism = 100, diplomat = 25, nerd = 25, religious = 25, expansionist = -50)
     }
 
-    /** CvPlayer::GetTotalJONSCulturePerTurn */
-    private fun culturePerTurn(civ: Civilization) = civ.stats.statsForNextTurn.culture.toInt()
+    private val CULTURE_FLAVORS = FlavorWeights(Flavor.GreatPeople to 1, Flavor.Culture to 1, Flavor.Wonder to 1, Flavor.Happiness to 1)
 
-    /** CvGrandStrategyAI::GetUnitedNationsPriority */
+    /** CvPlayer::GetTotalJONSCulturePerTurnTimes100 */
+    private fun culturePerTurnTimes100(civ: Civilization) = (civ.stats.statsForNextTurn.culture * 100).toInt()
+
+    /**
+     *  CvGrandStrategyAI::GetUnitedNationsPriority: +7000 when close to a diplomatic victory; a tenth of the net gold (a twenty-fifth) and of
+     *  the Gold, Diplomacy (3 for policies, 2 for buildings), Production and Religion flavors of the policies and buildings, plus the leader's
+     *  trait categories; before the World Congress, the diplomacy flavor weighs (10 - era); the priority is multiplied by 15, 10 or 5
+     *  with all, three quarters or half of the delegates a World Leader vote needs; more delegates than any rival add at least 100 (20 each),
+     *  otherwise the unallied city-states that could make up the difference add 20 or 5 each, and a shortfall at most -100 (50 each), and the
+     *  city-state modifiers of the leader count twice. Not ported: the paper from city-state alliances (MOD_BALANCE_VP, Vox Populi only),
+     *  the belief effects of the state religion (extra votes, city-state influence, yields from hosting and proposing), the alliance
+     *  defense and strength of the traits and the yields from city-state allies and friends (Unciv has none of these columns). Before a
+     *  league exists VP's votes needed is 0 until its first update: no victory is within reach here.
+     */
     fun unitedNationsPriority(civ: Civilization, def: GrandStrategyDef): Int {
         if (!isVictoryValid(civ, def)) return -100
         val ai = civ.ai
         val rules = ai.rules
-        var priority = civ.numMinorCivsAttacked * rules.define(AiDefine.AI_GRAND_STRATEGY_UN_EACH_MINOR_ATTACKED_WEIGHT)
+        var priority = 0
+        if (VictoryProgressAi.isCloseToDiploVictory(civ, rules)) priority += 7000
+
+        var bonus = civ.stats.statsForNextTurn.gold.toInt() / 25
+        bonus += adoptedPolicyFlavors(civ, UN_POLICY_FLAVORS)
+        for (city in civ.cities) bonus += builtBuildingFlavors(city, UN_BUILDING_FLAVORS)
+        priority += bonus / 10 + traitBonus(civ, warmonger = -100, smaller = 25, tourism = 25, diplomat = 100, nerd = 25, religious = 50, expansionist = 50)
 
         val league = civ.gameInfo.league
         var votesNeeded = Int.MAX_VALUE
@@ -329,7 +366,7 @@ object GrandStrategyAi {
         var unalliedCityStates = 0
         if (league == null) {
             // Before the World Congress, weight by flavor
-            priority += (10 - civ.getAiEraNumber()) * ai.personality(Flavor.Diplomacy) * 150 / 100
+            priority += (10 - civ.getAiEraNumber()) * ai.personality(Flavor.Diplomacy) * 125 / 100
         } else {
             votesNeeded = league.getVotesNeededForWorldLeader()
             votesControlled = league.getDelegates(civ)
@@ -343,22 +380,30 @@ object GrandStrategyAi {
             votesControlledDelta = votesControlled - highestOtherVotes
         }
 
-        if (votesControlled >= votesNeeded) return 1000
-        else if (votesControlled >= votesNeeded * 3 / 4) priority += 40
-
-        if (votesControlledDelta > 0) priority += max(40, votesControlledDelta * 5)
+        // Are we close to winning?
+        if (league != null) {
+            if (votesControlled >= votesNeeded) priority *= 15
+            else if (votesControlled >= votesNeeded * 3 / 4) priority *= 10
+            else if (votesControlled >= votesNeeded * 2 / 4) priority *= 5
+        }
+        if (votesControlledDelta > 0) priority += max(100, votesControlledDelta * 20) // We have the most votes
         else {
-            // Could the unallied city-states make up the difference?
+            // Could we make up the difference with currently unallied city-states?
             val potentialVotesDelta = unalliedCityStates * 2 + votesControlledDelta
             if (potentialVotesDelta > 0) priority += max(20, potentialVotesDelta * 5)
-            else if (potentialVotesDelta < 0) priority += min(-40, potentialVotesDelta * -5)
+            else if (potentialVotesDelta < 0) priority += min(-100, potentialVotesDelta * -50)
         }
 
-        priority += cityStateFriendshipModifier(civ)
-        priority += cityStateBonusModifier(civ)
-        priority -= cityStateCombatModifier(civ)
+        // Factor in some traits that could be useful (or harmful): the player's own city-state combat modifier (policies) counts once
+        priority += cityStateFriendshipModifier(civ) * 2
+        priority += cityStateBonusModifier(civ) * 2
+        priority -= nationCityStateCombatModifier(civ) * 2
+        priority -= cityStateCombatModifier(civ) - nationCityStateCombatModifier(civ)
         return priority
     }
+
+    private val UN_POLICY_FLAVORS = FlavorWeights(Flavor.Gold to 1, Flavor.Diplomacy to 3, Flavor.Production to 1, Flavor.Religion to 1)
+    private val UN_BUILDING_FLAVORS = FlavorWeights(Flavor.Gold to 1, Flavor.Diplomacy to 2, Flavor.Production to 1, Flavor.Religion to 1)
 
     /** CvPlayerTraits::GetCityStateFriendshipModifier: +100 % influence rate, Unciv's "recovers at twice the normal rate" */
     fun cityStateFriendshipModifier(civ: Civilization): Int =
@@ -381,14 +426,55 @@ object GrandStrategyAi {
         return sum
     }
 
-    /** CvGrandStrategyAI::GetSpaceshipPriority */
+    /** The sum of the "[x]% Strength <vs [City-States]>" of the civilization's nation (the leader's traits, CvPlayerTraits::GetCityStateCombatModifier) alone */
+    private fun nationCityStateCombatModifier(civ: Civilization): Int {
+        var sum = 0
+        civ.nation.forEachMatchingUnique(UniqueType.Strength, GameContext.IgnoreConditionals) { unique ->
+            if (unique.modifiers.any { it.type == UniqueType.ConditionalVsCombatant && it.params[0] == "City-States" })
+                sum += unique.params[0].toInt()
+        }
+        return sum
+    }
+
+    /**
+     *  CvGrandStrategyAI::GetSpaceshipPriority: +10000 when close to a spaceship victory, era squared times the science flavor (at least 1)
+     *  times 3; the share of living majors we are ahead of in techs known (the weight of the culture lead per ahead minus behind over those
+     *  alive, and per civilization alive when ahead of all), the Apollo Program, and a tenth of the science per turn (a twenty-fifth) and of the
+     *  Spaceship, Science, Growth and Tile Improvement flavors of the policies and buildings, plus the leader's trait categories. The state
+     *  religion's beliefs (science per follower of other religions, yields at an era and per science) map to none.
+     */
     fun spaceshipPriority(civ: Civilization, def: GrandStrategyDef): Int {
         if (!isVictoryValid(civ, def)) return -100
         val ai = civ.ai
-        var priority = civ.getAiEraNumber() * ai.personality(Flavor.Science) * 150 / 100
-        if (hasApolloProgram(civ)) priority += ai.rules.define(AiDefine.AI_GS_SS_HAS_APOLLO_PROGRAM)
-        return priority
+        val rules = ai.rules
+        var priority = 0
+        if (VictoryProgressAi.isCloseToSpaceshipVictory(civ, rules)) priority += 10000
+
+        // The later the game the greater the chance
+        val era = civ.getAiEraNumber()
+        priority += era * era * max(1, ai.personality(Flavor.Science)) * 300 / 100
+
+        var aheadScience = 0
+        var behindScience = 0
+        var alive = 0
+        for (other in civ.gameInfo.civilizations) {
+            if (other == civ || !other.isMajorCiv || !other.isAlive()) continue
+            if (civ.tech.techsResearched.size > other.tech.techsResearched.size) aheadScience++ else behindScience++
+            alive++
+        }
+        val aheadWeight = rules.define(AiDefine.AI_GS_CULTURE_AHEAD_WEIGHT)
+        if (alive > 0 && aheadScience > behindScience) priority += aheadWeight * (aheadScience - behindScience) / alive
+        // Are we in first overall? Bump it!
+        if (aheadScience == alive) priority += aheadWeight * alive
+        if (hasApolloProgram(civ)) priority += rules.define(AiDefine.AI_GS_SS_HAS_APOLLO_PROGRAM)
+
+        var bonus = civ.stats.statsForNextTurn.science.toInt() / 25
+        bonus += adoptedPolicyFlavors(civ, SPACESHIP_FLAVORS)
+        for (city in civ.cities) bonus += builtBuildingFlavors(city, SPACESHIP_FLAVORS)
+        return priority + bonus / 10 + traitBonus(civ, warmonger = -25, smaller = 50, tourism = 25, diplomat = 25, nerd = 100, religious = 50, expansionist = -50)
     }
+
+    private val SPACESHIP_FLAVORS = FlavorWeights(Flavor.Spaceship to 1, Flavor.Science to 1, Flavor.Growth to 1, Flavor.TileImprovement to 1)
 
     /** GetTeam()->getProjectCount(PROJECT_APOLLO_PROGRAM) > 0: counts from the turn it was built, even if the city is lost later */
     fun hasApolloProgram(civ: Civilization) = civ.ai.apolloProgramBuilt || civ.hasUnique(UniqueType.EnablesConstructionOfSpaceshipParts)

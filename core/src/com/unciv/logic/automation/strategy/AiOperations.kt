@@ -18,10 +18,9 @@ import kotlin.math.max
  *  [EnemyTerritory] is every army of Vox Populi's military operations (ARMY_TYPE_LAND, ARMY_TYPE_NAVAL and ARMY_TYPE_COMBINED, which
  *  CvAIOperation::Move gives to CvTacticalAI::PlotArmyMovesCombat): the attacks on a city, the pillage raids, the defense operations, and the
  *  naval ones, whose ships and embarked land units gather and sail on water ([com.unciv.logic.automation.unit.tactical.OperationalMoves]).
- *  [NavalEscort], [FreeformNaval] and [NavalFleet] are BNW's PlotNavalEscortOperationMoves, PlotFreeformNavalOperationMoves and
- *  the fleet moves, which no operation has any more.
+ *  BNW's PlotNavalEscortOperationMoves and PlotFreeformNavalOperationMoves, which had their own types, are gone.
  */
-enum class OperationMoveType { None, SingleHex, EnemyTerritory, NavalEscort, FreeformNaval, NavalFleet }
+enum class OperationMoveType { None, SingleHex, EnemyTerritory }
 
 /**
  *  AIOperationTypes this port covers. [moveType] is what CvAIOperation::m_eMoveType is set to by the operation's Init;
@@ -74,8 +73,6 @@ enum class AiOperationType(
     val isNeverEnding get() = this == CARRIER_GROUP
     /** CvAIOperationNavalAttack and its subclasses: land units that embark, with warships, against a coastal city */
     val isNavalInvasion get() = this == NAVAL_ATTACK || this == NAVAL_SNEAK_ATTACK || this == CITY_STATE_NAVAL_ATTACK
-    /** CvAINavalOperation and its subclasses: the operations of ships only */
-    val isNavalFleet get() = allNaval
 }
 
 /** AIOperationStates */

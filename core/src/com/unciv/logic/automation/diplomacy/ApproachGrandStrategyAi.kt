@@ -111,12 +111,12 @@ object ApproachGrandStrategyAi {
             w[HOSTILE] += bias(MajorCivApproach.Hostile) * 5
             if (easy) w[WAR] += bias(MajorCivApproach.War) * 5
         } else {
-            val strength = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
+            val strength = WarStateAi.rawMilitaryStrengthComparedToUs(civ, other) ?: StrengthLevel.Average
             var factor = (strength.ordinal - StrengthLevel.Average.ordinal) * 2
             if (strength > StrengthLevel.Average) {
                 if (civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact) factor++
-                // VP's TARGET_VALUE_DIFFICULT or worse: our bad or impossible (BNW has no difficult)
-                if ((WarStateAi.targetValue(civ, other) ?: TargetValue.Average) <= TargetValue.Bad) factor++
+                // They are a difficult target for now: aim to build up our strength
+                if ((WarStateAi.rawTargetValue(civ, other) ?: TargetValue.Average) <= TargetValue.Difficult) factor++
                 if (WarSanityAi.isBackstabber(civ) && OpinionAi.weDeclaredWarOnFriendCount(other) > 0 && !OpinionAi.isUntrustworthyFriend(other))
                     factor += 2
             }

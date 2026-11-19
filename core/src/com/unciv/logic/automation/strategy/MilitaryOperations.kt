@@ -285,7 +285,7 @@ object MilitaryOperations {
      */
     fun shouldLaunchNuke(civ: Civilization, other: Civilization): Boolean {
         if (civ.units.getCivUnits().none { it.isNuclearWeapon() } || !civ.isAtWarWith(other)) return false
-        val strength = WarStateAi.militaryStrengthComparedToUs(civ, other)
+        val strength = WarStateAi.rawMilitaryStrengthComparedToUs(civ, other)
         val warState = WarStateAi.warState(civ, other)
         // if we will surely lose this war anyway, we might as well nuke them!
         if (strength == StrengthLevel.Immense || warState == WarState.NearlyDefeated) return true

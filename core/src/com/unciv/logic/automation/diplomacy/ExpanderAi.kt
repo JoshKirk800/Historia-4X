@@ -57,8 +57,8 @@ object ExpanderAi {
             val land = totalLand(other)
             if (cities < 4 || DiplomacyTurn.proximity(civ, other) < DiplomacyTurn.PROXIMITY_CLOSE) continue
             if (cities <= civ.cities.size || land <= ourLand) continue
-            // VP's TARGET_VALUE_DIFFICULT or worse: our bad or impossible (none counts as VP's NO_TARGET_VALUE, below it)
-            if ((WarStateAi.targetValue(civ, other) ?: TargetValue.Impossible) <= TargetValue.Bad) continue
+            // VP's TARGET_VALUE_DIFFICULT or worse (none counts as VP's NO_TARGET_VALUE, below it)
+            if ((WarStateAi.targetValue(civ, other) ?: TargetValue.Impossible) <= TargetValue.Difficult) continue
             val averageCities = (totalCities - cities) / maxOf(1, players.size - 1)
             val averageLand = (totalPlots - land) / maxOf(1, players.size - 1)
             ai.memoryOf(other).recklessExpander =

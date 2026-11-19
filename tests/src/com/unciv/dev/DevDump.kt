@@ -183,15 +183,14 @@ class DevDump {
         for (civ in game.civilizations.filter { it.isMajorCiv && it.isAlive() && !it.isHuman() }) {
             for (other in game.civilizations.filter { it.isMajorCiv && it.isAlive() && it != civ && civ.knows(it) }) {
                 if (civ.ai.diplomacy.approachTowards(other) != MajorCivApproach.War || civ.isAtWarWith(other)) continue
-                val found = MilitaryTargets.findBestAttackTarget(civ, AiOperationType.SNEAK_CITY_ATTACK, other)
+                val target = MilitaryTargets.cityAttackTargets(civ, other, careful = false).firstOrNull()
                 val explored = other.cities.count { it.getCenterTile().isExplored(civ) }
                 out.append("${civ.civName} -> ${other.civName}: their cities ${other.cities.size}, explored $explored; ")
-                if (found == null) { out.append("no target\n"); continue }
-                val (target, score) = found
+                if (target == null) { out.append("no target\n"); continue }
                 val formation = if (target.attackBySea) "MUFORMATION_NAVAL_INVASION" else AiOperationLogic.formationName(civ, AiOperationType.BASIC_CITY_ATTACK)
                 val type = if (target.attackBySea) AiOperationType.NAVAL_SNEAK_ATTACK else AiOperationType.SNEAK_CITY_ATTACK
                 out.append("target ${target.targetCity.name} from ${target.musterCity.name}, by sea ${target.attackBySea}, path ${target.pathLength}, " +
-                    "score $score, ready ${MilitaryOperations.isAttackReady(civ, formation, type)}, operations ${civ.ai.operations.operations.map { it.type }}\n")
+                    "ready ${MilitaryOperations.isAttackReady(civ, formation, type)}, operations ${civ.ai.operations.operations.map { it.type }}\n")
             }
         }
     }

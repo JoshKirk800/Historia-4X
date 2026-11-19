@@ -102,7 +102,7 @@ object WarAi {
                     MilitaryOperations.requestSneakAttack(civ, target, careful)
                 }
             }
-            wantShowOfForce -> if (MilitaryOperations.showOfForceOperation(civ, target) == null) MilitaryOperations.requestShowOfForce(civ, target)
+            wantShowOfForce -> MilitaryOperations.requestShowOfForce(civ, target) // RequestBullyingOperation: not while an offensive operation runs
             else -> {
                 stopOffensiveOperations(civ, target, OperationAbortReason.DIPLO_OPINION_CHANGE)
                 if (memory.warGoal == WarGoal.Prepare) memory.warGoal = null

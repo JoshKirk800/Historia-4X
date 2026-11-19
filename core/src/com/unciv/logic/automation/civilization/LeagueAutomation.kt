@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.diplomacy.AiThreat
+import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.OpinionTimers
 import com.unciv.logic.city.CityStats.Companion.EXCESS_FOOD_TO_PRODUCTION
@@ -22,7 +23,7 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.random.Random
+import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 
 /**
  * World Congress proposals, votes and vote commitments (CvLeagueAI, CvVotingClasses.cpp:7365-9860).
@@ -31,8 +32,7 @@ import kotlin.random.Random
 object LeagueAutomation {
     /** CvLeagueAI::DoProposals and DoVotes stop after this many loops (CvVotingClasses.cpp:7449-7486) */
     const val MAX_LOOPS = 100
-    /** LeagueHelpers::AI_CHOOSE_PROPOSAL_FROM_TOP (CvVotingClasses.h:77) */
-    const val CHOOSE_PROPOSAL_FROM_TOP = 6
+    // (VP's AllocateProposals takes the best proposal, not a weighted roll among the top ones of LeagueHelpers::AI_CHOOSE_PROPOSAL_FROM_TOP)
     /** The Congress memory [observer] keeps of [other] */
     private fun memoryOf(league: League, observer: String, other: String): LeagueAlignmentMemory? =
         league.members[observer]?.alignmentMemory?.getOrPut(other) { LeagueAlignmentMemory() }
@@ -160,7 +160,7 @@ object LeagueAutomation {
         val observers = league.gameInfo.getAliveMajorCivs().filter { !it.isHuman() && it.civID in league.members }
         val desires = HashMap<String, LeagueDesire>()
         fun desireOf(observer: Civilization) = desires.getOrPut(observer.civID) {
-            LeagueDesire.of(LeagueEvaluator(observer, league).scoreVote(proposal, outcome))
+            LeagueDesire.of(LeagueEvaluator(observer, league).scoreOutcome(proposal, outcome))
         }
         for (voter in proposal.votes.map { it.voter }.distinct()) {
             for (against in listOf(false, true)) {
@@ -328,9 +328,9 @@ object LeagueAutomation {
     //region Vote commitments
 
     /**
-     * CvLeagueAI::GetDesiredVoteCommitments (CvVotingClasses.cpp:7488-7643): the commitment [civ] would like [fromCiv] to make to it, one per proposal.
-     * For an AI the choice it desires most, if more than neutrally; for a human the obvious ones (yes on its own proposals, no on an embargo on it,
-     * itself as host or World Leader). The votes are the core votes of [fromCiv].
+     * CvLeagueAI::GetDesiredVoteCommitments (Vox Populi, CvVotingClasses.cpp:10317-10495): the commitment [civ] would like [fromCiv] to make to it, one per
+     * proposal. For an AI the choice it desires most, if more than neutrally; for a human the assumed ones (yes on its own proposals, else yes or no by
+     * how much it likes the proposal without the global terms, itself as host or World Leader). The votes are the core votes of [fromCiv].
      */
     fun desiredVoteCommitments(civ: Civilization, fromCiv: Civilization): List<VoteCommitment> {
         val league = civ.gameInfo.league ?: return emptyList()
@@ -342,12 +342,14 @@ object LeagueAutomation {
             val resolution = resolutions[proposal.resolution] ?: continue
             var choice: String? = null
             if (civ.isHuman()) {
-                if (proposal.repeal) {
+                // Yes on its own proposals, else by its desire for the proposal without the global terms; itself as host or World Leader
+                if (proposal.repeal || resolution.voterDecision == ResolutionDecision.YesNo) {
                     if (proposal.proposer == civ.civID) choice = League.YES
-                    if (resolution.embargoesPlayer && proposal.proposerChoice == civ.civID) choice = League.YES
-                } else if (resolution.voterDecision == ResolutionDecision.YesNo) {
-                    if (proposal.proposer == civ.civID) choice = League.YES
-                    if (resolution.embargoesPlayer && proposal.proposerChoice == civ.civID) choice = League.NO
+                    else {
+                        val desire = LeagueDesire.of(LeagueEvaluator(civ, league).scoreOutcome(proposal, League.YES))
+                        if (desire > LeagueDesire.NEUTRAL) choice = League.YES
+                        else if (desire < LeagueDesire.NEUTRAL) choice = League.NO
+                    }
                 } else if (resolution.isHostElection || resolution.isWorldLeader) choice = civ.civID
             } else {
                 var highest = LeagueDesire.NEUTRAL
@@ -463,17 +465,20 @@ object LeagueAutomation {
 
     private class ProposalConsideration(val resolution: Resolution?, val choice: String?, val repeal: ActiveResolution?)
 
-    /** CvLeagueAI::DoProposals: one proposal per privilege (CvVotingClasses.cpp:7473-7486) */
+    /** CvLeagueAI::DoProposals: one proposal per privilege (Vox Populi, CvVotingClasses.cpp:10302-10315) */
     private fun doProposals(civ: Civilization, league: League) {
         val evaluator = LeagueEvaluator(civ, league)
         var loops = 0
         while (league.canPropose(civ) && loops++ < MAX_LOOPS) {
-            val considerations = ArrayList<ProposalConsideration>()
-            val weights = ArrayList<Int>()
+            // The score of what we like, and (by how bad) of what we do not
+            val liked = ArrayList<Pair<ProposalConsideration, Int>>()
+            val disliked = ArrayList<Pair<ProposalConsideration, Int>>()
+            fun consider(consideration: ProposalConsideration, score: Int) {
+                if (score > 0) liked.add(consideration to score) else disliked.add(consideration to -score)
+            }
             for (active in league.activeResolutions.toList()) {
                 if (!league.canProposeRepeal(active.id, civ)) continue
-                considerations.add(ProposalConsideration(null, null, active))
-                weights.add(evaluator.scoreRepeal(active))
+                consider(ProposalConsideration(null, null, active), evaluator.scoreRepeal(active, civ.civID, global = true))
             }
             for (resolution in league.gameInfo.ruleset.resolutions.values) {
                 val choices: List<String?> =
@@ -481,49 +486,42 @@ object LeagueAutomation {
                     else league.getChoices(resolution, civ)
                 for (choice in choices) {
                     if (!league.canProposeEnact(resolution, choice, civ)) continue
-                    considerations.add(ProposalConsideration(resolution, choice, null))
-                    weights.add(evaluator.scoreProposal(resolution, choice))
+                    consider(ProposalConsideration(resolution, choice, null), evaluator.scoreProposal(resolution, choice, civ.civID, global = true))
                 }
             }
-            if (considerations.isEmpty()) return // nothing to propose, League.removeUselessPrivileges takes the right away next turn
-
-            val rng = civ.state.stateBasedRandom("LeagueAutomation.propose", league.gameInfo.turns * 31 + league.nextProposalId)
-            val chosen = chooseProposal(considerations, weights, rng)
+            val chosen = chooseProposal(liked, disliked) ?: return // nothing to propose, League.removeUselessPrivileges takes the right away next turn
             if (chosen.repeal != null) league.proposeRepeal(chosen.repeal.id, civ)
             else league.proposeEnact(chosen.resolution!!, chosen.choice, civ)
         }
     }
 
     /**
-     * CvLeagueAI::AllocateProposals (CvVotingClasses.cpp:9602-9686): descending by weight, a weighted roll among the best [CHOOSE_PROPOSAL_FROM_TOP].
-     * If the weights add up to nothing positive all count as 1. Deviation: the original rolls with negative weights among the top, which is undefined
-     * there (CvWeightedVector.h:222-260); here they count as 0.
+     * CvLeagueAI::AllocateProposals (Vox Populi, CvVotingClasses.cpp:14038-14199): the best proposal by score, the first of equals in the order of the
+     * repeals, then the resolutions and their choices; if we like none, the least bad one (the last of the equally bad ones). The original halves
+     * the score of a resolution proposed in the previous session, but compares the proposal's number with the resolution's (not ported: the
+     * World Congress keeps no last session's proposals, and cannot propose them again).
      */
-    private fun chooseProposal(considerations: List<ProposalConsideration>, rawWeights: List<Int>, rng: Random): ProposalConsideration {
-        val weights = if (rawWeights.sum() <= 0) rawWeights.map { 1 } else rawWeights
-        val order = considerations.indices.sortedByDescending { weights[it] }.take(CHOOSE_PROPOSAL_FROM_TOP)
-        val topWeights = order.map { max(0, weights[it]) }
-        return considerations[order[rollIndex(topWeights, rng)]]
-    }
-
-    /** The index a roll up to the total weight lands on; all equal if nothing is positive (CvWeightedVector::ChooseFromTopChoices) */
-    private fun rollIndex(weights: List<Int>, rng: Random): Int {
-        val total = weights.sum()
-        if (total <= 0) return rng.nextInt(weights.size)
-        var roll = rng.nextInt(total)
-        for (index in weights.indices) {
-            roll -= weights[index]
-            if (roll < 0) return index
-        }
-        return weights.lastIndex
+    private fun chooseProposal(liked: List<Pair<ProposalConsideration, Int>>, disliked: List<Pair<ProposalConsideration, Int>>): ProposalConsideration? {
+        var best: Pair<ProposalConsideration, Int>? = null
+        for (candidate in liked) if (best == null || candidate.second > best.second) best = candidate
+        if (best != null) return best.first
+        for (candidate in disliked) if (best == null || candidate.second <= best.second) best = candidate
+        return best?.first
     }
 
     //endregion
     //region Votes
 
-    private class VoteConsideration(val proposal: LeagueProposal, val choice: String, var weight: Int)
+    private class VoteConsideration(val proposal: LeagueProposal, val choice: String, var weight: Int, var delegates: Int = 0)
 
-    /** CvLeagueAI::DoVotes and AllocateVotes (CvVotingClasses.cpp:7449-7466, 8453-8590) */
+    /**
+     * CvLeagueAI::DoVotes and AllocateVotes (Vox Populi, CvVotingClasses.cpp:10278-10295, 11729-11886): each proposal weighs by the score of our best choice
+     * on it (no negative weights; if nothing weighs anything all weigh 1000). The delegates go one at a time to the heaviest proposal (the first of equals
+     * in the order of the table); each vote takes 1 / (the votes left, ours included) of that proposal's weight, so the delegates spread over the
+     * proposals we like; once as many delegates are on it as all other members have left (at least the members) it takes no more. No chance is
+     * involved and the delegates are not given up while a proposal is on the table. The original's weight bonus when an embargo on us is proposed of the
+     * old rules is gone: the embargo is -1000 in the score itself.
+     */
     private fun doVotes(civ: Civilization, league: League) {
         val onTable = league.proposals.filter { !it.onHold }
         if (onTable.isEmpty()) {
@@ -534,27 +532,27 @@ object LeagueAutomation {
         val considerations = ArrayList<VoteConsideration>()
         for (proposal in onTable) {
             val (choice, score) = evaluator.findBestVoteChoice(proposal) ?: continue
-            considerations.add(VoteConsideration(proposal, choice, max(score, 0))) // no negative weights
+            considerations.add(VoteConsideration(proposal, choice, score))
         }
         if (considerations.isEmpty()) {
             league.abstainRemaining(civ)
             return
         }
+        if (considerations.sumOf { it.weight } <= 0) for (consideration in considerations) consideration.weight = 1000
 
-        // If an embargo on us is proposed (or its repeal), everything goes to it
-        val focus = onTable.firstOrNull { proposal ->
-            league.gameInfo.ruleset.resolutions[proposal.resolution]?.embargoesPlayer == true && proposal.proposerChoice == civ.civID
+        val votes = league.getDelegatesLeft(civ)
+        val members = league.members.size + league.gameInfo.getAliveCityStates().size
+        val othersCombined = max(members, league.members.entries.filter { it.key != civ.civID }.sumOf { it.value.delegatesLeft })
+        for (spent in 0 until votes) {
+            considerations.sortByDescending { it.weight } // stable
+            val chosen = considerations.first()
+            chosen.delegates++
+            chosen.weight = max(0, chosen.weight - chosen.weight / max(1, votes - spent))
+            // Enough to pass it whatever the others do
+            if (chosen.delegates >= othersCombined) chosen.weight = 0
         }
-        if (focus != null) for (consideration in considerations) if (consideration.proposal != focus) consideration.weight = 0
-        if (considerations.sumOf { it.weight } <= 0) for (consideration in considerations) consideration.weight = 1
-
-        // One delegate at a time, each rolled by weight; the votes of one proposal are cast together (the League merges them anyway)
-        val rng = civ.state.stateBasedRandom("LeagueAutomation.vote", league.gameInfo.turns)
-        val weights = considerations.map { it.weight }
-        val counts = IntArray(considerations.size)
-        repeat(league.getDelegatesLeft(civ)) { counts[rollIndex(weights, rng)]++ }
-        for ((index, consideration) in considerations.withIndex())
-            if (counts[index] > 0) league.vote(consideration.proposal.id, civ, counts[index], consideration.choice)
+        for (consideration in considerations)
+            if (consideration.delegates > 0) league.vote(consideration.proposal.id, civ, consideration.delegates, consideration.choice)
         if (league.canVote(civ)) league.abstainRemaining(civ)
     }
 
@@ -569,16 +567,16 @@ enum class LeagueDesire {
     NEVER, STRONG_DISLIKE, DISLIKE, WEAK_DISLIKE, NEUTRAL, WEAK_LIKE, LIKE, STRONG_LIKE, ALWAYS;
 
     companion object {
-        /** CvLeagueAI::EvaluateDesire (CvVotingClasses.cpp:8408-8450) */
+        /** CvLeagueAI::EvaluateDesire (Vox Populi, CvVotingClasses.cpp:11678-11720; BNW's bands were 15, 45, 75 and 105) */
         fun of(rawScore: Int): LeagueDesire = when {
-            rawScore < -105 -> NEVER
-            rawScore < -75 -> STRONG_DISLIKE
-            rawScore < -45 -> DISLIKE
-            rawScore < -15 -> WEAK_DISLIKE
-            rawScore <= 15 -> NEUTRAL
-            rawScore <= 45 -> WEAK_LIKE
-            rawScore <= 75 -> LIKE
-            rawScore <= 105 -> STRONG_LIKE
+            rawScore < -2500 -> NEVER
+            rawScore < -1000 -> STRONG_DISLIKE
+            rawScore < -250 -> DISLIKE
+            rawScore < -50 -> WEAK_DISLIKE
+            rawScore <= 50 -> NEUTRAL
+            rawScore <= 250 -> WEAK_LIKE
+            rawScore <= 1000 -> LIKE
+            rawScore <= 2500 -> STRONG_LIKE
             else -> ALWAYS
         }
     }
@@ -634,6 +632,7 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
     }
 
     private val gameInfo = league.gameInfo
+    private val rules = gameInfo.ruleset.ai
     private val seekingConquest = civ.ai.isGoingForWorldConquest()
     private val seekingDiplomacy = civ.ai.isGoingForDiploVictory()
     private val seekingScience = civ.ai.isGoingForSpaceshipVictory()
@@ -644,41 +643,56 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
 
     //region Entry points
 
-    /** CvLeagueAI::ScoreProposal for an enactment: our YES on a proposal without proposer, so the alignment with the proposer does not count (CvVotingClasses.cpp:9688-9713) */
-    fun scoreProposal(resolution: Resolution, choice: String?): Int = scoreYesNoEnact(resolution, choice, null)
+    /**
+     * CvLeagueAI::ScoreProposal for an enactment (CvVotingClasses.cpp:14201-14226): our YES on a proposal by [proposer] (none: the alignment with the
+     * proposer does not count; with [global] the AI's own proposals count their proposer as SELF), as a proposer sees it ([ScoreVoteChoiceYesNo] with bProposingToEnact)
+     */
+    fun scoreProposal(resolution: Resolution, choice: String?, proposer: String? = null, global: Boolean = false): Int =
+        scoreYesNo(resolution, choice, proposer, League.YES, enact = true, global = global, proposing = true)
 
-    /** CvLeagueAI::ScoreProposal for a repeal: our YES on repealing, which is the effects score reversed (CvVotingClasses.cpp:9715-9740) */
-    fun scoreRepeal(active: ActiveResolution): Int {
+    /** CvLeagueAI::ScoreProposal for a repeal (CvVotingClasses.cpp:14228-14253): our YES on repealing, the effects score reversed */
+    fun scoreRepeal(active: ActiveResolution, proposer: String? = null, global: Boolean = false): Int {
         val resolution = gameInfo.ruleset.resolutions[active.resolution] ?: return 0
-        return -scoreYesNoEnact(resolution, active.choice, null)
+        return scoreYesNo(resolution, active.choice, proposer, League.YES, enact = false, global = global)
     }
 
     /**
-     * CvLeagueAI::ScoreVoteChoice: how much we like [choice] on [proposal] (YES/NO, or the id of a civilization). For a vote on a civilization (host, World Leader)
-     * the proposal's proposer does not matter, for a yes/no vote his alignment does.
+     * CvLeagueAI::ScoreVoteChoice with bConsiderGlobal: how much we like [choice] on [proposal] (YES/NO, or the id of a civilization). For a vote on a
+     * civilization (host, World Leader) the proposal's proposer does not matter, for a yes/no vote his alignment does.
      */
     fun scoreVote(proposal: LeagueProposal, choice: String): Int {
         val resolution = gameInfo.ruleset.resolutions[proposal.resolution] ?: return 0
-        if (!proposal.repeal && resolution.voterDecision == ResolutionDecision.MajorCiv) {
+        if (!proposal.repeal && isPlayerDecision(resolution)) {
             val candidate = gameInfo.getCivilizationOrNull(choice) ?: return 0
             return scorePlayerChoice(resolution, candidate)
         }
-        var score = scoreYesNoEnact(resolution, proposal.proposerChoice, proposal.proposer)
-        if (choice == League.NO) score = -score
-        if (proposal.repeal) score = -score
-        return score
+        return scoreYesNo(resolution, proposal.proposerChoice, proposal.proposer, choice, enact = !proposal.repeal, global = true)
     }
 
-    /** CvLeagueAI::FindBestVoteChoices: the best of the choices with its raw score, `null` if there is none (CvVotingClasses.cpp:8593-8689) */
+    /**
+     * CvLeagueAI::EvaluateDesireForVoteOutcome (CvVotingClasses.cpp:11723-11726): how much we like the [outcome] of the vote on [proposal], with no
+     * global terms. A vote on a civilization has no effects, so it scores 0.
+     */
+    fun scoreOutcome(proposal: LeagueProposal, outcome: String): Int {
+        val resolution = gameInfo.ruleset.resolutions[proposal.resolution] ?: return 0
+        return scoreYesNo(resolution, proposal.proposerChoice, proposal.proposer, outcome, enact = !proposal.repeal, global = false)
+    }
+
+    /** CvLeagueAI::ScoreVoteChoicePlayer is used for the host and the World Leader */
+    private fun isPlayerDecision(resolution: Resolution) =
+        resolution.voterDecision == ResolutionDecision.MajorCiv || resolution.voterDecision == ResolutionDecision.OtherMajorCiv
+
+    /**
+     * CvLeagueAI::FindBestVoteChoices (CvVotingClasses.cpp:11889-11991): the best of the choices with its score, `null` if there is none. No choice
+     * weighs less than 0 and the first of equally scored choices wins (the original's stable sort): Yes before No, a civilization in the order of
+     * the civilizations.
+     */
     fun findBestVoteChoice(proposal: LeagueProposal): Pair<String, Int>? {
         val resolution = gameInfo.ruleset.resolutions[proposal.resolution] ?: return null
         val decision = if (proposal.repeal) ResolutionDecision.YesNo else resolution.voterDecision
-        var choices = league.getChoices(decision, civ)
-        // ties go to the status quo (No) or to ourselves, see the class comment
-        choices = if (decision == ResolutionDecision.YesNo) choices.reversed() else choices.sortedBy { it != civ.civID }
         var best: Pair<String, Int>? = null
-        for (choice in choices) {
-            val score = scoreVote(proposal, choice)
+        for (choice in league.getChoices(decision, civ)) {
+            val score = max(0, scoreVote(proposal, choice))
             if (best == null || score > best.second) best = choice to score
         }
         return best
@@ -687,51 +701,50 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
     //endregion
     //region Choosing a civilization
 
-    /** CvLeagueAI::ScoreVoteChoicePlayer (CvVotingClasses.cpp:9463-9600): World Leader and Choose Host */
+    /**
+     * CvLeagueAI::ScoreVoteChoicePlayer (Vox Populi, CvVotingClasses.cpp:13902-14036): World Leader and Choose Host. The votes are the delegates of the
+     * session (CalculateStartingVotesForMember), the percents those of the votes needed to win ([League.getVotesNeededForWorldLeader]). World Leader:
+     * the leader of our team 100000 (none here), ourselves AI_WORLD_LEADER_BASE_WEIGHT_SELF + 30 per percent of our own votes, a liberator the base +
+     * 30 per percent of theirs, an ally 25, a confidant 15, a friend 10 per percent of theirs but only if we like them, a rival -25, hatred -100, an
+     * enemy or war -250. Choose Host: ourselves 200 per vote (+1), a liberator likewise their votes, an ally 150, a confidant 100, a friend 50 per
+     * vote (+1) if liked, a rival -50, hatred -150, an enemy or war -300. The options that keep us from voting for other teams are off in Vox Populi.
+     */
     fun scorePlayerChoice(resolution: Resolution, candidate: Civilization): Int {
         var score = 0
+        val ourVotes = league.getDelegates(civ)
+        val theirVotes = league.getDelegates(candidate)
+        val needed = maxOf(1, league.getVotesNeededForWorldLeader())
+        val theirPercent = theirVotes * 100 / needed
+        val ourPercent = ourVotes * 100 / needed
         val alignment = LeagueAutomation.evaluateAlignment(civ, candidate)
+        val liked = civ.ai.diplomacy.opinionOf(candidate) > MajorCivOpinion.Neutral
         if (resolution.isWorldLeader) {
-            when (alignment) {
-                LeagueAlignment.LIBERATOR -> score += 200
-                LeagueAlignment.LEADER -> score += 150
-                LeagueAlignment.SELF -> score += 100
-                LeagueAlignment.WAR -> score -= 500
-                else -> {
-                    score -= 50
-                    if (seekingDiplomacy) score -= 150
-                    // Don't hand the victory to someone
-                    if (league.getDelegates(civ) + league.getDelegates(candidate) + 4 >= league.getVotesNeededForWorldLeader()) score -= 150
-                    score += when (alignment) {
-                        LeagueAlignment.ALLY -> 70
-                        LeagueAlignment.CONFIDANT -> 50
-                        LeagueAlignment.FRIEND -> 30
-                        LeagueAlignment.RIVAL -> -30
-                        LeagueAlignment.HATRED -> -50
-                        LeagueAlignment.ENEMY -> -70
-                        else -> 0
-                    }
-                }
+            val base = rules.define(AiDefine.AI_WORLD_LEADER_BASE_WEIGHT_SELF)
+            score += when (alignment) {
+                LeagueAlignment.LEADER -> 100000
+                LeagueAlignment.SELF -> max(base + 30 * ourPercent, 1)
+                LeagueAlignment.LIBERATOR -> base + 30 * theirPercent
+                LeagueAlignment.ALLY -> if (liked) 25 * theirPercent else 0
+                LeagueAlignment.CONFIDANT -> if (liked) 15 * theirPercent else 0
+                LeagueAlignment.FRIEND -> if (liked) 10 * theirPercent else 0
+                LeagueAlignment.RIVAL -> -25 * theirPercent
+                LeagueAlignment.HATRED -> -100 * theirPercent
+                LeagueAlignment.ENEMY, LeagueAlignment.WAR -> -250 * theirPercent
+                LeagueAlignment.NEUTRAL -> 0
             }
         }
         if (resolution.isHostElection) {
-            when (alignment) {
-                LeagueAlignment.LIBERATOR -> score += 200
-                LeagueAlignment.SELF -> score += 100
-                LeagueAlignment.LEADER -> score += 50
-                LeagueAlignment.WAR -> score -= 500
-                else -> {
-                    if (seekingDiplomacy) score -= 150
-                    score += when (alignment) {
-                        LeagueAlignment.ALLY -> 130
-                        LeagueAlignment.CONFIDANT -> 90
-                        LeagueAlignment.FRIEND -> 50
-                        LeagueAlignment.RIVAL -> -50
-                        LeagueAlignment.HATRED -> -90
-                        LeagueAlignment.ENEMY -> -130
-                        else -> 0
-                    }
-                }
+            score += when (alignment) {
+                LeagueAlignment.LEADER -> 100000
+                LeagueAlignment.SELF -> 200 * (ourVotes + 1)
+                LeagueAlignment.LIBERATOR -> 200 * (theirVotes + 1)
+                LeagueAlignment.ALLY -> if (liked) 150 * (theirVotes + 1) else 0
+                LeagueAlignment.CONFIDANT -> if (liked) 100 * (theirVotes + 1) else 0
+                LeagueAlignment.FRIEND -> if (liked) 50 * (theirVotes + 1) else 0
+                LeagueAlignment.RIVAL -> -50 * (theirVotes + 1)
+                LeagueAlignment.HATRED -> -150 * (theirVotes + 1)
+                LeagueAlignment.ENEMY, LeagueAlignment.WAR -> -300 * (theirVotes + 1)
+                LeagueAlignment.NEUTRAL -> 0
             }
         }
         return score
@@ -741,29 +754,79 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
     //region Yes/No resolutions
 
     /**
-     * CvLeagueAI::ScoreVoteChoiceYesNo (CvVotingClasses.cpp:8759-9460) for our YES on enacting [resolution] with the proposer's [choice]:
-     * the effects, then the alignment with [proposerId] (only if what we have so far is above -20, or we are the proposer).
+     * CvLeagueAI::ScoreVoteChoiceYesNo (Vox Populi, CvVotingClasses.cpp:12067-13899) for [choice] (yes or no) on a proposal to enact ([enact]) or repeal
+     * [resolution] with the proposer's [target] choice: the score of YES to enact is the effects ([scoreEffects]) plus, when [proposing], the sanction
+     * terms; a repeal flips it; with [global] the alignment with [proposerId] (SELF, LIBERATOR, LEADER 150, ALLY 90, CONFIDANT 65, FRIEND 40 to work-with
+     * willingness; RIVAL -40, HATRED -65, ENEMY and WAR -90 to work-against willingness) is added; No flips it again; with [global] also what the other
+     * voting majors, weighted by how much we like them, think of it (their own score without global terms, [forSelf] false), x16 / (10 + the voters).
+     * [forSelf] is false when another civilization's evaluator scores the same proposal for us.
      */
-    private fun scoreYesNoEnact(resolution: Resolution, choice: String?, proposerId: String?): Int {
-        var score = scoreEffects(resolution, choice)
-        if (proposerId != null && (score > -20 || proposerId == civ.civID)) {
-            val proposer = gameInfo.getCivilizationOrNull(proposerId)
-            if (proposer != null) score += when (LeagueAutomation.evaluateAlignment(civ, proposer)) {
-                LeagueAlignment.SELF -> 40
-                LeagueAlignment.LIBERATOR, LeagueAlignment.LEADER, LeagueAlignment.ALLY -> 30
-                LeagueAlignment.CONFIDANT -> 20
-                LeagueAlignment.FRIEND -> 10
-                LeagueAlignment.RIVAL -> -10
-                LeagueAlignment.HATRED -> -20
-                LeagueAlignment.ENEMY, LeagueAlignment.WAR -> -30
-                else -> 0
-            }
-        }
+    private fun scoreYesNo(resolution: Resolution, target: String?, proposerId: String?, choice: String, enact: Boolean, global: Boolean,
+                           forSelf: Boolean = true, proposing: Boolean = false): Int {
+        var score = scoreEffects(resolution, target, forSelf)
+        if (!enact) score = -score
+        if (global && proposerId != null) score += proposerAlignmentScore(proposerId)
+        if (choice == League.NO) score = -score
+        if (global) score += globalScore(resolution, target, proposerId, choice, enact)
         return score
     }
 
+    private fun proposerAlignmentScore(proposerId: String): Int {
+        val proposer = gameInfo.getCivilizationOrNull(proposerId) ?: return 0
+        val workWith = civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness)
+        val workAgainst = civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)
+        return when (LeagueAutomation.evaluateAlignment(civ, proposer)) {
+            LeagueAlignment.SELF, LeagueAlignment.LIBERATOR, LeagueAlignment.LEADER -> 150
+            LeagueAlignment.ALLY -> OpinionAi.adjustConditional(90, workWith)
+            LeagueAlignment.CONFIDANT -> OpinionAi.adjustConditional(65, workWith)
+            LeagueAlignment.FRIEND -> OpinionAi.adjustConditional(40, workWith)
+            LeagueAlignment.RIVAL -> OpinionAi.adjustConditional(-40, workAgainst)
+            LeagueAlignment.HATRED -> OpinionAi.adjustConditional(-65, workAgainst)
+            LeagueAlignment.ENEMY, LeagueAlignment.WAR -> OpinionAi.adjustConditional(-90, workAgainst)
+            LeagueAlignment.NEUTRAL -> 0
+        }
+    }
+
+    /**
+     * "How much will friends/enemies care about this?" (CvVotingClasses.cpp:13813-13896): for every other living major with cities that can vote, its good
+     * and bad diplomacy score (800 per opinion step above or below neutral, 800 more for our most valuable friend or ally, 600 less for our biggest
+     * competitor, and by its alignment +-800 / 1600 / 2400, a teammate, liberator or leader 10000 and no weighing) weighted by our work-with and
+     * work-against willingness (/ 2000) times its own score of the same choice (/ 100). The prime league ally and competitor, the victory dispute
+     * and block levels have no counterpart.
+     */
+    private fun globalScore(resolution: Resolution, target: String?, proposerId: String?, choice: String, enact: Boolean): Int {
+        val workWith = civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness)
+        val workAgainst = civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)
+        var total = 0
+        var voters = 1
+        for (other in gameInfo.getAliveMajorCivs()) {
+            if (other == civ || other.cities.isEmpty() || other.civID !in league.members) continue
+            val steps = (civ.ai.diplomacy.opinionOf(other).ordinal - MajorCivOpinion.Neutral.ordinal) * 800
+            var bad = if (steps < 0) steps else 0
+            var good = if (steps > 0) steps else 0
+            if (civ.ai.diplomacy.mostValuableFriend == other.civID || civ.ai.diplomacy.mostValuableAlly == other.civID) good += 800
+            if (civ.ai.diplomacy.biggestCompetitor == other.civID) bad -= 600
+            var maxCooperation = false
+            when (LeagueAutomation.evaluateAlignment(civ, other)) {
+                LeagueAlignment.LIBERATOR, LeagueAlignment.LEADER -> { good = 10000; maxCooperation = true }
+                LeagueAlignment.ALLY -> good += 2400
+                LeagueAlignment.CONFIDANT -> good += 1600
+                LeagueAlignment.FRIEND -> good += 800
+                LeagueAlignment.RIVAL -> bad -= 800
+                LeagueAlignment.HATRED -> bad -= 1600
+                LeagueAlignment.ENEMY, LeagueAlignment.WAR -> bad -= 2400
+                else -> Unit
+            }
+            var diplo = if (maxCooperation) good / 200 else good * workWith / 2000 + bad * workAgainst / 2000
+            diplo *= LeagueEvaluator(other, league).scoreYesNo(resolution, target, proposerId, choice, enact, global = false, forSelf = false)
+            total += diplo / 100
+            voters++
+        }
+        return total * 16 / (10 + voters)
+    }
+
     /** The effects part of ScoreVoteChoiceYesNo, in the order of the original, which matters for the caps and the hard set to 0 */
-    fun scoreEffects(resolution: Resolution, choice: String?): Int {
+    fun scoreEffects(resolution: Resolution, choice: String?, @Suppress("UNUSED_PARAMETER") forSelf: Boolean = true): Int {
         var score = 0
 
         if (resolution.isProject) score += scoreProject(resolution.name)

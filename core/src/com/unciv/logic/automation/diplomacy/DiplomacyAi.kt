@@ -61,8 +61,19 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var economicStrength: StrengthLevel? = null
     var militaryThreat = AiThreat.None
     var warmongerThreat = AiThreat.None
-    /** CvDiplomacyAI::m_paiOtherPlayerWarmongerAmount */
-    var warmongerAmount = 0
+    /** CvDiplomacyAI::m_aiWarmongerAmountTimes100: the warmongering we hold against them, in hundredths ([WarmongerAi]) */
+    var warmongerAmountTimes100 = 0
+    /** CvDiplomacyAI::GetOtherPlayerNumMinorsAttacked / NumMajorsAttacked / NumPlayersNuked: what we have seen them do (each adds to the next penalty) */
+    var numMinorsAttacked = 0
+    var numMajorsAttacked = 0
+    var numPlayersNuked = 0
+    /**
+     *  CvMinorCivAI::GetTurnLastAttacked, kept by the attacker: the game turn we last declared war on this city-state, -1 never; one
+     *  attacked within 50 turns counts for no new warmongering ([WarmongerAi.onMinorAttacked])
+     */
+    var turnLastDeclaredWarOnThem = -1
+    /** CvPlayer::m_aiMostRecentWarScore: our war score against them when the last war with them ended, as the game speed scales it ([WarDamageAi]) */
+    var mostRecentWarScore = 0
     var treatyWillingToOffer = PeaceTreatyType.None
     var treatyWillingToAccept = PeaceTreatyType.None
     var numWarsFought = 0
@@ -256,7 +267,10 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.lastWarProjection = lastWarProjection; copy.warDamageLevel = warDamageLevel; copy.warValueLost = warValueLost
         copy.theirWarValueLostToUs = theirWarValueLostToUs; copy.theirWarDamageLevel = theirWarDamageLevel
         copy.economicStrength = economicStrength; copy.militaryThreat = militaryThreat; copy.warmongerThreat = warmongerThreat
-        copy.warmongerAmount = warmongerAmount; copy.treatyWillingToOffer = treatyWillingToOffer
+        copy.warmongerAmountTimes100 = warmongerAmountTimes100; copy.numMinorsAttacked = numMinorsAttacked
+        copy.numMajorsAttacked = numMajorsAttacked; copy.numPlayersNuked = numPlayersNuked
+        copy.turnLastDeclaredWarOnThem = turnLastDeclaredWarOnThem; copy.mostRecentWarScore = mostRecentWarScore
+        copy.treatyWillingToOffer = treatyWillingToOffer
         copy.treatyWillingToAccept = treatyWillingToAccept; copy.numWarsFought = numWarsFought; copy.turnMadePeace = turnMadePeace
         copy.numWarsDeclaredOnUs = numWarsDeclaredOnUs
         copy.turnsLockedIntoWar = turnsLockedIntoWar; copy.musteringForAttack = musteringForAttack; copy.aggressor = aggressor

@@ -79,6 +79,13 @@ class City : IsPartOfGameInfoSerialization, INamed {
     var previousOwner = ""
     /** Historical owners, including the founder, for first-conquest effects. Persisted across trades and recaptures. */
     var everOwnedBy = HashSet<String>()
+    /**
+     *  CvCity::m_aiNumTimesOwned (Vox Populi) by civID: how many times a civilization has come to own this city, the founding included.
+     *  Absent entries count 1 for a civilization in [everOwnedBy] (founders, and owners before this was kept), else 0; read [getNumTimesOwned].
+     */
+    private var numTimesOwned = HashMap<String, Int>()
+    /** CvCity::m_abEverLiberated: the civilizations that have given this city back to its founder once; the bonuses of liberating count only the first time */
+    var everLiberatedBy = HashSet<String>()
     var turnAcquired = 0
     var health = 200
     /** CvCity::m_iDamageTakenThisTurn (Vox Populi): combat damage taken since the owner's turn began (CityCombatant.takeDamage) */
@@ -222,6 +229,8 @@ class City : IsPartOfGameInfoSerialization, INamed {
         toReturn.foundingCiv = foundingCiv
         toReturn.previousOwner = previousOwner
         toReturn.everOwnedBy.addAll(everOwnedBy)
+        toReturn.numTimesOwned.putAll(numTimesOwned)
+        toReturn.everLiberatedBy.addAll(everLiberatedBy)
         toReturn.turnAcquired = turnAcquired
         toReturn.isPuppet = isPuppet
         toReturn.isOriginalCapital = isOriginalCapital
@@ -236,6 +245,12 @@ class City : IsPartOfGameInfoSerialization, INamed {
         toReturn.unitToPromotions = unitToPromotions
         return toReturn
     }
+
+    /** CvCity::GetNumTimesOwned: how many times [civID] has come to own this city (the current ownership included) */
+    @Readonly fun getNumTimesOwned(civID: String): Int = numTimesOwned[civID] ?: if (civID in everOwnedBy) 1 else 0
+
+    /** CvCity::ChangeNumTimesOwned(civ, 1), as the city changes hands (before [everOwnedBy] takes the new owner) */
+    fun addTimeOwnedBy(civID: String) { numTimesOwned[civID] = getNumTimesOwned(civID) + 1 }
 
     @Readonly fun canBombard() = getBombardRange() > 0 && !attackedThisTurn && !isInResistance()
     @Readonly fun getCenterTile(): Tile = centerTile

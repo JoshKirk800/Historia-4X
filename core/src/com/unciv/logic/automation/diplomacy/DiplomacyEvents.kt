@@ -21,6 +21,9 @@ import com.unciv.models.ruleset.unit.BaseUnit
  */
 object DiplomacyEvents {
 
+    /** CvDiplomacyAI::DoPlayerDeclaredWarOnSomeone: turns after which a war on a city-state we declared before counts as a new attack */
+    private const val REPEATED_CITY_STATE_ATTACK_TURNS = 50
+
     //region Contact
 
     /**
@@ -45,28 +48,30 @@ object DiplomacyEvents {
 
     /**
      *  CvTeam::declareWar: the victim's DoSomeoneDeclaredWarOnMe, then every major that knows the declarer runs DoPlayerDeclaredWarOnSomeone and
-     *  (not for defensive pacts) counts the attack in its warmonger amounts (ChangeOtherPlayerNumMinorsAttacked / NumMajorsAttacked).
+     *  (not for defensive pacts) counts the attack in its warmonger amounts ([WarmongerAi.onMinorAttacked] / [WarmongerAi.onMajorAttacked]).
      *  Call after the war state is set and before the friendship flags are removed.
      */
     fun onWarDeclared(declarer: Civilization, victim: Civilization, isDefensivePact: Boolean) {
         val gameInfo = declarer.gameInfo
-        val rules = gameInfo.ruleset.ai
         // CvTeam::DoDeclareWar (Vox Populi): the declarer is the aggressor, unless a defensive pact called it in; either side that
         // wanted the war is one too
         if (declarer.isMajorCiv) declarer.ai.diplomacy.memoryOf(victim).aggressor = !isDefensivePact || wantedWar(declarer, victim)
         if (victim.isMajorCiv) victim.ai.diplomacy.memoryOf(declarer).aggressor = wantedWar(victim, declarer)
         WarProgressAi.onWarDeclared(declarer, victim)
         if (!declarer.isMajorCiv) return
+        // CvDiplomacyAI::DoPlayerDeclaredWarOnSomeone: a city-state attacked again within 50 turns of the last time counts for nothing more
+        val declarerMemory = declarer.ai.diplomacy.memoryOf(victim)
+        val repeatedAttack = victim.isCityState && declarerMemory.turnLastDeclaredWarOnThem > -1 &&
+            gameInfo.turns - declarerMemory.turnLastDeclaredWarOnThem < REPEATED_CITY_STATE_ATTACK_TURNS
         for (observer in gameInfo.civilizations) {
             if (!observer.isMajorCiv || observer == declarer || !observer.isAlive() || !observer.knows(declarer)) continue
             playerDeclaredWarOnSomeone(observer, declarer, victim)
             if (isDefensivePact) continue
-            val memory = observer.ai.diplomacy.memoryOf(declarer)
-            if (victim.isCityState) memory.warmongerAmount += rules.define(AiDefine.WARMONGER_THREAT_MINOR_ATTACKED_WEIGHT)
-            // Not counted if the observer is at war with the victim too
-            else if (victim.isMajorCiv && (observer == victim || !observer.isAtWarWith(victim)))
-                memory.warmongerAmount += rules.define(AiDefine.WARMONGER_THREAT_MAJOR_ATTACKED_WEIGHT)
+            if (victim.isCityState) { if (!repeatedAttack) WarmongerAi.onMinorAttacked(observer, declarer, victim) }
+            else if (victim.isMajorCiv) WarmongerAi.onMajorAttacked(observer, declarer, victim)
         }
+        // CvMinorCivAI::DoTeamDeclaredWarOnMe, after the observers have looked
+        if (victim.isCityState && !isDefensivePact) declarerMemory.turnLastDeclaredWarOnThem = gameInfo.turns
         // DoPlayerDeclaredWarOnSomeone runs for the declarer too (ePlayer == me)
         playerDeclaredWarOnSomeone(declarer, declarer, victim)
     }
@@ -207,6 +212,17 @@ object DiplomacyEvents {
         onDoFBetrayed(ender, friend)
     }
 
+    /**
+     *  CvTeam::SetAtWar (peace): the first of the two sides to make peace notes each side's war score against the other as the most
+     *  recent one ([WarDamageAi.mostRecentWarScore]). Call before the war ends.
+     */
+    fun onPeaceMaking(civ: Civilization, other: Civilization) {
+        if (!civ.isAtWarWith(other)) return
+        for ((us, them) in listOf(civ to other, other to civ)) {
+            if (us.isMajorCiv && us.isAlive() && them.isAlive()) WarDamageAi.setMostRecentWarScore(us, them, WarDamageAi.warScore(us, them))
+        }
+    }
+
     /** CvTeam::makePeace: both sides run DoWeMadePeaceWithSomeone and remember the turn of the treaty */
     fun onPeace(civ: Civilization, other: Civilization) {
         weMadePeaceWith(civ, other)
@@ -249,8 +265,8 @@ object DiplomacyEvents {
      *  CvPlayer::acquireCity by conquest: the war damage (CvUnitCombat: the conqueror applies the city's [WarDamageAi.cityWarValue];
      *  BNW's record of the loser's losses notes it too), the loser forgets liberation credit (Vox Populi: the liberated cities, ever
      *  liberated, the liberated capital and holy city, the resurrection) and remembers a major taking its original capital or the holy
-     *  city of the religion it founded, and the warmonger penalties (CvDiplomacyAIHelpers::ApplyWarmongerPenalties) unless the city was
-     *  the conqueror's. Call before the city changes hands.
+     *  city of the religion it founded, and the warmonger penalties ([WarmongerAi.applyWarmongerPenalties]) unless the city was the
+     *  conqueror's own or last. Call before the city changes hands.
      */
     fun onCityConquered(conqueror: Civilization, loser: Civilization, city: City) {
         if (conqueror.isBarbarian || loser.isBarbarian) return
@@ -277,40 +293,19 @@ object DiplomacyEvents {
         // CvPlayer::acquireCity (Vox Populi): the loser counts the cities the conqueror took, the conqueror the turn it last took one
         if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesCapturedBy++
         if (conqueror.isMajorCiv) conqueror.ai.diplomacy.memoryOf(loser).lastCityCaptureTurn = conqueror.gameInfo.turns
-        // The loser's city count after the loss, as the original applies the penalties once the city has changed hands
-        if (conqueror.isMajorCiv && city.foundingCivObject != conqueror) applyWarmongerPenalties(conqueror, loser, loser.cities.size - 1)
-    }
-
-    /**
-     *  CvDiplomacyAIHelpers::GetWarmongerOffset (SDK source): 1000 × estimated cities on the map / (actual cities × cities the victim has left),
-     *  scaled by WARMONGER_ON_CITY_STATE_MULTIPLIER percent when the victim is a City-State ("Minor power targeted, half penalty")
-     */
-    fun warmongerOffset(conqueror: Civilization, numCitiesRemaining: Int, victimIsCityState: Boolean): Int {
-        val gameInfo = conqueror.gameInfo
-        val rules = gameInfo.ruleset.ai
-        val estimated = rules.worldSize(gameInfo.tileMap.mapParameters.mapSize.getPredefinedOrNextSmaller().name).estimatedNumCities
-        val actual = gameInfo.civilizations.sumOf { it.cities.size }
-        val offset = 1000 * estimated / (maxOf(actual, 1) * numCitiesRemaining)
-        return if (victimIsCityState) offset * rules.define(AiDefine.WARMONGER_ON_CITY_STATE_MULTIPLIER) / 100 else offset
-    }
-
-    /** CvDiplomacyAIHelpers::ApplyWarmongerPenalties: every major that knows the conqueror, halved if it is at war with the loser too */
-    fun applyWarmongerPenalties(conqueror: Civilization, loser: Civilization, loserCitiesLeft: Int) {
-        val offset = warmongerOffset(conqueror, maxOf(loserCitiesLeft, 1), loser.isCityState)
-        for (observer in conqueror.gameInfo.civilizations) {
-            if (!observer.isMajorCiv || observer == conqueror || !observer.isAlive() || !observer.knows(conqueror)) continue
-            val penalty = if (observer.isAtWarWith(loser)) offset / 2 else offset
-            observer.ai.diplomacy.memoryOf(conqueror).warmongerAmount += penalty
-        }
+        WarmongerAi.applyWarmongerPenalties(city, conqueror, loser)
     }
 
     /**
      *  CvPlayer::DoLiberatePlayer: [liberator] gave [city] back to [receiver], who counts its liberated capital, its holy city (of the
      *  religion it founded), or else the liberated city (and the cities ever liberated); a dead receiver is also resurrected and forgets
-     *  its grievances; the liberator's warmonger amounts go down for everyone who knows it.
+     *  its grievances. The first time [liberator] liberates this city (CvCity::isEverLiberated: giving it back again and again earns
+     *  nothing more) it also counts as a city ever liberated and the liberator's warmonger amounts go down for everyone
+     *  ([WarmongerAi.applyLiberationBonuses]).
      *  Call before the city changes hands, with [receiverWasAlive] the receiver's state before.
      */
     fun onCityLiberated(liberator: Civilization, receiver: Civilization, city: City, receiverWasAlive: Boolean) {
+        val firstLiberation = city.everLiberatedBy.add(liberator.civID)
         if (receiver.isMajorCiv) {
             val memory = receiver.ai.diplomacy.memoryOf(liberator)
             val ownReligion = receiver.religionManager.religion?.takeIf { it.foundingCivName == receiver.civName }
@@ -319,10 +314,10 @@ object DiplomacyEvents {
                 ownReligion != null && city.isHolyCityOf(ownReligion.name) -> memory.liberatedHolyCity = true
                 else -> {
                     memory.numCitiesLiberated++
-                    memory.numCitiesEverLiberated++
                     memory.liberatedCitiesTurn = receiver.gameInfo.turns // CvDiplomacyAI::SetNumCitiesLiberatedBy (Vox Populi)
                 }
             }
+            if (firstLiberation) memory.numCitiesEverLiberated++
             if (!receiverWasAlive) {
                 memory.resurrectedUs = true
                 memory.landDispute = DisputeLevel.None
@@ -365,13 +360,7 @@ object DiplomacyEvents {
                 liberator.getDiplomacyManager(receiver)?.removeFlag(DiplomacyFlags.Denunciation)
             }
         }
-        // Negate the warmongering
-        val offset = warmongerOffset(liberator, maxOf(receiver.cities.size + 1, 1), receiver.isCityState)
-        for (observer in liberator.gameInfo.civilizations) {
-            if (!observer.isMajorCiv || observer == liberator || !observer.isAlive() || !observer.knows(liberator)) continue
-            val memory = observer.ai.diplomacy.memoryOf(liberator)
-            memory.warmongerAmount = maxOf(0, memory.warmongerAmount - offset)
-        }
+        if (firstLiberation) WarmongerAi.applyLiberationBonuses(city, liberator, receiver)
     }
 
     /**
@@ -382,6 +371,16 @@ object DiplomacyEvents {
     fun onLastCityTaken(newOwner: Civilization, oldOwner: Civilization) {
         if (!newOwner.isMajorCiv) return
         GrandStrategyAi.onCivDestroyed(newOwner, oldOwner)
+        // CvPlayer::verifyAlive: every major at war with the killed player remembers a won war, the killed player a lost one (they
+        // start to fade if it is resurrected); CvDiplomacyAI::DoResetDiplomacy: nobody holds the killed player's warmongering against it any more
+        for (other in newOwner.gameInfo.civilizations) {
+            if (other == oldOwner || !other.isMajorCiv || !other.isAlive()) continue
+            if (other.isAtWarWith(oldOwner)) {
+                WarDamageAi.setMostRecentWarScore(other, oldOwner, 100)
+                WarDamageAi.setMostRecentWarScore(oldOwner, other, -100)
+            }
+            if (oldOwner.isMajorCiv) other.ai.diplomacy.memoryOf(oldOwner).warmongerAmountTimes100 = 0
+        }
         if (!oldOwner.isCityState) return
         for (observer in oldOwner.cityStateFunctions.getProtectorCivs()) {
             if (!observer.isMajorCiv || observer == newOwner || !observer.isAlive() || !observer.knows(newOwner) || !WarStateAi.isPlayerValid(observer, newOwner)) continue
@@ -426,9 +425,13 @@ object DiplomacyEvents {
         if (bully.isMajorCiv) bully.ai.diplomacy.memoryOf(protector).turnsSinceSidedWithProtectedMinor = 0
     }
 
-    /** CvUnitCombat nuke damage: [victim] was nuked by [attacker] */
+    /** CvUnitCombat nuke damage: [victim] was nuked by [attacker], and the other majors count it in their warmonger amounts */
     fun onNuked(victim: Civilization, attacker: Civilization) {
-        if (victim.isMajorCiv && victim != attacker) victim.ai.diplomacy.memoryOf(attacker).numTimesNuked++
+        if (victim == attacker) return
+        if (victim.isMajorCiv) victim.ai.diplomacy.memoryOf(attacker).numTimesNuked++
+        // CvDiplomacyAI::ChangeNumTimesNuked / CvUnitCombat: every major notes a major or a city-state nuked by a major
+        if (attacker.isMajorCiv && (victim.isMajorCiv || victim.isCityState))
+            for (observer in attacker.gameInfo.civilizations) if (observer.isMajorCiv) WarmongerAi.onNuked(observer, attacker, victim)
     }
 
     /** CvUnit culture bomb (citadel and similar): [owner] lost tiles to [bomber] */

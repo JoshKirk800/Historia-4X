@@ -11,6 +11,7 @@ import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import yairm210.purity.annotations.Readonly
+import kotlin.math.roundToInt
 
 /**
  *  Vox Populi's war damage bookkeeping (CvPlayer.cpp, Release-5.4.8; D7): what each player lost to each other player
@@ -183,6 +184,39 @@ object WarDamageAi {
         return (warDamageValue(other, civ) - warDamageValue(civ, other)).coerceIn(-100, 100)
     }
 
+    /** CvGameSpeedInfo::getTrainPercent: the game speed's unit production cost in percent (Marathon 300, Epic 150, Standard 100, Quick 67) */
+    @Readonly
+    private fun trainPercent(civ: Civilization): Int = (civ.gameInfo.speed.productionCostModifier * 100).roundToInt()
+
+    /**
+     *  CvPlayer::GetMostRecentWarScore: [civ]'s war score against [other] when their last war ended (or 100 when it killed [other]; -100
+     *  the other way round), which decays towards 0 by one a turn at Standard speed and slower on slower speeds. The value is kept scaled
+     *  by the speed's train percent (above 100) so that the decay takes more turns, and read back unscaled and rounded.
+     */
+    @Readonly
+    fun mostRecentWarScore(civ: Civilization, other: Civilization): Int {
+        if (civ.isBarbarian) return 0
+        val stored = civ.ai.diplomacy.memories[other.civID]?.mostRecentWarScore ?: return 0
+        val train = trainPercent(civ)
+        if (train <= 100) return stored
+        return (stored * 100 + if (stored >= 0) train / 2 else -train / 2) / train
+    }
+
+    /** CvPlayer::SetMostRecentWarScore (not from the decay): [value] is scaled for the game speed as [mostRecentWarScore] expects */
+    fun setMostRecentWarScore(civ: Civilization, other: Civilization, value: Int) {
+        if (civ.isBarbarian || !civ.isMajorCiv) return
+        val train = trainPercent(civ)
+        civ.ai.diplomacy.memoryOf(other).mostRecentWarScore =
+            if (train <= 100) value else (value * train + if (value >= 0) 50 else -50) / 100
+    }
+
+    /** CvPlayer::DoMostRecentWarScoreDecay: the stored (scaled) value moves one towards 0 */
+    private fun mostRecentWarScoreDecay(civ: Civilization, other: Civilization) {
+        val memory = civ.ai.diplomacy.memories[other.civID] ?: return
+        if (memory.mostRecentWarScore > 0) memory.mostRecentWarScore--
+        else if (memory.mostRecentWarScore < 0) memory.mostRecentWarScore++
+    }
+
     /** CvGame::GetStartingMilitaryRating: MILITARY_RATING_STARTING_VALUE, plus MILITARY_RATING_PER_ADVANCED_START_ERA per later start era */
     @Readonly
     fun startingMilitaryRating(civ: Civilization): Int {
@@ -214,6 +248,8 @@ object WarDamageAi {
             memory.warValueLost -= maxOf(1, memory.warValueLost / if (civ.isAtWarWith(other)) 50 else 10)
         }
         if (!civ.isMajorCiv) return
+        // CvPlayer::doTurn: the recent war scores against the living majors decay
+        if (civ.isAlive()) for (other in civ.gameInfo.civilizations) if (other.isMajorCiv && other.isAlive()) mostRecentWarScoreDecay(civ, other)
         val starting = startingMilitaryRating(civ)
         val current = militaryRating(civ)
         if (current == starting) return

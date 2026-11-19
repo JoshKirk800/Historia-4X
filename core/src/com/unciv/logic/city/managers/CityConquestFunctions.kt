@@ -329,6 +329,7 @@ class CityConquestFunctions(val city: City) {
 
         oldCiv.cities = oldCiv.cities.withoutItem(city)
         newCiv.cities = newCiv.cities.withItem(city)
+        city.addTimeOwnedBy(newCiv.civID)
         city.everOwnedBy.add(oldCiv.civID)
         city.everOwnedBy.add(newCiv.civID)
         city.civ = newCiv

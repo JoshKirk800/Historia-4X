@@ -78,6 +78,10 @@ class MapUnit : IsPartOfGameInfoSerialization {
     var automatedRoadConnectionDestination: HexCoord? = null
 
     var attacksThisTurn = 0
+
+    /** Damage taken since this unit's turn started and during the turn before (CvUnit::m_iDamageTakenThisTurn / m_iDamageTakenLastTurn), see [isProjectedToDieNextTurn] */
+    var damageTakenThisTurn = 0
+    var damageTakenLastTurn = 0
     var promotions = UnitPromotions()
 
     /** Indicates if unit should be located with 'next unit' action */
@@ -243,6 +247,8 @@ class MapUnit : IsPartOfGameInfoSerialization {
         toReturn.escorting = escorting
         toReturn.automatedRoadConnectionDestination = automatedRoadConnectionDestination
         toReturn.attacksThisTurn = attacksThisTurn
+        toReturn.damageTakenThisTurn = damageTakenThisTurn
+        toReturn.damageTakenLastTurn = damageTakenLastTurn
         toReturn.turnsFortified = turnsFortified
         toReturn.promotions = promotions.clone(toReturn)
         toReturn.isTransported = isTransported
@@ -1012,6 +1018,20 @@ class MapUnit : IsPartOfGameInfoSerialization {
         if (health == 0) destroy()
         else cache.updateUniques()
     }
+
+    /** CvUnit::addDamageReceivedThisTurn: combat and citadel damage count, terrain and enemy-territory damage do not */
+    fun addDamageReceivedThisTurn(amount: Int) {
+        damageTakenThisTurn += amount
+    }
+
+    /** CvUnit::flipDamageReceivedPerTurn, at the start of the owner's turn */
+    fun flipDamageReceivedPerTurn() {
+        damageTakenLastTurn = damageTakenThisTurn
+        damageTakenThisTurn = 0
+    }
+
+    /** CvUnit::isProjectedToDieNextTurn: last turn's damage would kill the unit now */
+    @Readonly fun isProjectedToDieNextTurn() = damageTakenLastTurn > health
 
     fun destroy(destroyTransportedUnit: Boolean = true) {
         stopEscorting()

@@ -87,6 +87,7 @@ class UnitTurnManager(val unit: MapUnit) {
             }.maxByOrNull { it.second }
             ?: return
         if (damage == 0) return
+        unit.addDamageReceivedThisTurn(damage) // CvPlayer::DoTurn: the citadel's damage is counted like combat damage
         unit.takeDamage(damage)
         val improvementName = citadelTile.improvement!!  // guarded by `getUnpillagedImprovement() != null` above
         val improvementIcon = "ImprovementIcons/$improvementName"
@@ -166,6 +167,7 @@ class UnitTurnManager(val unit: MapUnit) {
         unit.movement.clearPathfindingCache()
         unit.currentMovement = unit.getMaxMovement().toFloat()
         unit.attacksThisTurn = 0
+        unit.flipDamageReceivedPerTurn()
         unit.due = true
 
         for (unique in unit.getTriggeredUniques(UniqueType.TriggerUponTurnStart))

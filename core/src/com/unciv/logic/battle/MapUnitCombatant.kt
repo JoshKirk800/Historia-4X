@@ -33,7 +33,11 @@ open class MapUnitCombatant(val unit: MapUnit) : ICombatant {
     }
 
 
-    override fun takeDamage(damage: Int) = unit.takeDamage(damage)
+    override fun takeDamage(damage: Int) {
+        // CvUnitCombat: the attacker's and the defender's damage count for CvUnit::isProjectedToDieNextTurn
+        unit.addDamageReceivedThisTurn(damage)
+        unit.takeDamage(damage)
+    }
 
     override fun getAttackingStrength(defender: ICombatant?): Int {
         val state = GameContext(this, defender, this.getTile(), CombatAction.Attack)

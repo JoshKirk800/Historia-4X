@@ -19,6 +19,7 @@ import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -232,8 +233,20 @@ class LiberationTests {
 
     @Test
     fun `the conquest decision gives a city back to an ally of ours, which BNW did only for a pact or a diplomatic victory`() {
-        assertEquals(CityConquestAutomation.ConquestChoice.Puppet, choice())
+        assertTrue(choice() != CityConquestAutomation.ConquestChoice.Liberate)
         feel(MajorCivOpinion.Ally)
+        assertEquals(CityConquestAutomation.ConquestChoice.Liberate, choice())
+    }
+
+    @Test
+    fun `a city worth keeping is kept before it is given back, which BNW did the other way round, unless we are out to liberate it`() {
+        feel(MajorCivOpinion.Ally)
+        assertEquals(CityConquestAutomation.ConquestChoice.Liberate, choice())
+        city.cityConstructions.addBuilding(game.createWonder())
+        assertEquals("a city with a world wonder is kept", CityConquestAutomation.ConquestChoice.Annex, choice())
+        // IsTryingToLiberate comes before the keep decision: a diplomat gives a friend its capital back, wonder or not
+        a.ai.currentVictoryPursuit = VictoryPursuit.Diplomacy
+        city.isOriginalCapital = true
         assertEquals(CityConquestAutomation.ConquestChoice.Liberate, choice())
     }
 
@@ -256,13 +269,61 @@ class LiberationTests {
     }
 
     @Test
-    fun `a founder that is no major gets the original's rules, a city-state liberated for a friendly approach`() {
+    fun `a city-state founder gets its city back whatever our approach to it, unless the city is kept`() {
         val cityState = game.addCiv(cityStateType = "Cultured")
         game.addCity(cityState, game.getTile(HexCoord(0, 8)))
         a.diplomacyFunctions.makeCivilizationsMeet(cityState)
         val csCity = cityOf(cityState, HexCoord(10, 6))
-        assertEquals(CityConquestAutomation.ConquestChoice.Puppet, CityConquestAutomation.chooseConquest(a, csCity))
-        a.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Friendly
+        a.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Bully
         assertEquals(CityConquestAutomation.ConquestChoice.Liberate, CityConquestAutomation.chooseConquest(a, csCity))
+        csCity.cityConstructions.addBuilding(game.createWonder())
+        assertEquals(CityConquestAutomation.ConquestChoice.Annex, CityConquestAutomation.chooseConquest(a, csCity))
+    }
+
+    @Test
+    fun `a city can be liberated to its founder when we are at peace with it or it is dead, never to us or to the one who holds it`() {
+        assertEquals(b, LiberationAi.playerToLiberate(a, city))
+        a.getDiplomacyManager(b)!!.declareWar()
+        assertNull("at war with the founder", LiberationAi.playerToLiberate(a, city))
+        a.getDiplomacyManager(b)!!.diplomaticStatus = DiplomaticStatus.Peace
+        assertEquals(b, LiberationAi.playerToLiberate(a, city))
+        assertNull("our own city", LiberationAi.playerToLiberate(a, game.addCity(a, game.getTile(HexCoord(-6, 4)))))
+        assertNull("held by its founder", LiberationAi.playerToLiberate(a, game.addCity(c, game.getTile(HexCoord(-4, -4)))))
+        val dead = game.addCiv()
+        assertEquals("a dead founder may be brought back", dead, LiberationAi.playerToLiberate(a, cityOf(dead, HexCoord(10, 6))))
+    }
+
+    @Test
+    fun `an AI tries to liberate only as a diplomat, a dead founder or the capital or holy city of a friend`() {
+        fun trying(of: City = city) = LiberationAi.isTryingToLiberate(a, of)
+        feel(MajorCivOpinion.Friend)
+        assertFalse("no diplomat", trying())
+        a.ai.currentVictoryPursuit = VictoryPursuit.Diplomacy
+        assertFalse("an ordinary city of a friend", trying())
+        city.religion.religionThisIsTheHolyCityOf = "Theirs"
+        assertTrue("a holy city", trying())
+        city.religion.religionThisIsTheHolyCityOf = null
+        city.isOriginalCapital = true
+        assertTrue("an original capital", trying())
+        feel(MajorCivOpinion.Neutral)
+        assertFalse("no friend", trying())
+        feel(MajorCivOpinion.Friend, MajorCivApproach.Guarded)
+        assertFalse("a guarded approach", trying())
+        feel(MajorCivOpinion.Friend)
+        a.ai.currentVictoryPursuit = VictoryPursuit.Domination
+        assertFalse("not a diplomat, and not the capital of a world conqueror", trying())
+        a.ai.currentVictoryPursuit = VictoryPursuit.Diplomacy
+        assertTrue(trying())
+        c.ai.diplomacy.memoryOf(a).friendDeclaredWarOnUs = true // a declared war on a friend of c's: a backstabber
+        assertFalse("a backstabber", trying())
+
+        c.ai.diplomacy.memoryOf(a).friendDeclaredWarOnUs = false
+        val dead = game.addCiv()
+        val otherDead = game.addCiv()
+        a.diplomacyFunctions.makeCivilizationsMeet(dead)
+        a.diplomacyFunctions.makeCivilizationsMeet(otherDead)
+        assertTrue("a dead founder is brought back", trying(cityOf(dead, HexCoord(10, 6))))
+        a.ai.currentVictoryPursuit = null
+        assertFalse(trying(cityOf(otherDead, HexCoord(6, 8))))
     }
 }

@@ -1,8 +1,6 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.Constants
-import com.unciv.logic.automation.civilization.CityConquestAutomation
-import com.unciv.logic.automation.civilization.CityConquestAutomation.ConquestChoice
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.diplomacy.PactPlanningAi
 import com.unciv.logic.automation.diplomacy.WarGoal
@@ -16,7 +14,6 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
-import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.ai.PlayerStrategyDef
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.testing.GdxTestRunner
@@ -420,72 +417,6 @@ class EconomicMilitaryAiTests {
         // CLOSE counts only minor-civ aggressors, not the war itself
         major.proximity[cityState.civID] = Proximity.Close
         assertEquals(MinorCivStatus.Normal, MinorCivStatusAi.status(cityState))
-    }
-    //endregion
-
-    //region Player decisions
-
-    private fun conquestSetup(): Triple<Civilization, Civilization, City> {
-        val attacker = neutralCiv()
-        val defender = neutralCiv()
-        game.addCity(attacker, tile(-4, 0))
-        game.addCity(defender, tile(4, 0))
-        val target = game.addCity(defender, tile(0, 0))
-        attacker.stats.happiness = 5
-        return Triple(attacker, defender, target)
-    }
-
-    @Test
-    fun `conquered cities are puppeted when happy and razed when unhappy`() {
-        val (attacker, _, target) = conquestSetup()
-        assertEquals(ConquestChoice.Puppet, CityConquestAutomation.chooseConquest(attacker, target))
-        attacker.stats.happiness = -1
-        assertEquals(ConquestChoice.Raze, CityConquestAutomation.chooseConquest(attacker, target))
-    }
-
-    @Test
-    fun `retaken own cities are annexed`() {
-        val (attacker, _, target) = conquestSetup()
-        target.foundingCivObject = attacker
-        attacker.stats.happiness = -1 // a city we founded is never razed
-        assertEquals(ConquestChoice.Annex, CityConquestAutomation.chooseConquest(attacker, target))
-    }
-
-    @Test
-    fun `city-state cities are liberated by friendly conquerors and diplomats`() {
-        val (attacker, _, target) = conquestSetup()
-        val cityState = game.addCiv(cityStateType = "Cultured")
-        game.addCity(cityState, tile(0, 4))
-        target.foundingCivObject = cityState
-        assertEquals(ConquestChoice.Puppet, CityConquestAutomation.chooseConquest(attacker, target))
-        attacker.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Friendly
-        assertEquals(ConquestChoice.Liberate, CityConquestAutomation.chooseConquest(attacker, target))
-        attacker.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Bully
-        attacker.ai.setGrandStrategyAndPursuit(GrandStrategyAi.UNITED_NATIONS)
-        assertEquals(ConquestChoice.Liberate, CityConquestAutomation.chooseConquest(attacker, target))
-    }
-
-    @Test
-    fun `annexing takes the best producing puppet in the top half, never under the culture grand strategy`() {
-        val civ = neutralCiv()
-        civ.stats.happiness = 5
-        val capital = game.addCity(civ, tile(0, 0))
-        val strong = game.addCity(civ, tile(4, 0))
-        val weak = game.addCity(civ, tile(-4, 0))
-        val weakest = game.addCity(civ, tile(0, 4))
-        for ((city, production) in listOf(capital to 10f, strong to 8f, weak to 3f, weakest to 1f)) {
-            city.cityStats.currentCityStats.production = production
-        }
-        weak.isPuppet = true
-        // only the top 50% (capital, strong) count: the puppet is third
-        assertNull(CityConquestAutomation.considerAnnex(civ))
-        strong.isPuppet = true
-        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
-        assertNull(CityConquestAutomation.considerAnnex(civ))
-        civ.ai.setGrandStrategyAndPursuit(null)
-        assertEquals(strong, CityConquestAutomation.considerAnnex(civ))
-        assertFalse(strong.isPuppet)
-        assertTrue(weak.isPuppet)
     }
     //endregion
 

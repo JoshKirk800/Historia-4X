@@ -115,7 +115,10 @@ object TacticalSafety {
 
     /**
      *  CvTacticalAI::PlotHealMoves / ExecuteHeals: a unit below full health that is neither embarked nor in a city, not a ship outside our
-     *  territory and not under enemy ranged attack, fortifies (or just waits) to heal and ends its turn. True if it did.
+     *  territory and not under enemy ranged attack, fortifies (or just waits) to heal where it stands; the caller marks it processed. It keeps its
+     *  movement: a unit only heals at the end of a turn in which it did not move ([com.unciv.logic.map.mapunit.UnitTurnManager.endTurn]; in the
+     *  original CvUnit::hasMoved is the flag of actually having moved, not the movement left), so a unit with its movement used up would never heal.
+     *  True if it did.
      */
     fun heal(unit: MapUnit): Boolean {
         if (unit.health >= MAX_HEALTH || unit.isEmbarked() || unit.getTile().isCityCenter()) return false
@@ -123,7 +126,6 @@ object TacticalSafety {
         if (isUnderEnemyRangedAttack(unit)) return false
         AiDecisionLog.log(unit.civ) { "Tactical: ${unit.name} heals at ${unit.getTile().position} (${unit.health})" }
         if (unit.canFortify()) unit.fortify()
-        unit.currentMovement = 0f
         return true
     }
 

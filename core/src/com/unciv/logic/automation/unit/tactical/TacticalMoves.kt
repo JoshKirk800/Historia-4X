@@ -2,7 +2,6 @@ package com.unciv.logic.automation.unit.tactical
 
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
-import com.unciv.logic.battle.Battle
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActionsFromUniques
 import com.unciv.logic.map.mapunit.actions.UnitActionsPillage
@@ -12,11 +11,11 @@ import com.unciv.models.ruleset.unique.UniqueType
 
 /**
  *  The target moves of CvTacticalAI, run in the order of the tactical priority list ([TacticalAi]): each looks at the targets of one type and
- *  commands the units that fit them. Ported: PlotCaptureCityMoves, PlotDamageCityMoves, PlotDestroyUnitMoves (the "destroy" moves of
- *  high, medium and low priority units and the "attrition" ones), PlotCivilianAttackMoves, PlotBarbarianCampMoves, PlotPillageMoves,
+ *  commands the units that fit them. Ported: PlotCivilianAttackMoves, PlotBarbarianCampMoves, PlotPillageMoves,
  *  PlotAncientRuinMoves, PlotSafeBombardMoves, PlotGarrisonMoves, PlotBastionMoves, PlotGuardImprovementMoves, PlotRepositionMoves and
  *  the execution helpers they share (ExecuteMoveToTarget, ExecuteMoveToPlot, ExecuteMoveOfBlockingUnit, MoveToEmptySpaceNearTarget,
- *  FindUnitsForThisMove, FindNearbyTarget).
+ *  FindUnitsForThisMove, FindNearbyTarget). The attacks on units and cities are [TacticalSimulation]'s (ExecuteDestroyEnemyUnits,
+ *  ExecuteCaptureCityMoves): [destroyEnemyUnits] is what the postures' loops over the unit targets do.
  *
  *  Deviations: [plotRepositionMoves] measures the path to the 5 nearest targets only;
  *  a unit's promotions that raise its attack, defense or strength are the unconditional and "when attacking" / "when defending"
@@ -25,77 +24,17 @@ import com.unciv.models.ruleset.unique.UniqueType
  */
 object TacticalMoves {
 
-    //region Attacking cities and units
+    //region Attacking units
 
     /**
-     *  CvTacticalAI::PlotCaptureCityMoves: against each enemy city, the units that can reach it count together; if what they do is at least half
-     *  of the city's hit points (a risk: they need not survive), all attack, melee last, one of them taking the city.
-     *  @return whether an attack was set up
+     *  The loop of the posture moves of CvTacticalAI (PlotAttritionAttacks, PlotExploitFlanksMoves, PlotSteamrollMoves, PlotSurgicalCityStrikeMoves,
+     *  PlotHedgehogMoves, PlotCounterattackMoves, PlotBarbarianAttacks): ExecuteDestroyEnemyUnits for each unit target of the current targets that
+     *  has not been attacked with at least [aggression] this turn, in the order of the targets. The barbarians' list runs it per target type ([type]).
      */
-    fun plotCaptureCityMoves(ctx: TacticalContext): Boolean {
-        var attackMade = false
-        for (target in TacticalTargets.ofType(ctx.currentTargets, TacticalTargetType.City)) {
-            if (!target.isAlive(ctx.civ)) continue
-            val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1, includeBlocked = true)
-            if (strikers.isEmpty()) continue
-            val required = target.city!!.health
-            target.aux = required
-            // Do we have enough firepower to destroy it?
-            if (TacticalAttacks.computeTotalExpectedDamage(target, strikers) >= required / 2) { // risky
-                ctx.log { "attacking city of ${target.city.name} to capture, ${target.tile.position}" }
-                TacticalAttacks.executeAttack(ctx, target, strikers, emptyList(), inflictWhatWeTake = false, mustSurviveAttack = false)
-                attackMade = true
-                // Did it work? If so, don't need a temporary dominance zone if had one here
-                if (target.tile.getOwner() == ctx.civ) ctx.state.deleteTemporaryZone(target.tile)
-            }
-        }
-        return attackMade
-    }
-
-    /**
-     *  CvTacticalAI::PlotDamageCityMoves: against each enemy city, attack with the units that can reach it if together they do more than an
-     *  eighth of its hit points ("don't want to hammer away to try and take down a city for more than 8 turns"), units that survive only.
-     */
-    fun plotDamageCityMoves(ctx: TacticalContext) {
-        for (target in TacticalTargets.ofType(ctx.currentTargets, TacticalTargetType.City)) {
-            if (!target.isAlive(ctx.civ)) continue
-            val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1, includeBlocked = true)
-            if (strikers.isEmpty()) continue
-            val required = target.city!!.health
-            target.aux = required
-            if (TacticalAttacks.computeTotalExpectedDamage(target, strikers) > required / 8) {
-                ctx.log { "attacking city of ${target.city.name} to damage, ${target.tile.position}" }
-                TacticalAttacks.executeAttack(ctx, target, strikers, emptyList(), inflictWhatWeTake = false, mustSurviveAttack = true)
-            }
-        }
-    }
-
-    /**
-     *  CvTacticalAI::PlotDestroyUnitMoves for the targets of [type]: the units and cities that can strike the unit together. With [mustBeAbleToKill]
-     *  they attack if what they do (cities included) is more than its hit points, units of any priority but high ones must survive. Without,
-     *  they attack for attrition: all of them if [attackAtPoorOdds]; else if together they take it to 40% of its strength each only has to
-     *  do as much as it takes, below that each has to, and they must survive.
-     */
-    fun plotDestroyUnitMoves(ctx: TacticalContext, type: TacticalTargetType, mustBeAbleToKill: Boolean, attackAtPoorOdds: Boolean = false) {
-        for (target in TacticalTargets.ofType(ctx.currentTargets, type)) {
-            val defender = TacticalTargets.visibleEnemyDefender(ctx.civ, target.tile) ?: continue
-            val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1)
-            val cities = TacticalAttacks.findCities(ctx, target.tile)
-            if (strikers.isEmpty() && cities.isEmpty()) continue
-            val combatant = Battle.getMapCombatantOfTile(target.tile) ?: continue
-            val expected = TacticalAttacks.computeTotalExpectedDamage(target, strikers) + TacticalAttacks.computeTotalExpectedBombardDamage(combatant, cities)
-            val required = defender.health
-            target.aux = required
-            if (!mustBeAbleToKill) {
-                // Put in any attacks where we'll inflict at least equal damage
-                ctx.log { "looking at damaging $type ${defender.name}, ${target.tile.position}, expecting $expected of $required" }
-                if (attackAtPoorOdds) TacticalAttacks.executeAttack(ctx, target, strikers, cities, inflictWhatWeTake = false, mustSurviveAttack = false)
-                // If we can at least knock the defender to 40% strength with our combined efforts, go ahead even if each individual attack isn't favorable
-                else TacticalAttacks.executeAttack(ctx, target, strikers, cities, inflictWhatWeTake = expected < required * 40 / 100, mustSurviveAttack = true)
-            } else if (expected > required) { // Do we have enough firepower to destroy it?
-                ctx.log { "looking at killing $type ${defender.name}, ${target.tile.position}, expecting $expected of $required" }
-                TacticalAttacks.executeAttack(ctx, target, strikers, cities, inflictWhatWeTake = false, mustSurviveAttack = type != TacticalTargetType.HighPriorityUnit)
-            }
+    fun destroyEnemyUnits(ctx: TacticalContext, aggression: AggressionLevel, type: TacticalTargetType? = null) {
+        for (target in ctx.currentTargets) {
+            if (!target.isUnitTarget || type != null && target.type != type || target.lastAggressionLevel >= aggression) continue
+            TacticalSimulation.executeDestroyEnemyUnits(ctx, target, aggression)
         }
     }
 

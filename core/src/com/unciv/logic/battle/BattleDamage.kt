@@ -176,10 +176,12 @@ object BattleDamage {
         return best
     }
 
+    /** @param ignoreFlanking leave out the flanking bonus (CvUnit::GetMaxAttackStrength's bIgnoreUnitAdjacency): the tactical simulation adds the flanking of the units it has not moved yet itself */
     @Readonly
     fun getAttackModifiers(
         attacker: ICombatant,
-        defender: ICombatant, tileToAttackFrom: Tile
+        defender: ICombatant, tileToAttackFrom: Tile,
+        ignoreFlanking: Boolean = false
     ): Counter<String> {
         val modifiers = getGeneralModifiers(attacker, defender, CombatAction.Attack, tileToAttackFrom)
 
@@ -197,7 +199,7 @@ object BattleDamage {
                 if (sapperBonus != 0) modifiers["Sapper"] = sapperBonus
             }
 
-            if (attacker.isMelee() && defender is MapUnitCombatant) {
+            if (attacker.isMelee() && defender is MapUnitCombatant && !ignoreFlanking) {
                 val flanking = getFlankingBonus(attacker, defender, CombatAction.Attack)
                 if (flanking != 0) modifiers["Flanking"] = flanking
             }
@@ -261,12 +263,12 @@ object BattleDamage {
     }
 
     @Readonly
-    fun getDefenceModifiers(attacker: ICombatant, defender: ICombatant, tileToAttackFrom: Tile): Counter<String> {
+    fun getDefenceModifiers(attacker: ICombatant, defender: ICombatant, tileToAttackFrom: Tile, ignoreFlanking: Boolean = false): Counter<String> {
         val modifiers = getGeneralModifiers(defender, attacker, CombatAction.Defend, tileToAttackFrom)
         val tile = defender.getTile()
 
         // Ranged attacks ignore flanking (GetMaxDefenseStrength passes bIgnoreUnitAdjacency = bFromRangedAttack)
-        if (defender is MapUnitCombatant && attacker is MapUnitCombatant && !attacker.isRanged()) {
+        if (defender is MapUnitCombatant && attacker is MapUnitCombatant && !attacker.isRanged() && !ignoreFlanking) {
             val flanking = getFlankingBonus(defender, attacker, CombatAction.Defend, tileToAttackFrom)
             if (flanking != 0) modifiers["Flanking"] = flanking
         }
@@ -355,9 +357,10 @@ object BattleDamage {
     fun getAttackingStrength(
         attacker: ICombatant,
         defender: ICombatant,
-        tileToAttackFrom: Tile
+        tileToAttackFrom: Tile,
+        ignoreFlanking: Boolean = false
     ): Float {
-        val attackModifier = modifiersToFinalBonus(getAttackModifiers(attacker, defender, tileToAttackFrom))
+        val attackModifier = modifiersToFinalBonus(getAttackModifiers(attacker, defender, tileToAttackFrom, ignoreFlanking))
         val strength = max(1f, attacker.getAttackingStrength(defender) * attackModifier)
         // CvUnitCombat::GenerateMeleeCombatInfo: Heavy Charge, 150% after all the modifiers, against a unit that cannot fall back
         return if (attacker is MapUnitCombatant && attacker.unit.cache.hasHeavyChargeUnique && MeleeFallBack.isHeavyChargeBoosted(attacker, defender)) strength * 1.5f else strength
@@ -368,8 +371,8 @@ object BattleDamage {
      * Includes defence modifiers
      */
     @Readonly
-    fun getDefendingStrength(attacker: ICombatant, defender: ICombatant, tileToAttackFrom: Tile): Float {
-        val defenceModifier = modifiersToFinalBonus(getDefenceModifiers(attacker, defender, tileToAttackFrom))
+    fun getDefendingStrength(attacker: ICombatant, defender: ICombatant, tileToAttackFrom: Tile, ignoreFlanking: Boolean = false): Float {
+        val defenceModifier = modifiersToFinalBonus(getDefenceModifiers(attacker, defender, tileToAttackFrom, ignoreFlanking))
         return max(1f, defender.getDefendingStrength(attacker) * defenceModifier)
     }
     
@@ -390,12 +393,13 @@ object BattleDamage {
         tileToAttackFrom: Tile = defender.getTile(),
         /** Between 0 and 1. */
         randomnessFactor: Float = getRandomness(attacker),
-        fullHealthScale: Boolean = isAirStrike(attacker, defender)
+        fullHealthScale: Boolean = isAirStrike(attacker, defender),
+        ignoreFlanking: Boolean = false
     ): Int {
         if (attacker.isRanged() && !attacker.isAirUnit()) return 0
         if (defender.isCivilian()) return 0
-        val ratio = getAttackingStrength(attacker, defender, tileToAttackFrom) / getDefendingStrength(
-                attacker, defender, tileToAttackFrom)
+        val ratio = getAttackingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking) / getDefendingStrength(
+                attacker, defender, tileToAttackFrom, ignoreFlanking)
         val minimum = if (defender is CityCombatant && isAirStrike(attacker, defender)) BattleConstants.MIN_CITY_STRIKE_DAMAGE else 1
         return damageToInt(damageModifier(ratio, true, randomnessFactor) * getHealthDependantDamageRatio(defender, fullHealthScale), minimum)
     }
@@ -408,11 +412,12 @@ object BattleDamage {
         /** Between 0 and 1.  Defaults to turn and location-based random to avoid save scumming */
         randomnessFactor: Float = getRandomness(defender),
         /** Damage follows the full health of the attacker instead of a third of its health loss: bombing missions and interceptions */
-        fullHealthScale: Boolean = isAirStrike(attacker, defender)
+        fullHealthScale: Boolean = isAirStrike(attacker, defender),
+        ignoreFlanking: Boolean = false
     ): Int {
         if (defender.isCivilian()) return BattleConstants.DAMAGE_TO_CIVILIAN_UNIT
-        val ratio = getAttackingStrength(attacker, defender, tileToAttackFrom) /
-                getDefendingStrength(attacker, defender, tileToAttackFrom)
+        val ratio = getAttackingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking) /
+                getDefendingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking)
         val minimum = if (attacker is CityCombatant) BattleConstants.MIN_CITY_STRIKE_DAMAGE else 1
         return damageToInt(damageModifier(ratio, false, randomnessFactor) * getHealthDependantDamageRatio(attacker, fullHealthScale), minimum)
     }

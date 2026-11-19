@@ -47,7 +47,10 @@ object CivilianUnitAutomation {
 
         // CvHomelandAI::PlotHealMoves takes every unit that is hurt, the civilians no earlier move took (workers, work boats, settlers) too:
         // it runs before the worker moves and the moves to safety, so such a civilian waits to heal where it stands
-        if (!hasMoveBeforeHealing(mapUnit) && TacticalSafety.heal(mapUnit)) return
+        if (!hasMoveBeforeHealing(mapUnit) && TacticalSafety.heal(mapUnit)) {
+            cache.processedUnits.add(mapUnit) // it keeps its movement to heal, nothing else may move it
+            return
+        }
 
         // To allow "found city" actions that can only trigger a limited number of times
         

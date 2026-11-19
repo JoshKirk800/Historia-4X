@@ -5,28 +5,19 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.ai.AiDefine
 
 /**
- * Select a tactical posture per zone. Zone eligibility and temporary operation zones remain from the current operation framework;
- * ordinary posture selection follows Vox Populi 5.4.8's CvTacticalDominanceZone::SelectPostureSingleZone.
+ * Select a tactical posture per zone: Vox Populi 5.4.8's CvTacticalAnalysisMap::UpdatePostures for every zone (CvTacticalDominanceZone::
+ * SelectPostureSingleZone, then SelectPostureMultiZone), temporary operation zones keeping the current framework's assault and shore-bombardment
+ * overrides. Every zone has a posture: ProcessDominanceZones runs the posture of each zone that has targets, so the barbarians that the zones'
+ * strengths ignore ("do not base tactical decisions on transients") are still fought where they are: with the counterattack of the zones in
+ * our land, the flank attacks of the unclaimed ones. (BNW's CvTacticalAnalysisMap::UseThisDominanceZone, which skipped the quiet zones, is not in
+ * Vox Populi 5.4.8: BNW's attacks on units were not tied to a zone, the combat simulation's are.)
  */
 object PostureSelection {
 
-    /** CvTacticalAI::UseThisDominanceZone: temporary zones, the capital's zone, zones where we have units near the enemy's city, where they have units near us, or both have units */
-    fun useThisZone(civ: Civilization, state: TacticalState, zone: DominanceZone): Boolean {
-        val city = zone.closestCity
-        val isOurCapital = city != null && city == civ.getCapital()
-        val isTempZone = city != null && state.isTemporaryZoneCity(city)
-        val weHaveUnitsNearEnemy = zone.totalFriendlyUnitCount > 0 && zone.territory == TacticalTerritory.Enemy
-        // The dominance cannot tell: our own city makes a quiet zone Friendly. Enemy units are what the enemy has near us.
-        val theyHaveUnitsNearUs = zone.overallEnemyStrength > 0 && zone.territory == TacticalTerritory.Friendly
-        val bothHaveUnits = zone.totalFriendlyUnitCount > 0 && zone.totalEnemyUnitCount > 0
-        return isTempZone || isOurCapital || weHaveUnitsNearEnemy || theyHaveUnitsNearUs || bothHaveUnits
-    }
-
-    /** Choose a fresh posture for each zone used by the current operation framework. */
+    /** Choose a fresh posture for each zone. */
     fun updatePostures(civ: Civilization, state: TacticalState, map: TacticalMap) {
         val newPostures = ArrayList<ZonePosture>()
         for (zone in map.zones) {
-            if (!useThisZone(civ, state, zone)) continue
             val ownerId = zone.owner?.civName
             val cityId = zone.closestCity?.id
             val entry = ZonePosture()

@@ -21,7 +21,7 @@ import kotlin.math.min
 /**
  *  The movement of the armies of the AI operations: CvTacticalAI::PlotOperationalArmyMoves (the TACTICAL_MOVE_OPERATIONS move) with
  *  PlotArmyMovesEscort ([EscortMoves]: a settler and its escort), PlotEnemyTerritoryOperationMoves (armies against a city or camp), ExecuteGatherMoves,
- *  ExecuteFormationMoves, ClearEnemiesNearArmy, MoveWithFormation, and the army's part of CvAIOperation::ComputeCenterOfMassForTurn and
+ *  ExecuteFormationMoves, CheckForEnemiesNearArmy, MoveWithFormation, and the army's part of CvAIOperation::ComputeCenterOfMassForTurn and
  *  CvArmyAI (movement rate, checkpoint turns). The operation model is [com.unciv.logic.automation.strategy.AiOperations]; the hexes the units
  *  take are scored by [Deployment]. Armies of the naval move types move by [NavalOperationMoves], which U6 adds as the `when` of [moveOperation].
  *
@@ -193,7 +193,7 @@ object OperationalMoves {
 
             // GATHERING FORCES
             ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP -> {
-                clearEnemiesNearArmy(ctx, army)
+                val contact = checkForEnemiesNearArmy(ctx, army)
                 // Request moves for all units
                 for ((index, unit) in AiOperationLogic.armyUnits(civ, army)) {
                     if (isProcessed(ctx, unit)) continue
@@ -201,7 +201,7 @@ object OperationalMoves {
                     army.slots[index].startedOnOperation = true
                     moveWithFormation(operationUnits, unit, slotDefs[index].position)
                 }
-                executeGatherMoves(ctx, operation, army, operationUnits)
+                executeGatherMoves(ctx, operation, army, operationUnits, if (contact) AiOperationLogic.centerOfMass(civ, army) else null)
             }
 
             // MOVING TO TARGET
@@ -221,50 +221,34 @@ object OperationalMoves {
                     return
                 }
                 army.position = turnTarget.position
-                clearEnemiesNearArmy(ctx, army)
+                val contact = checkForEnemiesNearArmy(ctx, army)
                 // Request moves for all units
                 for ((index, unit) in AiOperationLogic.armyUnits(civ, army)) {
                     if (isProcessed(ctx, unit)) continue
                     if (Deployment.isGeneralOrAdmiral(unit)) { if (unit.hasMovement()) generals.add(unit); continue }
                     moveWithFormation(operationUnits, unit, slotDefs[index].position)
                 }
-                executeFormationMoves(ctx, operation, army, turnTarget, closestCurrent, operationUnits)
+                // Do not move on while there are enemies around, it is too dangerous: the units keep together around their center of mass
+                val center = if (contact) AiOperationLogic.centerOfMass(civ, army) ?: turnTarget else null
+                executeFormationMoves(ctx, operation, army, center ?: turnTarget, center ?: closestCurrent, operationUnits)
             }
         }
         if (generals.isNotEmpty()) Deployment.moveGreatGenerals(ctx, generals, army)
     }
 
     /**
-     *  CvTacticalAI::ClearEnemiesNearArmy: if an enemy unit is on or next to the army's position, the army's units join the tactical units of
-     *  this turn and attack the enemies there, safe and protected bombards first, then the attacks where each unit does at least what it takes.
+     *  CvTacticalAI::CheckForEnemiesNearArmy: the army's units (those that can attack or be attacked, with those of ours around that the enemies
+     *  near could attack) that are in contact with the enemy join this turn's tactical units and fight it with the combat simulation
+     *  ([TacticalSimulation.checkForEnemiesNearArmy]).
+     *  @return whether they fought: the army then holds together around its center of mass instead of marching on
      */
-    fun clearEnemiesNearArmy(ctx: TacticalContext, army: AiArmy) {
-        val civ = ctx.civ
-        val position = tileAt(civ, army.position) ?: return
-        val range = 1
-        fun isNear(target: TacticalTarget) = target.isUnitTarget && position.aerialDistanceTo(target.tile) <= range
-        if (ctx.targets.all.none { isNear(it) }) return
-
-        // Add units from army to tactical AI for this turn
-        for ((_, unit) in AiOperationLogic.armyUnits(civ, army))
-            if (!isProcessed(ctx, unit) && !unit.isDestroyed && unit.hasMovement()) ctx.addUnit(unit)
-
-        // Now attack these targets
-        for (target in ctx.targets.all.filter { isNear(it) }) {
-            if (!target.isAlive(civ)) continue
-            ctx.map.clearDynamicFlags()
-            ctx.map.setTargetBombardCells(target.tile, ctx.map.bestFriendlyRange, ctx.map.ignoreLineOfSight)
-            TacticalBombards.executeSafeBombards(ctx, target)
-            if (target.isAlive(civ)) TacticalBombards.executeProtectedBombards(ctx, target)
-            if (target.isAlive(civ)) {
-                val defender = TacticalTargets.visibleEnemyDefender(civ, target.tile) ?: continue
-                target.aux = defender.health
-                val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1, 0)
-                if (strikers.isEmpty()) continue
-                TacticalAttacks.computeTotalExpectedDamage(target, strikers)
-                TacticalAttacks.executeAttack(ctx, target, strikers, emptyList(), inflictWhatWeTake = true, mustSurviveAttack = true)
-            }
-        }
+    fun checkForEnemiesNearArmy(ctx: TacticalContext, army: AiArmy): Boolean {
+        val units = AiOperationLogic.armyUnits(ctx.civ, army).map { it.second }
+        // The army's units join this turn's tactical units
+        for (unit in units) if (!isProcessed(ctx, unit) && !unit.isDestroyed && unit.hasMovement()) ctx.addUnit(unit)
+        val contact = TacticalSimulation.checkForEnemiesNearArmy(ctx, units)
+        if (contact) ctx.log { "army ${army.id}: contact with the enemy" }
+        return contact
     }
 
     /**
@@ -273,10 +257,10 @@ object OperationalMoves {
      *  only leaves some units where they are: Vox Populi never aborts an operation for it (BNW's NO_ROOM_DEPLOY kept a crowded empire's
      *  sneak attacks from ever gathering).
      */
-    private fun executeGatherMoves(ctx: TacticalContext, operation: AiOperation, army: AiArmy, units: List<OperationUnit>) {
+    private fun executeGatherMoves(ctx: TacticalContext, operation: AiOperation, army: AiArmy, units: List<OperationUnit>, center: Tile? = null) {
         if (units.isEmpty()) return
         val civ = ctx.civ
-        val target = tileAt(civ, army.position) ?: return
+        val target = center ?: tileAt(civ, army.position) ?: return
         // Gathering - treat everyone as a melee unit; don't need ranged in the rear yet
         val count = units.size
         // Range around target based on number of units we need to place; try one time with the computed range

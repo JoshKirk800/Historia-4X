@@ -144,12 +144,13 @@ class NavalOperationTests {
     /** The required slots of the naval squadron: an attack ship and an assault ship (a second assault ship takes the optional second attack slot first) */
     private fun squadron(y: Int): List<MapUnit> = listOf(ship("Quinquereme", 2, y), ship("Galleass", 3, y), ship("Galleass", 4, y))
 
+    /** Ships with an enemy within 3 plots are engaged (CvUnit::canUseForAIOperation), so the squadron stands further from the enemy ship */
     @Test
     fun `a naval superiority squadron at hand hunts the enemy ship and sails at once`() {
         squadron(0)
-        game.addUnit("Trireme", enemy, tile(5, 2))
+        game.addUnit("Trireme", enemy, tile(8, 2))
         val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
-        assertEquals("the enemy ship is the target", tile(5, 2).position, operation.targetTile)
+        assertEquals("the enemy ship is the target", tile(8, 2).position, operation.targetTile)
         assertEquals("it sails at once", OperationState.MOVING_TO_TARGET, operation.state)
     }
 
@@ -215,18 +216,21 @@ class NavalOperationTests {
         assertEquals(3, operation.slotsToBuild.size) // only the two ships are there
     }
 
+    /** Vox Populi (GrabUnitsFromTheReserves): ships that cannot enter the ocean are no recruits when muster point and target are on different waters */
     @Test
-    fun `once ships may cross the ocean a coast-bound ship no longer fills an invasion, an ocean-going one does`() {
-        civ.tech.embarkedUnitsCanEnterOcean = true
-        val coastal = ship("Trireme", 2, 0)
+    fun `a coast-bound ship does not fill an invasion across two bodies of water, an ocean-going one does`() {
+        for (y in -6..6) game.tileMap.getOrNull(7, y)?.let { game.setTileTerrain(it.position, "Grassland") } // a strip of land splits the sea
+        civ.ai.invalidateTurnCaches()
+        val coastal = ship("Quinquereme", 2, 0)
         val ocean = ship("Frigate", 2, 1)
         val operation = invade()
-        assertNull("a Trireme cannot enter the ocean", ops.armyOf(coastal))
+        assertNull("a Quinquereme cannot enter the ocean", ops.armyOf(coastal))
         assertNotNull(ops.armyOf(ocean))
         ops.kill(operation, OperationAbortReason.KILLED)
-        civ.tech.embarkedUnitsCanEnterOcean = false
+        for (y in -6..6) game.tileMap.getOrNull(7, y)?.let { game.setTileTerrain(it.position, "Coast") }
+        civ.ai.invalidateTurnCaches()
         invade()
-        assertNotNull("without the ocean tech the formation takes it", ops.armyOf(coastal))
+        assertNotNull("on one sea the formation takes it", ops.armyOf(coastal))
     }
 
     @Test

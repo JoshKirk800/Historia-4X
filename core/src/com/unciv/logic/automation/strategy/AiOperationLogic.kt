@@ -602,8 +602,9 @@ object AiOperationLogic {
      *  operation's target, and ships must be able to cross the ocean when the muster point and the target are on different landmasses), is
      *  near enough to the muster point and gets there within [maxRecruitTurns]. Candidates are ranked 10000 + power (CvUnit::GetPower) - 30
      *  per turn to the muster point (one more outside our territory, one more for a land unit on another landmass), +42 for a land unit
-     *  guarding a citadel on the border of an unfriendly major (so those stay); the open slots, in order, take the best candidate that
-     *  fits. A slot left open that is required stays on the list of units still to build, an optional one is given up until the next time.
+     *  guarding a citadel on the border of an unfriendly major. The source comment says to prefer other units, but its descending sort
+     *  applies this as a positive bonus. Open slots, in order, take the best candidate that fits. A slot left open that is required
+     *  stays on the list of units still to build, an optional one is given up until the next time.
      *  @return whether the army now has enough units ([haveEnoughUnits])
      */
     fun grabUnitsFromTheReserves(civ: Civilization, operation: AiOperation): Boolean {
@@ -651,7 +652,7 @@ object AiOperationLogic {
             if (tile.getOwner() != civ) turns++
             // ... and units which don't have to pass through a chokepoint
             if (unit.baseUnit.isLandUnit && tile.getContinent() != muster.getContinent()) turns++
-            // prefer units which are not currently guarding the border
+            // The source adds 42 here, despite its comment about preferring units not guarding the border.
             var extra = 0
             if (unit.baseUnit.isLandUnit && civ.ai.tactical.map.isPlayerCitadel(tile, civ)) {
                 val majors = unfriendly ?: unfriendlyMajors(civ).also { unfriendly = it }

@@ -359,6 +359,8 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     var militaryRating = -1
     /** CvDiplomacyAI::IsSaneDiplomaticTarget (Vox Populi) is false for these civIDs: set each turn by [WarSanityAi.updateSaneTargets] */
     var insaneTargets = HashSet<String>()
+    /** CvDiplomacyAI::IsPotentialWarTarget (Vox Populi): the civIDs of the majors we might want to attack, set each turn by [WarTargetAi.updateWarTargets] */
+    var potentialWarTargets = HashSet<String>()
     /** CvPlayer::GetWondersConstructed (Vox Populi): the world wonders this civilization has built */
     var wondersConstructed = 0
     /** CvDiplomacyAI::GetMostValuableFriend (Vox Populi), civID; null = none. Set each turn by [FriendshipPlanningAi.updateFriendships] */
@@ -382,6 +384,7 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         copy.biggestCompetitor = biggestCompetitor
         copy.militaryRating = militaryRating
         copy.insaneTargets.addAll(insaneTargets)
+        copy.potentialWarTargets.addAll(potentialWarTargets)
         copy.wondersConstructed = wondersConstructed
         copy.mostValuableFriend = mostValuableFriend
         copy.mostValuableAlly = mostValuableAlly

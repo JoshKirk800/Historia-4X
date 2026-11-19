@@ -25,7 +25,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
  *  theirs (an insane one also not when the war would bankrupt us); neighbours, or anyone across oceans. Then sneak attacks under
  *  way (an operation or a mustered army; mustered first, then by war score) continue, the best war scores among the candidates
  *  get war while the budget lasts, and if we fight nobody, the best last resort does. Everyone else gets their best approach
- *  but war ([highestValueApproach]). VP's potential war targets (for coop and impulse wars, not ported yet) are left out.
+ *  but war ([highestValueApproach]). Then the potential war targets ([updatePotentialTargets]), which the coop wars read.
  */
 object WarTargetAi {
 
@@ -38,13 +38,18 @@ object WarTargetAi {
             WarAlliesAi.warAllies(civ, other, includeMinors = false, reverse = true, defensive = true, newWarsOnly = true)
 
         val atWar = LinkedHashSet<Civilization>()
-        for (other in majors) if (civ.isAtWarWith(other)) atWar.add(other)
+        val direct = LinkedHashSet<Civilization>() // vDirectTargets: the wars we fight and plan, not the allies they bring in
+        for (other in majors) if (civ.isAtWarWith(other)) {
+            atWar.add(other)
+            direct.add(other)
+        }
         for (other in majors) {
             if (civ.isAtWarWith(other)) continue
             val coop = CoopWarAi.globalState(civ, other)
             if (coop == null || coop < CoopWarState.Soon) continue
             setApproach(civ, other, MajorCivApproach.War)
             atWar.add(other)
+            direct.add(other)
             atWar.addAll(newWarAllies(other))
         }
         var score = atWar.sumOf {
@@ -53,6 +58,7 @@ object WarTargetAi {
         val limit = if (era <= 1) 10 else 10 + 5 * VictoryProgressAi.capitalsConquered(civ)
         if (score >= limit) {
             for (other in majors) if (other !in atWar) setApproach(civ, other, highestValueApproach(civ, other))
+            updatePotentialTargets(civ, majors, direct, score, limit, rules)
             return
         }
 
@@ -109,6 +115,7 @@ object WarTargetAi {
             ai.demandTarget != it.civID && (civ.ai.operations.hasAnyOffensiveOperationsAgainst(it) || ai.memoryOf(it).musteringForAttack)
         }.sortedByDescending { warValue(civ, it).toLong() + if (ai.memoryOf(it).musteringForAttack) 100_000_000L else 0L }
         fun commit(target: Civilization) {
+            direct.add(target)
             score += cost(target)
             setApproach(civ, target, MajorCivApproach.War)
             atWar.add(target)
@@ -130,6 +137,52 @@ object WarTargetAi {
             byWarValue(civ, majors).firstOrNull { it in lastResort }?.let { commit(it) }
 
         for (other in majors) if (other !in atWar) setApproach(civ, other, highestValueApproach(civ, other))
+        updatePotentialTargets(civ, majors, direct, score, limit, rules)
+    }
+
+    /**
+     *  The end of CvDiplomacyAI::DoUpdateWarTargets: the majors we might want to attack, [DiplomacyAi.potentialWarTargets] (the original
+     *  keeps IsPotentialWarTarget; the coop wars read it, and VP's impulse wars). With no new wars, or the budget used up (the limit
+     *  plus 5, 10 in the first two eras), only the targets we have chosen ([direct]) that we are not at war with already. Otherwise every
+     *  major we are not at war with but: not one that would take us over the budget, not one we are afraid of, not an immense one
+     *  unless it is an easy target with a preferred attack target, not one without any attack target, not after a recent peace treaty,
+     *  and, unless untrustworthy, not our most valuable friend or ally, a friend of the early game (unless we are a backstabber), one we
+     *  are friendly towards or whose opinion is friend or better, nor a liberator (or a recent liberation while we have lost cities).
+     *  War sanity is not asked: the original leaves it to the war declaration, to allow impulse wars and betrayals. VP's strategic trade
+     *  partners (no counterpart here) do not keep anyone out.
+     */
+    private fun updatePotentialTargets(civ: Civilization, majors: List<Civilization>, direct: Set<Civilization>, score: Int, limit: Int, rules: AiRuleset) {
+        val ai = civ.ai.diplomacy
+        val era = civ.getEra().eraNumber
+        val potentialLimit = if (era <= 1) 10 else limit + 5
+        val targets = ai.potentialWarTargets
+        targets.clear()
+        val onlyDirect = WarStateAi.isNoNewWars(civ) || score >= potentialLimit
+        for (other in majors) {
+            if (civ.isAtWarWith(other)) continue
+            if (other in direct) {
+                targets.add(other.civID)
+                continue
+            }
+            if (onlyDirect) continue
+            val cost = if (era > 1 && WarStateAi.isEasyTarget(civ, other)) 5 else 10
+            if (score + cost > potentialLimit) continue
+            if (ai.approachTowards(other) == MajorCivApproach.Afraid) continue
+            val easyWithTarget = WarStateAi.isEasyTarget(civ, other) && civ.ai.military.havePreferredAttackTarget(other)
+            if (WarStateAi.militaryStrengthComparedToUs(civ, other) == StrengthLevel.Immense && !easyWithTarget) continue
+            if (!civ.ai.military.havePossibleAttackTarget(other)) continue
+            if (isRecentPeaceTreaty(civ, other, rules)) continue
+            if (!OpinionAi.isUntrustworthyFriend(other)) {
+                if (ai.mostValuableFriend == other.civID || ai.mostValuableAlly == other.civID) continue
+                if (OpinionAi.isDoFAccepted(civ, other) && era <= 1 && !WarSanityAi.isBackstabber(civ)) continue
+                if (ai.approachTowards(other) == MajorCivApproach.Friendly) continue
+                if (ai.opinionOf(other) >= MajorCivOpinion.Friend) continue
+                if (WarSanityAi.isLiberator(civ, other, onlyMajorCities = true) ||
+                    (WarSanityAi.isCityRecentlyLiberatedBy(civ, other) && !VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules) &&
+                        WarSanityAi.citiesLost(civ) > 0)) continue
+            }
+            targets.add(other.civID)
+        }
     }
 
     /** GetPlayerApproachValue(WAR): the war score of the last final approach pass */
@@ -190,7 +243,7 @@ object WarTargetAi {
     }
 
     /** CvDiplomacyAI::SetCivApproach as far as ours goes: a new war approach takes BNW's war face from the approach scores */
-    private fun setApproach(civ: Civilization, other: Civilization, approach: MajorCivApproach) {
+    internal fun setApproach(civ: Civilization, other: Civilization, approach: MajorCivApproach) {
         val memory = civ.ai.diplomacy.memoryOf(other)
         memory.approach = approach
         if (approach == MajorCivApproach.War && memory.warFace == null && memory.approachValues.size == MajorCivApproach.entries.size)

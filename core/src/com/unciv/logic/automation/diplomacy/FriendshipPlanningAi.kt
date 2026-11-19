@@ -193,7 +193,7 @@ object FriendshipPlanningAi {
     }
 
     /** [civ] broke a DoF with [other] within [turns] turns (their IsDoFBroken and GetTurnsSinceDoFBroken towards us) */
-    private fun isDoFBrokenByUs(civ: Civilization, other: Civilization, turns: Int): Boolean {
+    internal fun isDoFBrokenByUs(civ: Civilization, other: Civilization, turns: Int): Boolean {
         val broken = other.ai.diplomacy.memoryOf(civ).doFBrokenTurn
         return broken >= 0 && civ.gameInfo.turns - broken < turns
     }

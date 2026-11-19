@@ -50,8 +50,6 @@ object DealAi {
     /** CvDealAI::GetDealPercentLeewayWithHuman */
     const val LEEWAY_WITH_HUMAN_PERCENT = 10
 
-    /** CvResourceInfo::getHappiness of every BNW luxury (Resources.Happiness = 4), as Unciv's happiness calculation uses it */
-    private const val LUXURY_HAPPINESS = 4
     /** Value a deal item is given when the original refuses it outright */
     const val NEVER = 100000
 
@@ -199,45 +197,19 @@ object DealAi {
     }
 
     /**
-     *  CvDealAI::GetResourceValue. A luxury is worth quantity × happiness × turns × 2 (0 if the World Congress bans it); giving away our
-     *  last copy ×3 (×1.5 with a luxury happiness retention trait). A strategic is worth quantity × turns × 1.5; a strategic we receive
-     *  counts at most max(5, cities) units, and none if we already have more than our city count. Items we give are then scaled by
-     *  (opinion modifier + approach modifier) / 200. There is no even value.
+     *  CvDealAI::GetResourceValue (Vox Populi, Community Patch part): [DealResourceValues.luxuryValue] or
+     *  [DealResourceValues.strategicValue], with the receiver's net gold; a bonus resource is worth nothing. What the original returns as
+     *  INT_MAX is [NEVER] for the player who would give it and -[NEVER] for the one who would get it. There is no even value; the
+     *  approach modifiers of [getTradeItemValue] take the place of the opinion scaling of Brave New World.
      */
     fun getResourceValue(us: Civilization, them: Civilization, resource: TileResource, quantity: Int, numTurns: Int, fromMe: Boolean): Int {
-        var value = 0L
-        if (resource.resourceType == ResourceType.Luxury) {
-            if (us.gameInfo.league?.isLuxuryBanned(resource.name) != true) {
-                value = quantity.toLong() * LUXURY_HAPPINESS * numTurns * 2
-                if (fromMe && numResourceAvailable(us, resource, true) == 1) {
-                    value *= 3
-                    if (us.hasUnique(UniqueType.RetainHappinessFromLuxury)) value /= 2
-                }
-            }
-        } else if (resource.resourceType == ResourceType.Strategic) {
-            var amount = quantity
-            if (!fromMe) {
-                amount = if (numResourceAvailable(us, resource, true) > us.cities.size) 0
-                    else min(max(5, us.cities.size), amount)
-            }
-            value = amount.toLong() * numTurns * 150 / 100
+        val netGoldOfReceiver = goldRate(if (fromMe) them else us)
+        val value = when (resource.resourceType) {
+            ResourceType.Luxury -> DealResourceValues.luxuryValue(us, them, resource, numTurns, fromMe, netGoldOfReceiver)
+            ResourceType.Strategic -> DealResourceValues.strategicValue(us, them, resource, quantity, numTurns, fromMe, netGoldOfReceiver)
+            ResourceType.Bonus -> 0
         }
-        if (fromMe) {
-            var modifier = when (us.ai.diplomacy.opinionOf(them)) {
-                MajorCivOpinion.Competitor -> 175
-                MajorCivOpinion.Enemy -> 400
-                MajorCivOpinion.Unforgivable -> 1000
-                else -> 100
-            }
-            modifier = when (us.ai.diplomacy.approachTowards(them, true)) {
-                MajorCivApproach.Hostile -> modifier + 300
-                MajorCivApproach.Guarded -> modifier + 150
-                MajorCivApproach.Afraid, MajorCivApproach.Friendly -> 200
-                else -> modifier + 100
-            }
-            value = value * modifier / 200
-        }
-        return clamp(value)
+        return value ?: if (fromMe) NEVER else -NEVER
     }
 
     /**

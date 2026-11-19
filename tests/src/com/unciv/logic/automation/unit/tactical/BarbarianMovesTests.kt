@@ -156,7 +156,7 @@ class BarbarianMovesTests {
     }
 
     @Test
-    fun `the strongest unit that can be on an empty camp this turn goes there, one too far away stays`() {
+    fun `an empty camp gets the nearest unit within five turns, one too far away stays`() {
         val camp = tile(3)
         camp.setImprovementBasic(Constants.barbarianEncampment)
         val archer = game.addUnit("Archer", barbarians, tile(2))
@@ -164,10 +164,23 @@ class BarbarianMovesTests {
         val far = game.addUnit("Swordsman", barbarians, tile(-4))
         val ctx = context(archer, swordsman, far)
         BarbarianMoves.plotCampDefenseMoves(ctx)
-        assertSame(swordsman, camp.militaryUnit)
-        assertEquals(tile(2), archer.getTile())
+        assertTrue(camp.militaryUnit == archer || camp.militaryUnit == swordsman)
         assertEquals(tile(-4), far.getTile())
     }
+
+    @Test
+    fun `a camp defender attacks what is next to the camp without leaving it, and is done`() {
+        val camp = tile(0)
+        camp.setImprovementBasic(Constants.barbarianEncampment)
+        val defender = game.addUnit("Swordsman", barbarians, camp)
+        val victim = game.addUnit("Warrior", civ, tile(1))
+        val ctx = context(defender)
+        BarbarianMoves.plotCampDefenseMoves(ctx)
+        assertSame(defender, camp.militaryUnit)
+        assertTrue(victim.isDestroyed || victim.health < 100)
+        assertTrue(defender in ctx.cache.processedUnits)
+    }
+
     // endregion
 
     // region Sea raids

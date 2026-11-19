@@ -312,35 +312,61 @@ class TacticalAttackTests {
     }
 
     @Test
-    fun `garrisons go to the most threatened city, ranged units first, and a city is garrisoned once a turn`() {
-        val city = game.addCity(civ, tile(0))
-        val warrior = game.addUnit("Warrior", civ, tile(2))
-        val archer = game.addUnit("Archer", civ, tile(1))
-        val second = game.addUnit("Warrior", civ, tile(-2))
+    fun `a friendly city is a target only when a zone of somebody else touches it, with its border score as the sort key`() {
+        val lone = game.addCity(civ, tile(-10))
+        assertTrue("nobody around", context().targets.all.none { it.type == TacticalTargetType.CityToDefend })
+        game.addCity(enemy, tile(0))
         val ctx = context()
-        TacticalMoves.plotGarrisonMoves(ctx, 1)
-        assertEquals("the ranged unit goes in", city.getCenterTile(), archer.getTile())
-        assertEquals(civ.gameInfo.turns, civ.ai.tactical.lastTurnGarrisonAssigned(city))
-        assertNotEquals(city.getCenterTile(), warrior.getTile())
-        assertNotEquals(city.getCenterTile(), second.getTile())
+        val target = ctx.targets.all.single { it.type == TacticalTargetType.CityToDefend }
+        assertEquals(lone, target.city)
+        assertTrue(target.aux > 0)
+        assertEquals(CityThreat.borderScore(lone), target.aux)
     }
 
     @Test
-    fun `units with a strength bonus from their promotions are not garrisoned, a unit already in the city fortifies`() {
+    fun `a garrison is the ranged unit first, and a unit already in the city is no better`() {
         val city = game.addCity(civ, tile(0))
-        val veteran = game.addUnit("Spearman", civ, tile(2))
-        val plain = game.addUnit("Spearman", civ, tile(-2))
-        veteran.promotions.addPromotion(game.createUnitPromotion("[+25]% Strength").name, true)
+        game.addUnit("Warrior", civ, tile(2))
+        val archer = game.addUnit("Archer", civ, tile(-2))
         val ctx = context()
-        val (high, regular) = TacticalMoves.findUnitsForThisMove(ctx, TacticalMoves.MoveKind.Garrison, city.getCenterTile(), 1)
-        assertTrue(high.isEmpty())
-        assertEquals("its bonus would be wasted in a city", listOf(plain), regular.map { it.unit })
+        assertEquals(archer, UnitSelection.findUnitForThisMove(ctx, UnitMove.Garrison, city.getCenterTile(), 2))
+    }
 
-        val resident = game.addUnit("Spearman", civ, city.getCenterTile())
-        val ctx2 = context()
-        TacticalMoves.plotGarrisonMoves(ctx2, 0)
-        assertTrue(resident.isFortified())
-        assertTrue(resident in ctx2.cache.processedUnits)
+    @Test
+    fun `a guard is never a ranged unit outside a citadel`() {
+        val target = tile(4)
+        val archer = game.addUnit("Archer", civ, tile(3))
+        val spearman = game.addUnit("Spearman", civ, tile(1))
+        val ctx = context()
+        assertEquals(spearman, UnitSelection.findUnitForThisMove(ctx, UnitMove.Guard, target, 2))
+        archer.destroy()
+        spearman.destroy()
+        assertNull(UnitSelection.findUnitForThisMove(context(), UnitMove.Guard, target, 2))
+    }
+
+    @Test
+    fun `units for harassing come nearest first, and none from too far or of the wrong domain`() {
+        val far = game.addUnit("Warrior", civ, tile(5))
+        val near = game.addUnit("Warrior", civ, tile(2))
+        val ctx = context()
+        assertEquals(listOf(near, far), UnitSelection.findUnitsForHarassing(ctx, tile(0), 5, 0, 0, false, false, 2))
+        assertEquals(listOf(near), UnitSelection.findUnitsForHarassing(ctx, tile(0), 5, 0, 0, false, false, 1))
+        assertTrue(UnitSelection.findUnitsForHarassing(ctx, tile(0), 5, 0, 0, true, false, 2).isEmpty())
+    }
+
+    @Test
+    fun `a garrison of a border city fights what is next to it without leaving, and is fortified and processed`() {
+        val city = game.addCity(civ, tile(-10))
+        game.addCity(enemy, tile(0))
+        val garrison = game.addUnit("Swordsman", civ, city.getCenterTile())
+        val victim = game.addUnit("Warrior", enemy, tile(-9))
+        val ctx = context()
+        GarrisonMoves.plotGarrisonMoves(ctx, 2)
+        assertEquals(city.getCenterTile(), garrison.getTile())
+        assertTrue("the garrison hit the enemy", victim.isDestroyed || victim.health < 100)
+        assertTrue(garrison in ctx.cache.processedUnits)
+        assertEquals(civ.gameInfo.turns, civ.ai.tactical.lastTurnGarrisonAssigned(city))
+        assertTrue(garrison.isFortified())
     }
 
     @Test

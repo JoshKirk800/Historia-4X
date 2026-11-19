@@ -419,7 +419,8 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
             }
         }
 
-        val cityZones = HashMap<Pair<String, Boolean>, DominanceZone>()
+        val landCityZones = HashMap<String, DominanceZone>()
+        val waterCityZones = HashMap<String, DominanceZone>()
         val areaSizes = HashMap<Int, Int>()
         for (tile in tileList) areaSizes.merge(areas[tile.zeroBasedIndex], 1, Int::plus)
         for (tile in tileList) {
@@ -439,7 +440,8 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
                 isAtWarWith(owner) -> TacticalTerritory.Enemy
                 else -> TacticalTerritory.Neutral
             }
-            val zone = cityZones.getOrPut(city.id to tile.isWater) {
+            val cityZones = if (tile.isWater) waterCityZones else landCityZones
+            val zone = cityZones.getOrPut(city.id) {
                 DominanceZone(zonesById.size, territory, owner, areas[index], tile.isWater, city).also { zonesById.add(it) }
             }
             zoneIds[index] = zone.id

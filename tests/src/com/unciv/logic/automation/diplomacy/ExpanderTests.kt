@@ -56,7 +56,7 @@ class ExpanderTests {
         for (x in listOf(3, 6, 9, 12)) game.addCity(b, game.getTile(HexCoord(10, x)))
         ExpanderAi.updateRecklessExpanders(a, others(), game.ruleset.ai)
         assertTrue("5 cities against a median of 1", WarStateAi.isPlayerRecklessExpander(a, b))
-        a.ai.warStates.targetValues[b.civID] = TargetValue.Bad
+        a.ai.warStates.targetValues[b.civID] = TargetValue.Difficult
         ExpanderAi.updateRecklessExpanders(a, others(), game.ruleset.ai)
         assertFalse("a difficult target is just strong", WarStateAi.isPlayerRecklessExpander(a, b))
     }

@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.diplomacy
 
+import com.unciv.logic.automation.strategy.TargetValue
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
@@ -109,6 +110,8 @@ class ApproachFrameTests {
             return memory(c).approachValues[war]
         }
         withAttackTargets()
+        // The frame alone: a bad target halves war in part 10, whatever the estimates of two equal civilizations are
+        a.ai.warStates.targetValues[c.civID] = TargetValue.Bad
         memory(b).strategicApproachValues = arrayListOf(9000, 0, 0, 0, 0, 0, 0)
         memory(c).strategicApproachValues = arrayListOf(100, 0, 0, 0, 0, 0, 0)
         // war modifier = bias 5 + boldness 5 = 10: no scaling, the whole 500

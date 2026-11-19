@@ -1,13 +1,19 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.diplomacy.AiThreat
-import com.unciv.logic.automation.diplomacy.OpinionAi
+import com.unciv.logic.automation.diplomacy.CompetitorAi
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
+import com.unciv.logic.automation.diplomacy.DoFLevel
+import com.unciv.logic.automation.diplomacy.MajorCivOpinion
+import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.diplomacy.OpinionTimers
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
+import com.unciv.logic.automation.diplomacy.WarIntentAi
 import com.unciv.logic.city.CityStats.Companion.EXCESS_FOOD_TO_PRODUCTION
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomacyManager
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.league.ActiveResolution
 import com.unciv.logic.league.League
@@ -23,7 +29,6 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
 import kotlin.math.max
 import kotlin.math.min
-import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 
 /**
  * World Congress proposals, votes and vote commitments (CvLeagueAI, CvVotingClasses.cpp:7365-9860).
@@ -267,47 +272,144 @@ object LeagueAutomation {
     //region Alignment and diplomats
 
     /**
-     * CvLeagueAI::EvaluateAlignment (CvVotingClasses.cpp:7905-8030). Works without a World Congress too (the DLL evaluates alignment for diplomats
-     * before there is one), then without the Congress memories.
+     * CvLeagueAI::EvaluateAlignment (Vox Populi, CvVotingClasses.cpp:10789-11225): how far our interests are aligned with [other]'s. War is WAR only when
+     * we want to conquer them (unless [ignoreWar]), else -1 for a phony war and -2. Then: the ideologies (+2 the same, -2 different unless we ignore
+     * the difference; doubled when either has World Ideology pressure), the state religions (+1 / -1, likewise with the World Religion's spread),
+     * their support of our hosting (+1, +2 beyond -40), whether we liked (+1, +2 beyond OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL) or disliked their
+     * proposals, their support of our proposals (-1 / -2 when they foiled them, +1 / +2 when they supported them; one less after the reverse),
+     * sanctions and lifting them (-2 ever, -1 tried; +2 ever, +1 tried), the voting history score / (VOTING_HISTORY_SCORE_MAX / the alignment scaler),
+     * a denunciation of us -2 else a friendship worth +1, +2 or +3 by its level unless they are untrustworthy or we want to end it, a defensive pact
+     * +2; the bloc term (the mutual friends, defensive pacts and enemies they denounced, up to 4 / 3 / 2 by work-with willingness) less the enemy
+     * term (their friends and pacts with our enemies, the friends they denounced, by work-against willingness); our city-state dispute with them,
+     * the warmonger threat of them, -4 for a backstabber, +4 for a liberator (+2 when we compete for a victory, they are untrustworthy or we are at
+     * war), the cities of ours they ever liberated, -1 per city of ours they captured, -2 for our biggest competitor. Below -8 ENEMY, -6..-8 HATRED,
+     * -3..-5 RIVAL; a civilization that resurrected us is a LIBERATOR then, else 2 and less NEUTRAL, 5 FRIEND, 8 CONFIDANT, more ALLY.
+     * Works without a World Congress too (the DLL evaluates alignment for diplomats before there is one), then without the Congress memories.
+     * Teams and vassals (their terms, the same-master bonus), the coop war agreement score and a returned capital or holy city have no counterpart.
      */
-    fun evaluateAlignment(civ: Civilization, other: Civilization): LeagueAlignment {
+    fun evaluateAlignment(civ: Civilization, other: Civilization, ignoreWar: Boolean = false): LeagueAlignment {
         if (!other.isAlive() || !other.isMajorCiv) return LeagueAlignment.NEUTRAL
         if (other == civ) return LeagueAlignment.SELF
-        if (civ.isAtWarWith(other)) return LeagueAlignment.WAR
-
+        val rules = civ.gameInfo.ruleset.ai
+        val diplomacy = civ.ai.diplomacy
+        val memory = diplomacy.memoryOf(other)
+        val league = civ.gameInfo.league
+        val congress = league?.members?.get(civ.civID)?.alignmentMemory?.get(other.civID)
+        val atWar = civ.isAtWarWith(other)
         var sum = 0
+        if (atWar) {
+            if (!ignoreWar && WarIntentAi.wantsToConquer(civ, other)) return LeagueAlignment.WAR
+            sum -= if (WarIntentAi.isPhonyWar(civ, other)) 1 else 2
+        }
+
         val ours = civ.getIdeology()
         val theirs = other.getIdeology()
-        val memory = civ.gameInfo.league?.members?.get(civ.civID)?.alignmentMemory?.get(other.civID)
-        if (memory != null) {
-            val turn = civ.gameInfo.turns
-            if (memory.supportedHostingTurn.isRecentAt(turn)) sum += 2
-            if ((memory.likedProposalTurn.isRecentAt(turn) && memory.likedProposalTurn > memory.dislikedProposalTurn) ||
-                (memory.supportedProposalTurn.isRecentAt(turn) && memory.supportedProposalTurn > memory.foiledProposalTurn)) sum += 2
-            if ((memory.dislikedProposalTurn.isRecentAt(turn) && memory.dislikedProposalTurn > memory.likedProposalTurn) ||
-                (memory.foiledProposalTurn.isRecentAt(turn) && memory.foiledProposalTurn > memory.supportedProposalTurn)) sum -= 2
+        if (ours != null && theirs != null) {
+            var mod = if (ours == theirs) 2 else if (!OpinionAi.isIgnoreIdeologyDifferences(civ, other)) -2 else 0
+            if (league != null && (league.getIdeologyPressure(ours.name) > 0 || league.getIdeologyPressure(theirs.name) > 0)) mod *= 2
+            sum += mod
         }
-        if (ours != null && theirs != null) sum += if (ours.name == theirs.name) 2 else -2
-        val diplomacy = civ.getDiplomacyManager(other)
-        if (diplomacy != null) {
-            if (diplomacy.hasFlag(DiplomacyFlags.DeclarationOfFriendship)) sum += 1
-            if (diplomacy.hasFlag(DiplomacyFlags.Denunciation)) sum -= 1
-            val level = diplomacy.relationshipIgnoreAfraid()
-            if (level > RelationshipLevel.Neutral) sum += 1
-            else if (level <= RelationshipLevel.Enemy) sum -= 1
+
+        val ourReligion = OpinionAi.stateReligion(civ)?.first
+        val theirReligion = OpinionAi.stateReligion(other)?.first
+        if (ourReligion != null && theirReligion != null) {
+            var mod = if (ourReligion == theirReligion && !CompetitorAi.isHolyCityCapturedBy(civ, other)) 1
+                else if (!OpinionAi.isIgnoreReligionDifferences(civ, other)) -1 else 0
+            if (league != null && (league.getReligionSpreadPercent(theirReligion.name) > 0 || league.getReligionSpreadPercent(ourReligion.name) > 0)) mod *= 2
+            sum += mod
         }
+
+        if (congress != null) {
+            val hosting = OpinionAi.supportedMyHostingScore(civ, congress, rules)
+            if (hosting != 0) sum += if (hosting < -40) 2 else 1
+
+            val agreement = congress.proposalAgreementValue
+            if (agreement < 0) sum += if (agreement < rules.define(AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL)) 2 else 1
+            else if (agreement > 0) sum -= if (agreement > rules.define(AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL)) 2 else 1
+
+            val supported = OpinionAi.supportedOurProposalScore(civ, congress, rules)
+            if (supported > 0) sum -= if (congress.supportedProposalTurn > -1 && congress.proposalSupportDelta > 0) 1 else 2
+            else if (supported < 0) sum += if (congress.foiledProposalTurn > -1 && congress.proposalSupportDelta < 0) 1 else 2
+
+            if (congress.everSanctioned) sum -= 2 else if (congress.sanctionedTurn != -1) sum -= 1
+            if (congress.everUnsanctioned) sum += 2 else if (congress.unsanctionedTurn != -1) sum += 1
+
+            // "This is intentionally powerful": it takes long and major support to reach +-10
+            sum += congress.votingHistoryScore / max(rules.define(AiDefine.VOTING_HISTORY_SCORE_MAX) / rules.define(AiDefine.VOTING_HISTORY_SCORE_LEAGUE_ALIGNMENT_SCALER), 1)
+        }
+
+        val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
+        if (OpinionAi.isDenouncedPlayer(other, civ)) sum -= 2
+        else if (!untrustworthy && !memory.wantsToEndDoF && (OpinionAi.isDoFAccepted(civ, other) || memory.wantsDoF)) {
+            sum += when (memory.doFLevel) {
+                DoFLevel.Untrustworthy, DoFLevel.New -> 0
+                DoFLevel.Friends -> 1
+                DoFLevel.Allies -> 2
+                DoFLevel.BattleBrothers -> 3
+            }
+        }
+        if (!untrustworthy && hasDefensivePact(civ, other) && !memory.wantsToEndDefensivePact) sum += 2
+
+        // Encourage bloc formation
+        val workWith = civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness)
+        val workAgainst = civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)
+        val maxBonus = if (workWith > 8) 4 else if (workWith < 4) 2 else 3
+        sum += min(numMutualFriends(civ, other) + numMutualDefensePacts(civ, other) + numEnemiesDenounced(civ, other), maxBonus)
+        val maxPenalty = if (workAgainst > 8) 4 else if (workAgainst < 4) 2 else 3
+        sum -= min(numEnemyFriends(civ, other) + numEnemyDefensePacts(civ, other) + numFriendsDenounced(civ, other), maxPenalty)
+
+        sum -= memory.minorCivDispute.ordinal
+        sum -= diplomacy.warmongerThreat(other).ordinal
+
+        if (untrustworthy) sum -= 4
+        if (memory.liberatedCapital || memory.liberatedHolyCity || memory.resurrectedUs)
+            sum += if (!VictoryProgressAi.isCompetingForVictory(civ) && !untrustworthy && !atWar) 4 else 2
+        if (!atWar && memory.numCitiesEverLiberated > 0) sum += memory.numCitiesEverLiberated
+        sum -= memory.numCitiesCapturedBy
+        if (diplomacy.biggestCompetitor == other.civID) sum -= 2
+
         return when {
-            sum < -6 -> LeagueAlignment.ENEMY
-            sum < -4 -> LeagueAlignment.HATRED
-            sum < -1 -> LeagueAlignment.RIVAL
-            sum <= 1 -> LeagueAlignment.NEUTRAL
-            sum <= 4 -> LeagueAlignment.FRIEND
-            sum <= 6 -> LeagueAlignment.CONFIDANT
+            sum < -8 -> LeagueAlignment.ENEMY
+            sum < -5 -> LeagueAlignment.HATRED
+            sum < -2 -> LeagueAlignment.RIVAL
+            memory.resurrectedUs -> LeagueAlignment.LIBERATOR
+            sum <= 2 -> LeagueAlignment.NEUTRAL
+            sum <= 5 -> LeagueAlignment.FRIEND
+            sum <= 8 -> LeagueAlignment.CONFIDANT
             else -> LeagueAlignment.ALLY
         }
     }
 
-    private fun Int.isRecentAt(turn: Int) = this >= 0 && turn >= this && turn - this < 45
+    private fun hasDefensivePact(civ: Civilization, other: Civilization) =
+        civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
+
+    /** The majors alive with cities that the counts of CvDiplomacyAI (GetNumMutualFriends and the like) go over; the friendship counts skip a human's view of a human */
+    private fun blocMembers(civ: Civilization, skipHumans: Boolean) = civ.gameInfo.getAliveMajorCivs()
+        .filter { it.cities.isNotEmpty() && !(skipHumans && civ.isHuman() && it.isHuman()) }
+
+    /** GetNumMutualFriends: majors we and [other] both have a friendship with */
+    private fun numMutualFriends(civ: Civilization, other: Civilization) =
+        blocMembers(civ, true).count { OpinionAi.isDoFAccepted(civ, it) && OpinionAi.isDoFAccepted(other, it) }
+
+    /** GetNumEnemyFriends: majors [other] is friends with that we denounced or are at war with */
+    private fun numEnemyFriends(civ: Civilization, other: Civilization) = blocMembers(civ, true)
+        .count { OpinionAi.isDoFAccepted(other, it) && (OpinionAi.isDenouncedPlayer(civ, it) || civ.isAtWarWith(it)) }
+
+    /** GetNumMutualDefensePacts */
+    private fun numMutualDefensePacts(civ: Civilization, other: Civilization) =
+        blocMembers(civ, false).count { hasDefensivePact(civ, it) && hasDefensivePact(other, it) }
+
+    /** GetNumEnemyDefensePacts: majors [other] has a defensive pact with that we denounced or are at war with */
+    private fun numEnemyDefensePacts(civ: Civilization, other: Civilization) = blocMembers(civ, false)
+        .count { hasDefensivePact(other, it) && (OpinionAi.isDenouncedPlayer(civ, it) || civ.isAtWarWith(it)) }
+
+    /** GetNumFriendsDenounced: our friends [other] denounced */
+    private fun numFriendsDenounced(civ: Civilization, other: Civilization) =
+        blocMembers(civ, true).count { OpinionAi.isDoFAccepted(civ, it) && OpinionAi.isDenouncedPlayer(other, it) }
+
+    /** GetNumEnemiesDenounced: majors we denounced or are at war with that [other] denounced too */
+    private fun numEnemiesDenounced(civ: Civilization, other: Civilization) = blocMembers(civ, true)
+        .count { (OpinionAi.isDenouncedPlayer(civ, it) || civ.isAtWarWith(it)) && OpinionAi.isDenouncedPlayer(other, it) }
 
     /**
      * CvLeagueAI::GetDiplomatUsefulnessAtCiv (CvVotingClasses.cpp:8242-8266): +1 if our diplomats give delegates (Globalization,

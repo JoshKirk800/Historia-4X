@@ -175,84 +175,22 @@ class DiplomacyAiTests {
     //region Warmonger
 
     @Test
-    fun `declaring war on a major adds 250 warmonger to observers not at war with the victim`() {
+    fun `the warmonger opinion term is the amount in whole points x WarmongerHate over 20, with no floor`() {
         c.ai.setDiplomacyValue(DiplomacyPersonality.WarmongerHate, 8)
-        a.getDiplomacyManager(b)!!.declareWar()
-        // WARMONGER_THREAT_MAJOR_ATTACKED_WEIGHT, and the victim counts it too
-        assertEquals(250, c.ai.diplomacy.memoryOf(a).warmongerAmount)
-        assertEquals(250, b.ai.diplomacy.memoryOf(a).warmongerAmount)
-        // Score = 250 * WarmongerHate 8 / 100 = 20
+        // 50 points x 8 / 20 = 20 (the warmonger system itself is checked in WarmongerTests)
+        c.ai.diplomacy.memoryOf(a).warmongerAmountTimes100 = 5000
         assertEquals(-20f, modifier(c, a, DiplomaticModifiers.WarMongerer), 0.001f)
-    }
-
-    @Test
-    fun `an observer already at war with the victim does not count the declaration`() {
-        c.getDiplomacyManager(b)!!.declareWar()
-        a.getDiplomacyManager(b)!!.declareWar()
-        assertEquals(0, c.ai.diplomacy.memoryOf(a).warmongerAmount)
-    }
-
-    @Test
-    fun `declaring war on a city-state adds 125`() {
-        val cityState = game.addCiv(cityStateType = game.ruleset.cityStateTypes.keys.first())
-        game.addCity(cityState, game.getTile(HexCoord(0, 8)))
-        meet(cityState, a)
-        meet(cityState, c)
-        a.getDiplomacyManager(cityState)!!.declareWar()
-        assertEquals(125, c.ai.diplomacy.memoryOf(a).warmongerAmount)
-    }
-
-    @Test
-    fun `warmonger score under 5 is no opinion term`() {
+        // BNW counted a score only from 5; Vox Populi takes every point
         c.ai.setDiplomacyValue(DiplomacyPersonality.WarmongerHate, 1)
-        c.ai.diplomacy.memoryOf(a).warmongerAmount = 499 // 4.99 -> 4
-        assertEquals(0f, modifier(c, a, DiplomaticModifiers.WarMongerer), 0.001f)
-        c.ai.diplomacy.memoryOf(a).warmongerAmount = 500
-        assertEquals(-5f, modifier(c, a, DiplomaticModifiers.WarMongerer), 0.001f)
+        c.ai.diplomacy.memoryOf(a).warmongerAmountTimes100 = 4000
+        assertEquals(-2f, modifier(c, a, DiplomaticModifiers.WarMongerer), 0.001f)
     }
 
     @Test
-    fun `warmonger amount decays by 5 a turn down to 0`() {
-        c.ai.diplomacy.memoryOf(a).warmongerAmount = 12
-        DiplomacyTurn.doTurn(c)
-        assertEquals(7, c.ai.diplomacy.memoryOf(a).warmongerAmount)
-        DiplomacyTurn.doTurn(c)
-        DiplomacyTurn.doTurn(c)
-        assertEquals(0, c.ai.diplomacy.memoryOf(a).warmongerAmount)
-    }
-
-    @Test
-    fun `conquering a city adds the warmonger offset by cities left and halves it for those at war with the loser`() {
-        game.addCity(b, game.getTile(HexCoord(10, -2)))
-        val lost = game.addCity(b, game.getTile(HexCoord(10, 2)))
-        val d = neutralCiv(HexCoord(0, -8))
-        meet(d, a)
-        meet(d, b)
-        d.getDiplomacyManager(b)!!.declareWar()
-        val dBefore = d.ai.diplomacy.memoryOf(a).warmongerAmount
-        val cBefore = c.ai.diplomacy.memoryOf(a).warmongerAmount
-        val estimated = rules.worldSize(game.gameInfo.tileMap.mapParameters.mapSize.getPredefinedOrNextSmaller().name).estimatedNumCities
-        val allCities = game.gameInfo.civilizations.sumOf { it.cities.size }
-        // GetWarmongerOffset: 1000 * estimated / (cities in the world * cities the loser keeps (3 - 1))
-        val offset = 1000 * estimated / (allCities * 2)
-        DiplomacyEvents.onCityConquered(a, b, lost)
-        assertEquals(offset, c.ai.diplomacy.memoryOf(a).warmongerAmount - cBefore)
-        assertEquals(offset / 2, d.ai.diplomacy.memoryOf(a).warmongerAmount - dBefore)
-    }
-
-    @Test
-    fun `conquering a city-state city adds half of the warmonger offset a major's city would`() {
-        val cityState = game.addCiv(cityStateType = "Cultured")
-        game.addCity(cityState, game.getTile(HexCoord(0, 8)))
-        val lost = game.addCity(cityState, game.getTile(HexCoord(0, 4)))
-        meet(c, a)
-        val before = c.ai.diplomacy.memoryOf(a).warmongerAmount
-        val estimated = rules.worldSize(game.gameInfo.tileMap.mapParameters.mapSize.getPredefinedOrNextSmaller().name).estimatedNumCities
-        val allCities = game.gameInfo.civilizations.sumOf { it.cities.size }
-        // GetWarmongerOffset(1 city left, minor): 1000 * estimated / (cities in the world * 1), times WARMONGER_ON_CITY_STATE_MULTIPLIER (BNW XML: 50) / 100
-        val offset = 1000 * estimated / allCities * 50 / 100
-        DiplomacyEvents.onCityConquered(a, cityState, lost)
-        assertEquals(offset, c.ai.diplomacy.memoryOf(a).warmongerAmount - before)
+    fun `declaring war on a major is counted by the observers that know the declarer`() {
+        a.getDiplomacyManager(b)!!.declareWar()
+        assertTrue(c.ai.diplomacy.memoryOf(a).warmongerAmountTimes100 > 0)
+        assertTrue("and by the victim", b.ai.diplomacy.memoryOf(a).warmongerAmountTimes100 > 0)
     }
 
     @Test

@@ -341,7 +341,9 @@ object TacticalMoves {
      */
     fun moveSwapping(unit: MapUnit, tile: Tile): Boolean {
         if (unit.getTile() == tile) return true
-        if (!unit.movement.canMoveTo(tile) && unit.movement.canMoveTo(tile, allowSwap = true)) {
+        // The reach the unit had cached may be stale, and a swap needs the other unit to reach us too
+        unit.movement.clearPathfindingCache()
+        if (!unit.movement.canMoveTo(tile) && unit.movement.canUnitSwapTo(tile)) {
             unit.movement.swapMoveToTile(tile)
             return unit.getTile() == tile
         }

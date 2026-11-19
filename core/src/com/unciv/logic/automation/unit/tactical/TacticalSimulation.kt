@@ -464,6 +464,8 @@ object TacticalSimulation {
         val city = unit.getTile().getCity()?.takeIf { unit.baseUnit.isLandUnit && unit.getTile().isCityCenter() && it.civ == unit.civ && it.getGarrison() == unit }
         val garrisoned = city != null && AiOperationLogic.needsGarrison(unit.civ, city)
         val mayMove = allowMovement && !garrisoned
+        // Other units have moved since the reach of this one was cached
+        unit.movement.clearPathfindingCache()
         if (mayMove || unit.hasUnique(UniqueType.CanMoveAfterAttacking)) {
             val result = TacticalSimSearch.findBestUnitAssignments(ctx, listOf(unit), unit.getTile(), AggressionLevel.Low,
                 targetDistanceRelevant = false, returnToStart = !mayMove, saveMovement = saveMovement)

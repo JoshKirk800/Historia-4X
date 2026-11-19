@@ -13,7 +13,8 @@ import kotlin.math.ceil
  *  TacticalAIHelpers::KillLoneEnemyIfPossible. Vox Populi 5.4.8 (CvTacticalAI.cpp) uses them for garrisons, units that heal or flee, the camp
  *  defenders of the barbarians, and units that arrive somewhere with movement to spare.
  *
- *  Deviations: "can the unit attack the plot this turn" is [TacticalAttacks.attackOptions] (Unciv's path finder) where the original asks its
+ *  Deviations: a unit that must not leave its fortification only makes a killing attack with the movement to come back ([MOVES_TO_ADVANCE_AND_RETURN]);
+ *  "can the unit attack the plot this turn" is [TacticalAttacks.attackOptions] (Unciv's path finder) where the original asks its
  *  path finder for the turns to reach the plot; a melee unit that kills advances in Unciv's rules and is walked back to where it started if it
  *  has movement left (the original's second move order); CvPlot::isFortification is a city or one of our citadels ([TacticalMap.isPlayerCitadel];
  *  Unciv has no "no follow up" improvement flag).
@@ -28,6 +29,8 @@ object OpportunityAttacks {
     /** KillLoneEnemyIfPossible: the damage must beat the enemy's hit points by this margin for randomness, and the unit must keep more than [SAFE_HEALTH_AFTER_FIGHT] */
     private const val KILL_MARGIN = 3
     private const val SAFE_HEALTH_AFTER_FIGHT = 23
+    /** A melee kill advances in Unciv's rules: a unit that must stay in its fortification only kills if it can advance and walk back (3 movement points) */
+    private const val MOVES_TO_ADVANCE_AND_RETURN = 3f
 
     private class Candidate(val tile: Tile, val score: Int)
 
@@ -43,6 +46,8 @@ object OpportunityAttacks {
      */
     fun perform(ctx: TacticalContext, unit: MapUnit, allowMovement: Boolean = false): Boolean {
         if (unit.isDestroyed || !TacticalAttacks.canAttack(unit) || !unit.hasMovement()) return false
+        // The reach the unit has cached may be stale: other units have moved
+        unit.movement.clearPathfindingCache()
         // For ranged units we have a readymade method
         if (unit.baseUnit.isRanged()) return TacticalSimulation.performRangedOpportunityAttack(ctx, unit, allowMovement)
 
@@ -67,7 +72,7 @@ object OpportunityAttacks {
                     // A bonus for a kill, but no suicide
                     dealt += KILL_BONUS
                     received -= minOf(healedByKilling(unit), MAX_HEALTH - unit.health + received)
-                    if (!allowMovement && !isFortification(ctx, origin)) continue
+                    if (!allowMovement && (!isFortification(ctx, origin) || unit.currentMovement < MOVES_TO_ADVANCE_AND_RETURN)) continue
                 }
                 // We have just a single attacker, avoid enemy clusters
                 if (received * 4 >= (unit.health - received) * 3 && numEnemyUnitsAdjacent(ctx, tile) > 0) continue
@@ -103,9 +108,12 @@ object OpportunityAttacks {
         ctx.log { "performing melee opportunity attack on ${best.tile.position} with ${unit.name} at ${origin.position}" }
         val option = attackOption(unit, best.tile, allowMovement)
         if (option != null) Battle.moveAndAttack(MapUnitCombatant(unit), option)
-        else unit.movement.moveToTile(best.tile)
+        else if (unit.movement.canReachInCurrentTurn(best.tile) && unit.movement.canMoveTo(best.tile)) unit.movement.moveToTile(best.tile)
         // Try to move back to the original plot (if we advanced)
-        if (!unit.isDestroyed && unit.hasMovement() && unit.getTile() != origin && unit.movement.canMoveTo(origin)) unit.movement.moveToTile(origin)
+        if (!unit.isDestroyed && unit.hasMovement() && unit.getTile() != origin) {
+            unit.movement.clearPathfindingCache()
+            if (unit.movement.canReachInCurrentTurn(origin) && unit.movement.canMoveTo(origin)) unit.movement.moveToTile(origin)
+        }
         return true
     }
 
@@ -121,6 +129,7 @@ object OpportunityAttacks {
         // Aircraft are different
         if (unit.baseUnit.isAirUnit() || enemy.baseUnit.isAirUnit()) return false
         if (!TacticalAttacks.canAttack(unit)) return false
+        unit.movement.clearPathfindingCache()
 
         // See how the attack would go
         val (dealt, received) = SimWorld.damageOnUnit(unit, unit.getTile(), unit.health, enemy, enemy.getTile(), enemy.health, ignoreFlanking = false)

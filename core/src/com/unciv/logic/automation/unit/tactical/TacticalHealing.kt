@@ -88,6 +88,8 @@ object TacticalHealing {
         val civ = ctx.civ
         val danger = civ.ai.unitDanger
         val current = unit.getTile()
+        // What the unit reaches changes as other units move: the cached reach may be stale
+        unit.movement.clearPathfindingCache()
         val alwaysHeals = unit.hasUnique(UniqueType.HealsEvenAfterAction)
         // First see if the current plot is good
         val currentHealRate = TacticalSafety.actualHealRate(unit)
@@ -115,7 +117,7 @@ object TacticalHealing {
                 if (city != null && garrison != null && CityDangerAi.isUnderSiege(city) && garrison.baseUnit.isRanged()) continue
             } else if (!pillages && rate == 0) continue // Naval units usually must pillage to heal ...
             // Can we stay there?
-            if (tile != current && !unit.movement.canMoveTo(tile, allowSwap = true)) continue
+            if (tile != current && !unit.movement.canMoveTo(tile) && !unit.movement.canUnitSwapTo(tile)) continue
 
             val plotDanger = min(danger.get(unit, tile), UNLIMITED_DANGER)
             var healRate = rate

@@ -19,7 +19,7 @@ class ReachedTile(val tile: Tile, val movesLeft: Float)
  *  and TacticalAIHelpers::FindSafestPlotInReach for units that are not civilians (the civilians' is [EscortMoves]'s own copy). Vox Populi 5.4.8 (the
  *  Community Patch and Vox Populi share them: there is no MOD_BALANCE_VP branch). Danger is the expected damage of [UnitDanger] (CvUnit::GetDanger).
  *
- *  Deviations: a plot that holds a unit of ours of the same type is taken by swapping places with it ([com.unciv.logic.map.mapunit.movement.UnitMovement.swapMoveToTile]),
+ *  Deviations: a plot that holds a unit of ours of the same type is taken by swapping places with it ([com.unciv.logic.map.mapunit.movement.UnitMovement.swapMoveToTile], only where [com.unciv.logic.map.mapunit.movement.UnitMovement.canUnitSwapTo] says both units can),
  *  where the original pushes the unit out of the way; "the city distance" is the distance to our nearest city (GetCityDistancePathLength);
  *  the closest city to go home to is the nearest on the unit's landmass, not by path length; the unit's own plot is asked for pillaging after the
  *  retreat, where the original asks about the plot it left (a likely slip: the mission pillages the plot the unit stands on).
@@ -72,6 +72,8 @@ object SafestPlot {
         val danger = civ.ai.unitDanger
         val current = unit.getTile()
         val moves = unit.currentMovement
+        // What the unit reaches changes as other units move: the cached reach may be stale
+        unit.movement.clearPathfindingCache()
 
         // Special behavior for cities and citadels - don't run even if there is a "safe" plot somewhere else
         val inCityOrCitadelNow = isSafeCity(civ, current) || isCitadelFor(ctx, unit, current)
@@ -98,7 +100,7 @@ object SafestPlot {
             if (TacticalTargets.visibleEnemyDefender(civ, tile) != null || ctx.isEnemyCity(tile)) continue
             // If we cannot move in because one of our own units is blocking us, we may swap with it
             if (tile != current && !unit.movement.canMoveTo(tile)) {
-                if (!considerPush || !unit.movement.canMoveTo(tile, allowSwap = true)) continue
+                if (!considerPush || !unit.movement.canUnitSwapTo(tile)) continue
             }
             val movesLeft = if (tile == current) moves else max(moves - (reachable[tile]?.totalMovement ?: moves), 0f)
 
@@ -226,7 +228,7 @@ object SafestPlot {
         if (best != null) {
             val target = best.tile
             // Check if we need to bump somebody else
-            if (target != origin && !unit.movement.canMoveTo(target) && unit.movement.canMoveTo(target, allowSwap = true)) {
+            if (target != origin && !unit.movement.canMoveTo(target) && unit.movement.canUnitSwapTo(target)) {
                 unit.movement.swapMoveToTile(target)
                 if (unit.getTile() == target) {
                     ctx.unitProcessed(unit)

@@ -12,7 +12,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** CvTacticalAI::SelectPosture, UpdatePostures and UseThisDominanceZone on zones with chosen strengths and counts */
+/** CvTacticalAI::SelectPosture and UpdatePostures on zones with chosen strengths and counts */
 @RunWith(BaseTestRunner::class)
 class PostureSelectionTests {
     private val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
@@ -162,42 +162,36 @@ class PostureSelectionTests {
     }
 
     // endregion
-    // region Which zones count and what is remembered
+    // region Which zones have a posture and what is remembered
 
     @Test
-    fun `a zone counts when it is temporary, our capital's, or where we or they have units near`() {
-        val capital = civ.getCapital()!!
-        val quiet = { city: City, enemyStrength: Int -> zone(TacticalTerritory.Friendly, TacticalDominance.Friendly, city = city, friendlyUnits = 0, enemyUnits = 0,
-            friendlyRangedStrength = 500, enemyRangedStrength = 0, friendlyStrength = 500, enemyStrength = enemyStrength) }
-        assertTrue(PostureSelection.useThisZone(civ, state, quiet(capital, 0)))
+    fun `every zone has a posture, the quiet ones too, so that the barbarians the strengths ignore are fought where they are`() {
         val other = game.addCity(civ, game.tileMap[0, 0])
-        assertFalse("a quiet city of ours: Friendly by its own strength, but nobody is near it", PostureSelection.useThisZone(civ, state, quiet(other, 0)))
-        assertTrue("with the enemy in sight", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Friendly, TacticalDominance.Even, city = other, friendlyUnits = 0, enemyUnits = 1)))
-        assertTrue("with enemy air units over it, which are not counted", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Friendly, TacticalDominance.Even, city = other, friendlyUnits = 0, enemyUnits = 0)))
-        assertTrue("our units near their city", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Enemy, TacticalDominance.Enemy, city = enemyCity, friendlyUnits = 1, enemyUnits = 0)))
-        assertFalse("no units of ours near their city", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Enemy, TacticalDominance.Enemy, city = enemyCity, friendlyUnits = 0, enemyUnits = 0)))
-        assertTrue("both have units", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.NoOwner, TacticalDominance.Even)))
-        state.addTemporaryZone(enemyCity.getCenterTile(), TacticalTargetType.City)
-        assertTrue("an operation's target", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Enemy, TacticalDominance.Enemy, city = enemyCity, friendlyUnits = 0, enemyUnits = 0)))
+        civ.viewableTiles = game.tileMap.values.toSet()
+        civ.ai.invalidateTurnCaches()
+        PostureSelection.updatePostures(civ, state, state.map)
+        assertEquals("one for each zone", state.map.zones.size, state.postures.size)
+        assertEquals("a quiet city of ours that is not the capital", TacticalPosture.Counterattack, state.findPosture(civ.civName, false, other.id))
+        assertEquals(TacticalPosture.Counterattack, state.findPosture(civ.civName, false, civ.getCapital()!!.id))
     }
 
     @Test
-    fun `postures are chosen for the zones worth using and remembered by owner, water and city`() {
+    fun `postures are chosen for every zone and remembered by owner, water and city`() {
         val capital = civ.getCapital()!!
         civ.viewableTiles = game.tileMap.values.toSet()
         civ.ai.invalidateTurnCaches()
-        // five Swordsmen around our capital, which is the only zone in use: the enemy dominates it
+        // five Swordsmen around our capital: the enemy dominates its zone
         for (tile in capital.getCenterTile().getTilesAtDistance(2).take(5)) game.addUnit("Swordsman", enemy, tile)
         civ.ai.invalidateTurnCaches()
         assertEquals(TacticalDominance.Enemy, state.map.zoneOf(capital.getCenterTile())!!.dominance)
         PostureSelection.updatePostures(civ, state, state.map)
-        assertEquals(1, state.postures.size)
+        assertEquals(state.map.zones.size, state.postures.size)
         assertEquals(TacticalPosture.Hedgehog, state.findPosture(civ.civName, false, capital.id))
         assertEquals(TacticalPosture.None, state.findPosture(civ.civName, true, capital.id))
-        assertEquals(TacticalPosture.None, state.findPosture(null, false, null))
+        assertEquals("unclaimed land is flanked", TacticalPosture.ExploitFlanks, state.findPosture(null, false, null))
 
         // what a zone chose last turn is what it remembers
-        state.postures[0].posture = TacticalPosture.Counterattack
+        state.postures.first { it.cityId == capital.id && !it.isWater }.posture = TacticalPosture.Counterattack
         assertEquals(TacticalPosture.Counterattack, state.findPosture(civ.civName, false, capital.id))
     }
 

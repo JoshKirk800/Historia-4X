@@ -6,6 +6,7 @@ import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.AirMoves
+import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
@@ -15,15 +16,16 @@ import com.unciv.models.ruleset.unique.UniqueType
 /**
  *  CvTacticalAI::Update for one civilization's turn: the units under tactical control ([commandeerUnits]), the targets
  *  ([TacticalTargets]), then the moves of the tactical priority list (`tacticalMoves` of AI.json, [com.unciv.models.ruleset.ai.TacticalMoveDef.priority]
- *  first, in the XML order among equals): emergency purchases and defensive airlifts (once per dominance zone), the attack moves (capture and damage
- *  cities, destroy and attrition attacks on units, civilians, camps, pillaging (by paradrop too), plundering and parking on trade routes, safe
- *  bombards - [TacticalMoves], [TradeMoves], [TacticalAttacks], [TacticalBombards]),
- *  the moves of the dominance zones' postures (offensive postures, shore bombardment, hedgehog, withdrawing, closing on the target - [Postures],
- *  [Deployment]), the armies of the operations ([OperationalMoves]), moves to safety and healing, garrisons, bastions, guarding improvements,
- *  repositioning. A unit a move commands is added to [AutomationCache.processedUnits]; the other units, tactical or not, go on to the rest of
- *  the unit AI.
+ *  first, in the XML order among equals): emergency purchases and defensive airlifts (once per dominance zone), the attack moves (civilians, camps,
+ *  pillaging (by paradrop too), plundering and parking on trade routes, safe bombards - [TacticalMoves], [TradeMoves], [TacticalBombards]),
+ *  the moves of the dominance zones' postures (the attacks on units and cities by [TacticalSimulation], shore bombardment, hedgehog, withdrawing,
+ *  closing on the target - [Postures], [Deployment]), the armies of the operations ([OperationalMoves]), moves to safety and healing, garrisons,
+ *  bastions, guarding improvements, repositioning. A unit a move commands is added to [AutomationCache.processedUnits]; the other units, tactical
+ *  or not, go on to the rest of the unit AI.
  *
- *  Not ported (their rows of AI.json's `tacticalMoves` have no code behind them): naval blockades.
+ *  Not ported (their rows of AI.json's `tacticalMoves` have no code behind them): naval blockades, and the BNW moves that Vox Populi dropped for the
+ *  combat simulation of the postures: capturing and damaging cities, destroying and attriting units (TACTICAL_CAPTURE_CITY, TACTICAL_DAMAGE_CITY,
+ *  TACTICAL_DESTROY_*_UNIT, TACTICAL_ATTRIT_*_UNIT).
  */
 object TacticalAi {
 
@@ -115,12 +117,8 @@ object TacticalAi {
                     plotDefensiveAirlifts(ctx, zone)
                 }
             },
-            Step("TACTICAL_CAPTURE_CITY") { TacticalMoves.plotCaptureCityMoves(ctx) },
-            Step("TACTICAL_DESTROY_HIGH_UNIT") { TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.HighPriorityUnit, true) },
             Step("TACTICAL_ATTACK_VERY_HIGH_PRIORITY_CIVILIAN") { TacticalMoves.plotCivilianAttackMoves(ctx, TacticalTargetType.VeryHighPriorityCivilian) },
             Step("TACTICAL_PILLAGE_CITADEL") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Citadel, true) },
-            Step("TACTICAL_DESTROY_MEDIUM_UNIT") { TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.MediumPriorityUnit, true) },
-            Step("TACTICAL_DESTROY_LOW_UNIT") { TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.LowPriorityUnit, true) },
             Step(Postures.OFFENSIVE_POSTURE_MOVES) { Postures.offensivePostureMoves(ctx) },
             Step(Postures.SHORE_BOMBARDMENT) { Postures.shoreBombardmentZones(ctx) },
             Step("TACTICAL_ATTACK_HIGH_PRIORITY_CIVILIAN") { TacticalMoves.plotCivilianAttackMoves(ctx, TacticalTargetType.HighPriorityCivilian) },
@@ -139,13 +137,13 @@ object TacticalAi {
             Step("TACTICAL_ANCIENT_RUINS") { TacticalMoves.plotAncientRuinMoves(ctx, 1) },
             Step("TACTICAL_PILLAGE_CITADEL_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Citadel, false) },
             Step("TACTICAL_GARRISON_TO_ALLOW_BOMBARD") { TacticalMoves.plotGarrisonMoves(ctx, 1, true) },
-            Step("TACTICAL_ATTRIT_HIGH_UNIT") { TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.HighPriorityUnit, false) },
-            Step("TACTICAL_DAMAGE_CITY") { TacticalMoves.plotDamageCityMoves(ctx) },
-            Step("TACTICAL_ATTRIT_MEDIUM_UNIT") { TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.MediumPriorityUnit, false) },
             Step("TACTICAL_PILLAGE_RESOURCE_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, false) },
-            Step("TACTICAL_ATTRIT_LOW_UNIT") { TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.LowPriorityUnit, false) },
             Step(TO_SAFETY) {
-                for (unit in ctx.liveUnits()) if (unit.hasMovement() && TacticalSafety.moveToSafety(unit, danger)) ctx.unitProcessed(unit)
+                for (unit in ctx.liveUnits()) {
+                    if (!unit.hasMovement() || !TacticalSafety.wantsToFlee(unit, danger)) continue
+                    shootBeforeFleeing(ctx, unit, danger)
+                    if (!unit.isDestroyed && unit.hasMovement() && TacticalSafety.moveToSafety(unit, danger)) ctx.unitProcessed(unit)
+                }
             },
             Step("TACTICAL_BARBARIAN_CAMP") { TacticalMoves.plotBarbarianCampMoves(ctx) },
             Step("TACTICAL_PILLAGE_NEXT_TURN") { TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, false) },
@@ -175,7 +173,8 @@ object TacticalAi {
         }
         AiDecisionLog.log(civ) {
             "Tactical: $commandeered units commandeered, ${commandeered - ctx.units.size} commanded, ${ctx.targets.all.size} targets; postures " +
-                state.postures.filter { it.posture != TacticalPosture.None }.joinToString { "${it.posture}${if (it.isWater) " (sea)" else ""}" }.ifEmpty { "-" }
+                state.postures.filter { it.posture != TacticalPosture.None }.groupingBy { "${it.posture}${if (it.isWater) " (sea)" else ""}" }.eachCount()
+                    .entries.joinToString { if (it.value > 1) "${it.key} x${it.value}" else it.key }.ifEmpty { "-" }
         }
     }
 
@@ -243,11 +242,26 @@ object TacticalAi {
             val target = TacticalMoves.emptyTileNextTo(unit, withdrawal.city) ?: continue
             AiDecisionLog.log(civ) { "Tactical: ${unit.name} withdraws from zone ${zone.id} (${zone.closestCity?.name}) toward ${target.position}" }
             unit.movement.tryHeadTowards(target)
+            // CvTacticalAI::ExecuteWithdrawMoves: a shooter that withdrew shoots what it can from where it ends up
+            if (!unit.isDestroyed) TacticalSimulation.performRangedOpportunityAttack(ctx, unit)
             unit.currentMovement = 0f
             ctx.unitProcessed(unit)
             moved.add(unit)
         }
         return moved
+    }
+
+    /**
+     *  CvTacticalAI::ExecuteMovesToSafestPlot: "try to do some damage if we have movement points to spare": a shooter that can move after attacking
+     *  and has more than a movement point left after the walk to the safest tile shoots first, from where it stands, and keeps enough movement
+     *  for the walk ([TacticalSimulation.performRangedOpportunityAttack]).
+     */
+    private fun shootBeforeFleeing(ctx: TacticalContext, unit: MapUnit, danger: PlotDanger) {
+        if (!unit.baseUnit.isRanged() || !unit.hasUnique(UniqueType.CanMoveAfterAttacking)) return
+        val safe = TacticalSafety.safestPlot(unit, danger) ?: return
+        val needed = unit.movement.getDistanceToTiles()[safe]?.totalMovement ?: return
+        if (unit.currentMovement - needed <= 1f) return
+        TacticalSimulation.performRangedOpportunityAttack(ctx, unit, false, needed)
     }
 
     /** CvMap::findCity(x, y, owner, NO_TEAM, bSameArea): the nearest of our cities on the same landmass or sea as the unit */

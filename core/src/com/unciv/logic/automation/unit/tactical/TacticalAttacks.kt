@@ -13,12 +13,10 @@ import com.unciv.logic.city.City
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActionsPillage
 import com.unciv.logic.map.tile.Tile
-import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.unique.UniqueType
 
 /**
- *  One unit that can strike a target (CvTacticalUnit): [attackStrength] and [healthPercent] rank it ([attackPriority], highest first),
- *  the expected damages are filled in by [TacticalAttacks.computeTotalExpectedDamage].
+ *  One unit that can strike a target (CvTacticalUnit): [attackStrength] and [healthPercent] rank it ([attackPriority], highest first).
  */
 class Striker(
     val unit: MapUnit,
@@ -27,10 +25,8 @@ class Striker(
     /** The tile it would attack from: the one it stands on if it shoots or is adjacent, else the cheapest it can move to */
     val attackFrom: Tile? = null,
 ) {
-    var expectedTargetDamage = 0
-    var expectedSelfDamage = 0
     val attackPriority get() = attackStrength * healthPercent
-    override fun toString() = "${unit.name} ($expectedTargetDamage/$expectedSelfDamage)"
+    override fun toString() = unit.name
 }
 
 /** One city that can shoot a target (CvTacticalCity) */
@@ -56,17 +52,17 @@ class AttackSeries(val target: TacticalTarget) {
 }
 
 /**
- *  How the tactical AI attacks one target together (CvTacticalAI): which of our units and cities can strike it, what they would do to it
- *  and take from it (expected damage, [BattleDamage] at the mean of the randomness), and the attack with its overkill budget.
+ *  How the tactical AI finds what can strike a tile (CvTacticalAI): which of our units and cities can strike it, for the moves that are not
+ *  the combat simulation's ([TacticalSimulation]: pillaging, capturing civilians and camps, plundering, bombards), and the series of attacks
+ *  those moves launch.
  *
- *  Sources: CvTacticalAI::FindUnitsWithinStrikingDistance, FindCitiesWithinStrikingDistance, ComputeTotalExpectedDamage,
- *  ComputeTotalExpectedBombardDamage, ExecuteAttack, QueueAttack / LaunchAttack / CombatResolved.
+ *  Sources: CvTacticalAI::FindUnitsWithinStrikingDistance, FindCitiesWithinStrikingDistance, ComputeTotalExpectedBombardDamage,
+ *  QueueAttack / LaunchAttack / CombatResolved.
  *
  *  Deviations:
  *  - "can reach the target in N turns" is Unciv's reach: a unit that can attack (melee: move beside the target with movement left; ranged:
  *    shoot from where it stands) or, for targets without an enemy on them, move onto the tile this turn (0 turns: with movement left)
- *    or along its path (more turns). The original's ignore-units path finder has no counterpart: a melee unit that can reach the tile next
- *    to the target only if someone moves out of the way counts as "blocked" (half strength) when the tiles are held by units of ours;
+ *    or along its path (more turns). The original's ignore-units path finder has no counterpart;
  *  - the fire support of the defender's ranged units is not part of the expected damage (Unciv has no such rule);
  *  - the series is made one attack at a time as the fights resolve (they do at once in Unciv, so there is no queue to wait on): a
  *    unit's melee move up to its attack tile happens when its turn in the series comes, not when the series is planned, so units whose
@@ -128,15 +124,6 @@ object TacticalAttacks {
         return needed >= 2 || tile == unit.getTile() || unit.movement.canMoveTo(tile)
     }
 
-    /** Units that can reach the tiles next to [tile] but find them held by units of ours: they could strike if those moved on (the original's "blocked units") */
-    private fun isBlocked(unit: MapUnit, tile: Tile): Boolean {
-        val reachable = unit.movement.getDistanceToTiles()
-        return tile.neighbors.any {
-            val move = reachable[it]
-            move != null && unit.currentMovement - move.totalMovement > EPSILON && it != unit.getTile() && !unit.movement.canMoveTo(it)
-        }
-    }
-
     //endregion
     //region Finding strikers
 
@@ -145,7 +132,7 @@ object TacticalAttacks {
      *  and healthiest first (ranged ones before all others).
      *  @param preferredDamage when pillaging: units with more damage than this count three times as strong (they want to heal)
      *  @param noRanged leave out units that shoot; @param navalOnly only ships; @param mustMoveThrough they must be able to get there with
-     *  movement to spare; @param includeBlocked also units that could strike if units of ours made room, at half strength;
+     *  movement to spare;
      *  @param willPillage the unit pillages the tile (shooters do not); @param targetUndefended the tile has nobody to fight, units just move
      *  onto it (half strength)
      *
@@ -155,7 +142,7 @@ object TacticalAttacks {
      */
     fun findUnits(
         ctx: TacticalContext, tile: Tile, turns: Int, preferredDamage: Int = 0, noRanged: Boolean = false, navalOnly: Boolean = false,
-        mustMoveThrough: Boolean = false, includeBlocked: Boolean = false, willPillage: Boolean = false, targetUndefended: Boolean = false,
+        mustMoveThrough: Boolean = false, willPillage: Boolean = false, targetUndefended: Boolean = false,
     ): List<Striker> {
         val isCityTarget = tile.isCityCenter()
         val hasEnemy = Battle.getMapCombatantOfTile(tile)?.let { it.getCivInfo() != ctx.civ && ctx.civ.isAtWarWith(it.getCivInfo()) } == true
@@ -185,11 +172,9 @@ object TacticalAttacks {
             } else if (hasEnemy && !willPillage) {
                 val option = attackOptions(unit, tile, false).let { bestOption(it, null) }
                 if (option != null) result.add(Striker(unit, strength, health, option.tileToAttackFrom))
-                else if (includeBlocked && !ranged && isBlocked(unit, tile)) result.add(Striker(unit, strength / 2, health))
             } else if (mustMoveThrough) {
                 if (canMoveOnto(unit, tile, 0)) result.add(Striker(unit, strength, health))
             } else if (canMoveOnto(unit, tile, turns)) result.add(Striker(unit, strength, health))
-            else if (includeBlocked && !ranged && isBlocked(unit, tile)) result.add(Striker(unit, strength / 2, health))
         }
         // std::stable_sort: in the order we'd like them to attack
         return result.sortedByDescending { it.attackPriority }
@@ -218,25 +203,6 @@ object TacticalAttacks {
     //endregion
     //region Expected damage
 
-    /**
-     *  CvTacticalAI::ComputeTotalExpectedDamage: what [strikers] do to the unit or city on the target's tile and take from it, in whole hit
-     *  points at the mean of the randomness; sets each striker's expected damages.
-     *  @return the damage the strikers do together
-     */
-    fun computeTotalExpectedDamage(target: TacticalTarget, strikers: List<Striker>): Int {
-        val defender = Battle.getMapCombatantOfTile(target.tile) ?: return 0
-        var total = 0
-        for (striker in strikers) {
-            val attacker = MapUnitCombatant(striker.unit)
-            val from = striker.attackFrom ?: striker.unit.getTile()
-            striker.expectedTargetDamage = BattleDamage.calculateDamageToDefender(attacker, defender, from, TacticalTargets.EXPECTED_RANDOMNESS)
-            // Shooting costs nothing (CvTacticalAI sets the self damage of ranged attacks to 0), aircraft included: what Unciv's air strikes cost them is not weighed
-            striker.expectedSelfDamage = if (striker.unit.baseUnit.isRanged()) 0 else BattleDamage.calculateDamageToAttacker(attacker, defender, from, TacticalTargets.EXPECTED_RANDOMNESS)
-            total += striker.expectedTargetDamage
-        }
-        return total
-    }
-
     /** CvTacticalAI::ComputeTotalExpectedBombardDamage: what [cities] do to [defender] by shooting at it */
     fun computeTotalExpectedBombardDamage(defender: ICombatant, cities: List<CityStriker>): Int {
         var total = 0
@@ -249,98 +215,7 @@ object TacticalAttacks {
     }
 
     //endregion
-    //region ExecuteAttack
-
-    /**
-     *  CvTacticalAI::ExecuteAttack: attack the unit or city on [target]'s tile until the damage still needed, [TacticalTarget.aux] plus the
-     *  overkill percent (AI_TACTICAL_OVERKILL_PERCENT), has been used up in expectation: our cities that can shoot it first, then the units that
-     *  shoot and are in range, then the melee units (beside the target, or moving to a free tile beside it, else next to it for the next
-     *  turn). A unit whose expected damage to the target is less than what it takes joins only if [inflictWhatWeTake] is off, one that
-     *  would die only if [mustSurviveAttack] is off. Against a city at least one melee attack is made.
-     *  [strikers] and [cities] come from [findUnits] / [findCities] and [computeTotalExpectedDamage].
-     */
-    fun executeAttack(
-        ctx: TacticalContext, target: TacticalTarget, strikers: List<Striker>, cities: List<CityStriker>,
-        inflictWhatWeTake: Boolean = false, mustSurviveAttack: Boolean = true,
-    ) {
-        launch(ctx, planAttack(ctx, target, strikers, cities, inflictWhatWeTake, mustSurviveAttack))
-    }
-
-    /** The planning half of [executeAttack]: who attacks [target], in what order (cities, shooters, melee units), without making any attack */
-    fun planAttack(
-        ctx: TacticalContext, target: TacticalTarget, strikers: List<Striker>, cities: List<CityStriker>,
-        inflictWhatWeTake: Boolean = false, mustSurviveAttack: Boolean = true,
-    ): AttackSeries {
-        val tile = target.tile
-        val series = AttackSeries(target)
-        var damageRemaining = target.aux * (100 + ctx.rules.define(AiDefine.AI_TACTICAL_OVERKILL_PERCENT)) / 100
-
-        // Start by applying damage from city bombards
-        for (striker in cities) {
-            if (damageRemaining <= 0) break
-            series.addCity(striker.city)
-            damageRemaining -= striker.expectedTargetDamage
-        }
-
-        fun usable(striker: Striker): Boolean {
-            val unit = striker.unit
-            if (inflictWhatWeTake && striker.expectedTargetDamage < striker.expectedSelfDamage) {
-                ctx.log { "not attacking with ${unit.name}: it cannot inflict what it takes" }
-                return false
-            }
-            if (!unit.hasMovement()) return false
-            if (mustSurviveAttack && striker.expectedSelfDamage >= unit.health) {
-                ctx.log { "not attacking with ${unit.name} at ${unit.getTile().position}: it would be destroyed" }
-                return false
-            }
-            return true
-        }
-
-        // First loop is ranged units only
-        for (striker in strikers) {
-            if (damageRemaining <= 0) break
-            val unit = striker.unit
-            if (!unit.baseUnit.isRanged() || !usable(striker) || series.contains(unit)) continue
-            if (unit.getTile().aerialDistanceTo(tile) > unit.getRange() || attackOptions(unit, tile, true).isEmpty()) continue
-            series.addUnit(unit, true, unit.getTile())
-            damageRemaining -= striker.expectedTargetDamage
-        }
-
-        // If target is city, want to get in one melee attack, so set damage remaining to 1
-        if (target.type == TacticalTargetType.City && damageRemaining < 1) damageRemaining = 1
-
-        // The free tiles around the target to attack from
-        val freeTiles = tile.neighbors.filter { n ->
-            !ctx.isEnemyCity(n) && n.militaryUnit?.let { it.civ == target.targetCiv } != true
-        }.toMutableList()
-
-        // Second loop are only melee units
-        for (striker in strikers) {
-            if (damageRemaining <= 0) break
-            val unit = striker.unit
-            if (unit.baseUnit.isRanged() || !usable(striker) || series.contains(unit)) continue
-            var attackFrom: Tile? = null
-            if (unit.getTile().aerialDistanceTo(tile) <= 1) attackFrom = unit.getTile()
-            else {
-                // Find spaces adjacent to target we can move into with movement left
-                val reachable = unit.movement.getDistanceToTiles()
-                attackFrom = freeTiles.firstOrNull {
-                    val move = reachable[it]
-                    move != null && unit.currentMovement - move.totalMovement > EPSILON && unit.movement.canMoveTo(it)
-                }
-                if (attackFrom != null) freeTiles.remove(attackFrom)
-                else {
-                    ctx.log { "not enough free tiles next to $tile for ${unit.name} to attack" }
-                    // Move up if we can, to attack next turn
-                    if (TacticalMoves.moveToEmptySpaceNearTarget(ctx, unit, tile)) ctx.unitProcessed(unit)
-                    continue
-                }
-            }
-            series.addUnit(unit, false, attackFrom)
-            damageRemaining -= striker.expectedTargetDamage
-        }
-        return series
-    }
+    //region Launching attacks
 
     /**
      *  CvTacticalAI::LaunchAttack and CombatResolved: make the attacks of [series] one after the other. When the target is gone (killed, or

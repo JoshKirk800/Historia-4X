@@ -30,6 +30,9 @@ class TacticalTarget(
     /** CvTacticalTarget::GetAuxIntData: what the targets are sorted by (damage of a unit, threat of a city); some moves store the damage required here */
     var aux: Int = 0,
 ) {
+    /** CvTacticalTarget::GetLastAggLevel: the highest aggression the units were sent against this target with this turn (attacking again at the same level makes no sense) */
+    var lastAggressionLevel = AggressionLevel.None
+
     /** CvTacticalTarget::IsTargetStillAlive: only unit and city targets can die */
     fun isAlive(civ: Civilization): Boolean = when (type) {
         TacticalTargetType.LowPriorityUnit, TacticalTargetType.MediumPriorityUnit, TacticalTargetType.HighPriorityUnit ->

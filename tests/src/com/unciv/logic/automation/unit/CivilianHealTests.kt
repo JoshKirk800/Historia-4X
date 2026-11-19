@@ -10,8 +10,10 @@ import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
 import com.unciv.view.GameView
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,8 +37,8 @@ class CivilianHealTests {
         mine.setTileResource("Iron")
     }
 
-    private fun automate(unit: MapUnit) =
-        CivilianUnitAutomation.automateCivilianUnit(GameView(civ.gameInfo, civ).getMapUnitView(unit), AutomationCache())
+    private fun automate(unit: MapUnit, cache: AutomationCache = AutomationCache()) =
+        CivilianUnitAutomation.automateCivilianUnit(GameView(civ.gameInfo, civ).getMapUnitView(unit), cache)
 
     @Test
     fun `a worker with full health goes to work`() {
@@ -46,12 +48,14 @@ class CivilianHealTests {
     }
 
     @Test
-    fun `a hurt worker outside a city waits where it is to heal`() {
+    fun `a hurt worker outside a city waits where it is to heal, keeping its movement, for no other move takes it`() {
         val worker = game.addUnit("Worker", civ, mine)
         worker.health = 60
-        automate(worker)
+        val cache = AutomationCache()
+        automate(worker, cache)
         assertNull(mine.improvementInProgress)
         assertEquals(mine, worker.getTile())
-        assertEquals(0f, worker.currentMovement)
+        assertTrue(worker in cache.processedUnits)
+        assertFalse("it did not use its movement: it heals at the end of the turn", worker.hasUnitMovedThisTurn())
     }
 }

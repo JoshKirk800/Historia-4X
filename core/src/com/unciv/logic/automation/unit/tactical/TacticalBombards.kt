@@ -13,14 +13,13 @@ class Candidate(val unit: MapUnit, val turns: Int, val distance: Int)
 class Block(val unit: MapUnit, val tile: Tile, val distance: Int)
 
 /**
- *  Bombarding from where the enemy cannot get at the ranged unit, and the attacks that combine units on one target: CvTacticalAI::
- *  ExecuteSafeBombards, ExecuteProtectedBombards, ExecuteOneProtectedBombard, CanCoverFromEnemy, ExecuteFlankAttack,
- *  ExecutePriorityAttacksOnUnitTarget, FindClosestUnit, ChooseRemainingAssignments (the matching of units to tiles).
+ *  Bombarding from where the enemy cannot get at the ranged unit (BNW's, kept for the temporary operation zones and ships): CvTacticalAI::
+ *  ExecuteSafeBombards, ExecuteProtectedBombards, ExecuteOneProtectedBombard, CanCoverFromEnemy, FindClosestUnit, ChooseRemainingAssignments (the
+ *  matching of units to tiles). The flank attack and priority attacks of BNW are replaced by the combat simulation ([TacticalSimulation]).
  *
  *  A safe bombard shoots from a tile within range of the target that no enemy unit can attack (the analysis map's SubjectToAttack, see
  *  [TacticalMap.isSubjectToAttack]), moving a ranged unit there if need be (up to 2 turns away). A protected bombard shoots from a tile
- *  enemies can reach after melee units of ours have taken the tiles around it they could come through. A flank attack puts melee units
- *  on the free tiles around a unit, which adds the flank bonus to every attack on it, and then attacks.
+ *  enemies can reach after melee units of ours have taken the tiles around it they could come through.
  *
  *  Deviations: the original asks the unit whether it can strike the target from where it stands now (CvUnit::canEverRangeStrikeAt at its
  *  current tile) when it looks for a unit to move to a bombard tile, which would only let units already in range move there; here the
@@ -256,89 +255,6 @@ object TacticalBombards {
         // Now select exact covering units, making sure we didn't over commit a unit to covering more than one hex
         val blocks = assign(choices, canLeaveOpenings = false) ?: return null
         return Cover(toCover.size, blocks)
-    }
-
-    // endregion
-    // region Flank attacks
-
-    /**
-     *  CvTacticalAI::ExecuteFlankAttack: if at least 2 of the free tiles around the unit on [target]'s tile give a flank bonus (its flank bonus
-     *  cells are set) and melee units of ours can take them (one this turn with at least half health and 3 tiles in all, or 2 units this
-     *  turn), move them in and attack with everything that can. @return false: like the original, which never reports an attack
-     */
-    fun executeFlankAttack(ctx: TacticalContext, target: TacticalTarget): Boolean {
-        val tile = target.tile
-        val map = ctx.map
-        val flankTiles = tile.neighbors.filter { map.helpsProvideFlankBonus(it) }.toList()
-        // If more than 1, find how many we can fill with units
-        if (flankTiles.size <= 1) return false
-        var fillable = 0
-        var attackers = 0
-        val fillableTiles = ArrayList<Tile>()
-        for (hex in flankTiles) {
-            if (findClosestUnits(ctx, hex, 0, mustHaveHalfHp = true, mustBeMelee = true).isNotEmpty()) {
-                fillable++
-                attackers++
-                fillableTiles.add(hex)
-            } else if (findClosestUnits(ctx, hex, 1, mustBeMelee = true).isNotEmpty()) { // What about next turn?
-                fillable++
-                fillableTiles.add(hex)
-            }
-        }
-        // As long as we either get three hexes filled with one attacker, or two we can attack from, then this multi-hex attack is worth considering
-        if (!((attackers >= 1 && fillable >= 3) || attackers >= 2)) return false
-
-        // Compute best way to fill the hexes
-        val choices = LinkedHashMap<Tile, List<Candidate>>()
-        for (hex in fillableTiles) {
-            val units = findClosestUnits(ctx, hex, 1, mustBeMelee = true)
-            if (units.isEmpty()) {
-                fillable--
-                if (fillable < 2) return false
-            } else choices[hex] = units
-        }
-        val blocks = assign(choices, canLeaveOpenings = fillable != 2, minimum = 2) ?: return false
-
-        // Make moves up into hexes
-        for (block in blocks) {
-            val unit = block.unit
-            if (unit.getTile() == block.tile) ctx.log { "already in a flanking position with ${unit.name}, ${block.tile.position}" }
-            else {
-                ctx.log { "moving into a flanking position with ${unit.name}, ${block.tile.position}" }
-                unit.movement.tryHeadTowards(block.tile)
-                if (!unit.hasMovement()) ctx.unitProcessed(unit)
-            }
-        }
-        // Make attacks
-        val defender = TacticalTargets.visibleEnemyDefender(ctx.civ, tile) ?: return false
-        target.aux = defender.health
-        val strikers = TacticalAttacks.findUnits(ctx, tile, 1, 0)
-        if (strikers.isNotEmpty()) {
-            TacticalAttacks.computeTotalExpectedDamage(target, strikers)
-            TacticalAttacks.executeAttack(ctx, target, strikers, emptyList(), inflictWhatWeTake = false, mustSurviveAttack = true)
-        }
-        return false
-    }
-
-    // endregion
-
-    /**
-     *  CvTacticalAI::ExecutePriorityAttacksOnUnitTarget: what can be done to a unit target with bombards and flanks: safe bombards, protected
-     *  bombards, then a flank attack, as long as it lives.
-     */
-    fun executePriorityAttacksOnUnitTarget(ctx: TacticalContext, target: TacticalTarget) {
-        val tile = target.tile
-        // Try to find a bombard first
-        ctx.map.clearDynamicFlags()
-        ctx.map.setTargetBombardCells(tile, ctx.map.bestFriendlyRange, ctx.map.ignoreLineOfSight)
-        if (target.isAlive(ctx.civ)) executeSafeBombards(ctx, target)
-        if (target.isAlive(ctx.civ)) executeProtectedBombards(ctx, target)
-        // Then try for a flank attack
-        if (target.isAlive(ctx.civ)) {
-            ctx.map.clearDynamicFlags()
-            ctx.map.setTargetFlankBonusCells(tile)
-            executeFlankAttack(ctx, target)
-        }
     }
 
     /**

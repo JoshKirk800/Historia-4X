@@ -3032,6 +3032,42 @@
       "flavors": {
         "Airlift": 80
       }
+    },
+    {
+      "name": "AICITYSTRATEGY_NEW_CONTINENT_FEEDER",
+      "noMinorCivs": true,
+      "checkTriggerTurnCount": 50,
+      "minimumNumTurnsExecuted": 100,
+      "advisorCounselImportance": 1,
+      "flavors": {
+        "Defense": 50,
+        "Recon": 50,
+        "NavalRecon": 100,
+        "Expansion": 100
+      }
+    },
+    {
+      "name": "AICITYSTRATEGY_POCKET_CITY",
+      "noMinorCivs": true,
+      "checkTriggerTurnCount": 50,
+      "minimumNumTurnsExecuted": 50,
+      "advisorCounselImportance": 1,
+      "flavors": {
+        "Defense": 100,
+        "Expansion": -100
+      }
+    },
+    {
+      "name": "AICITYSTRATEGY_ENOUGH_SETTLERS",
+      "noMinorCivs": true,
+      "checkTriggerTurnCount": 5,
+      "minimumNumTurnsExecuted": 20,
+      "advisorCounselImportance": 1,
+      "flavors": {
+        "Offense": 30,
+        "Defense": 30,
+        "Expansion": -100
+      }
     }
   ],
   "citySpecializations": [

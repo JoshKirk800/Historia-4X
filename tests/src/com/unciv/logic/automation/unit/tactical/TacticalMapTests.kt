@@ -63,6 +63,15 @@ class TacticalMapTests {
         assertSame(tactical.zoneOf(city.getCenterTile()), tactical.zoneOf(unclaimed))
     }
 
+    @Test
+    fun `unclaimed plots use the nearest city even across opposing territory`() {
+        val other = game.addCity(enemy, tile(9))
+        val tactical = map()
+        assertSame(tactical.zoneOf(city.getCenterTile()), tactical.zoneOf(tile(4)))
+        assertSame(tactical.zoneOf(other.getCenterTile()), tactical.zoneOf(tile(5)))
+        assertEquals(TacticalTerritory.Enemy, tactical.zoneOf(tile(5))!!.territory)
+    }
+
     /** The enemy melee strength of our city's zone with one unit of [name] [distance] tiles from the city, which is removed again */
     private fun enemyMeleeOf(name: String, distance: Int, health: Int = 100): Int {
         val unit = game.addUnit(name, enemy, tile(distance))

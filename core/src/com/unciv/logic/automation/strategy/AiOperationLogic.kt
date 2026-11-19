@@ -568,7 +568,7 @@ object AiOperationLogic {
      *  ([ApproachPart6Ai.isPotentialMilitaryTargetOrThreat]), all of them for a barbarian; a city-state's are those it is at war with (the
      *  original adds those it is wary of or that were jerks to it).
      */
-    private fun unfriendlyMajors(civ: Civilization): List<Civilization> = civ.gameInfo.civilizations.filter { other ->
+    internal fun unfriendlyMajors(civ: Civilization): List<Civilization> = civ.gameInfo.civilizations.filter { other ->
         other != civ && other.isMajorCiv && other.isAlive() && other.cities.isNotEmpty() && when {
             civ.isMajorCiv -> ApproachPart6Ai.isPotentialMilitaryTargetOrThreat(civ, other)
             civ.isBarbarian -> true
@@ -580,7 +580,7 @@ object AiOperationLogic {
      *  CvPlot::IsBorderLand with the unfriendly majors given: a city of one of them within AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT plots,
      *  or a passable neighbour plot owned by one (by anyone, for a barbarian).
      */
-    private fun isBorderLand(civ: Civilization, tile: Tile, unfriendly: List<Civilization>): Boolean {
+    internal fun isBorderLand(civ: Civilization, tile: Tile, unfriendly: List<Civilization>): Boolean {
         val range = civ.gameInfo.ruleset.ai.define(AiDefine.AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT)
         if (unfriendly.any { other -> other.cities.any { it.getCenterTile().aerialDistanceTo(tile) <= range } }) return true
         return tile.neighbors.any { neighbor ->

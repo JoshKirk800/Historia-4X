@@ -8,6 +8,8 @@ import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.InfluenceTrend
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.TraitCategory
+import com.unciv.models.ruleset.unique.UniqueType
 
 /**
  *  Whether an AI that has just taken a city gives it back to the major civilization that founded it: Vox Populi's
@@ -52,10 +54,7 @@ object LiberationAi {
         val memory = ours.memoryOf(founder)
         val oldOwner = city.civ
 
-        if ((ai.isGoingForWorldConquest() || VictoryProgressAi.isCloseToWorldConquest(civ, rules)) && city.isOriginalCapital) return false
-        val stateReligion = OpinionAi.stateReligion(civ)?.first
-        val holyCityOf = city.religion.religionThisIsTheHolyCityOf
-        if (stateReligion != null && holyCityOf != null && holyCityOf != stateReligion.name) return false
+        if (isCityWeKeep(civ, city)) return false
 
         val alive = founder.isAlive()
         if (alive && (opinion <= MajorCivOpinion.Enemy || approach <= MajorCivApproach.Guarded || OpinionAi.isUntrustworthyFriend(founder))) return false
@@ -103,6 +102,59 @@ object LiberationAi {
             memory.doFLevel >= DoFLevel.Allies -> true
             else -> !badWarDecision
         }
+    }
+
+    /**
+     *  CvPlayer::GetPlayerToLiberate for [civ] that has taken [city] (still its previous owner's): the civilization that founded it, when
+     *  [civ] may liberate it (CvPlayer::CanLiberatePlayerCity: a living one it is at peace with; a dead one may be brought back unless
+     *  relations cannot change in the game). Null for a city [civ] founded, one gained by diplomatic marriage, and one its founder holds.
+     *  Unciv keeps no record of who destroyed a civilization, so CanLiberatePlayer's refusals for one "ever conquered" or "killed" by us
+     *  and for a resurrected major we attacked have no input. Not ported: GetPlayerToLiberate's fall-back to the previous owner when that
+     *  is a city-state and the founder cannot be liberated: [City.liberateCity] gives a city to its founder only.
+     */
+    fun playerToLiberate(civ: Civilization, city: City): Civilization? {
+        val founder = city.foundingCivObject ?: return null
+        if (founder == civ || founder == city.civ || founder.isBarbarian) return null
+        val canLiberate = if (founder.isAlive()) !civ.isAtWarWith(founder)
+            else !civ.gameInfo.ruleset.modOptions.hasUnique(UniqueType.DiplomaticRelationshipsCannotChange)
+        return founder.takeIf { canLiberate }
+    }
+
+    /** CvCity::IsOriginalMajorCapital: [city] was founded as the capital of a major civilization */
+    fun isOriginalMajorCapital(city: City): Boolean = city.isOriginalCapital && city.foundingCivObject?.isMajorCiv == true
+
+    /**
+     *  The two refusals DoPossibleMajorLiberation and IsTryingToLiberate share: an original major capital while [civ] goes for or is
+     *  close to world conquest, and the holy city of a religion other than [civ]'s state religion ("never liberate a rival Holy City")
+     */
+    private fun isCityWeKeep(civ: Civilization, city: City): Boolean {
+        if ((civ.ai.isGoingForWorldConquest() || VictoryProgressAi.isCloseToWorldConquest(civ, civ.gameInfo.ruleset.ai)) &&
+            isOriginalMajorCapital(city)) return true
+        val stateReligion = OpinionAi.stateReligion(civ)?.first ?: return false
+        return city.isHolyCity() && !city.isHolyCityOf(stateReligion.name)
+    }
+
+    /**
+     *  CvDiplomacyAI::IsTryingToLiberate: does [civ] actively want to liberate [city] (of [playerToLiberate]) when it takes it? It is asked
+     *  first by CvPlayerAI::AI_conquerCity, before the keep decision. Never for a backstabber ([WarSanityAi.isBackstabber]), nor for a
+     *  city [isCityWeKeep], nor for a living major we hate (an opinion of enemy or worse, a guarded or worse approach, untrustworthy).
+     *  Otherwise a major is liberated by an AI going for a diplomatic victory, with the diplomat trait or the diplomat personality
+     *  ([CivAi.isDiplomat]) when it is dead, or an opinion of friend or better and the city is a holy city or an original major capital.
+     *  Not ported, for lack of input: a teammate's city (no teams), the liberation quests of city-states (Unciv has none) and the policies
+     *  that boost liberation (POLICYMOD_LIBERATION_BONUS: none in BNW).
+     */
+    fun isTryingToLiberate(civ: Civilization, city: City): Boolean {
+        val founder = playerToLiberate(civ, city) ?: return false
+        if (WarSanityAi.isBackstabber(civ) || isCityWeKeep(civ, city)) return false
+        if (!founder.isMajorCiv) return false
+        val ours = civ.ai.diplomacy
+        val opinion = ours.opinionOf(founder)
+        val alive = founder.isAlive()
+        if (alive && (opinion <= MajorCivOpinion.Enemy || ours.approachTowards(founder) <= MajorCivApproach.Guarded ||
+                OpinionAi.isUntrustworthyFriend(founder))) return false
+        val diplomat = civ.ai.isGoingForDiploVictory() || civ.ai.hasTraitCategory(TraitCategory.Diplomat) || civ.ai.isDiplomat()
+        if (!diplomat) return false
+        return !alive || (opinion >= MajorCivOpinion.Friend && (city.isHolyCity() || isOriginalMajorCapital(city)))
     }
 
     /** Close to a culture victory, liberating is for a founder we already influence: popular and rising, or influential or better */

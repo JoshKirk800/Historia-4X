@@ -245,11 +245,17 @@ enum class AiDefine(val default: Float) {
     UNKNOWN_EXPLORE_TILE_VALUE(25f),
     MAX_PLOTS_PER_EXPLORER(54f),
 
-    // CvMinorCivAI::DoTurnStatus (CvTeam::IsMinorCivAggressor / IsMinorCivWarmonger), CvPlayerAI::AI_considerAnnex
+    // CvMinorCivAI::DoTurnStatus (CvTeam::IsMinorCivAggressor / IsMinorCivWarmonger)
     MINOR_CIV_AGGRESSOR_THRESHOLD(2f),
     MINOR_CIV_WARMONGER_THRESHOLD(4f),
-    NORMAL_ANNEX(0.5f),
-    AGGRESSIVE_ANNEX(0.75f),
+
+    // CvPlayerAI::AI_conquerCity (CityConquestAutomation): a city's value is its economic value as a percentage of the median city's, x the
+    // multiplier (%), x the capital multiplier (%) for an original major capital; at the high threshold the city is kept, at the some-value one a puppet is worth having
+    // (Community Patch's values; the Vox Populi puppet bonus threshold needs puppet yield modifiers no ruleset here has)
+    AI_CITY_VALUE_MULTIPLIER(100f),
+    AI_CAPITAL_VALUE_MULTIPLIER(150f),
+    AI_CITY_HIGH_VALUE_THRESHOLD(80f),
+    AI_CITY_SOME_VALUE_THRESHOLD(40f),
 
     // CvCitySpecializationAI
     AI_CITY_SPECIALIZATION_EARLIEST_TURN(25f),

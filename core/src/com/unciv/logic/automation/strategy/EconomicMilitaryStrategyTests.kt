@@ -125,6 +125,14 @@ object EconomicMilitaryStrategyTests {
     /** CvPlayer::IsEmpireUnhappy */
     internal fun isEmpireUnhappy(civ: Civilization) = civ.getHappiness() < 0
 
+    /** CvPlayer::IsEmpireVeryUnhappy without VP's happiness rules: excess happiness at or below VERY_UNHAPPY_THRESHOLD */
+    internal fun isEmpireVeryUnhappy(civ: Civilization) =
+        civ.getHappiness() <= civ.gameInfo.ruleset.ai.define(AiDefine.VERY_UNHAPPY_THRESHOLD)
+
+    /** CvPlayer::IsEmpireSuperUnhappy without VP's happiness rules (the empire's cities may revolt): excess happiness at or below SUPER_UNHAPPY_THRESHOLD */
+    internal fun isEmpireSuperUnhappy(civ: Civilization) =
+        civ.getHappiness() <= civ.gameInfo.ruleset.ai.define(AiDefine.SUPER_UNHAPPY_THRESHOLD)
+
     private fun minimumSettleFertility(civ: Civilization) = civ.gameInfo.ruleset.ai.define(AiDefine.AI_STRATEGY_MINIMUM_SETTLE_FERTILITY)
 
     //region Economic

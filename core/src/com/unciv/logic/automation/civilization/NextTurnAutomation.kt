@@ -90,7 +90,11 @@ object NextTurnAutomation {
         }
 
         timeThis("AI.chooseTechToResearch") { TechAutomation.chooseTechToResearch(civInfo) }
-        if (tradeAndChangeState) timeThis("AI.considerAnnex") { CityConquestAutomation.considerAnnex(civInfo) }
+        if (tradeAndChangeState) timeThis("AI.considerAnnex") {
+            // CvPlayerAI::AI_doTurnPre: AI_considerAnnex, then AI_considerRaze
+            CityConquestAutomation.considerAnnex(civInfo)
+            CityConquestAutomation.considerRaze(civInfo)
+        }
         val cache = AutomationCache()
         // CvPlayer::doTurnUnits' operations: units that were lost, cities that stopped building for a slot, loose settlers; the armies move in the tactical AI
         OperationalMoves.prepareTurn(civInfo)

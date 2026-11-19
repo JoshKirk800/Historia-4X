@@ -114,6 +114,9 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
     var gameParameters = GameParameters()
     var turns = 0
     var oneMoreTurnMode = false
+    /** CvGame::m_iCityFoundValueReference and m_iNumReferenceCities: the sum of the found values of the capitals of the major civilizations and their count, the yardstick of CvPlayer::GetSettlePlotQualityMeasure */
+    var cityFoundValueReference = 0
+    var numReferenceCities = 0
     var currentPlayer = ""
     var currentTurnStartTime = Clock.System.now().toEpochMilliseconds()
     var gameId = randomGameId()
@@ -222,6 +225,8 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
         toReturn.diplomaticVictoryVotesCast.putAll(diplomaticVictoryVotesCast)
         toReturn.diplomaticVictoryVotesProcessed = diplomaticVictoryVotesProcessed
         toReturn.oneMoreTurnMode = oneMoreTurnMode
+        toReturn.cityFoundValueReference = cityFoundValueReference
+        toReturn.numReferenceCities = numReferenceCities
         toReturn.customSaveLocation = customSaveLocation
         toReturn.victoryData = victoryData?.copy()
         toReturn.historyStartTurn = historyStartTurn

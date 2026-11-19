@@ -1,7 +1,9 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.WaterBodies
+import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.WarGoal
+import com.unciv.logic.automation.unit.CityDistances
 import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.city.GreatWorkFunctions
 import com.unciv.logic.civilization.Civilization
@@ -11,6 +13,7 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.PlayerStrategyDef
+import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
@@ -31,7 +34,6 @@ object EconomicMilitaryStrategyTests {
     const val REALLY_NEED_RECON_SEA = "ECONOMICAISTRATEGY_REALLY_NEED_RECON_SEA"
     const val EARLY_EXPANSION = "ECONOMICAISTRATEGY_EARLY_EXPANSION"
     const val ISLAND_START = "ECONOMICAISTRATEGY_ISLAND_START"
-    const val REALLY_EXPAND_TO_OTHER_CONTINENTS = "ECONOMICAISTRATEGY_REALLY_EXPAND_TO_OTHER_CONTINENTS"
     const val LOSING_WARS = "MILITARYAISTRATEGY_LOSING_WARS"
     const val WAR_MOBILIZATION = "MILITARYAISTRATEGY_WAR_MOBILIZATION"
     /** MAX_MAJOR_CIVS of the original: the player slots its per-civ loops pass over */
@@ -47,14 +49,13 @@ object EconomicMilitaryStrategyTests {
         tests.register("ECONOMICAISTRATEGY_ENOUGH_RECON_SEA") { civ, _ ->
             civ.ai.isMilitaryStrategyActive(LOSING_WARS) || civ.ai.economic.navalReconState == ReconState.Enough }
         tests.register(EARLY_EXPANSION) { civ, _ -> earlyExpansion(civ) }
-        tests.register("ECONOMICAISTRATEGY_ENOUGH_EXPANSION") { civ, def -> enoughExpansion(civ, def) }
+        tests.register("ECONOMICAISTRATEGY_ENOUGH_EXPANSION") { civ, _ -> enoughExpansion(civ) }
         tests.register("ECONOMICAISTRATEGY_NEED_HAPPINESS") { civ, def -> needHappiness(civ, def) }
         tests.register("ECONOMICAISTRATEGY_NEED_HAPPINESS_CRITICAL") { civ, def -> needHappinessCritical(civ, def) }
         tests.register("ECONOMICAISTRATEGY_CITIES_NEED_NAVAL_GROWTH") { civ, def ->
             citiesNeedCityStrategy(civ, def, "AICITYSTRATEGY_NEED_NAVAL_GROWTH") }
         tests.register("ECONOMICAISTRATEGY_CITIES_NEED_NAVAL_TILE_IMPROVEMENT") { civ, def ->
             citiesNeedCityStrategy(civ, def, "AICITYSTRATEGY_NEED_NAVAL_TILE_IMPROVEMENT") }
-        tests.register("ECONOMICAISTRATEGY_FOUND_CITY") { civ, _ -> foundCity(civ) }
         tests.register("ECONOMICAISTRATEGY_NEED_IMPROVEMENT_FOOD") { civ, _ ->
             needImprovement(civ, Stat.Food, "AICITYSTRATEGY_NEED_IMPROVEMENT_FOOD") }
         tests.register("ECONOMICAISTRATEGY_NEED_IMPROVEMENT_PRODUCTION") { civ, _ ->
@@ -65,7 +66,6 @@ object EconomicMilitaryStrategyTests {
         tests.register("ECONOMICAISTRATEGY_TOO_MANY_UNITS") { civ, _ -> civ.stats.getUnitSupplyDeficit() > 0 }
         tests.register(ISLAND_START) { civ, def -> islandStart(civ, def) }
         tests.register(MilitaryAi.EXPAND_TO_OTHER_CONTINENTS) { civ, _ -> expandToOtherContinents(civ) }
-        tests.register(REALLY_EXPAND_TO_OTHER_CONTINENTS) { civ, _ -> reallyExpandToOtherContinents(civ) }
         tests.register("ECONOMICAISTRATEGY_MOSTLY_ON_THE_COAST") { civ, _ -> mostlyOnTheCoast(civ) }
         tests.register("ECONOMICAISTRATEGY_EXPAND_LIKE_CRAZY") { civ, def -> expandLikeCrazy(civ, def) }
         tests.register("ECONOMICAISTRATEGY_GROW_LIKE_CRAZY") { civ, def ->
@@ -133,7 +133,6 @@ object EconomicMilitaryStrategyTests {
     internal fun isEmpireSuperUnhappy(civ: Civilization) =
         civ.getHappiness() <= civ.gameInfo.ruleset.ai.define(AiDefine.SUPER_UNHAPPY_THRESHOLD)
 
-    private fun minimumSettleFertility(civ: Civilization) = civ.gameInfo.ruleset.ai.define(AiDefine.AI_STRATEGY_MINIMUM_SETTLE_FERTILITY)
 
     //region Economic
 
@@ -170,70 +169,63 @@ object EconomicMilitaryStrategyTests {
         return true
     }
 
-    /** The tiles of a landmass (CvArea): total, owned, unowned */
-    private class AreaTiles(val total: Int, val owned: Int, val unowned: Int)
-
-    private fun areaTiles(civ: Civilization, continent: Int): AreaTiles {
-        var total = 0
-        var owned = 0
-        for (tile in civ.gameInfo.tileMap.values) {
-            if (tile.getContinent() != continent) continue
-            total++
-            if (tile.getOwner() != null) owned++
-        }
-        return AreaTiles(total, owned, total - owned)
-    }
-
-    /** CvEconomicAI::GetEarlyCityNumberTarget scaled as IsTestStrategy_EarlyExpansion does: x EXPANSION / GROWTH, + max(0, handicap - 3), x map tiles / (80 x 52) */
-    fun desiredEarlyCities(civ: Civilization): Int {
-        val rules = civ.gameInfo.ruleset.ai
-        var desired = rules.define(AiDefine.AI_STRATEGY_EARLY_EXPANSION_NUM_CITIES_LIMIT)
-        desired = desired * civ.ai.personalityAndGrandStrategy(Flavor.Expansion) / max(civ.ai.personalityAndGrandStrategy(Flavor.Growth), 1)
-        desired += max(0, EconomicAi.gameHandicapIndex(civ.gameInfo) - 3)
-        return desired * civ.gameInfo.tileMap.values.size / (80 * 52)
-    }
-
     /**
-     *  IsTestStrategy_EarlyExpansion: the capital's landmass is one of the two best settle areas, less than AI_STRATEGY_AREA_IS_FULL_PERCENT
-     *  of it is owned, at least AI_STRATEGY_EARLY_EXPANSION_NUM_UNOWNED_TILES_REQUIRED of it is unowned, and non-puppet cities plus settlers
-     *  (being trained included) are below [desiredEarlyCities].
+     *  IsTestStrategy_EarlyExpansion (Vox Populi): not for an unhappy empire; always until 3 cities are founded; not once a neighbor that is
+     *  stronger than average is at least next door (proximity Neighbors) nor after turn 169; else while the best settle plot
+     *  ([SettleAreas.bestSettlePlot]) is within our sphere of influence - its closest city by path length is ours, or ours is at most a step
+     *  farther than the closest city of another major - or more than 7 steps (6 for an expansionist, 8 for a smaller or tourism civilization)
+     *  from any major's city.
      */
     fun earlyExpansion(civ: Civilization): Boolean {
         if (civ.isOneCityChallenger()) return false
-        val desired = desiredEarlyCities(civ)
-        val capital = civ.getCapital(firstCityIfNoCapital = false) ?: return false
-        val capitalArea = capital.getCenterTile().getContinent()
-        val areas = SettleAreas.bestSettleAreas(civ, minimumSettleFertility(civ))
-        if (areas.first != capitalArea && areas.second != capitalArea) return false
-        val rules = civ.gameInfo.ruleset.ai
-        val tiles = areaTiles(civ, capitalArea)
-        val ownageRatio = tiles.owned * 100 / max(1, tiles.total)
-        val cities = civ.cities.count { !it.isPuppet }
-        val settlers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.SETTLE, includeBeingTrained = true)
-        return ownageRatio < rules.define(AiDefine.AI_STRATEGY_AREA_IS_FULL_PERCENT)
-            && cities + settlers < desired
-            && tiles.unowned >= rules.define(AiDefine.AI_STRATEGY_EARLY_EXPANSION_NUM_UNOWNED_TILES_REQUIRED)
+        if (isEmpireUnhappy(civ)) return false
+        // We do not want to lose time for building our settlers even if we have not explored yet
+        if (civ.citiesCreated < 3) return true
+        // Midgame depends on the map situation
+        var closestNeighborProximity = -1
+        for (other in civ.gameInfo.civilizations) {
+            if (!other.isMajorCiv || other == civ) continue
+            // Continue expanding if our military is good enough
+            val strength = WarStateAi.militaryStrengthComparedToUs(civ, other) ?: continue
+            if (strength <= StrengthLevel.Average) continue
+            closestNeighborProximity = max(closestNeighborProximity, DiplomacyTurn.proximity(civ, other))
+        }
+        if (closestNeighborProximity >= DiplomacyTurn.PROXIMITY_NEIGHBORS) return false
+        // Never in the late game
+        if (civ.gameInfo.turns > 169) return false
+
+        val settlePlot = SettleAreas.bestSettlePlot(civ, null, null) ?: return false
+        val game = civ.gameInfo
+        // As long as it is within our "sphere of influence"
+        val closestCity = CityDistances.closestCityByPathLength(game, settlePlot, majorsOnly = true)
+        if (closestCity != null) {
+            if (closestCity.civ == civ) return true
+            // Check for near ties
+            val theirDistance = CityDistances.closestCityDistancePathLength(game, settlePlot, majorsOnly = true)
+            if (CityDistances.cityDistancePathLength(civ, settlePlot) <= theirDistance + 1) return true
+        }
+        // If the neighbors are far away it is also good
+        var offset = 0
+        if (civ.ai.hasTraitCategory(TraitCategory.Expansionist)) offset-- // smaller distance: keep expanding longer
+        if (civ.ai.hasTraitCategory(TraitCategory.Smaller) || civ.ai.hasTraitCategory(TraitCategory.Tourism)) offset++ // larger distance: stop expanding earlier
+        return CityDistances.closestCityDistancePathLength(game, settlePlot, majorsOnly = true) > 7 + offset
     }
 
     /**
-     *  IsTestStrategy_EnoughExpansion: no settle area left, or settlers (being trained included) >= the weight threshold (1) plus extras
-     *  when not unhappy: +1 under REALLY_EXPAND_TO_OTHER_CONTINENTS (+1 more on offshore-expansion maps), +1 if EXPANSION > 6, +1 if > 8.
+     *  IsTestStrategy_EnoughExpansion (Vox Populi): always for a one-city challenger and for a civilization that may not annex cities (Venice);
+     *  never with one city or less; always for a very unhappy empire and under LOSING_WARS; never while expanding to other continents or early;
+     *  else when no plot is a good settle plot ([SettleAreas.haveGoodSettlePlot]). The number of settlers no longer counts here: the production
+     *  AI's settler sanity and [CityStrategyAi.isEnoughSettlers] limit them.
      */
-    fun enoughExpansion(civ: Civilization, def: PlayerStrategyDef): Boolean {
-        if (civ.isOneCityChallenger()) return true
-        if (SettleAreas.bestSettleAreas(civ, minimumSettleFertility(civ)).count == 0) return true
-        var extraSettlers = 0
-        if (!isEmpireUnhappy(civ)) {
-            if (civ.ai.isEconomicStrategyActive(REALLY_EXPAND_TO_OTHER_CONTINENTS)) {
-                extraSettlers++
-                if (SettleAreas.aiMapHint(civ.gameInfo) and 4 != 0) extraSettlers++
-            }
-            val flavorExpansion = civ.ai.personalityAndGrandStrategy(Flavor.Expansion)
-            if (flavorExpansion > 6) extraSettlers++
-            if (flavorExpansion > 8) extraSettlers++
-        }
-        val settlers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.SETTLE, includeBeingTrained = true)
-        return settlers >= def.weightThreshold + extraSettlers
+    fun enoughExpansion(civ: Civilization): Boolean {
+        if (civ.isOneCityChallenger() || civ.hasUnique(UniqueType.MayNotAnnexCities)) return true
+        if (civ.cities.size <= 1) return false
+        if (isEmpireVeryUnhappy(civ)) return true
+        if (civ.ai.isMilitaryStrategyActive(LOSING_WARS)) return true
+        if (civ.ai.isEconomicStrategyActive(MilitaryAi.EXPAND_TO_OTHER_CONTINENTS)) return false
+        if (civ.ai.isEconomicStrategyActive(EARLY_EXPANSION)) return false
+        // Do this check last, it can be expensive
+        return !SettleAreas.haveGoodSettlePlot(civ, -1)
     }
 
     /**
@@ -274,18 +266,6 @@ object EconomicMilitaryStrategyTests {
         val threshold = def.weightThreshold + civ.ai.weightThresholdModifier(def)
         if (threshold == 0) return false
         return numCities > (civ.cities.size - 1) * 10 / threshold
-    }
-
-    /**
-     *  IsTestStrategy_FoundCity (the test; launching the found-city operation is [com.unciv.logic.automation.unit.SettlerAutomation.launchOperation]):
-     *  AI players with at least one city and a loose settler (UNITAI_SETTLE that is in no army, so not one an operation already moves)
-     *  and a settle area.
-     */
-    fun foundCity(civ: Civilization): Boolean {
-        if (civ.isHuman() || civ.cities.isEmpty()) return false
-        val operations = civ.ai.operations
-        if (civ.units.getCivUnits().none { UnitAiTypes.current(it) == UnitAiType.SETTLE && operations.armyOf(it) == null }) return false
-        return SettleAreas.bestSettleAreas(civ, minimumSettleFertility(civ)).count > 0
     }
 
     /**
@@ -351,30 +331,48 @@ object EconomicMilitaryStrategyTests {
             && total < def.weightThreshold
     }
 
-    /** IsTestStrategy_ExpandToOtherContinents: not with ISLAND_START, EARLY_EXPANSION or LOSING_WARS; a best or second-best settle area off the capital's landmass */
+    /**
+     *  IsTestStrategy_ExpandToOtherContinents (Vox Populi): not for an unhappy empire, without a capital, before embarking, without a coastal
+     *  city, under LOSING_WARS unless cramped, under ISLAND_START or EARLY_EXPANSION, nor once the cities founded reach twice the EXPANSION
+     *  flavor; else when a landmass of at least 23 plots, with at least 3 plots revealed and at most a third of its usable plots
+     *  claimed at 10 plots per city, has a good settle plot while the capital's landmass has none.
+     *  (The original counts the plots of a landmass that are snow, ice or desert without a resource as bad plots, but never fills the count in.)
+     */
     fun expandToOtherContinents(civ: Civilization): Boolean {
         if (civ.isOneCityChallenger()) return false
-        if (civ.ai.isEconomicStrategyActive(ISLAND_START) || civ.ai.isEconomicStrategyActive(EARLY_EXPANSION)) return false
-        if (civ.ai.isMilitaryStrategyActive(LOSING_WARS)) return false
-        val capitalArea = civ.getCapital(firstCityIfNoCapital = false)?.getCenterTile()?.getContinent() ?: return false
-        val areas = SettleAreas.bestSettleAreas(civ, minimumSettleFertility(civ))
-        return (areas.first != capitalArea && areas.first != -1) || (areas.second != capitalArea && areas.second != -1)
-    }
-
-    /**
-     *  IsTestStrategy_ReallyExpandToOtherContinents: with EXPAND_TO_OTHER_CONTINENTS, not LOSING_WARS, not AT_WAR (except on offshore-expansion
-     *  maps), GROWTH < EXPANSION, not unhappy, and the best settle area off the capital's landmass.
-     */
-    fun reallyExpandToOtherContinents(civ: Civilization): Boolean {
-        if (civ.isOneCityChallenger()) return false
-        if (!civ.ai.isEconomicStrategyActive(MilitaryAi.EXPAND_TO_OTHER_CONTINENTS)) return false
-        if (civ.ai.isMilitaryStrategyActive(LOSING_WARS)) return false
-        if (SettleAreas.aiMapHint(civ.gameInfo) and 4 == 0 && civ.ai.isMilitaryStrategyActive(MilitaryAi.AT_WAR)) return false
-        val capital = civ.getCapital(firstCityIfNoCapital = false) ?: return false
-        if (civ.ai.personalityAndGrandStrategy(Flavor.Growth) >= civ.ai.personalityAndGrandStrategy(Flavor.Expansion)) return false
         if (isEmpireUnhappy(civ)) return false
-        val best = SettleAreas.bestSettleAreas(civ, minimumSettleFertility(civ)).first
-        return best != capital.getCenterTile().getContinent() && best != -1
+        val capital = civ.getCapital(firstCityIfNoCapital = false) ?: return false
+        if (!civ.tech.unitsCanEmbark) return false
+        if (civ.cities.none { WaterBodies.isCoastal(it) }) return false
+        if (civ.ai.isMilitaryStrategyActive(LOSING_WARS) && !civ.ai.isCramped) return false
+        if (civ.ai.isEconomicStrategyActive(ISLAND_START)) return false
+        // We should settle our island first
+        if (civ.ai.isEconomicStrategyActive(EARLY_EXPANSION)) return false
+        // Do not do it if we already have a lot of cities
+        if (civ.citiesCreated >= civ.ai.personalityAndGrandStrategy(Flavor.Expansion) * 2) return false
+
+        // Check for sparsely settled areas first
+        val start = capital.getCenterTile().getContinent()
+        val tiles = HashMap<Int, IntArray>() // by landmass: tiles, revealed, cities
+        for (tile in civ.gameInfo.tileMap.tileList) {
+            val continent = tile.getContinent()
+            if (continent == -1 || tile.isWater) continue
+            val counts = tiles.getOrPut(continent) { IntArray(3) }
+            counts[0]++
+            if (civ.hasExplored(tile)) counts[1]++
+            if (tile.isCityCenter()) counts[2]++
+        }
+        for ((area, counts) in tiles) {
+            // Make up an arbitrary threshold for islands
+            if (counts[0] < 23) continue
+            // Have to know about it
+            if (counts[1] < 3) continue
+            // Assuming 10 tiles per city (some may be water) at most 1/3 of the good plots should be claimed
+            if (counts[2] * 10 > counts[0] / 3) continue
+            // Do this last, potentially expensive. Note this does not guarantee that our settler will actually go there
+            if (SettleAreas.haveGoodSettlePlot(civ, area) && !SettleAreas.haveGoodSettlePlot(civ, start)) return true
+        }
+        return false
     }
 
     /** IsTestStrategy_MostlyOnTheCoast: population of cities on a body of water of at least 100 tiles (no lakes or small inland seas) at least that of the others, and some */

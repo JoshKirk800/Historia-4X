@@ -195,8 +195,6 @@ class AiOperation : IsPartOfGameInfoSerialization {
     var startCityId: String? = null
     /** CvAIOperation::m_iDefaultArea: the landmass cities must be on to supply units, [Tile.getContinent] */
     var area = -1
-    /** CvAIEscortedOperation::m_iTargetArea: the landmass the settler looks for a site on, -1 = anywhere */
-    var targetArea = -1
     var armies = ArrayList<AiArmy>()
     /** The slots still to fill, the next to build is the last */
     var slotsToBuild = ArrayList<SlotRef>()
@@ -210,7 +208,7 @@ class AiOperation : IsPartOfGameInfoSerialization {
         val toReturn = AiOperation()
         toReturn.id = id; toReturn.type = type; toReturn.enemyCivId = enemyCivId; toReturn.state = state
         toReturn.abortReason = abortReason; toReturn.targetTile = targetTile; toReturn.musterTile = musterTile
-        toReturn.startCityId = startCityId; toReturn.area = area; toReturn.targetArea = targetArea
+        toReturn.startCityId = startCityId; toReturn.area = area
         for (army in armies) toReturn.armies.add(army.clone())
         for (slot in slotsToBuild) toReturn.slotsToBuild.add(slot.copy())
         for (commitment in committedCities) toReturn.committedCities.add(commitment.clone())

@@ -4,6 +4,7 @@ import com.unciv.json.json
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.city.managers.CityConquestFunctions
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.league.League
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
@@ -245,23 +246,87 @@ class GrandStrategyAiTests {
         civ.ai.setPersonalityFlavor(Flavor.Culture, 5)
         val other1 = game.addCiv()
         val other2 = game.addCiv()
-        for (c in listOf(civ, other1, other2)) game.addCity(c, game.tileMap.values.first { it.getCity() == null && it.neighbors.none { n -> n.getCity() != null } })
+        for (c in listOf(civ, other1, other2)) game.addCity(c, game.tileMap.values.first { it.getCity() == null && it.neighbors.none { n -> n.getCity() != null } }, replacePalace = true)
         civ.stats.statsForNextTurn = Stats(culture = 10f)
         other1.stats.statsForNextTurn = Stats(culture = 3f)
         other2.stats.statsForNextTurn = Stats(culture = 3f)
-        // (10 - era) * flavor * 200 / 100 = 100; ahead of both of 2: AI_GS_CULTURE_AHEAD_WEIGHT 50 * 2 / 2; tourism all equal: nothing
-        assertEquals(150, GrandStrategyAi.culturePriority(civ, def(GrandStrategyAi.CULTURE)))
+        // era (at least 1) * flavor * 150 / 100 = 7; ahead of both of 2: AI_GS_CULTURE_AHEAD_WEIGHT 50 * 2 / 2; tourism all equal, so behind both:
+        // -AI_GS_CULTURE_TOURISM_AHEAD_WEIGHT 100 * 2 / 2; the bonus: one effective city, -10 / 8
+        assertEquals(7 + 50 - 100 - 1, GrandStrategyAi.culturePriority(civ, def(GrandStrategyAi.CULTURE)))
         other2.stats.statsForNextTurn = Stats(culture = 30f)
         // ahead of 1, behind 1: no longer ahead of more than behind
-        assertEquals(100, GrandStrategyAi.culturePriority(civ, def(GrandStrategyAi.CULTURE)))
+        assertEquals(7 - 100 - 1, GrandStrategyAi.culturePriority(civ, def(GrandStrategyAi.CULTURE)))
+    }
+
+    @Test
+    fun `culture priority adds an eighth of the stored culture, the tourism, the cities and the flavors of policies and buildings`() {
+        val civ = neutralCiv()
+        val city = game.addCity(civ, game.getTile(0, 0), replacePalace = true) // the Palace has flavors of its own
+        bystanders(1)
+        civ.policies.storedCulture = 9000 // times 100 / 3000
+        // Military Caste: Culture 10, Happiness 10; Amphitheater: Culture and more
+        civ.policies.getAdoptedPolicies().add("Military Caste")
+        val flavors = game.ruleset.ai.flavorsOf(game.ruleset.buildings["Amphitheater"]!!)
+        city.cityConstructions.addBuilding("Amphitheater")
+        val buildingSum = flavors[Flavor.GreatPeople.ordinal] + flavors[Flavor.Culture.ordinal] + flavors[Flavor.Wonder.ordinal] + flavors[Flavor.Happiness.ordinal]
+        assertTrue(buildingSum > 0)
+        // somebody else is alive, so we are not influential over everybody: not close to a culture victory; culture and tourism behind: -100
+        assertEquals(-100 + (300 + 20 + buildingSum - 10) / 8, GrandStrategyAi.culturePriority(civ, def(GrandStrategyAi.CULTURE)))
+    }
+
+    @Test
+    fun `the trait categories of the leader move the three peaceful priorities`() {
+        for ((category, amounts) in listOf("Warmonger" to listOf(-50, -100, -25), "Diplomat" to listOf(25, 100, 25), "Nerd" to listOf(25, 25, 100))) {
+            val personality = Personality().apply { name = "Test $category"; traitCategories = linkedMapOf(category to 1) }
+            game.ruleset.personalities[personality.name] = personality
+            val nation = Nation().apply { name = "Nation $category"; this.personality = personality.name; cities = arrayListOf("The Capital") }
+            game.ruleset.nations[nation.name] = nation
+            val civ = game.addCiv(nation)
+            for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
+            // culture: no city, so one effective city is counted as -10 / 8 = -1
+            assertEquals(category, amounts[0] - 1, GrandStrategyAi.culturePriority(civ, def(GrandStrategyAi.CULTURE)))
+            assertEquals(category, amounts[1], GrandStrategyAi.unitedNationsPriority(civ, def(GrandStrategyAi.UNITED_NATIONS)))
+            assertEquals(category, amounts[2], GrandStrategyAi.spaceshipPriority(civ, def(GrandStrategyAi.SPACESHIP)))
+        }
+    }
+
+    @Test
+    fun `united nations priority is multiplied by the share of the delegates a World Leader vote needs`() {
+        val civ = neutralCiv()
+        game.addCity(civ, game.getTile(0, 0), replacePalace = true)
+        val rival = neutralCiv()
+        game.addCity(rival, game.getTile(3, 0), replacePalace = true)
+        civ.diplomacyFunctions.makeCivilizationsMeet(rival)
+        civ.tech.addTechnology("Printing Press")
+        val league = League.tryFound(game.gameInfo)!!
+        game.gameInfo.league = league
+        civ.stats.statsForNextTurn = Stats(gold = 2500f) // a twenty-fifth, a tenth: 10
+        val needed = league.getVotesNeededForWorldLeader()
+        val member = league.members.getValue(civ.civID)
+        for ((target, multiplier) in listOf(needed to 15, needed * 3 / 4 to 10, needed * 2 / 4 to 5)) {
+            member.extraDelegates = 0
+            member.extraDelegates = target - league.getDelegates(civ)
+            val delegates = league.getDelegates(civ)
+            val lead = delegates - league.getDelegates(rival)
+            assertTrue("$delegates delegates of $needed", delegates >= target && lead > 0)
+            val base = 10 + if (VictoryProgressAi.isCloseToDiploVictory(civ, game.ruleset.ai)) 7000 else 0 // AI.json CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD
+            assertEquals("$delegates of $needed", base * multiplier + maxOf(100, lead * 20), GrandStrategyAi.unitedNationsPriority(civ, def(GrandStrategyAi.UNITED_NATIONS)))
+        }
+        // fewer than half of the delegates needed: not multiplied
+        member.extraDelegates = 0
+        val base = league.getDelegates(civ)
+        assertTrue(base < needed * 2 / 4)
+        val lead = base - league.getDelegates(rival)
+        assertTrue(lead > 0)
+        assertEquals(10 + maxOf(100, lead * 20), GrandStrategyAi.unitedNationsPriority(civ, def(GrandStrategyAi.UNITED_NATIONS)))
     }
 
     @Test
     fun `united nations priority before the congress weights the diplomacy flavor`() {
         val civ = neutralCiv()
         civ.ai.setPersonalityFlavor(Flavor.Diplomacy, 6)
-        // (10 - era) * flavor * 150 / 100
-        assertEquals(90, GrandStrategyAi.unitedNationsPriority(civ, def(GrandStrategyAi.UNITED_NATIONS)))
+        // (10 - era) * flavor * 125 / 100
+        assertEquals(75, GrandStrategyAi.unitedNationsPriority(civ, def(GrandStrategyAi.UNITED_NATIONS)))
         game.gameInfo.gameParameters.victoryTypes.remove("Diplomatic")
         assertEquals(-100, GrandStrategyAi.unitedNationsPriority(civ, def(GrandStrategyAi.UNITED_NATIONS)))
     }
@@ -281,18 +346,18 @@ class GrandStrategyAiTests {
         civ.tech.era = game.ruleset.eras["Information era"]!!
         // XML eras: ... Postmodern 6, Future 7; Unciv's Information era (7) and Future era (8) are both its Future
         assertEquals(7, civ.getEraNumber())
-        assertEquals(105, GrandStrategyAi.spaceshipPriority(civ, def(GrandStrategyAi.SPACESHIP)))
+        assertEquals(1470, GrandStrategyAi.spaceshipPriority(civ, def(GrandStrategyAi.SPACESHIP)))
         civ.tech.era = game.ruleset.eras["Future era"]!!
         assertEquals(8, civ.getEraNumber())
-        // era * flavor * 150 / 100 with era 7
-        assertEquals(105, GrandStrategyAi.spaceshipPriority(civ, def(GrandStrategyAi.SPACESHIP)))
+        // era squared * flavor * 300 / 100 with era 7
+        assertEquals(1470, GrandStrategyAi.spaceshipPriority(civ, def(GrandStrategyAi.SPACESHIP)))
     }
 
     @Test
     fun `the Apollo bonus stays after the program building is lost`() {
         val civ = neutralCiv()
         for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
-        val city = game.addCity(civ, game.getTile(0, 0))
+        val city = game.addCity(civ, game.getTile(0, 0), replacePalace = true)
         val apollo = game.createBuilding("Enables construction of Spaceship parts")
         city.cityConstructions.addBuilding(apollo)
         assertEquals(150, GrandStrategyAi.spaceshipPriority(civ, def(GrandStrategyAi.SPACESHIP)))
@@ -300,6 +365,22 @@ class GrandStrategyAiTests {
         city.cityConstructions.removeBuilding(apollo)
         assertFalse(civ.hasUnique(UniqueType.EnablesConstructionOfSpaceshipParts))
         assertEquals(150, GrandStrategyAi.spaceshipPriority(civ, def(GrandStrategyAi.SPACESHIP)))
+    }
+
+    @Test
+    fun `spaceship priority adds the lead in techs and the bump for being first, and a tenth of science`() {
+        val civ = neutralCiv()
+        val behind = neutralCiv()
+        val other = neutralCiv()
+        for (c in listOf(civ, behind, other)) game.addCity(c, game.tileMap.values.first { it.getCity() == null && it.neighbors.none { n -> n.getCity() != null } }, replacePalace = true)
+        for (tech in game.ruleset.technologies.values.take(3)) civ.tech.addTechnology(tech.name)
+        assertTrue(civ.tech.techsResearched.size > behind.tech.techsResearched.size)
+        civ.stats.statsForNextTurn = Stats(science = 500f) // a twenty-fifth, a tenth: 2
+        // ahead of both: AI_GS_CULTURE_AHEAD_WEIGHT 50 * 2 / 2, first overall: 50 * 2
+        assertEquals(50 + 100 + 2, GrandStrategyAi.spaceshipPriority(civ, def(GrandStrategyAi.SPACESHIP)))
+        for (tech in game.ruleset.technologies.values.take(6)) other.tech.addTechnology(tech.name)
+        // ahead of one, behind one: neither
+        assertEquals(2, GrandStrategyAi.spaceshipPriority(civ, def(GrandStrategyAi.SPACESHIP)))
     }
 
     @Test

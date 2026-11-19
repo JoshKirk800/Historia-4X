@@ -443,20 +443,14 @@ object MilitaryOperations {
     /**
      *  CvPlayer::addAIOperation for an operation against [enemy] at [target] from [muster] (each may be left to the operation to find): it
      *  is made only if the units at hand would do but for [maxMissingUnits] required ones ([AiOperationLogic.preconditionsAreMet]), and
-     *  ends at once, as the original deletes it, when its initialization fails or leaves more than that many units to build.
+     *  is deleted at once ([AiOperationLogic.addOperation]) when its initialization fails or leaves more than that many units to build.
      *  @return the operation, null if none was made
      */
     private fun addLimitedOperation(
         civ: Civilization, type: AiOperationType, maxMissingUnits: Int, enemy: Civilization, target: City? = null, muster: City? = null
     ): AiOperation? {
         if (!AiOperationLogic.preconditionsAreMet(civ, type, target?.getCenterTile(), muster?.getCenterTile(), maxMissingUnits, enemy)) return null
-        val operation = AiOperationLogic.addOperation(civ, type, enemy, target, muster)
-        // check number of units again
-        if (operation.state != OperationState.ABORTED && operation.slotsToBuild.size > maxMissingUnits)
-            AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_UNITS)
-        if (operation.state != OperationState.ABORTED) return operation
-        civ.ai.operations.kill(operation, operation.abortReason)
-        return null
+        return AiOperationLogic.addOperation(civ, type, enemy, target, muster, maxMissingUnits).takeIf { it.state != OperationState.ABORTED }
     }
     //endregion
 

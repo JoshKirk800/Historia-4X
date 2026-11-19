@@ -112,24 +112,6 @@ object AiOperationLogic {
         return result
     }
 
-    /** CvArmyAI::UpdateCheckpointTurns: when each unit that exists will be at the muster point */
-    fun updateCheckpointTurns(civ: Civilization, army: AiArmy, muster: Tile) {
-        for ((index, unit) in armyUnits(civ, army)) {
-            val turns = turnsToReach(unit, muster)
-            if (turns != Int.MAX_VALUE) civ.ai.operations.setEstimatedTurn(army, index, turns)
-        }
-    }
-
-    /** CvArmyAI::GetTurnAtNextCheckpoint: the latest expected arrival, [ArmySlot.UNKNOWN_TURN] if a slot has no estimate */
-    fun turnAtNextCheckpoint(army: AiArmy): Int {
-        var result = ArmySlot.NOT_INCLUDED
-        for (slot in army.slots) {
-            if (slot.estimatedTurn == ArmySlot.UNKNOWN_TURN) return ArmySlot.UNKNOWN_TURN
-            if (slot.estimatedTurn > result) result = slot.estimatedTurn
-        }
-        return result
-    }
-
     /** Whether the city attack formations are the bigger ones: handicap above 4 on a map that is not an archipelago (GetMap().GetAIMapHint() & 1) */
     private fun biggerForces(civ: Civilization) =
         EconomicAi.gameHandicapIndex(civ.gameInfo) > 4 && SettleAreas.aiMapHint(civ.gameInfo) and 1 == 0
@@ -813,7 +795,7 @@ object AiOperationLogic {
                     if (civilianTile != null && civilianTile == escortTile) { armyInPosition(civ, operation, army); return true }
                 }
             }
-            OperationMoveType.NavalEscort, OperationMoveType.FreeformNaval, OperationMoveType.NavalFleet, OperationMoveType.EnemyTerritory, OperationMoveType.None -> Unit
+            OperationMoveType.EnemyTerritory, OperationMoveType.None -> Unit
         }
         return false
     }

@@ -33,25 +33,6 @@ object NavalOperationLogic {
     /** CvPlot::isShallowWater */
     fun isShallowWater(tile: Tile) = tile.isWater && tile.getBaseTerrain().isCoast
 
-    /**
-     *  CvMilitaryAI::GetCoastalPlotAdjacentToTarget with an army: the first shallow water tile next to [target] that the army's first unit can
-     *  get to (without an army, the first shallow water tile). The original asks TurnsToReachTarget with bIgnoreUnits: the path ignores the
-     *  units on the way and on the tile (and, as CvAStar.cpp IgnoreUnitsValid tests canEnterTerritory with the unit's own team, borders).
-     *  Here the step finder's sea route against [target]'s owner, which ignores units and may enter that owner's territory. A unit's own path
-     *  (`canReach`) cannot cross closed borders, so before the war no water next to a grown city was a goal and every sneak invasion ended
-     *  at once with LOST_PATH (a Domination game: 191 naval sneak attacks, none succeeded).
-     */
-    fun coastalPlotAdjacentToTarget(civ: Civilization, target: Tile, army: AiArmy?): Tile? {
-        val first = army?.let { AiOperationLogic.armyUnits(civ, it).firstOrNull()?.second }
-        val steps = civ.ai.military.steps
-        for (adjacent in target.neighbors) {
-            if (!isShallowWater(adjacent)) continue
-            if (first == null) return adjacent
-            if (first.getTile() == adjacent || steps.distance(civ, target.getOwner(), first.getTile(), adjacent, sea = true) >= 0) return adjacent
-        }
-        return null
-    }
-
     //region Init
 
     /** CvAINavalOperation::GetOperationStartCity: the start city, else the first coastal city */

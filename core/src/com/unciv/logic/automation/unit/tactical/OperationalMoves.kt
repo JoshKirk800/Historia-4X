@@ -26,7 +26,7 @@ import kotlin.math.min
  *  the naval and combined armies on water; here [moveEnemyTerritory]), ExecuteGatherMoves, ExecuteFormationMoves, CheckForEnemiesNearArmy,
  *  MoveWithFormation, and the army's part of CvAIOperation::ComputeTargetPlotForThisTurn and
  *  CvArmyAI (movement rate, checkpoint turns). The operation model is [com.unciv.logic.automation.strategy.AiOperations]; the hexes the units
- *  take are scored by [Deployment]. BNW's PlotNavalEscortOperationMoves and ExecuteNavalFormationMoves are not used any more.
+ *  take are scored by [Deployment]. BNW's PlotNavalEscortOperationMoves and ExecuteNavalFormationMoves are gone.
  *
  *  An army that is recruiting sends its units to the muster point once they are just able to get there in time; gathering, everyone goes to hexes
  *  around the muster point (scored for safety and terrain, the gather range for the army's size, or 3); moving, the army's center of mass is
@@ -87,7 +87,7 @@ object OperationalMoves {
         when (operation.type.moveType) {
             OperationMoveType.SingleHex -> moveSingleHex(ctx ?: lightContext(civ, cache), operation)
             OperationMoveType.EnemyTerritory -> moveEnemyTerritory(ctx ?: fullContext(civ, cache), operation)
-            OperationMoveType.None, OperationMoveType.NavalEscort, OperationMoveType.FreeformNaval, OperationMoveType.NavalFleet -> Unit
+            OperationMoveType.None -> Unit
         }
         // CvAIOperation::Move: an operation that ends with the move releases its units, and is not checked on its target
         if (!AiOperationLogic.continueAfterMove(civ, operation)) return

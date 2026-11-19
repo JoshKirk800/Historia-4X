@@ -189,7 +189,7 @@ object TacticalAi {
         val civ = ctx.civ
         if (civ.isCityState) return emptyList()
         val city = zone.closestCity ?: return emptyList()
-        if (city.civ != civ || zone.territory != TacticalTerritory.Friendly || !city.canAirlift() || zone.enemyUnitCount <= 0) return emptyList()
+        if (city.civ != civ || zone.territory != TacticalTerritory.Friendly || !city.canAirlift() || zone.totalEnemyUnitCount <= 0) return emptyList()
 
         val airlifted = ArrayList<MapUnit>()
         for (unit in ctx.liveUnits()) {

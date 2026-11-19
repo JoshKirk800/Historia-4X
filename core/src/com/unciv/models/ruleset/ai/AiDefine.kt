@@ -834,9 +834,8 @@ enum class AiDefine(val default: Float) {
     AI_DANGER_MINOR_APPROACH_CONQUEST(1.0f),
     CITY_ATTACK_RANGE(2f),
     WOUNDED_DAMAGE_MULTIPLIER(50f),
-    // CvTacticalAnalysisMap / CvTacticalAI (dominance zones, temporary zones, emergency purchases)
-    AI_TACTICAL_MAP_UNIT_STRENGTH_MULTIPLIER(10f),
-    AI_TACTICAL_MAP_DOMINANCE_PERCENTAGE(25f),
+    // CvTacticalAnalysisMap / CvTacticalAI (dominance zones, temporary zones, emergency purchases); the dominance percentage is Vox Populi's 70 (Brave New World's is 25)
+    AI_TACTICAL_MAP_DOMINANCE_PERCENTAGE(70f),
     AI_TACTICAL_MAP_TEMP_ZONE_TURNS(4f),
     // CvTacticalAI target moves (ExecuteAttack, PlotPillageMoves, PlotRepositionMoves, FindUnitsWithinStrikingDistance)
     AI_TACTICAL_OVERKILL_PERCENT(25f),

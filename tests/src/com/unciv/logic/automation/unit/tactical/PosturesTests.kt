@@ -226,12 +226,15 @@ class PosturesTests {
         val swordsman = unit("Swordsman", civ, 0, -4)
         val ctx = context()
         val zone = ctx.map.zoneByCity(city, false)!!
-        zone.friendlyStrength = 100
-        zone.enemyStrength = 1000 // less than half of the enemy's: stay away
+        zone.dominance = TacticalDominance.Even
+        zone.friendlyMeleeStrength = 0
+        zone.friendlyRangedStrength = 100
+        zone.enemyMeleeStrength = 0
+        zone.enemyRangedStrength = 1000 // less than half of the enemy's: stay away
         Postures.plotCloseOnTarget(ctx, zone, true)
         assertEquals(tile(0, -4), swordsman.getTile())
 
-        zone.enemyStrength = 199 // more than half
+        zone.enemyRangedStrength = 199 // more than half
         zone.dominance = TacticalDominance.Enemy
         Postures.plotCloseOnTarget(ctx, zone, true)
         assertEquals("the enemy dominates", tile(0, -4), swordsman.getTile())

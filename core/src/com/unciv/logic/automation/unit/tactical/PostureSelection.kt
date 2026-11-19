@@ -15,9 +15,10 @@ object PostureSelection {
         val city = zone.closestCity
         val isOurCapital = city != null && city == civ.getCapital()
         val isTempZone = city != null && state.isTemporaryZoneCity(city)
-        val weHaveUnitsNearEnemy = zone.friendlyUnitCount > 0 && zone.territory == TacticalTerritory.Enemy
-        val theyHaveUnitsNearUs = zone.dominance != TacticalDominance.NoUnitsVisible && zone.territory == TacticalTerritory.Friendly
-        val bothHaveUnits = zone.friendlyUnitCount > 0 && zone.enemyUnitCount > 0
+        val weHaveUnitsNearEnemy = zone.totalFriendlyUnitCount > 0 && zone.territory == TacticalTerritory.Enemy
+        // The dominance cannot tell: our own city makes a quiet zone Friendly. Enemy units are what the enemy has near us.
+        val theyHaveUnitsNearUs = zone.overallEnemyStrength > 0 && zone.territory == TacticalTerritory.Friendly
+        val bothHaveUnits = zone.totalFriendlyUnitCount > 0 && zone.totalEnemyUnitCount > 0
         return isTempZone || isOurCapital || weHaveUnitsNearEnemy || theyHaveUnitsNearUs || bothHaveUnits
     }
 
@@ -46,29 +47,31 @@ object PostureSelection {
     fun selectPosture(civ: Civilization, state: TacticalState, zone: DominanceZone, last: TacticalPosture): TacticalPosture {
         val dominancePercentage = civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_MAP_DOMINANCE_PERCENTAGE)
         val rangedDominance = when {
-            zone.enemyRangedStrength <= 0 -> TacticalDominance.Friendly
-            else -> ratioDominance(zone.friendlyRangedStrength.toLong() * 100 / zone.enemyRangedStrength, dominancePercentage)
+            zone.enemyDomainRangedStrength <= 0 -> TacticalDominance.Friendly
+            else -> ratioDominance(zone.friendlyDomainRangedStrength.toLong() * 100 / zone.enemyDomainRangedStrength, dominancePercentage)
         }
         val unitCountDominance = when {
-            zone.enemyUnitCount <= 0 -> TacticalDominance.Friendly
-            else -> ratioDominance(zone.friendlyUnitCount.toLong() * 100 / zone.enemyUnitCount, dominancePercentage)
+            zone.totalEnemyUnitCount <= 0 -> TacticalDominance.Friendly
+            else -> ratioDominance(zone.totalFriendlyUnitCount.toLong() * 100 / zone.totalEnemyUnitCount, dominancePercentage)
         }
+        // Our own city makes a quiet zone Friendly, which would be a counterattack on nothing: the posture needs enemy units to dominate
+        val weDominateEnemies = zone.dominance == TacticalDominance.Friendly && zone.overallEnemyStrength > 0
 
         return when (zone.territory) {
             TacticalTerritory.Enemy -> {
                 val isTemporaryZone = zone.closestCity?.let { state.isTemporaryZoneCity(it) } ?: false
                 when {
                     // Withdraw if the enemy is dominant overall or we have nothing but ranged left
-                    !isTemporaryZone && (zone.dominance == TacticalDominance.Enemy || zone.friendlyRangedUnitCount == zone.friendlyUnitCount) ->
+                    !isTemporaryZone && (zone.dominance == TacticalDominance.Enemy || zone.friendlyRangedUnitCount == zone.totalFriendlyUnitCount) ->
                         TacticalPosture.Withdraw
                     // A temporary zone wants us to close in on the city
                     isTemporaryZone ->
                         if (zone.dominance != TacticalDominance.Enemy) TacticalPosture.Steamroll else TacticalPosture.SurgicalCityStrike
                     // Destroy units then assault: dominance in total strength but not the enemy's in ranged units, or double the total strength
-                    zone.enemyUnitCount > 0 && zone.dominance == TacticalDominance.Friendly
-                        && (rangedDominance != TacticalDominance.Enemy || zone.friendlyStrength.toLong() > zone.enemyStrength.toLong() * 2) ->
+                    zone.totalEnemyUnitCount > 0 && zone.dominance == TacticalDominance.Friendly
+                        && (rangedDominance != TacticalDominance.Enemy || zone.overallFriendlyStrength.toLong() > zone.overallEnemyStrength.toLong() * 2) ->
                         TacticalPosture.Steamroll
-                    last == TacticalPosture.Steamroll && zone.dominance == TacticalDominance.Friendly && zone.enemyUnitCount > 0 ->
+                    last == TacticalPosture.Steamroll && zone.dominance == TacticalDominance.Friendly && zone.totalEnemyUnitCount > 0 ->
                         TacticalPosture.Steamroll
                     // Sit and bombard: dominance in ranged strength and total unit count
                     rangedDominance == TacticalDominance.Friendly && unitCountDominance != TacticalDominance.Enemy ->
@@ -78,8 +81,8 @@ object PostureSelection {
                     // Go right after the city: tactical dominance
                     zone.dominance == TacticalDominance.Friendly -> TacticalPosture.SurgicalCityStrike
                     // Exploit flanks: dominance in unit count
-                    unitCountDominance == TacticalDominance.Friendly && zone.enemyUnitCount > 1 -> TacticalPosture.ExploitFlanks
-                    last == TacticalPosture.ExploitFlanks && unitCountDominance != TacticalDominance.Enemy && zone.enemyUnitCount > 1 ->
+                    unitCountDominance == TacticalDominance.Friendly && zone.totalEnemyUnitCount > 1 -> TacticalPosture.ExploitFlanks
+                    last == TacticalPosture.ExploitFlanks && unitCountDominance != TacticalDominance.Enemy && zone.totalEnemyUnitCount > 1 ->
                         TacticalPosture.ExploitFlanks
                     else -> TacticalPosture.SurgicalCityStrike
                 }
@@ -93,11 +96,11 @@ object PostureSelection {
                 rangedDominance == TacticalDominance.Friendly && zone.friendlyRangedUnitCount > 1 -> TacticalPosture.AttritFromRange
                 last == TacticalPosture.AttritFromRange && zone.friendlyRangedUnitCount > 1 && rangedDominance != TacticalDominance.Enemy ->
                     TacticalPosture.AttritFromRange
-                unitCountDominance == TacticalDominance.Friendly && zone.enemyUnitCount > 0 -> TacticalPosture.ExploitFlanks
-                last == TacticalPosture.ExploitFlanks && unitCountDominance != TacticalDominance.Enemy && zone.enemyUnitCount > 0 ->
+                unitCountDominance == TacticalDominance.Friendly && zone.totalEnemyUnitCount > 0 -> TacticalPosture.ExploitFlanks
+                last == TacticalPosture.ExploitFlanks && unitCountDominance != TacticalDominance.Enemy && zone.totalEnemyUnitCount > 0 ->
                     TacticalPosture.ExploitFlanks
                 // Counterattack: stronger, or even with the enemy having a ranged advantage
-                zone.dominance == TacticalDominance.Friendly || (zone.dominance == TacticalDominance.Even && rangedDominance == TacticalDominance.Enemy) ->
+                weDominateEnemies || (zone.dominance == TacticalDominance.Even && rangedDominance == TacticalDominance.Enemy) ->
                     TacticalPosture.Counterattack
                 last == TacticalPosture.Counterattack && zone.dominance != TacticalDominance.Enemy -> TacticalPosture.Counterattack
                 else -> TacticalPosture.Hedgehog

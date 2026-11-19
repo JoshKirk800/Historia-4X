@@ -164,10 +164,12 @@ class PlotDanger(private val civ: Civilization) {
         private const val NOT_COMPUTED = -1
 
         /** CvUnit::GetBaseCombatStrengthConsideringDamage (the unit's base strength, see the class comment) */
-        fun strengthConsideringDamage(unit: MapUnit, rules: AiRuleset): Int {
-            val strength = unit.baseUnit.strength
+        fun strengthConsideringDamage(unit: MapUnit, rules: AiRuleset): Int = valueConsideringDamage(unit.baseUnit.strength, unit, rules)
+
+        /** CvUnit::GetDamageCombatModifier: [value] less the share a wounded [unit] loses (WOUNDED_DAMAGE_MULTIPLIER percent of its missing health) */
+        fun valueConsideringDamage(value: Int, unit: MapUnit, rules: AiRuleset): Int {
             val damageMod = (100 - unit.health) * rules.define(AiDefine.WOUNDED_DAMAGE_MULTIPLIER) / 100
-            return strength - strength * damageMod / 100
+            return value - value * damageMod / 100
         }
     }
 }

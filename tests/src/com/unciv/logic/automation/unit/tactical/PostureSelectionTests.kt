@@ -34,6 +34,10 @@ class PostureSelectionTests {
 
     private val state get() = civ.ai.tactical
 
+    /**
+     *  A zone with chosen counts and overall strengths: the ranged strength of the zone's domain as given, the rest of [friendlyStrength]
+     *  and [enemyStrength] melee strength (which weighs 4/3)
+     */
     private fun zone(
         territory: TacticalTerritory,
         dominance: TacticalDominance,
@@ -44,15 +48,22 @@ class PostureSelectionTests {
         enemyUnits: Int = 2,
         friendlyRangedStrength: Int = 100,
         enemyRangedStrength: Int = 100,
+        friendlyStrength: Int = 1000,
+        enemyStrength: Int = 1000,
     ) = DominanceZone(0, territory, null, 0, isWater, city).also {
         it.dominance = dominance
-        it.friendlyUnitCount = friendlyUnits
+        it.friendlyLandUnitCount = friendlyUnits
         it.friendlyRangedUnitCount = friendlyRanged
-        it.enemyUnitCount = enemyUnits
-        it.friendlyRangedStrength = friendlyRangedStrength
-        it.enemyRangedStrength = enemyRangedStrength
-        it.friendlyStrength = 1000
-        it.enemyStrength = 1000
+        it.enemyLandUnitCount = enemyUnits
+        if (isWater) {
+            it.friendlyNavalRangedStrength = friendlyRangedStrength
+            it.enemyNavalRangedStrength = enemyRangedStrength
+        } else {
+            it.friendlyRangedStrength = friendlyRangedStrength
+            it.enemyRangedStrength = enemyRangedStrength
+        }
+        it.friendlyMeleeStrength = (friendlyStrength - friendlyRangedStrength).coerceAtLeast(0) * 3 / 4
+        it.enemyMeleeStrength = (enemyStrength - enemyRangedStrength).coerceAtLeast(0) * 3 / 4
     }
 
     private fun select(zone: DominanceZone, last: TacticalPosture = TacticalPosture.None) =
@@ -81,8 +92,8 @@ class PostureSelectionTests {
         assertEquals("the enemy dominates ranged and we are not at double strength: not steamroll",
             TacticalPosture.SurgicalCityStrike, select(ranged))
         assertEquals("but once begun it goes on", TacticalPosture.Steamroll, select(ranged, last = TacticalPosture.Steamroll))
-        ranged.friendlyStrength = 2001
-        ranged.enemyStrength = 1000
+        ranged.friendlyMeleeStrength = 1650 // 2200 overall against 1000
+        ranged.enemyMeleeStrength = 675
         assertEquals("at more than double the strength it starts anyway", TacticalPosture.Steamroll, select(ranged))
         assertEquals(TacticalPosture.Steamroll, select(zone(TacticalTerritory.Enemy, TacticalDominance.Friendly, city = enemyCity)))
     }
@@ -95,8 +106,8 @@ class PostureSelectionTests {
         assertEquals(TacticalPosture.SurgicalCityStrike, select(weaker))
         assertEquals(TacticalPosture.SitAndBombard, select(weaker, last = TacticalPosture.SitAndBombard))
         val outnumbered = zone(TacticalTerritory.Enemy, TacticalDominance.Even, city = enemyCity, friendlyUnits = 2, friendlyRanged = 1,
-            enemyUnits = 4, friendlyRangedStrength = 1000, enemyRangedStrength = 100)
-        assertEquals("outnumbered two to one: no sitting back", TacticalPosture.SurgicalCityStrike, select(outnumbered))
+            enemyUnits = 8, friendlyRangedStrength = 1000, enemyRangedStrength = 100)
+        assertEquals("outnumbered four to one: no sitting back", TacticalPosture.SurgicalCityStrike, select(outnumbered))
     }
 
     @Test
@@ -104,7 +115,7 @@ class PostureSelectionTests {
         val flanks = zone(TacticalTerritory.Enemy, TacticalDominance.Even, city = enemyCity, friendlyUnits = 6, friendlyRanged = 1, enemyUnits = 2,
             friendlyRangedStrength = 100, enemyRangedStrength = 100)
         assertEquals(TacticalPosture.ExploitFlanks, select(flanks))
-        flanks.enemyUnitCount = 1
+        flanks.enemyLandUnitCount = 1
         assertEquals("one enemy is not enough", TacticalPosture.SurgicalCityStrike, select(flanks))
     }
 
@@ -141,6 +152,26 @@ class PostureSelectionTests {
     }
 
     @Test
+    fun `our city alone makes its zone Friendly but it holds, with real enemies we dominate we counterattack`() {
+        val quiet = zone(TacticalTerritory.Friendly, TacticalDominance.Friendly, city = civ.getCapital(), friendlyUnits = 0, enemyUnits = 0,
+            friendlyRangedStrength = 500, enemyRangedStrength = 0, friendlyStrength = 500, enemyStrength = 0)
+        assertEquals(TacticalPosture.Hedgehog, select(quiet))
+        val besieged = zone(TacticalTerritory.Friendly, TacticalDominance.Friendly, city = civ.getCapital(), friendlyUnits = 3, enemyUnits = 3,
+            friendlyRangedStrength = 500, enemyRangedStrength = 0, friendlyStrength = 2000, enemyStrength = 300)
+        assertEquals(TacticalPosture.Counterattack, select(besieged))
+    }
+
+    @Test
+    fun `a water zone judges the ranged edge by its ships and a land zone by its land units`() {
+        val water = zone(TacticalTerritory.Friendly, TacticalDominance.Even, isWater = true, friendlyRanged = 2, friendlyRangedStrength = 1000, enemyRangedStrength = 100)
+        water.enemyRangedStrength = 100000 // the land's, not the domain's
+        assertEquals(TacticalPosture.AttritFromRange, select(water))
+        val land = zone(TacticalTerritory.Friendly, TacticalDominance.Even, friendlyRanged = 2, friendlyRangedStrength = 1000, enemyRangedStrength = 100)
+        land.enemyNavalRangedStrength = 100000
+        assertEquals(TacticalPosture.AttritFromRange, select(land))
+    }
+
+    @Test
     fun `a temporary zone is bombarded from the sea on water and flanked on land`() {
         assertEquals(TacticalPosture.ShoreBombardment, select(zone(TacticalTerritory.TempZone, TacticalDominance.Even, isWater = true)))
         assertEquals(TacticalPosture.ExploitFlanks, select(zone(TacticalTerritory.TempZone, TacticalDominance.Even)))
@@ -152,10 +183,13 @@ class PostureSelectionTests {
     @Test
     fun `a zone counts when it is temporary, our capital's, or where we or they have units near`() {
         val capital = civ.getCapital()!!
-        assertTrue(PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Friendly, TacticalDominance.NoUnitsVisible, city = capital, friendlyUnits = 0, enemyUnits = 0)))
+        val quiet = { city: City, enemyStrength: Int -> zone(TacticalTerritory.Friendly, TacticalDominance.Friendly, city = city, friendlyUnits = 0, enemyUnits = 0,
+            friendlyRangedStrength = 500, enemyRangedStrength = 0, friendlyStrength = 500, enemyStrength = enemyStrength) }
+        assertTrue(PostureSelection.useThisZone(civ, state, quiet(capital, 0)))
         val other = game.addCity(civ, game.tileMap[0, 0])
-        assertFalse("a quiet city of ours", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Friendly, TacticalDominance.NoUnitsVisible, city = other, friendlyUnits = 0, enemyUnits = 0)))
+        assertFalse("a quiet city of ours: Friendly by its own strength, but nobody is near it", PostureSelection.useThisZone(civ, state, quiet(other, 0)))
         assertTrue("with the enemy in sight", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Friendly, TacticalDominance.Even, city = other, friendlyUnits = 0, enemyUnits = 1)))
+        assertTrue("with enemy air units over it, which are not counted", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Friendly, TacticalDominance.Even, city = other, friendlyUnits = 0, enemyUnits = 0)))
         assertTrue("our units near their city", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Enemy, TacticalDominance.Enemy, city = enemyCity, friendlyUnits = 1, enemyUnits = 0)))
         assertFalse("no units of ours near their city", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.Enemy, TacticalDominance.Enemy, city = enemyCity, friendlyUnits = 0, enemyUnits = 0)))
         assertTrue("both have units", PostureSelection.useThisZone(civ, state, zone(TacticalTerritory.NoOwner, TacticalDominance.Even)))

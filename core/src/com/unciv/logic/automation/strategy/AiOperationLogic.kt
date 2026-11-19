@@ -1010,7 +1010,8 @@ object AiOperationLogic {
             type.isLandDefense -> verifyDefenseTarget(civ, operation)
             type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.verifySuperiorityTarget(civ, operation)
         }
-        return false
+        // the verification of the target may have ended it (CvAIOperation::ShouldAbort: true for an operation that is aborted)
+        return operation.state == OperationState.ABORTED
     }
 
     /** CvAIOperationFoundCity::ShouldAbort: an escort that does not come: after 15 turns, or off our land, with no city committed, go alone */

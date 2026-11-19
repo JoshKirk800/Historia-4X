@@ -33,6 +33,7 @@ object CityThreat {
      *  threat stay in the order of the player's cities. The most threatened city of a civilization at peace is thus still the first.
      */
     fun threatenedCities(civ: Civilization, coastalOnly: Boolean = false): List<City> {
+        if (civ.cities.isEmpty()) return emptyList()
         val values = valuesOf(civ)
         return civ.cities.filter { !coastalOnly || it.isCoastal() }.sortedByDescending { values.value(it) }
     }

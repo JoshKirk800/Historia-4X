@@ -1188,6 +1188,10 @@ enum class AiDefine(val default: Float) {
     VOTING_HISTORY_SCORE_MAX(2400f),
     VOTING_HISTORY_SCORE_OUTCOME_VOTE_PERCENT_VALUE(200f),
     VOTING_HISTORY_SCORE_PLAYER_VOTE_PERCENT_VALUE(100f),
+    // CvLeagueAI::EvaluateAlignment: the voting history score / (VOTING_HISTORY_SCORE_MAX / this) is added to the alignment (-10 to 10)
+    VOTING_HISTORY_SCORE_LEAGUE_ALIGNMENT_SCALER(10f), // Vox Populi's (BNW: no such define, its alignment has no voting history)
+    // CvLeagueAI::ScoreVoteChoicePlayer: what a vote for oneself as World Leader weighs before 30 per percent of the votes needed
+    AI_WORLD_LEADER_BASE_WEIGHT_SELF(1000f), // Vox Populi's (BNW: no such define, a flat +100)
     // CvDiplomacyAI::GetLowestTourismInfluence starts from the influence percent of Influential (GlobalDefines CULTURE_LEVEL_INFLUENTIAL)
     CULTURE_LEVEL_INFLUENTIAL(100f),
     // SelectBestApproachTowardsMajorCiv part 14: this turn's score counts this much, last turn's the rest (APPROACH_SHIFT_PERCENT)

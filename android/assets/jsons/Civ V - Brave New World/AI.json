@@ -13055,6 +13055,53 @@
       ]
     },
     {
+      "name": "MUFORMATION_CARRIER_ESCORT",
+      "slots": [
+        {
+          "primaryUnitAi": "UNITAI_CARRIER_SEA",
+          "secondaryUnitAi": "UNITAI_CARRIER_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ADMIRAL",
+          "secondaryUnitAi": "UNITAI_ADMIRAL",
+          "required": false,
+          "positionType": "MUPOSITION_CIVILIAN_SUPPORT"
+        }
+      ]
+    },
+    {
       "name": "MUFORMATION_CONCERT_TOUR",
       "slots": [
         {

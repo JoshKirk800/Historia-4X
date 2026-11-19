@@ -160,6 +160,7 @@ object AiOperationLogic {
             AiOperationType.NAVAL_ATTACK, AiOperationType.NAVAL_SNEAK_ATTACK, AiOperationType.CITY_STATE_NAVAL_ATTACK ->
                 lateGameOr(civ, "MUFORMATION_LATE_GAME_INVASION_FORCE", "MUFORMATION_NAVAL_INVASION")
             AiOperationType.NAVAL_SUPERIORITY -> "MUFORMATION_NAVAL_SQUADRON"
+            AiOperationType.CARRIER_GROUP -> "MUFORMATION_CARRIER_ESCORT"
             // MilitaryAIHelpers::GetCurrentBestFormationTypeForPureNavalAttack
             AiOperationType.PURE_NAVAL_CITY_ATTACK -> lateGameOr(civ, "MUFORMATION_LATE_GAME_PURE_NAVAL_FORCE", "MUFORMATION_PURE_NAVAL_CITY_ATTACK")
             AiOperationType.NUKE_ATTACK -> "MUFORMATION_NUKE_ATTACK"
@@ -231,6 +232,7 @@ object AiOperationLogic {
             type.isNavalInvasion -> NavalOperationLogic.initNavalInvasion(civ, operation, target, muster)
             type == AiOperationType.PURE_NAVAL_CITY_ATTACK -> NavalOperationLogic.initPureNavalAttack(civ, operation, target, muster)
             type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.initSuperiority(civ, operation, target, muster)
+            type == AiOperationType.CARRIER_GROUP -> NavalOperationLogic.initCarrierGroup(civ, operation)
             type == AiOperationType.NUKE_ATTACK -> NavalOperationLogic.initNuke(civ, operation)
             else -> initDefense(civ, operation, target, muster)
         }
@@ -485,6 +487,7 @@ object AiOperationLogic {
     }
 
     /**
+
      *  Whether [unit] is free for an operation in general (the counting of the fillable slots in [MilitaryOperations] shares it with the
      *  recruiting): [isSuitableForRecruitment] with no target and no deep water.
      */
@@ -930,7 +933,7 @@ object AiOperationLogic {
         if (operation.state == OperationState.SUCCESSFUL_FINISH)
             for (army in operation.armies) for ((_, unit) in armyUnits(civ, army)) operations.deployFromOperationTurns[unit.id] = civ.gameInfo.turns
         if (operation.state == OperationState.ABORTED || operation.state == OperationState.SUCCESSFUL_FINISH) return true
-        if (civ.gameInfo.turns - operation.createdTurn > TIMEOUT_TURNS) {
+        if (civ.gameInfo.turns - operation.createdTurn > TIMEOUT_TURNS && !operation.type.isNeverEnding) {
             abort(operation, OperationAbortReason.TIMED_OUT)
             return true
         }
@@ -965,6 +968,7 @@ object AiOperationLogic {
             type.isEscorted -> escortedShouldAbort(civ, operation)
             type.isLandDefense -> verifyDefenseTarget(civ, operation)
             type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.verifySuperiorityTarget(civ, operation)
+            type == AiOperationType.CARRIER_GROUP -> NavalOperationLogic.verifyCarrierTarget(civ, operation)
             type == AiOperationType.PILLAGE_ENEMY -> verifyPillageTarget(civ, operation)
             else -> {
                 val owner = targetTile(civ, operation)?.getOwner()
@@ -1027,6 +1031,8 @@ object AiOperationLogic {
      *  until the failsafe of [TIMEOUT_TURNS] ends it).
      */
     fun unitWasRemoved(operations: AiOperations, operation: AiOperation, army: AiArmy, slot: Int) {
+        // the carrier slot is special - without it there's nothing we can do (CvAIOperationCarrierGroup::UnitWasRemoved), then the default handling
+        if (operation.type == AiOperationType.CARRIER_GROUP && slot == 0) abort(operation, OperationAbortReason.CANCELLED)
         if (operation.type.isEscorted) {
             // Assumes the civilian is in the first slot of the formation
             if (slot == 0) abort(operation, OperationAbortReason.LOST_CIVILIAN) else operation.escorted = false
@@ -1426,6 +1432,8 @@ object AiOperationLogic {
                 true
             }
             ArmyState.MOVING_TO_DESTINATION -> {
+                // some ops are not intended to ever reach their target
+                if (operation.type.isNeverEnding) return false
                 val goal = tileAt(civ, army.goalTile) ?: return false
                 val center = centerOfMass(civ, army, sea) ?: return false
                 var inPlace = center.aerialDistanceTo(goal) <= DEPLOY_RANGE && furthestUnitDistance(civ, army, goal) < 2 * DEPLOY_RANGE

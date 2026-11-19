@@ -46,6 +46,8 @@ enum class AiOperationType(
     NAVAL_SNEAK_ATTACK(OperationMoveType.EnemyTerritory, mixedLandNaval = true),
     CITY_STATE_NAVAL_ATTACK(OperationMoveType.EnemyTerritory, mixedLandNaval = true),
     NAVAL_SUPERIORITY(OperationMoveType.EnemyTerritory, tacticalMayInterrupt = true, allNaval = true),
+    /** CvAIOperationCarrierGroup: an aircraft carrier with its escort, which goes where the war is and never ends (IsNeverEnding) */
+    CARRIER_GROUP(OperationMoveType.EnemyTerritory, allNaval = true),
     PURE_NAVAL_CITY_ATTACK(OperationMoveType.EnemyTerritory, tacticalMayInterrupt = true, allNaval = true),
     /** CvAIOperationNukeAttack: the original's STATIC move type, it only works with the nuke already in place */
     NUKE_ATTACK(OperationMoveType.None),
@@ -68,6 +70,8 @@ enum class AiOperationType(
     val isDefense get() = isLandDefense || this == NAVAL_SUPERIORITY
     /** Retired types ([DESTROY_BARBARIAN_CAMP], [NAVAL_BOMBARDMENT], [SMALL_CITY_ATTACK]) */
     val isRetired get() = this == DESTROY_BARBARIAN_CAMP || this == NAVAL_BOMBARDMENT || this == SMALL_CITY_ATTACK
+    /** CvAIOperation::IsNeverEnding: the operation is not meant to reach its target, so it does not time out ([AiOperationLogic.TIMEOUT_TURNS]) or arrive */
+    val isNeverEnding get() = this == CARRIER_GROUP
     /** CvAIOperationNavalAttack and its subclasses: land units that embark, with warships, against a coastal city */
     val isNavalInvasion get() = this == NAVAL_ATTACK || this == NAVAL_SNEAK_ATTACK || this == CITY_STATE_NAVAL_ATTACK
     /** CvAINavalOperation and its subclasses: the operations of ships only */
@@ -88,7 +92,9 @@ enum class OperationAbortReason {
     /** Vox Populi's AI_ABORT_NO_UNITS: more units to build than the request allows ([MilitaryOperations.requestPillageAttack]) */
     NO_UNITS,
     /** Vox Populi's AI_ABORT_TOO_DANGEROUS: the army's way leads past a city of another enemy ([com.unciv.logic.automation.unit.tactical.OperationalMoves]) */
-    TOO_DANGEROUS
+    TOO_DANGEROUS,
+    /** Vox Populi's AI_ABORT_CANCELLED: the carrier of a carrier group is gone */
+    CANCELLED
 }
 
 /** ArmyAIState */

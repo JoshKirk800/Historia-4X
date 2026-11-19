@@ -2,6 +2,10 @@ package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.unit.tactical.CityThreat
+import com.unciv.logic.automation.unit.tactical.DominanceZone
+import com.unciv.logic.automation.unit.tactical.TacticalDominance
+import com.unciv.logic.automation.unit.tactical.TacticalHealing
+import com.unciv.logic.automation.unit.tactical.TacticalTerritory
 import com.unciv.logic.battle.Nuke
 import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.city.City
@@ -282,6 +286,109 @@ object NavalOperationLogic {
             operation.state = OperationState.SUCCESSFUL_FINISH
         }
         return true
+    }
+    //endregion
+
+    //region Carrier group (CvAIOperationCarrierGroup)
+
+    /** CvAIOperationCarrierGroup::Init's and CvMilitaryAI::UpdateOperations' idle carrier: unit AI carrier, in no army, not to heal */
+    fun idleCarrier(civ: Civilization): MapUnit? = civ.units.getCivUnits().firstOrNull {
+        UnitAiTypes.current(it) == UnitAiType.CARRIER_SEA && civ.ai.operations.armyOf(it) == null && !TacticalHealing.shouldHeal(civ, it, beforeAttacks = false)
+    }
+
+    /**
+     *  CvAIOperationCarrierGroup::GetPossibleDeploymentZones: the water zones next to a zone in the enemy's territory that we do not
+     *  dominate and that the enemy does not dominate, whose center we can sail to and that no other carrier group goes to, by zone id. The
+     *  original's check "targeted by another carrier" also finds the asking operation's own target, though its comment says the zone
+     *  a group is on is included: [asking] is left out here, so that a group that has arrived is not sent home and back.
+     */
+    private fun possibleDeploymentZones(civ: Civilization, asking: AiOperation?): List<DominanceZone> {
+        val map = civ.ai.tactical.map
+        val taken = civ.ai.operations.operations
+            .filter { it.type == AiOperationType.CARRIER_GROUP && it !== asking }
+            .mapNotNull { operation -> AiOperationLogic.targetTile(civ, operation)?.let { map.zoneOf(it)?.id } }
+            .toSet()
+        val result = LinkedHashMap<Int, DominanceZone>()
+        for (zone in map.zones) {
+            if (zone.territory != TacticalTerritory.Enemy || zone.dominance == TacticalDominance.Friendly) continue
+            for (neighbor in zone.neighbors) {
+                if (!neighbor.isWater || neighbor.dominance == TacticalDominance.Enemy || neighbor.id in taken) continue
+                // make sure we can go there
+                val center = neighbor.centerTile ?: continue
+                if (center.isImpassible()) continue
+                result[neighbor.id] = neighbor
+            }
+        }
+        return result.values.sortedBy { it.id }
+    }
+
+    /**
+     *  CvAIOperationCarrierGroup::Init: the idle carrier is slot 0. At peace (no zone to go to) the group stays where the carrier is (the
+     *  coastal water near it when it lies in a city); else it musters at our coastal city nearest the zone center that is closest to home
+     *  ([MilitaryTargets.closestCityByPathLength]) and goes there. No idle carrier ends the operation.
+     */
+    fun initCarrierGroup(civ: Civilization, operation: AiOperation) {
+        val carrier = idleCarrier(civ) ?: run { AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_UNITS); return }
+        var muster: Tile? = null
+        var target: Tile? = null
+        val zones = possibleDeploymentZones(civ, null)
+        if (zones.isEmpty()) {
+            // peacetime
+            muster = carrier.getTile()
+            if (muster.isCityCenter()) muster = coastalWaterNearPlot(civ, muster, checkTeam = true)
+            // good enough for now, will update if war breaks out
+            target = muster
+        } else {
+            // take the deployment zone that is closest to home
+            var closest = Int.MAX_VALUE
+            for (zone in zones) {
+                val center = zone.centerTile ?: continue
+                val distance = MilitaryTargets.closestCityByPathLength(civ, null, center, allowSea = true)?.second ?: continue
+                if (distance >= closest) continue
+                val musterCity = AiOperationLogic.closestFriendlyCoastalCity(civ, center) ?: continue
+                closest = distance
+                target = center
+                muster = musterCity.getCenterTile()
+            }
+        }
+        val army = civ.ai.operations.newArmy(operation, AiOperationLogic.formationName(civ, operation.type))
+        // we know the carrier is slot 0
+        civ.ai.operations.addUnit(army, carrier, 0)
+        AiOperationLogic.setUpArmy(civ, operation, army, muster, target)
+    }
+
+    /**
+     *  CvAIOperationCarrierGroup::VerifyOrAdjustTarget: nothing while it gathers; then the carrier retreats (HALF_STRENGTH) when it would not
+     *  survive the next turn where it is - the original reads the damage it took last turn, which is not recorded, so the danger of its
+     *  plot ([com.unciv.logic.automation.unit.PlotDanger]) against its health stands in - and the group goes to the possible deployment zone
+     *  nearest to it on its water ([possibleDeploymentZones]), else to the coastal water of our nearest coastal port (NO_TARGET without
+     *  one; the original's second try with a port on an ocean-sized water is not ported).
+     */
+    fun verifyCarrierTarget(civ: Civilization, operation: AiOperation) {
+        if (operation.state == OperationState.RECRUITING_UNITS || operation.state == OperationState.GATHERING_FORCES) return
+        val army = operation.firstArmy ?: return
+        val carrier = AiOperationLogic.armyUnits(civ, army).firstOrNull()?.second
+        if (carrier != null && civ.ai.plotDanger.get(carrier.getTile()) > carrier.health) {
+            AiOperationLogic.abortOperation(operation, OperationAbortReason.HALF_STRENGTH)
+            return
+        }
+        val current = AiOperationLogic.centerOfMass(civ, army, sea = true) ?: return
+        val map = civ.ai.tactical.map
+        // take the one that is closest to us, on our water
+        var newTarget: Tile? = null
+        var closest = Int.MAX_VALUE
+        for (zone in possibleDeploymentZones(civ, operation)) {
+            val center = zone.centerTile ?: continue
+            if (map.areaOf(center) != map.areaOf(current)) continue
+            val distance = center.aerialDistanceTo(current)
+            if (distance < closest) { closest = distance; newTarget = center }
+        }
+        if (newTarget == null) {
+            val home = AiOperationLogic.closestFriendlyCoastalCity(civ, current)
+            newTarget = home?.let { coastalWaterNearPlot(civ, it.getCenterTile(), checkTeam = true) }
+        }
+        if (newTarget == null) AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_TARGET)
+        else AiOperationLogic.setTarget(operation, newTarget)
     }
     //endregion
 

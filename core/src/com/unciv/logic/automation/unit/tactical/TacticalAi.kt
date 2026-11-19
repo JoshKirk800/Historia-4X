@@ -116,10 +116,10 @@ object TacticalAi {
 
         // Then confront the enemy in each tactical zone
         timeThis("AI.Tactical.Zones") {
-            Postures.processZones(ctx) { zone ->
+            Postures.processZones(ctx, beforeZone = { zone ->
                 if (civ.isAIOrAutoPlaying() && zone.dominance != TacticalDominance.Friendly && zone.territory == TacticalTerritory.Friendly)
                     EmergencyPurchases.plot(civ, zone, map) { highPriority }
-            }
+            })
         }
 
         // Second pass: bring in reinforcements

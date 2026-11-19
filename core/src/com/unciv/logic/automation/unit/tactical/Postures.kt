@@ -65,8 +65,8 @@ object Postures {
             TacticalPosture.SitAndBombard -> sitAndBombardMoves(ctx, zone)
             TacticalPosture.ShoreBombardment -> shoreBombardmentMoves(ctx)
         }
-        // Brave New World's, for the temporary zones of the operations: the army closes in on the target
-        if (zone.territory == TacticalTerritory.TempZone) plotCloseOnTarget(ctx, zone)
+        // Brave New World's, for what an operation is about: the army closes in on the target
+        plotCloseOnTarget(ctx, zone)
     }
 
     private fun cityTarget(zone: DominanceZone, city: City) =
@@ -164,12 +164,19 @@ object Postures {
     }
 
     /**
-     *  Brave New World's CvTacticalAI::PlotCloseOnTarget for the temporary zone of an operation (Vox Populi has none: the units come to a zone in the
-     *  second pass, [ReinforcementMoves]): units close in on the target the zone is about, the camp or city of the operation, unless the enemy
-     *  dominates the zone.
+     *  Brave New World's CvTacticalAI::PlotCloseOnTarget for what an operation is about (Vox Populi has none: the units come to a zone in the second
+     *  pass, [ReinforcementMoves]): units close in on the camp of a temporary zone, unless the enemy dominates it, or on the city an operation
+     *  targets (the zone of an enemy city that is a temporary zone's city) if we cannot see it or are not outmatched by more than half.
      */
     fun plotCloseOnTarget(ctx: TacticalContext, zone: DominanceZone) {
-        if (zone.dominance == TacticalDominance.Enemy) return
-        Deployment.executeCloseOnTarget(ctx, zone.tempZoneCenter ?: return, zone)
+        if (zone.territory == TacticalTerritory.TempZone) {
+            if (zone.dominance != TacticalDominance.Enemy) Deployment.executeCloseOnTarget(ctx, zone.tempZoneCenter ?: return, zone)
+            return
+        }
+        val city = zone.closestCity ?: return
+        if (zone.territory != TacticalTerritory.Enemy || !ctx.state.isTemporaryZoneCity(city)) return
+        // If we cannot see the city, be careful advancing on it: we want to be sure we are not heavily outnumbered
+        if (city.getCenterTile() !in ctx.civ.viewableTiles || zone.overallFriendlyStrength > zone.overallEnemyStrength / 2)
+            Deployment.executeCloseOnTarget(ctx, city.getCenterTile(), zone)
     }
 }

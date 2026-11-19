@@ -145,7 +145,7 @@ class OperationalMovesTests {
     private fun recruiting(): Pair<AiOperation, MapUnit> {
         val operation = AiOperationLogic.addOperation(civ, AiOperationType.BASIC_CITY_ATTACK, enemy, enemyCity, city)
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
-        val warrior = unit("Warrior", -3, 0)
+        val warrior = unit("Warrior", -5, 0)
         ops.addUnit(operation.firstArmy!!, warrior, 1)
         return operation to warrior
     }
@@ -155,7 +155,7 @@ class OperationalMovesTests {
         val (operation, warrior) = recruiting()
         val cache = AutomationCache()
         OperationalMoves.moveOperation(civ, operation, cache)
-        assertEquals(tile(-3, 0), warrior.getTile())
+        assertEquals(tile(-5, 0), warrior.getTile())
         assertFalse(warrior in cache.processedUnits)
     }
 
@@ -167,13 +167,13 @@ class OperationalMovesTests {
         for (index in army.slots.indices) if (index != 1) ops.setEstimatedTurn(army, index, 10)
         val cache = AutomationCache()
         OperationalMoves.moveOperation(civ, operation, cache)
-        assertEquals("no hurry", tile(-3, 0), warrior.getTile())
+        assertEquals("no hurry", tile(-5, 0), warrior.getTile())
 
         operation.lastTurnMoved = -1
-        // Now the army expects its last unit in 2 turns: the warrior is that late already
+        // Now the army expects its last unit in 2 turns: the warrior is that late already (3 plots to a plot 2 from the muster point)
         for (index in army.slots.indices) if (index != 1) ops.setEstimatedTurn(army, index, 2)
         OperationalMoves.moveOperation(civ, operation, cache)
-        assertTrue("it heads for the muster point", warrior.getTile().aerialDistanceTo(tile(0, 0)) < 3)
+        assertTrue("it heads for the muster point", warrior.getTile().aerialDistanceTo(tile(0, 0)) < 5)
         assertTrue(warrior in cache.processedUnits)
     }
 

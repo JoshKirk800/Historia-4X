@@ -183,8 +183,9 @@ class RecruitmentTests {
     @Test
     fun `a settler waits for an escort that needs more turns than it will wait, and takes it when the wait has grown`() {
         fertileLand()
-        val warrior = unit("Warrior", -11, 0) // 6 turns of two moves from the settler
-        val settler = unit("Settler", 0, 0)
+        // 13 plots from the settler: CvUnit::TurnsToReachTarget with MOVEFLAG_APPROX_TARGET_RING2 counts the 11 to a plot 2 from it, 6 turns of two moves
+        val warrior = unit("Warrior", -12, 0)
+        val settler = unit("Settler", 1, 0)
         val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
         assertEquals(5, AiOperationLogic.maxRecruitTurns(civ, operation))

@@ -130,10 +130,10 @@ class NavalOperationTests {
         requestNavalAttack(0)
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         assertFalse(AiOperationLogic.shouldAbort(civ, operation))
-        enemyCity.getCenterTile().setOwningCity(null)
-        enemyCity.getCenterTile().getOwner() // the owner of the tile went with the city
         enemyCity.moveToCiv(civ)
+        // CvAIOperationMilitary::VerifyOrAdjustTarget: owned by anyone but the enemy
         assertTrue(AiOperationLogic.shouldAbort(civ, operation))
+        assertEquals(OperationAbortReason.TARGET_ALREADY_CAPTURED, operation.abortReason)
     }
     // endregion
 

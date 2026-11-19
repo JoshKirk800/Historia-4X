@@ -253,7 +253,11 @@ enum class AiDefine(val default: Float) {
     AI_DIPLO_LAND_DISPUTE_WEIGHT_STRONG(3f),
     AI_DIPLO_LAND_DISPUTE_WEIGHT_WEAK(1f),
     AI_OPERATIONAL_CITY_ATTACK_DEPLOY_RANGE(5f),
-    AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION(80f),
+    // Vox Populi's value, 70 (Community Patch CoreDefineChanges.sql; BNW 80), of the health below which a unit is not recruited for an operation
+    AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION(70f),
+    // CvAIOperation::GetMaximumRecruitTurns: the turns an operation waits for a recruit (civilian operations, the base value; military operations)
+    AI_OPERATIONAL_MAX_RECRUIT_TURNS_DEFAULT(5f),
+    AI_OPERATIONAL_MAX_RECRUIT_TURNS_ENEMY_TERRITORY(10f),
     AI_OPERATIONAL_BARBARIAN_CAMP_DEPLOY_RANGE(2f),
     AI_OPERATIONAL_PILLAGE_ENEMY_DEPLOY_RANGE(5f),
     AI_OPERATIONAL_PERCENT_DANGER_FOR_FORWARD_MUSTER(20f),

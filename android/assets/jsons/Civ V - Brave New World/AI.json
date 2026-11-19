@@ -165,7 +165,7 @@
     "AI_OPERATIONAL_MAX_RECRUIT_TURNS_ENEMY_TERRITORY": 10,
     "AI_OPERATIONAL_NAVAL_BOMBARDMENT_DEPLOY_RANGE": 1,
     "AI_OPERATIONAL_PERCENT_DANGER_FOR_FORWARD_MUSTER": 20,
-    "AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION": 80,
+    "AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION": 70,
     "AI_OPERATIONAL_PILLAGE_ENEMY_DEPLOY_RANGE": 5,
     "AI_PLOT_VALUE_DEFICIENT_YIELD_MULTIPLIER": 5,
     "AI_PLOT_VALUE_FIERCE_DISPUTE": 6,
@@ -12568,8 +12568,7 @@
           "required": false,
           "positionType": "MUPOSITION_BOMBARD"
         }
-      ],
-      "requiresNavalUnitConsistency": true
+      ]
     },
     {
       "name": "MUFORMATION_CITY_STATE_INVASION",
@@ -12610,8 +12609,7 @@
           "required": false,
           "positionType": "MUPOSITION_CIVILIAN_SUPPORT"
         }
-      ],
-      "requiresNavalUnitConsistency": true
+      ]
     },
     {
       "name": "MUFORMATION_NUKE_ATTACK",

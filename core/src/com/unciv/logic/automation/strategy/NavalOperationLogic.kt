@@ -117,7 +117,7 @@ object NavalOperationLogic {
         operation.area = muster.getContinent()
         operations.buildListOfUnitsWeStillNeedToBuild(operation)
         // try to get as many units as possible from existing units that are waiting around
-        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation, muster, muster)) {
+        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation)) {
             army.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
             // the superiority fleet is on its way as soon as it is together, it never gathers on its own
             operation.state = OperationState.MOVING_TO_TARGET
@@ -142,7 +142,7 @@ object NavalOperationLogic {
         operation.musterTile = coastalMuster.position
         army.position = coastalMuster.position
         operations.buildListOfUnitsWeStillNeedToBuild(operation)
-        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation, coastalMuster, coastalMuster)) {
+        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation)) {
             army.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
             operation.state = OperationState.GATHERING_FORCES
         } else operation.state = OperationState.RECRUITING_UNITS
@@ -165,7 +165,7 @@ object NavalOperationLogic {
         operation.musterTile = muster.getCenterTile().position
         army.position = muster.getCenterTile().position
         operations.buildListOfUnitsWeStillNeedToBuild(operation)
-        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation, muster.getCenterTile(), null)) {
+        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation)) {
             army.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
             operation.state = OperationState.GATHERING_FORCES
         } else operation.state = OperationState.RECRUITING_UNITS

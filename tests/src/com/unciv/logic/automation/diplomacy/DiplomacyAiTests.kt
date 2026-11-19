@@ -349,7 +349,7 @@ class DiplomacyAiTests {
         // A Pikeman can explore too (Unit_AITypes) but its own AI type is not exploring: it fills the attack/counter slot
         val pikeman = game.addUnit("Pikeman", a, game.getTile(HexCoord(1, -1)))
         assertTrue(MilitaryOperations.isAttackReady(a, formation, AiOperationType.BASIC_CITY_ATTACK))
-        // Below AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION (80) it does not count
+        // 21 damage is more than a unit that heals in the capital accepts (CvUnit::shouldHeal), whatever AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION (70) says
         pikeman.health = 79
         assertFalse(MilitaryOperations.isAttackReady(a, formation, AiOperationType.BASIC_CITY_ATTACK))
     }

@@ -107,14 +107,40 @@ class ArmySlot : IsPartOfGameInfoSerialization {
     /** Game turn the slot's unit is expected at the muster point: [UNKNOWN_TURN], [NOT_INCLUDED] or a turn */
     var estimatedTurn = UNKNOWN_TURN
     var startedOnOperation = false
+    /**
+     *  CvArmyFormationSlot::m_estTurnsToCheckpoint: the turns the slot's unit needed to get to the army's checkpoint at the last three
+     *  updates ([AiOperationLogic.continueRecruiting]), the newest first; [Int.MAX_VALUE] when it could not get there in time
+     */
+    var checkpointTurns = ArrayList<Int>()
 
-    fun clone() = ArmySlot().also { it.unitId = unitId; it.estimatedTurn = estimatedTurn; it.startedOnOperation = startedOnOperation }
+    fun clone() = ArmySlot().also {
+        it.unitId = unitId; it.estimatedTurn = estimatedTurn; it.startedOnOperation = startedOnOperation
+        it.checkpointTurns = ArrayList(checkpointTurns)
+    }
+
+    /** CvArmyFormationSlot::SetCurrentTurnsToCheckpoint: [turns] is the newest record, only the last three are kept */
+    fun pushCheckpointTurns(turns: Int) {
+        checkpointTurns.add(0, turns)
+        if (checkpointTurns.size > CHECKPOINT_HISTORY) checkpointTurns.removeAt(checkpointTurns.lastIndex)
+    }
+
+    /**
+     *  CvArmyFormationSlot::IsMakingProgressTowardsCheckpoint: with fewer than three records, or when the newest says the unit is there
+     *  next turn, yes; else only if the newest is better than the oldest (a fight or a block costs a turn now and then)
+     */
+    fun isMakingProgress(): Boolean {
+        if (checkpointTurns.size < CHECKPOINT_HISTORY) return true
+        if (checkpointTurns.first() < 2) return true
+        return checkpointTurns.first() < checkpointTurns.last()
+    }
 
     companion object {
         /** ARMYSLOT_UNKNOWN_TURN_AT_CHECKPOINT */
         const val UNKNOWN_TURN = -1
         /** ARMYSLOT_NOT_INCLUDING_IN_OPERATION */
         const val NOT_INCLUDED = -2
+        /** The records [checkpointTurns] keeps */
+        const val CHECKPOINT_HISTORY = 3
     }
 }
 
@@ -261,7 +287,7 @@ class AiOperations : IsPartOfGameInfoSerialization {
     }
 
     /** CvAIOperation::IsOffensive: the target is outside our territory (rapid response never is) */
-    private fun isOffensive(op: AiOperation): Boolean =
+    fun isOffensive(op: AiOperation): Boolean =
         op.type != AiOperationType.RAPID_RESPONSE && op.targetTile?.let { civ.gameInfo.tileMap[it].getOwner() != civ } == true
 
     private fun isOffensiveAgainst(op: AiOperation, enemy: Civilization): Boolean =
@@ -350,10 +376,14 @@ class AiOperations : IsPartOfGameInfoSerialization {
     /** CvArmyAI::AddUnit: [unit] takes slot [slot] of [army], leaving the army it was in; its estimated arrival at the muster is computed */
     fun addUnit(army: AiArmy, unit: MapUnit, slot: Int) {
         removeFromArmy(unit)
-        army.slots[slot].unitId = unit.id
+        val entry = army.slots[slot]
+        entry.unitId = unit.id
+        entry.checkpointTurns.clear()
         val muster = army.position?.let { civ.gameInfo.tileMap.getOrNull(it.x, it.y) } ?: return
         val turns = AiOperationLogic.turnsToReach(unit, muster)
         if (turns != Int.MAX_VALUE) setEstimatedTurn(army, slot, turns)
+        // CvArmyAI::AddUnit records the first estimate to the checkpoint, [Int.MAX_VALUE] for one that takes too long
+        entry.pushCheckpointTurns(if (turns > civ.gameInfo.ruleset.ai.define(AiDefine.AI_OPERATIONAL_MAX_RECRUIT_TURNS_ENEMY_TERRITORY)) Int.MAX_VALUE else turns)
     }
 
     /** CvArmyAI::SetEstimatedTurn */
@@ -362,7 +392,7 @@ class AiOperations : IsPartOfGameInfoSerialization {
             if (turns == ArmySlot.NOT_INCLUDED || turns == ArmySlot.UNKNOWN_TURN) turns else civ.gameInfo.turns + turns
     }
 
-    /** CvPlayer::removeFromArmy: the unit leaves its army; its operation is told (CvArmyAI::RemoveUnit) */
+    /** CvPlayer::removeFromArmy: the unit leaves its army and gets its own unit AI back; its operation is told (CvArmyAI::RemoveUnit) */
     fun removeFromArmy(unit: MapUnit) = removeUnitId(unit.id)
 
     internal fun removeUnitId(unitId: Int) {
@@ -370,8 +400,16 @@ class AiOperations : IsPartOfGameInfoSerialization {
             val index = army.slots.indexOfFirst { it.unitId == unitId }
             if (index < 0) continue
             army.slots[index].unitId = -1
+            army.slots[index].checkpointTurns.clear()
+            releaseUnitAi(unitId)
             AiOperationLogic.unitWasRemoved(this, operation, army, index)
         }
+    }
+
+    /** CvArmyAI::RemoveUnit's AI_setUnitAIType(default): a unit that leaves an army is no longer what its slot made of it */
+    private fun releaseUnitAi(unitId: Int) {
+        val unit = civ.units.getUnitById(unitId) ?: return
+        UnitAiTypes.set(unit, UnitAiTypes.defaultOf(unit.baseUnit, civ.gameInfo.ruleset.ai))
     }
 
     /** CvAIOperation::Kill with CvAIOperation::Uninit: the armies are dissolved, their units are free again */
@@ -387,6 +425,7 @@ class AiOperations : IsPartOfGameInfoSerialization {
             statsAborted++
             statsAbortReasons.getOrPut(operation.type) { HashMap() }.merge(operation.abortReason, 1, Int::plus)
         }
+        for (army in operation.armies) for (slot in army.slots) if (slot.unitId != -1) releaseUnitAi(slot.unitId)
         operation.armies.clear()
         operation.slotsToBuild.clear()
         operation.committedCities.clear()
@@ -477,13 +516,16 @@ class AiOperations : IsPartOfGameInfoSerialization {
 
     /**
      *  A city that no longer trains the unit it committed to (production changed, city lost) uncommits
-     *  (CvCity::popOrder / CvCity::PostKill: CityUncommitToBuildUnitForOperationSlot).
+     *  (CvCity::popOrder / CvCity::PostKill: CityUncommitToBuildUnitForOperationSlot); then the operations take what the reserves have
+     *  now ([AiOperationLogic.continueRecruiting], CvAIOperation::Move's first steps). It runs before the armies move, with the other
+     *  start-of-turn bookkeeping ([com.unciv.logic.automation.unit.tactical.OperationalMoves.prepareTurn]).
      */
     fun refreshCommitments() {
         for (operation in operations) for (commitment in operation.committedCities.toList()) {
             val city = civ.cities.firstOrNull { it.id == commitment.cityId }
             if (city == null || city.cityConstructions.currentConstructionName() != commitment.unitName) uncommit(commitment)
         }
+        AiOperationLogic.continueRecruiting(civ)
     }
 
     /**
@@ -498,10 +540,7 @@ class AiOperations : IsPartOfGameInfoSerialization {
         UnitAiType.ofXmlName(commitment.unitAi)?.let { UnitAiTypes.set(unit, it) }
         addUnit(army, unit, commitment.slot.slotId)
         operation.committedCities.remove(commitment)
-        if (operation.slotsToBuild.isEmpty() && operation.state == OperationState.RECRUITING_UNITS) {
-            operation.state = OperationState.GATHERING_FORCES
-            for (a in operation.armies) a.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
-        }
+        if (operation.slotsToBuild.isEmpty()) AiOperationLogic.finishRecruitingIfDone(civ, operation)
         return true
     }
 

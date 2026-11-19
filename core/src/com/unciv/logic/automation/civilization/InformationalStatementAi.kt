@@ -61,10 +61,10 @@ object InformationalStatementAi {
                 since(DiploStatement.BulliedProtectedCityState) >= 1) return Pending(DiploStatement.BulliedProtectedCityState, minor)
         }
         if (expansionWarning(civ, other, memory, rules)) return pending(DiploStatement.ExpansionWarning)
-        if (memory.brokenExpansionPromiseValue > 0 && since(DiploStatement.ExpansionBrokenPromise) >= NEVER)
+        if (memory.brokenExpansionPromise && since(DiploStatement.ExpansionBrokenPromise) >= NEVER)
             return pending(DiploStatement.ExpansionBrokenPromise)
         if (plotBuyingWarning(civ, other, memory, rules)) return pending(DiploStatement.PlotBuyingWarning)
-        if (memory.brokenBorderPromiseValue > 0 && since(DiploStatement.PlotBuyingBrokenPromise) >= NEVER)
+        if (memory.brokenBorderPromise && since(DiploStatement.PlotBuyingBrokenPromise) >= NEVER)
             return pending(DiploStatement.PlotBuyingBrokenPromise)
 
         // DoWeAttackedYourMinor, DoWeBulliedYourMinor: the last city-state of theirs we hurt wins
@@ -131,7 +131,7 @@ object InformationalStatementAi {
     private fun expansionWarning(civ: Civilization, other: Civilization, memory: MajorCivMemory, rules: AiRuleset): Boolean {
         val settled = other.ai.diplomacy.turnsSinceSettledLastCity
         if (settled < 0 || settled >= rules.define(AiDefine.EXPANSION_BICKER_TIMEOUT)) return false
-        if (memory.expansionPromiseTurn >= 0 || memory.ignoredExpansionPromiseValue > 0 || memory.brokenExpansionPromiseValue > 0) return false
+        if (memory.expansionPromiseTurn >= 0 || memory.ignoredExpansionPromise || memory.brokenExpansionPromise) return false
         if (!canAskPromise(civ, other, Demand.DoNotSettleNearUs, broken = false, ignored = false)) return false
         val send = memory.landDispute >= DisputeLevel.Fierce ||
             memory.landDispute >= DisputeLevel.Strong && memory.lastTurnLandDispute < DisputeLevel.Strong &&
@@ -145,7 +145,7 @@ object InformationalStatementAi {
      *  (posture at least low); not again within BORDER_PROMISE_TURNS_EFFECTIVE turns (scaled by the game speed).
      */
     private fun plotBuyingWarning(civ: Civilization, other: Civilization, memory: MajorCivMemory, rules: AiRuleset): Boolean {
-        if (memory.borderPromiseTurn >= 0 || memory.ignoredBorderPromiseValue > 0 || memory.brokenBorderPromiseValue > 0) return false
+        if (memory.borderPromiseTurn >= 0 || memory.ignoredBorderPromise || memory.brokenBorderPromise) return false
         if (!canAskPromise(civ, other, Demand.DoNotBuyLandNearUs, broken = false, ignored = false)) return false
         if (memory.landDispute < DisputeLevel.Strong || memory.plotBuyingPosture < AggressivePosture.Low) return false
         val interval = rules.define(AiDefine.BORDER_PROMISE_TURNS_EFFECTIVE) * DiplomacyTurn.opinionDurationPercent(civ) / 100
@@ -160,7 +160,6 @@ object InformationalStatementAi {
     private fun leagueStatement(civ: Civilization, other: Civilization, memory: MajorCivMemory, rules: AiRuleset): DiploStatement? {
         val league = civ.gameInfo.league?.members?.get(civ.civID)?.alignmentMemory?.get(other.civID) ?: return null
         val ai = civ.ai.diplomacy
-        val turn = civ.gameInfo.turns
         val hostileApproach = ai.approachTowards(other, hideTrueFeelings = true).let { it == MajorCivApproach.War || it == MajorCivApproach.Hostile }
         val opinion = ai.opinionOf(other)
         val chattiness = civ.ai.diplomacyValue(DiplomacyPersonality.Chattiness)
@@ -168,21 +167,22 @@ object InformationalStatementAi {
         fun fits(positive: Boolean) = if (positive) opinion > MajorCivOpinion.Competitor && !hostileApproach
             else opinion < MajorCivOpinion.Favorable && ai.approachTowards(other, hideTrueFeelings = true) != MajorCivApproach.Friendly
 
-        if (OpinionAi.supportedMyHostingScore(league, turn, rules) != 0 && fits(true) &&
+        if (OpinionAi.supportedMyHostingScore(civ, league, rules) != 0 && fits(true) &&
             since(DiploStatement.TheySupportedOurHosting) >= rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_HOSTING_NUM_TURNS))
             return DiploStatement.TheySupportedOurHosting
-        if (OpinionAi.likedTheirProposalScore(league, turn, rules) != 0 && fits(true) &&
+        if (OpinionAi.likedTheirProposalScore(civ, league, rules) != 0 && fits(true) &&
             chattiness > civ.ai.random("DiplomacyAI.WeLikedTheirProposal" + other.civID).nextInt(10) &&
             since(DiploStatement.WeLikedTheirProposal) >= rules.define(AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL_NUM_TURNS))
             return DiploStatement.WeLikedTheirProposal
-        if (OpinionAi.dislikedTheirProposalScore(league, turn, rules) != 0 && fits(false) &&
+        if (OpinionAi.dislikedTheirProposalScore(civ, league, rules) != 0 && fits(false) &&
             chattiness > civ.ai.random("DiplomacyAI.WeDislikedTheirProposal" + other.civID).nextInt(10) &&
             since(DiploStatement.WeDislikedTheirProposal) >= rules.define(AiDefine.OPINION_WEIGHT_WE_DISLIKED_THEIR_PROPOSAL_NUM_TURNS))
             return DiploStatement.WeDislikedTheirProposal
-        if (OpinionAi.supportedMyProposalScore(league, turn, rules) != 0 && fits(true) &&
+        val support = OpinionAi.supportedOurProposalScore(civ, league, rules)
+        if (support < 0 && fits(true) &&
             since(DiploStatement.TheySupportedOurProposal) >= rules.define(AiDefine.OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL_NUM_TURNS))
             return DiploStatement.TheySupportedOurProposal
-        if (OpinionAi.foiledMyProposalScore(league, turn, rules) != 0 && fits(false) &&
+        if (support > 0 && fits(false) &&
             since(DiploStatement.TheyFoiledOurProposal) >= rules.define(AiDefine.OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_NUM_TURNS))
             return DiploStatement.TheyFoiledOurProposal
         return null

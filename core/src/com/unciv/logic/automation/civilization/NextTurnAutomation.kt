@@ -10,6 +10,7 @@ import com.unciv.UncivGame
 import com.unciv.logic.automation.Automation
 import com.unciv.logic.automation.diplomacy.PromiseAi
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.strategy.SpaceshipProductionAi
 import com.unciv.logic.automation.unit.HomelandAi
 import com.unciv.logic.automation.unit.PromotionAi
 import com.unciv.logic.automation.unit.tactical.OperationalMoves
@@ -144,7 +145,6 @@ object NextTurnAutomation {
             val demandingCiv = civInfo.gameInfo.getCivilization(popupAlert.value)
             if (demandingCiv.isDefeated()) return
             val diploManager = civInfo.getDiplomacyManager(demandingCiv)!!
-            PromiseAi.onDemandAsked(demandingCiv, civInfo, demand)
             if (PromiseAi.isDemandAcceptable(civInfo, demandingCiv, demand))
                 diploManager.agreeToDemand(demand)
             else diploManager.refuseDemand(demand)
@@ -227,13 +227,11 @@ object NextTurnAutomation {
         for (city in civView.cities()) UnitAutomation.tryBombardEnemy(city)
     }
 
+    /** CvPlayer::doTurn's city part for the AI: the spaceship parts planned on the player level ([SpaceshipProductionAi]), then each city's production */
     fun automateCities(civView: CivView) {
         val civInfo = civView.getCiv()
-        for (city in civInfo.cities) {
-
-
-            city.cityConstructions.chooseNextConstruction()
-        }
+        SpaceshipProductionAi.doSpaceshipProduction(civInfo)
+        for (city in civInfo.cities) city.cityConstructions.chooseNextConstruction()
     }
 
     // Technically, this function should also check for civs that have liberated one or more cities

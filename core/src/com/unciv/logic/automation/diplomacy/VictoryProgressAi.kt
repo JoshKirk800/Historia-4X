@@ -18,7 +18,7 @@ object VictoryProgressAi {
      *  the living major civilizations that have a city, and our share of the original capitals of major civilizations that still stand.
      *  A capital never founded or razed counts for no one. 0 when the civilization is dead or cannot win by Domination
      *  (CvGame::CanPlayerAttemptDominationVictory: Unciv has no passive AI or always-peace option, so only whether the victory is open).
-     *  Might is [com.unciv.logic.automation.strategy.CivAi.militaryMight] (the BNW formula; VP's calculateMilitaryMight is a later queue item),
+     *  Might is [com.unciv.logic.automation.strategy.CivAi.militaryMight],
      *  a statistic of the turn as in VP; the capitals are counted at the call, so a capture counts at once.
      */
     @Readonly
@@ -49,15 +49,27 @@ object VictoryProgressAi {
     fun isCloseToWorldConquest(civ: Civilization, rules: AiRuleset): Boolean =
         dominationVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DOMINATION_VICTORY_THRESHOLD)
 
+    /** CvDiplomacyAI::IsCloseToDiploVictory: progress at or above CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD */
+    fun isCloseToDiploVictory(civ: Civilization, rules: AiRuleset): Boolean =
+        diplomaticVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)
+
+    /** CvDiplomacyAI::IsCloseToSpaceshipVictory: progress at or above CLOSE_TO_SCIENCE_VICTORY_THRESHOLD */
+    @Readonly
+    fun isCloseToSpaceshipVictory(civ: Civilization, rules: AiRuleset): Boolean =
+        scienceVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
+
+    /** CvDiplomacyAI::IsCloseToCultureVictory: progress at or above CLOSE_TO_CULTURE_VICTORY_THRESHOLD */
+    @Readonly
+    fun isCloseToCultureVictory(civ: Civilization, rules: AiRuleset): Boolean =
+        cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD)
+
     /**
      *  CvDiplomacyAI::IsCloseToAnyVictoryCondition: nobody has won yet and [civ] is close to a victory: world conquest, or a diplomatic,
      *  science or culture victory at or above their VP thresholds (55, 80, 60).
      */
     fun isCloseToAnyVictoryCondition(civ: Civilization, rules: AiRuleset): Boolean = civ.gameInfo.victoryData == null && (
         isCloseToWorldConquest(civ, rules)
-            || diplomaticVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD)
-            || scienceVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
-            || cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD))
+            || isCloseToDiploVictory(civ, rules) || isCloseToSpaceshipVictory(civ, rules) || isCloseToCultureVictory(civ, rules))
 
     /**
      *  CvDiplomacyAI::GetDiplomaticVictoryProgress: our delegates as a percentage of those a World Leader vote needs, at most 59 before the
@@ -110,8 +122,9 @@ object VictoryProgressAi {
         return minOf(99, lowest)
     }
 
+    /** Whether one of the victories open to [civ] has [milestone] */
     @Readonly
-    private fun isVictoryOpen(civ: Civilization, milestone: MilestoneType) =
+    fun isVictoryOpen(civ: Civilization, milestone: MilestoneType) =
         civ.victoryManager.getAvailableVictories().any { victory -> victory.milestoneObjects.any { it.type == milestone } }
 
     /**

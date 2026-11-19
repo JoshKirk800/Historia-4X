@@ -47,6 +47,10 @@ object DiplomacyTurn {
         DisputeAi.updateMilitaryPostures(civ, others, rules)
         DisputeAi.updateExpansionPostures(civ, others, rules)
         DisputeAi.updatePlotBuyingPostures(civ, others, rules)
+        ExpanderAi.updateRecklessExpanders(civ, others, rules)  // Vox Populi's DoUpdateRecklessExpanders and DoUpdateWonderSpammers
+        ExpanderAi.updateWonderSpammers(civ, others, rules)
+        WarSanityAi.updateSaneTargets(civ, rules)  // Vox Populi's DoUpdateSaneDiplomaticTargets, before its opinions
+        OpinionAi.testOpinionModifiers(civ, others, rules)  // Vox Populi's TestOpinionModifiers, before its opinions
         OpinionAi.updateOpinions(civ, others, rules)
         ApproachAi.updateApproaches(civ, others, rules)
         com.unciv.logic.automation.civilization.CityStateAi.updateMinorCivApproaches(civ)
@@ -74,7 +78,7 @@ object DiplomacyTurn {
     fun opinionDurationPercent(civ: Civilization): Int = civ.gameInfo.ruleset.ai.gameSpeedDiplomacy(civ.gameInfo.speed.name).opinionDurationPercent
 
     /** CvGame::getCurrentEra: the average era of the living civilizations (city-states and the barbarians included, as the original's teams) */
-    fun gameEraName(civ: Civilization): String {
+    fun gameEraNumber(civ: Civilization): Int {
         var sum = 0
         var count = 0
         for (other in civ.gameInfo.civilizations) {
@@ -82,7 +86,12 @@ object DiplomacyTurn {
             sum += other.getAiEraNumber()
             count++
         }
-        val eraNumber = if (count == 0) 0 else sum / count
+        return if (count == 0) 0 else sum / count
+    }
+
+    /** The name of the era [gameEraNumber] */
+    fun gameEraName(civ: Civilization): String {
+        val eraNumber = gameEraNumber(civ)
         return civ.gameInfo.ruleset.eras.values.firstOrNull { it.eraNumber == eraNumber }?.name ?: ""
     }
 
@@ -90,28 +99,30 @@ object DiplomacyTurn {
 
     private fun doCounters(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
         val ai = civ.ai.diplomacy
-        val dealDecay = rules.define(AiDefine.DEAL_VALUE_PER_TURN_DECAY)
         val relationshipDuration = relationshipDuration(civ)
         for (other in others) {
             val memory = ai.memoryOf(other)
             if (memory.turnsLockedIntoWar > 0) memory.turnsLockedIntoWar--   // CvTeam::doTurn
             if (!other.isMajorCiv) continue
-            memory.recentTradeValue = max(0, memory.recentTradeValue - dealDecay)
-            memory.commonFoeValue = max(0, memory.commonFoeValue - rules.define(AiDefine.COMMON_FOE_VALUE_PER_TURN_DECAY))
-            if (memory.recentAssistValue > 0) memory.recentAssistValue -= min(memory.recentAssistValue, dealDecay)
-            else if (memory.recentAssistValue < 0) memory.recentAssistValue += min(-memory.recentAssistValue, dealDecay)
-            PromiseAi.decayPromiseValues(memory, rules, civ.gameInfo.turns)
-            memory.declaredWarOnFriendValue = max(0, memory.declaredWarOnFriendValue - rules.define(AiDefine.DECLARED_WAR_ON_FRIEND_PER_TURN_DECAY))
+            // Vox Populi's TestOpinionModifiers: the trade and common foe values go down, help (ours < 0) decays unless a coop war with
+            // them is being prepared, refusals decay too
+            ai.changeRecentTradeValue(other, -rules.define(AiDefine.DEAL_VALUE_PER_TURN_DECAY))
+            ai.changeCommonFoeValue(other, -rules.define(AiDefine.COMMON_FOE_VALUE_PER_TURN_DECAY))
+            val assistDecay = rules.define(AiDefine.ASSIST_VALUE_PER_TURN_DECAY)
+            if (memory.recentAssistValue < 0) {
+                val preparing = memory.coopWars.values.any { it.state == CoopWarState.Soon || it.state == CoopWarState.Accepted }
+                if (!preparing) ai.changeRecentAssistValue(other, assistDecay, decay = true)
+            } else if (memory.recentAssistValue > 0) ai.changeRecentAssistValue(other, -assistDecay, decay = true)
 
             if (memory.turnsSinceAttackedProtectedMinor >= 0) memory.turnsSinceAttackedProtectedMinor++
             if (memory.turnsSinceKilledProtectedMinor >= 0) memory.turnsSinceKilledProtectedMinor++
             if (memory.turnsSinceBulliedProtectedMinor >= 0) memory.turnsSinceBulliedProtectedMinor++
             if (memory.turnsSinceSidedWithProtectedMinor >= 0) memory.turnsSinceSidedWithProtectedMinor++
-            if (memory.demandCounter > -1) memory.demandCounter++
             if (memory.doFCounter > -1) memory.doFCounter++
             if (memory.denouncedCounter > -1) memory.denouncedCounter++
 
-            // The denouncement ran out (Unciv keeps it as a flag lasting RelationshipDuration turns)
+            // The denouncement ran out (Unciv keeps it as a flag lasting RelationshipDuration turns). The friend's backstab memory
+            // stays: Vox Populi forgives it by its own timer (OpinionAi.testOpinionModifiers), not with the denouncement as BNW
             val diplomacy = civ.getDiplomacyManager(other) ?: continue
             if (memory.denouncementActive && !diplomacy.hasFlag(DiplomacyFlags.Denunciation)) {
                 memory.denouncementActive = false
@@ -119,7 +130,6 @@ object DiplomacyTurn {
                 memory.doFCounter = -1
                 val theirMemory = other.ai.diplomacy.memoryOf(civ)
                 theirMemory.doFCounter = -1
-                theirMemory.friendDenouncedUs = false
                 for (entry in memory.coopWars.values) if (entry.counter < -1) entry.counter = -1
                 for (entry in theirMemory.coopWars.values) entry.counter = -1
             }

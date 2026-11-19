@@ -3,6 +3,7 @@ package com.unciv.logic.civilization
 import com.unciv.logic.automation.diplomacy.IntrigueAi
 import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.strategy.AiOperation
+import com.unciv.logic.automation.strategy.OperationState
 import com.unciv.logic.automation.strategy.AiOperationType
 import com.unciv.logic.automation.strategy.ArmyType
 import com.unciv.logic.city.City
@@ -71,6 +72,8 @@ class IntrigueTests {
     private fun sneakAttack(type: AiOperationType = AiOperationType.SNEAK_CITY_ATTACK) {
         val operation = AiOperation()
         operation.type = type
+        // A running operation: VP's GetFirstAIOperationOfType passes over those that are aborted (the state a new one starts in)
+        operation.state = OperationState.RECRUITING_UNITS
         operation.enemyCivId = c.civID
         operation.targetTile = cCity.location
         b.ai.operations.operations.add(operation)

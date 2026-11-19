@@ -3,7 +3,7 @@ package com.unciv.logic.automation.diplomacy
 import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.OperationAbortReason
 import com.unciv.logic.automation.strategy.WarStateAi
-import com.unciv.logic.automation.strategy.AiOperationLogic
+import com.unciv.logic.automation.strategy.TargetValue
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DeclareWarReason
 import com.unciv.logic.civilization.diplomacy.WarType
@@ -18,86 +18,101 @@ import com.unciv.models.ruleset.ai.MinorCivApproach
  */
 object WarAi {
 
-    /** The share of the way to its target an attack operation must have covered before war is declared (CvDiplomacyAI::DoMakeWarOnPlayer) */
+    /** The share of the way to its target a show of force must have covered before the demand is made (BNW's CvDiplomacyAI::DoTestDemandReady) */
     const val PERCENT_TO_DECLARE_WAR = 85
 
-    /** CvDiplomacyAI::MakeWar */
+    /**
+     *  CvDiplomacyAI::MakeWar (Vox Populi, D7): every valid target in turn, ranked by its strategic war score (a major) or its target
+     *  value + 1 on VP's scale (a city-state; none counts 0), times (1 + proximity) squared; ties in player order.
+     */
     fun makeWar(civ: Civilization, rules: AiRuleset) {
         val ai = civ.ai.diplomacy
         val targets = civ.gameInfo.civilizations.filter { (it.isMajorCiv || it.isCityState) && WarStateAi.isPlayerValid(civ, it) }
             .map { target ->
-                var weight = (ai.warProjection(target)?.ordinal ?: -1) + 1
+                var weight = if (target.isMajorCiv)
+                    ai.memoryOf(target).strategicApproachValues.getOrNull(MajorCivApproach.War.ordinal) ?: 0
+                else vpTargetValue(ai.targetValue(target)) + 1
                 // Square the distance enum to make it crucial
                 val proximity = 1 + DiplomacyTurn.proximity(civ, target)
                 weight *= proximity
                 weight *= proximity
-                if (target.isMajorCiv) {
-                    if (ai.opinionOf(target) == MajorCivOpinion.Unforgivable) weight *= 2
-                    weight *= 10  // majors before city-states
-                }
                 target to weight
             }.sortedByDescending { it.second }
         for ((target, _) in targets) doMakeWarOnPlayer(civ, target, rules)
         CoopWarAi.doCoopWarCounters(civ, rules)
     }
 
-    /** MilitaryAIHelpers::IsTestStrategy_AtWar: at war with at least one major */
-    fun isAtWarWithAMajor(civ: Civilization): Boolean = civ.getCivsAtWarWith().any { it.isMajorCiv }
-
     /**
-     *  CvDiplomacyAI::DoMakeWarOnPlayer. Without an attack operation against [target] (and not mustering from one that finished) the civilization
-     *  that wants war sets the war goal PREPARE and requests the attack ([MilitaryOperations.requestSneakAttack], for city-states
-     *  [MilitaryOperations.requestCityStateAttack]) - every turn until the operation exists. With one, war is declared when it is at least
-     *  [PERCENT_TO_DECLARE_WAR]% of the way or has mustered; if we changed our mind the operation is killed.
+     *  CvDiplomacyAI::DoMakeWarOnPlayer (Vox Populi, D7). At war: nothing to do. When we may not declare war on [target] (not valid, a
+     *  peace treaty): no army counts as in place and our offensive operations against them stop. We want to attack a major we have
+     *  the war approach towards or the city-state that is our war target ([DiplomacyAi.csWarTarget]), and want a show of force against
+     *  our demand target or our city-state bully target ([DiplomacyAi.csBullyTarget]), the attack first. An army in place
+     *  ([MajorCivMemory.musteringForAttack], set when an attack reaches its target or is discovered on the way) declares the war - on a
+     *  major once no coop war against them is still being prepared - or makes the demand to a major ready (a city-state's tribute is
+     *  DoContactMinorCivs'); with neither wish our operations against them stop. Without one we request
+     *  the attack (the war goal Prepare) or the show of force, or else stop any operation against them. The attack goes at VP's
+     *  RequestCityAttack targets ([com.unciv.logic.automation.strategy.MilitaryTargets.cityAttackTargets]) through our sneak and
+     *  city-state attacks, careful (preferred targets only) against a city-state while a dangerous major fights us, against a major
+     *  without new wars or while one fights us that our cities are exposed to or that threatens them, unless a coop war against them is
+     *  being prepared ([WarStateAi.numDangerousMajorsAtWarWith]).
      */
     fun doMakeWarOnPlayer(civ: Civilization, target: Civilization, rules: AiRuleset) {
-        if (!WarStateAi.isPlayerValid(civ, target)) return
         val ai = civ.ai.diplomacy
         val memory = ai.memoryOf(target)
-        if (memory.warGoal == WarGoal.Demand) return
-        if (civ.isAtWarWith(target)) return
-        val atWarWithAMajor = isAtWarWithAMajor(civ)
-        val operation: com.unciv.logic.automation.strategy.AiOperation?
-        val wantToAttack = if (target.isCityState) {
-            operation = MilitaryOperations.cityStateAttackOperation(civ, target)
-            !atWarWithAMajor && civ.ai.minorCivApproaches[target.civID] == MinorCivApproach.Conquest
-        } else {
-            operation = MilitaryOperations.sneakAttackOperation(civ, target)
-            val approach = ai.approachTowards(target)
-            // Vox Populi (CvDiplomacyAI::DoUpdateWarTargets, D7): close to world conquest, or endgame aggressive towards the target, a
-            // Hostile or Deceptive approach is reason enough for war
-            val endgame = (approach == MajorCivApproach.Hostile || approach == MajorCivApproach.Deceptive)
-                && (VictoryProgressAi.isCloseToWorldConquest(civ, rules) || VictoryProgressAi.isEndgameAggressiveTo(civ, target, rules))
-            // Let's not get into another war right now
-            (approach == MajorCivApproach.War || endgame || (approach == MajorCivApproach.Deceptive && civ.ai.isGoingForWorldConquest()))
-                && !atWarWithAMajor
-        }
-        val canDeclare = civ.getDiplomacyManager(target)?.canDeclareWar() == true
-        if (operation == null && !memory.musteringForAttack) {
-            // Not yet readying an attack
-            if (canDeclare && wantToAttack) {
-                memory.warGoal = WarGoal.Prepare
-                if (target.isCityState) MilitaryOperations.requestCityStateAttack(civ, target)
-                else MilitaryOperations.requestSneakAttack(civ, target)
-            }
-            return
-        }
-        // We already have an attack on the way
-        if (!wantToAttack) {
-            // We were planning an attack, but changed our minds
-            if (operation != null) {
-                civ.ai.operations.kill(operation, OperationAbortReason.DIPLO_OPINION_CHANGE)
-                memory.warGoal = null
-                memory.musteringForAttack = false
-            }
-            return
-        }
-        if (!canDeclare) return
-        // If we're at least 85% of the way to our objective, let loose the dogs of war!
-        if (memory.musteringForAttack || (operation != null && AiOperationLogic.percentFromMusterPointToTarget(civ, operation) >= PERCENT_TO_DECLARE_WAR)) {
+        if (civ.isAtWarWith(target)) {
             memory.musteringForAttack = false
-            declareWar(civ, target)
+            return
         }
+        if (!WarStateAi.isPlayerValid(civ, target) || civ.getDiplomacyManager(target)?.canDeclareWar() != true) {
+            memory.musteringForAttack = false
+            stopOffensiveOperations(civ, target, OperationAbortReason.TARGET_NOT_VALID)
+            return
+        }
+        val wantToAttack: Boolean
+        val wantShowOfForce: Boolean
+        if (target.isCityState) {
+            wantToAttack = ai.csWarTarget == target.civID
+            wantShowOfForce = ai.csBullyTarget == target.civID
+        } else {
+            // Vox Populi's bWantToAttack: the war approach, which its war targets (WarTargetAi) give within the conflict budget
+            wantToAttack = ai.approachTowards(target) == MajorCivApproach.War
+            wantShowOfForce = ai.demandTarget == target.civID
+        }
+        if (memory.musteringForAttack) {
+            memory.musteringForAttack = false
+            when {
+                // Not before the allies of a coop war against them are ready
+                wantToAttack -> if (target.isCityState || CoopWarAi.globalState(civ, target) != CoopWarState.Soon) declareWar(civ, target)
+                wantShowOfForce -> if (target.isMajorCiv) ai.demandReady = true
+                else -> stopOffensiveOperations(civ, target, OperationAbortReason.DIPLO_OPINION_CHANGE)
+            }
+            return
+        }
+        when {
+            wantToAttack -> {
+                memory.warGoal = WarGoal.Prepare
+                if (target.isCityState) {
+                    val careful = WarStateAi.numDangerousMajorsAtWarWith(civ, excludePhonyWars = true, excludeIfNoTarget = false) > 0
+                    if (MilitaryOperations.cityStateAttackOperation(civ, target) == null) MilitaryOperations.requestCityStateAttack(civ, target, careful)
+                } else if (MilitaryOperations.sneakAttackOperation(civ, target) == null) {
+                    val coop = CoopWarAi.globalState(civ, target)
+                    val coopPreparing = coop == CoopWarState.Soon || coop == CoopWarState.Accepted
+                    val careful = (WarStateAi.isNoNewWars(civ) || WarStateAi.numDangerousMajorsAtWarWith(civ, excludePhonyWars = true, excludeIfNoTarget = true) > 0) &&
+                        !coopPreparing
+                    MilitaryOperations.requestSneakAttack(civ, target, careful)
+                }
+            }
+            wantShowOfForce -> MilitaryOperations.requestShowOfForce(civ, target) // RequestBullyingOperation: not while an offensive operation runs
+            else -> {
+                stopOffensiveOperations(civ, target, OperationAbortReason.DIPLO_OPINION_CHANGE)
+                if (memory.warGoal == WarGoal.Prepare) memory.warGoal = null
+            }
+        }
+    }
+
+    /** CvPlayer::StopAllLandOffensiveOperationsAgainstPlayer and StopAllSeaOffensiveOperationsAgainstPlayer */
+    private fun stopOffensiveOperations(civ: Civilization, target: Civilization, reason: OperationAbortReason) {
+        for (operation in civ.ai.operations.offensiveOperationsAgainst(target)) civ.ai.operations.kill(operation, reason)
     }
 
     /** CvDiplomacyAI::DeclareWar */
@@ -118,5 +133,15 @@ object WarAi {
             civ.getDiplomacyManager(minor)!!.makePeace()
             DiplomacyEvents.onPeace(civ, minor)
         }
+    }
+
+    /** BNW's target value on VP's TargetValueTypes scale (VP adds Difficult and Cakewalk); none = NO_TARGET_VALUE, -1 */
+    private fun vpTargetValue(value: TargetValue?): Int = when (value) {
+        null -> -1
+        TargetValue.Impossible -> 0
+        TargetValue.Bad -> 1
+        TargetValue.Average -> 3
+        TargetValue.Favorable -> 4
+        TargetValue.Soft -> 5
     }
 }

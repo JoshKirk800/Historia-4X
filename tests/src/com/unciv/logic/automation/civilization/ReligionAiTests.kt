@@ -4,6 +4,7 @@ import com.unciv.logic.automation.civilization.ReligionAutomation.FaithPurchase
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.ReligionManager
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.tile.Tile
@@ -50,6 +51,7 @@ class ReligionAiTests {
     private fun neutralCiv(vararg uniques: String): Civilization {
         val civ = game.addCiv(*uniques)
         for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
+        civ.ai.setGrandStrategyAndPursuit(null)
         return civ
     }
 
@@ -64,7 +66,7 @@ class ReligionAiTests {
         civ.ai.setPersonalityFlavor(Flavor.Offense, 5)
         // God of War: 50 faith from kills × 4 distance × offense / 100
         assertEquals(50 * 4 * 5 / 100, playerScore(civ, "God of War"))
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         assertEquals(50 * 4 * 5 / 100 * 2, playerScore(civ, "God of War"))
     }
 
@@ -306,13 +308,13 @@ class ReligionAiTests {
         assertEquals("Great Scientist", desired(civ))
         // one scientist bought from faith: 1000 / 2 = 500, below each grand strategy's 1000 (engineer: 2000 in the homestretch)
         civ.civConstructions.boughtItemsWithIncreasingPrice.add("Great Scientist", 1)
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals("Great Writer", desired(civ))
-        civ.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.UNITED_NATIONS)
         assertEquals("Great Merchant", desired(civ))
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         assertEquals("Great General", desired(civ))
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         civ.ai.economicStrategies["ECONOMICAISTRATEGY_GS_SPACESHIP_HOMESTRETCH"] = 0
         assertEquals("Great Engineer", desired(civ))
     }
@@ -320,7 +322,7 @@ class ReligionAiTests {
     @Test
     fun `great generals are divided by the ones we already have`() {
         val civ = greatPersonCiv()
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         civ.civConstructions.boughtItemsWithIncreasingPrice.add("Great Scientist", 3) // 250
         civ.civConstructions.boughtItemsWithIncreasingPrice.add("Great Engineer", 1) // 250
         game.addUnit("Great General", civ, tile(1, 1))
@@ -374,5 +376,30 @@ class ReligionAiTests {
         small.getCenterTile().setExplored(civ, false)
         assertEquals(0, ReligionAutomation.scoreCityForMissionary(civ, small, missionary, religion))
         assertEquals(own, ReligionAutomation.chooseMissionaryTargetCity(civ, missionary))
+    }
+
+    @Test
+    fun `missionaries leave a friend with a religion of its own, and a civilization we promised, alone`() {
+        val (civ, religion) = foundedCiv()
+        val missionary = game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(0, 1))
+        missionary.religion = religion.name
+        val other = game.addCiv()
+        val city = game.addCity(other, tile(3, 0))
+        city.getCenterTile().setExplored(civ, true)
+        civ.diplomacyFunctions.makeCivilizationsMeet(other)
+        val ours = civ.getDiplomacyManager(other)!!
+        fun score() = ReligionAutomation.scoreCityForMissionary(civ, city, missionary, religion)
+
+        ours.setFlag(DiplomacyFlags.DeclarationOfFriendship, 20)
+        assertTrue("a friend without a religion: nothing asked", score() > 0)
+        foundReligion(other)
+        assertEquals("a friend with a religion", 0, score())
+        ours.removeFlag(DiplomacyFlags.DeclarationOfFriendship)
+        assertTrue("a stranger", score() > 0)
+        other.getDiplomacyManager(civ)!!.setFlag(DiplomacyFlags.AgreedToNotSpreadReligion, 20)
+        assertEquals("our promise to them", 0, score())
+        other.getDiplomacyManager(civ)!!.removeFlag(DiplomacyFlags.AgreedToNotSpreadReligion)
+        ours.setFlag(DiplomacyFlags.AgreedToNotSpreadReligion, 20)
+        assertTrue("their promise to us does not bind us", score() > 0)
     }
 }

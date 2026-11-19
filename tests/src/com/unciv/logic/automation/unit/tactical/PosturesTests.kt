@@ -89,25 +89,24 @@ class PosturesTests {
     }
 
     @Test
-    fun `a zone that is not worth using is left alone, with whatever posture it was given`() {
-        val city = game.addCity(enemy, tile(0, 0)) // no temporary zone, none of our units nearby
-        setPosture(city, TacticalPosture.Hedgehog)
+    fun `a zone runs the move of its posture with the enemy units in it as targets, whatever the strengths of the zones say`() {
+        val city = game.addCity(civ, tile(0, 0))
+        setPosture(city, TacticalPosture.Counterattack)
+        // An enemy unit near the city and none of our units: a target, though the strengths of the zones may not count it (the barbarians'
+        // never do)
+        val intruder = unit("Warrior", enemy, 0, 2)
         val ctx = context()
-        var count = 0
-        Postures.forEachZone(ctx, { _, posture -> posture == TacticalPosture.Hedgehog }) { _, _ -> count++ }
-        assertEquals(0, count)
-        // Our units near the enemy's city make it worth using
-        unit("Swordsman", civ, 0, -3)
-        val ctx2 = context()
-        Postures.forEachZone(ctx2, { _, posture -> posture == TacticalPosture.Hedgehog }) { _, _ -> count++ }
-        assertEquals(1, count)
+        val seen = ArrayList<List<TacticalTarget>>()
+        Postures.forEachZone(ctx, { _, posture -> posture == TacticalPosture.Counterattack }) { _, _ -> seen.add(ctx.currentTargets) }
+        assertEquals(1, seen.size)
+        assertTrue(seen.single().any { it.unit == intruder })
     }
 
     // endregion
     // region The postures
 
     @Test
-    fun `sit and bombard shoots the city from safe tiles, shuts off the damage-city move, and closes in`() {
+    fun `sit and bombard shoots the city from safe tiles and closes in`() {
         val city = enemyCity()
         val archer = unit("Archer", civ, 0, -2)
         val swordsman = unit("Swordsman", civ, 0, -5)
@@ -117,7 +116,6 @@ class PosturesTests {
         Postures.offensivePostureMoves(ctx)
         assertTrue("the archer shot at the city", city.health < before)
         assertEquals(1, archer.attacksThisTurn)
-        assertTrue("no city damage moves this turn", Postures.DAMAGE_CITY in ctx.disabledMoves)
         assertTrue("and the army closes in", swordsman in ctx.cache.processedUnits && swordsman.getTile().aerialDistanceTo(city.getCenterTile()) < 5)
     }
 
@@ -226,12 +224,15 @@ class PosturesTests {
         val swordsman = unit("Swordsman", civ, 0, -4)
         val ctx = context()
         val zone = ctx.map.zoneByCity(city, false)!!
-        zone.friendlyStrength = 100
-        zone.enemyStrength = 1000 // less than half of the enemy's: stay away
+        zone.dominance = TacticalDominance.Even
+        zone.friendlyMeleeStrength = 0
+        zone.friendlyRangedStrength = 100
+        zone.enemyMeleeStrength = 0
+        zone.enemyRangedStrength = 1000 // less than half of the enemy's: stay away
         Postures.plotCloseOnTarget(ctx, zone, true)
         assertEquals(tile(0, -4), swordsman.getTile())
 
-        zone.enemyStrength = 199 // more than half
+        zone.enemyRangedStrength = 199 // more than half
         zone.dominance = TacticalDominance.Enemy
         Postures.plotCloseOnTarget(ctx, zone, true)
         assertEquals("the enemy dominates", tile(0, -4), swordsman.getTile())

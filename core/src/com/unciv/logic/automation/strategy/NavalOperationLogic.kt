@@ -1,8 +1,8 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.AiDecisionLog
+import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.logic.automation.unit.tactical.TacticalTargetType
-import com.unciv.logic.automation.unit.tactical.TacticalTargets
 import com.unciv.logic.battle.Nuke
 import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.city.City
@@ -12,16 +12,17 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 
 /**
- *  The naval operations of CvAIOperation.cpp: CvAINavalOperation (CvAIOperationNavalBombardment, CvAIOperationNavalSuperiority,
- *  CvAIOperationPureNavalCityAttack), CvAIOperationNavalAttack and its descendants NavalSneakAttack / NavalCityStateAttack (an invasion:
- *  land units that embark, with warships), and CvAIOperationNukeAttack: Init, target finding, ArmyInPosition, CheckOnTarget. The base
- *  machinery is [AiOperationLogic], the ships are moved by [com.unciv.logic.automation.unit.NavalOperationMoves].
+ *  The naval operations of CvAIOperation.cpp: CvAIOperationNavalSuperiority (the squadron that defends a threatened coastal city, Vox
+ *  Populi's), CvAINavalOperation (CvAIOperationPureNavalCityAttack), CvAIOperationNavalAttack and its descendants NavalSneakAttack /
+ *  NavalCityStateAttack (an invasion: land units that embark, with warships), and CvAIOperationNukeAttack: Init, target finding,
+ *  ArmyInPosition, CheckOnTarget. The base machinery is [AiOperationLogic] (the squadron's lifecycle is its
+ *  [AiOperationLogic.checkTransitionToNextStage]), the ships are moved by [com.unciv.logic.automation.unit.NavalOperationMoves].
  *
  *  As in the original, land units embark themselves (there are no transports): an invasion army is the land units and the warships of its
  *  slots (UNITAI_ASSAULT_SEA is the Frigate, Galleass and the like), all moving as a formation on water.
  *  Not ported: the colonization party of CvAINavalEscortedOperation (AI_OPERATION_COLONIZE), which no caller in the original ever creates.
  *  Deviations, with the reason: an army's operation area is the one the original gives it
- *  (bombardment, superiority and pure naval attacks: the water at the muster point, which no city lies on, so cities do not train for
+ *  (superiority and pure naval attacks: the water at the muster point, which no city lies on, so cities do not train for
  *  them, their ships come from the reserves and the last one is bought; invasions: the landmass of the target); FindBestTarget of the
  *  invasions and the pure naval attack is "obsolete" in the original and is not ported (the target is the city chosen by the military
  *  AI); a naval target is visible to the original's whole-map loops only when revealed, as here.
@@ -32,16 +33,6 @@ object NavalOperationLogic {
 
     /** CvPlot::isShallowWater */
     fun isShallowWater(tile: Tile) = tile.isWater && tile.getBaseTerrain().isCoast
-
-    /** CvPlot::isCoastalLand: a land tile next to water */
-    fun isCoastalLand(tile: Tile) = tile.isLand && tile.neighbors.any { it.isWater }
-
-    /** CvAINavalOperation::GetDeployRange, CvAIOperationPureNavalCityAttack::GetDeployRange */
-    fun deployRange(civ: Civilization, operation: AiOperation): Int {
-        val rules = civ.gameInfo.ruleset.ai
-        return if (operation.type == AiOperationType.PURE_NAVAL_CITY_ATTACK) rules.define(AiDefine.AI_OPERATIONAL_CITY_ATTACK_DEPLOY_RANGE)
-        else rules.define(AiDefine.AI_OPERATIONAL_NAVAL_BOMBARDMENT_DEPLOY_RANGE)
-    }
 
     /**
      *  CvMilitaryAI::GetCoastalPlotAdjacentToTarget with an army: the first shallow water tile next to [target] that the army's first unit can
@@ -70,59 +61,45 @@ object NavalOperationLogic {
         return civ.cities.firstOrNull { it.isCoastal() }
     }
 
-    /** CvAINavalOperation::FindInitialUnit: the first of our ships that may attack at sea, not scouting and in no army */
-    fun findInitialUnit(civ: Civilization): MapUnit? {
-        val rules = civ.gameInfo.ruleset.ai
-        return civ.units.getCivUnits().firstOrNull {
-            UnitAiTypes.current(it) != UnitAiType.EXPLORE_SEA && UnitAiTypes.canHave(it.baseUnit, UnitAiType.ATTACK_SEA, rules) &&
-                civ.ai.operations.armyOf(it) == null
-        }
-    }
-
-    private fun initialUnitOf(civ: Civilization, operation: AiOperation): MapUnit? {
-        val army = operation.firstArmy ?: return findInitialUnit(civ)
-        return AiOperationLogic.armyUnits(civ, army).firstOrNull()?.second ?: findInitialUnit(civ)
-    }
 
     /**
-     *  CvAINavalOperation::SelectInitialMusterPoint: for each water tile next to the start port, the sea path to the army's goal; walking back
-     *  from the goal the tile [deployRange] steps from it is the muster point (the first port with such a path decides).
+     *  MilitaryAIHelpers::GetCoastalWaterNearPlot: shallow water within two plots of [target] that is not a bay (more than two sailable
+     *  neighbours) and has no feature (ice); with [checkTeam] it must be the target owner's or nobody's. The original looks at the plots in
+     *  one of three fixed orders picked by the target's pseudo-random seed, so as not to return the same plot every time; here each ring (the
+     *  plot, the ring around it, the ring around that) is shuffled by a random number of the civilization's turn and the plot, as the
+     *  layouts of the rings of Civ V's grid are not Unciv's. Null if there is none.
      */
-    private fun selectNavalMusterPoint(civ: Civilization, operation: AiOperation, army: AiArmy): Tile? {
-        val start = startCity(civ, operation) ?: return null
-        val goal = tileAt(civ, army.goalTile) ?: return null
-        val range = deployRange(civ, operation)
-        for (adjacent in start.getCenterTile().neighbors) {
-            if (!adjacent.isWater) continue
-            val path = civ.ai.military.steps.path(civ, AiOperationLogic.enemy(civ, operation), adjacent, goal, sea = true) ?: continue
-            // spaces from the target: the last tile is 0
-            val index = path.size - 1 - range
-            if (index >= 0) return path[index]
+    fun coastalWaterNearPlot(civ: Civilization, target: Tile, checkTeam: Boolean = false): Tile? {
+        val random = civ.ai.random("CoastalWater${target.position}")
+        val owner = target.getOwner()
+        for (distance in 0..2) {
+            val ring = if (distance == 0) listOf(target) else target.getTilesAtDistance(distance).toMutableList().also { it.shuffle(random) }
+            for (tile in ring) {
+                if (checkTeam && tile.getOwner() != owner && tile.getOwner() != null) continue
+                if (isShallowWater(tile) && tile.terrainFeatures.isEmpty() && tile.neighbors.count { it.isWater && !it.isImpassible() } > 2) return tile
+            }
         }
         return null
     }
 
-    /** CvAIOperationNavalBombardment::Init and CvAIOperationNavalSuperiority::Init: [AiOperationType.NAVAL_BOMBARDMENT], [AiOperationType.NAVAL_SUPERIORITY] */
-    fun initFleet(civ: Civilization, operation: AiOperation) {
-        val operations = civ.ai.operations
-        if (startCity(civ, operation) == null) { AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_MUSTER); return }
-        val army = operations.newArmy(operation, AiOperationLogic.formationName(civ, operation.type))
-        val target = findFleetTarget(civ, operation)
-        if (target == null) { AiOperationLogic.abortOperation(operation, OperationAbortReason.LOST_TARGET); return }
-        operation.targetTile = target.position
-        army.goalTile = target.position
-        val muster = selectNavalMusterPoint(civ, operation, army)
-        if (muster == null) { AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_MUSTER); return }
-        operation.musterTile = muster.position
-        army.position = muster.position
-        operation.area = muster.getContinent()
-        operations.buildListOfUnitsWeStillNeedToBuild(operation)
-        // try to get as many units as possible from existing units that are waiting around
-        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation, muster, muster)) {
-            army.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
-            // the superiority fleet is on its way as soon as it is together, it never gathers on its own
-            operation.state = if (operation.type == AiOperationType.NAVAL_SUPERIORITY) OperationState.MOVING_TO_TARGET else OperationState.GATHERING_FORCES
-        } else operation.state = OperationState.RECRUITING_UNITS
+    /**
+     *  CvAIOperationNavalSuperiority::Init, which Vox Populi's CheckSeaDefenses starts for a threatened coastal city: a squadron that musters
+     *  on the coastal water next to [muster] (else our coastal city nearest to [target] that has access to it, else the city itself) and goes to
+     *  the coastal water next to [target]. Without water at either end the operation ends.
+     */
+    fun initSuperiority(civ: Civilization, operation: AiOperation, target: City?, muster: City?) {
+        val targetCity = target ?: run { AiOperationLogic.abortOperation(operation, OperationAbortReason.LOST_TARGET); return }
+        val musterCity = muster ?: AiOperationLogic.closestFriendlyCoastalCity(civ, targetCity.getCenterTile()) ?: targetCity
+        // this is where we gather the army, and where the army should go
+        val musterTile = coastalWaterNearPlot(civ, musterCity.getCenterTile())
+        val targetTile = coastalWaterNearPlot(civ, targetCity.getCenterTile())
+        if (musterTile == null || targetTile == null) {
+            AiOperationLogic.abortOperation(operation, if (targetTile != null) OperationAbortReason.NO_MUSTER else OperationAbortReason.NO_TARGET)
+            return
+        }
+        operation.startCityId = musterCity.id
+        val army = civ.ai.operations.newArmy(operation, AiOperationLogic.formationName(civ, operation.type))
+        AiOperationLogic.setUpArmy(civ, operation, army, musterTile, targetTile)
     }
 
     /**
@@ -143,7 +120,7 @@ object NavalOperationLogic {
         operation.musterTile = coastalMuster.position
         army.position = coastalMuster.position
         operations.buildListOfUnitsWeStillNeedToBuild(operation)
-        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation, coastalMuster, coastalMuster)) {
+        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation)) {
             army.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
             operation.state = OperationState.GATHERING_FORCES
         } else operation.state = OperationState.RECRUITING_UNITS
@@ -166,7 +143,7 @@ object NavalOperationLogic {
         operation.musterTile = muster.getCenterTile().position
         army.position = muster.getCenterTile().position
         operations.buildListOfUnitsWeStillNeedToBuild(operation)
-        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation, muster.getCenterTile(), null)) {
+        if (AiOperationLogic.grabUnitsFromTheReserves(civ, operation)) {
             army.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
             operation.state = OperationState.GATHERING_FORCES
         } else operation.state = OperationState.RECRUITING_UNITS
@@ -195,96 +172,32 @@ object NavalOperationLogic {
 
     //region Targets
 
-    /** The enemy units on [tile] (CvUnit::isEnemy for our team: at war with us, barbarians included) */
-    private fun enemyUnitsOn(civ: Civilization, tile: Tile) = tile.getUnits().filter { it.civ != civ && civ.isAtWarWith(it.civ) }.toList()
-
-    /** CvAIOperationNavalBombardment::FindBestTarget / CvAIOperationNavalSuperiority::FindBestTarget */
-    fun findFleetTarget(civ: Civilization, operation: AiOperation): Tile? {
-        val unit = initialUnitOf(civ, operation) ?: return null
-        return if (operation.type == AiOperationType.NAVAL_BOMBARDMENT) findBombardmentTarget(civ, unit) else findSuperiorityTarget(civ, unit)
-    }
-
     /**
-     *  The shallow water tile next to a coastal land tile with an enemy defender (cities are left alone, they fire back) that [unit] reaches
-     *  in the fewest turns.
+     *  CvAIOperationNavalSuperiority::FindBestTarget: the coastal water next to the threatened coastal city (of the three most threatened,
+     *  [CityThreat.threatenedCities]) that the squadron reaches by the shortest sea route from where it is now ([AiOperationLogic.checkpointTile]);
+     *  the first of the three when it is nowhere. Null if no sea route leads to any of them.
      */
-    private fun findBombardmentTarget(civ: Civilization, unit: MapUnit): Tile? {
+    fun findSuperiorityTarget(civ: Civilization, operation: AiOperation): Tile? {
+        val current = operation.firstArmy?.let { AiOperationLogic.checkpointTile(civ, operation, it) }
+        val enemy = AiOperationLogic.enemy(civ, operation)
         var best: Tile? = null
-        var bestTurns = Int.MAX_VALUE
-        for (tile in civ.gameInfo.tileMap.tileList) {
-            if (!civ.hasExplored(tile) || !isCoastalLand(tile)) continue
-            // Enemy defender here?
-            if (TacticalTargets.visibleEnemyDefender(civ, tile) == null) continue
-            for (adjacent in tile.neighbors) {
-                if (!isShallowWater(adjacent)) continue
-                val turns = AiOperationLogic.turnsToReach(unit, adjacent)
-                if (turns < bestTurns) { bestTurns = turns; best = adjacent }
-            }
+        var bestLength = Int.MAX_VALUE
+        for (city in CityThreat.threatenedCities(civ, coastalOnly = true).take(SUPERIORITY_CITIES)) {
+            if (current == null) return coastalWaterNearPlot(civ, city.getCenterTile(), checkTeam = true)
+            val length = civ.ai.military.steps.distance(civ, enemy, current, city.getCenterTile(), sea = true)
+            if (length in 0 until bestLength) { bestLength = length; best = coastalWaterNearPlot(civ, city.getCenterTile(), checkTeam = true) }
         }
         return best
     }
 
     /**
-     *  The water tile of an enemy unit (embarked ones count 2/3) or trader at sea (1/3) weighted by base moves x distance from [unit]; of the lightest the first one
-     *  [unit] can reach, fewer turns winning among equal weights (GetReachablePlot). None: a water tile next to the nearest coastal enemy city,
-     *  else next to the nearest coastal barbarian camp, that it can reach (the last such one).
+     *  CvAIOperationNavalSuperiority::VerifyOrAdjustTarget: the threatened coastal cities change, so the squadron's target follows them; with none
+     *  to sail to the operation ends (NO_TARGET).
      */
-    private fun findSuperiorityTarget(civ: Civilization, unit: MapUnit): Tile? {
-        val weighted = ArrayList<Pair<Tile, Int>>()
-        var enemyCity: City? = null
-        var enemyCityDistance = Int.MAX_VALUE
-        var camp: Tile? = null
-        var campDistance = Int.MAX_VALUE
-        val baseMoves = unit.baseUnit.movement
-        for (tile in civ.gameInfo.tileMap.tileList) {
-            if (!civ.hasExplored(tile)) continue
-            if (tile.isWater) {
-                val units = enemyUnitsOn(civ, tile)
-                val traders = civ.tradeRoutes.getEnemyTradersAt(tile)
-                if (units.isEmpty() && traders.isEmpty()) continue
-                val distance = unit.getTile().aerialDistanceTo(tile)
-                for (enemy in units) {
-                    var score = baseMoves * distance
-                    if (enemy.isEmbarked()) score = score * 2 / 3 // we want to take out embarked units more than ships
-                    weighted.add(tile to score)
-                }
-                // we want to plunder trade routes if possible
-                repeat(traders.size) { weighted.add(tile to baseMoves * distance / 3) }
-            } else if (tile.isCityCenter() && isCoastalLand(tile)) { // Backup plan is a coastal enemy city
-                val city = tile.getCity() ?: continue
-                if (civ.isAtWarWith(city.civ) || city.civ.isBarbarian) {
-                    val distance = unit.getTile().aerialDistanceTo(tile)
-                    if (distance < enemyCityDistance) { enemyCityDistance = distance; enemyCity = city }
-                }
-            } else if (isCoastalLand(tile) && tile.isBarbarianEncampment()) {
-                val distance = unit.getTile().aerialDistanceTo(tile)
-                if (distance < campDistance) { campDistance = distance; camp = tile }
-            }
-        }
-        reachablePlot(unit, weighted)?.let { return it }
-        // None found, patrol over near closest enemy coastal city, or if not that a water tile adjacent to a camp
-        val patrolled = enemyCity?.getCenterTile() ?: camp ?: return null
-        var result: Tile? = null
-        for (adjacent in patrolled.neighbors)
-            if (isShallowWater(adjacent) && AiOperationLogic.turnsToReach(unit, adjacent) != Int.MAX_VALUE) result = adjacent
-        return result
-    }
-
-    /** GetReachablePlot: the lightest plot [unit] can get to, among plots of that weight the one in the fewest turns */
-    private fun reachablePlot(unit: MapUnit, plots: List<Pair<Tile, Int>>): Tile? {
-        var found: Tile? = null
-        var foundWeight = 0
-        var foundTurns = 0
-        for ((plot, weight) in plots.sortedBy { it.second }) {
-            if (found != null && weight > foundWeight) break // Already found one of a lower weight
-            val turns = AiOperationLogic.turnsToReach(unit, plot)
-            if (turns == Int.MAX_VALUE) continue
-            if (found == null || turns < foundTurns) {
-                found = plot; foundWeight = weight; foundTurns = turns
-                if (foundTurns == 1) break // Not getting better than this
-            }
-        }
-        return found
+    fun verifySuperiorityTarget(civ: Civilization, operation: AiOperation) {
+        val better = findSuperiorityTarget(civ, operation)
+        if (better == null) AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_TARGET)
+        else AiOperationLogic.setTarget(operation, better)
     }
 
     /**
@@ -354,53 +267,10 @@ object NavalOperationLogic {
             // Notify tactical AI to focus on this area
             civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.City, navalInvasion = true)
             operation.state = OperationState.SUCCESSFUL_FINISH
+            AiOperationLogic.onSuccess(civ, operation)
             return true
         }
         return false
-    }
-
-    /**
-     *  CvAIOperationNavalBombardment::ArmyInPosition: gathered, a better target may have shown up; arrived (the army is at its goal), the
-     *  tactical AI gets a bombardment zone around the target.
-     */
-    fun bombardmentInPosition(civ: Civilization, operation: AiOperation, army: AiArmy): Boolean {
-        when (operation.state) {
-            OperationState.GATHERING_FORCES -> {
-                val changed = AiOperationLogic.baseArmyInPosition(operation, army)
-                retargetFleet(civ, operation, army)
-                return changed
-            }
-            OperationState.MOVING_TO_TARGET -> {
-                if (army.position == army.goalTile) {
-                    val target = AiOperationLogic.targetTile(civ, operation)
-                    if (target != null) civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.BombardmentZone,
-                        turns = civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_MAP_BOMBARDMENT_ZONE_TURNS))
-                    operation.state = OperationState.SUCCESSFUL_FINISH
-                }
-                return false
-            }
-            else -> return AiOperationLogic.baseArmyInPosition(operation, army)
-        }
-    }
-
-    /** CvAIOperationNavalSuperiority::ArmyInPosition: the fleet never reaches a final target, it looks for the next one every turn */
-    fun superiorityInPosition(civ: Civilization, operation: AiOperation, army: AiArmy): Boolean {
-        if (operation.state != OperationState.GATHERING_FORCES && operation.state != OperationState.MOVING_TO_TARGET)
-            return AiOperationLogic.baseArmyInPosition(operation, army)
-        val changed = AiOperationLogic.baseArmyInPosition(operation, army)
-        retargetFleet(civ, operation, army)
-        return changed
-    }
-
-    /** The shared tail of the bombardment's and superiority's ArmyInPosition: revisit the target, abort with none, else move the goal */
-    private fun retargetFleet(civ: Civilization, operation: AiOperation, army: AiArmy) {
-        val better = findFleetTarget(civ, operation)
-        if (better == null) { AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_TARGET); return }
-        if (better.position == operation.targetTile) return
-        // Reset our destination to be a few plots shy of the final target
-        val position = tileAt(civ, army.position) ?: return
-        val deploy = civ.ai.military.steps.xPlotsFromEnd(civ, AiOperationLogic.enemy(civ, operation), position, better, deployRange(civ, operation), sea = true)
-        if (deploy != null) { army.goalTile = deploy.position; operation.targetTile = better.position }
     }
 
     /**
@@ -422,6 +292,7 @@ object NavalOperationLogic {
                     // Notify tactical AI to focus on this area
                     civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.City)
                     operation.state = OperationState.SUCCESSFUL_FINISH
+                    AiOperationLogic.onSuccess(civ, operation)
                 }
                 return false
             }
@@ -447,8 +318,8 @@ object NavalOperationLogic {
     /**
      *  CvAIOperation::CheckOnTarget for the naval move types. Escort: gathering when the center of mass is within the gather tolerance of the
      *  muster and no unit is further than three times that; moving when it is within twice the city attack range of the target and
-     *  no unit further than three times that range. Freeform: the army in position is evaluated every turn. Fleet: as the original's enemy
-     *  territory check with the center of mass at sea.
+     *  no unit further than three times that range. Fleet: as the original's enemy territory check with the center of mass at sea.
+     *  (The naval superiority squadron's is [AiOperationLogic.checkTransitionToNextStage].)
      *  @return whether an army was found in position
      */
     fun checkOnTarget(civ: Civilization, operation: AiOperation): Boolean {
@@ -473,14 +344,6 @@ object NavalOperationLogic {
                             AiOperationLogic.armyInPosition(civ, operation, army); return true
                         }
                     else -> Unit
-                }
-                OperationMoveType.FreeformNaval -> if (operation.state == OperationState.GATHERING_FORCES || operation.state == OperationState.MOVING_TO_TARGET) {
-                    // We want to recompute a new target each turn. So call ArmyInPosition regardless of return status
-                    AiOperationLogic.armyInPosition(civ, operation, army)
-                    val tolerance = gatherTolerance(civ, operation, army)
-                    val newTarget = AiOperationLogic.targetTile(civ, operation)
-                    if (com != null && newTarget != null && muster != null && com.aerialDistanceTo(newTarget) <= tolerance &&
-                        AiOperationLogic.furthestUnitDistance(civ, army, muster) <= tolerance * 3 / 2) return true
                 }
                 OperationMoveType.NavalFleet -> when (operation.state) {
                     OperationState.GATHERING_FORCES -> {
@@ -524,4 +387,7 @@ object NavalOperationLogic {
     fun allOceanGoing(civ: Civilization, army: AiArmy): Boolean =
         AiOperationLogic.armyUnits(civ, army).all { !it.second.baseUnit.isWaterUnit || !it.second.cache.cannotEnterOceanTiles }
     //endregion
+
+    /** CvAIOperationNavalSuperiority::FindBestTarget looks at this many of the most threatened coastal cities */
+    private const val SUPERIORITY_CITIES = 3
 }

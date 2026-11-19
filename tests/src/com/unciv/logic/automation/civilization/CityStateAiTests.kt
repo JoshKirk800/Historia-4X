@@ -3,6 +3,7 @@ package com.unciv.logic.automation.civilization
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.json.json
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.civilization.diplomacy.CityStatePersonality
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
@@ -32,11 +33,6 @@ class CityStateAiTests {
     private lateinit var a: Civilization
     private lateinit var cs: Civilization
 
-    private val ignore = MinorCivApproach.Ignore.ordinal
-    private val friendly = MinorCivApproach.Friendly.ordinal
-    private val protective = MinorCivApproach.Protective.ordinal
-    private val bully = MinorCivApproach.Bully.ordinal
-
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
@@ -54,73 +50,30 @@ class CityStateAiTests {
 
     private fun influence(value: Float) = cs.getDiplomacyManager(a)!!.setInfluence(value)
 
-    private fun weights(old: MinorCivApproach = MinorCivApproach.Ignore) = CityStateAi.approachWeights(a, cs, old, emptyMap(), null)
-
-    //region Approaches
+    //region Approaches (Vox Populi's SelectBestApproachTowardsMinorCiv)
 
     @Test
-    fun `being friends with a city-state favours Friendly and Protective and disfavours Bully`() {
-        val before = weights()
-        influence(30f)
-        val after = weights()
-        // MINOR_APPROACH_FRIENDLY_FRIENDS 4, _PROTECTIVE_FRIENDS 2, bully -10, all × 100
-        assertEquals(400, after[friendly] - before[friendly])
-        assertEquals(200, after[protective] - before[protective])
-        assertEquals(-1000, after[bully] - before[bully])
-    }
-
-    @Test
-    fun `the diplomatic grand strategy turns away from Ignore and Bully`() {
-        val before = weights()
-        a.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS
-        val after = weights()
-        assertEquals(-1500, after[ignore] - before[ignore])
-        assertEquals(-1500, after[bully] - before[bully])
-    }
-
-    @Test
-    fun `last turn's approach sticks, a Protective one most`() {
-        val fromIgnore = weights(MinorCivApproach.Ignore)
-        val fromProtective = weights(MinorCivApproach.Protective)
-        // bias for current 4 and PROTECTIVE_CURRENTLY_PROTECTIVE 10 instead of the bias on Ignore; bully -10
-        assertEquals(1400, fromProtective[protective] - fromIgnore[protective])
-        assertEquals(-400, fromProtective[ignore] - fromIgnore[ignore])
-        assertEquals(-1000, fromProtective[bully] - fromIgnore[bully])
-    }
-
-    @Test
-    fun `the leader's minor civ approach bias adds directly`() {
-        val before = weights()
-        a.ai.minorCivApproachBiases[MinorCivApproach.Bully.name] = 9
-        assertEquals(400, weights()[bully] - before[bully])
-    }
-
-    @Test
-    fun `Protective is not chosen where we cannot pledge`() {
-        a.ai.minorCivApproachBiases[MinorCivApproach.Protective.name] = 20
-        assertTrue(weights()[protective] > 0)
-        influence(-10f)
-        assertEquals(0, weights()[protective])
-    }
-
-    @Test
-    fun `Bully is not chosen toward our ally`() {
+    fun `without a possible attack target neither war nor bullying is chosen`() {
+        a.ai.minorCivApproachBiases[MinorCivApproach.Conquest.name] = 30
         a.ai.minorCivApproachBiases[MinorCivApproach.Bully.name] = 30
-        influence(70f)
-        cs.cityStateFunctions.updateAllyCivForCityState()
-        assertEquals(a, cs.allyCiv)
-        assertEquals(0, weights()[bully])
+        a.ai.minorCivApproachBiases[MinorCivApproach.Friendly.name] = 1
+        assertTrue(a.ai.military.potentialAttackTargets.isEmpty())
+        val approach = CityStateAi.selectBestApproach(a, cs)
+        assertTrue("got $approach", approach == MinorCivApproach.Ignore || approach == MinorCivApproach.Friendly)
     }
 
     @Test
-    fun `the best approach is the highest weight, the first one on a tie`() {
-        assertEquals(MinorCivApproach.Friendly, CityStateAi.bestOf(intArrayOf(1, 5, 5, 0, 2)))
-        assertEquals(MinorCivApproach.Bully, CityStateAi.bestOf(intArrayOf(1, 5, 5, 0, 6)))
+    fun `with no weight at all the approach is neutral`() {
+        for (approach in MinorCivApproach.entries) a.ai.minorCivApproachBiases[approach.name] = 0
+        assertEquals(MinorCivApproach.Ignore, CityStateAi.selectBestApproach(a, cs))
     }
 
     @Test
-    fun `the yearly update stores an approach for every met city-state`() {
-        a.ai.minorCivApproachBiases[MinorCivApproach.Friendly.name] = 30
+    fun `a human player's approach is friendly with friends and neutral otherwise`() {
+        a.playerType = PlayerType.Human
+        CityStateAi.updateMinorCivApproaches(a)
+        assertEquals(MinorCivApproach.Ignore, a.ai.minorCivApproaches[cs.civID])
+        influence(30f)
         CityStateAi.updateMinorCivApproaches(a)
         assertEquals(MinorCivApproach.Friendly, a.ai.minorCivApproaches[cs.civID])
     }
@@ -129,15 +82,24 @@ class CityStateAiTests {
     //region Protection
 
     @Test
-    fun `a Protective AI pledges and a non-protective one withdraws once the lock ends`() {
-        CityStateAi.updateMinorCivProtection(a, cs, MinorCivApproach.Protective)
+    fun `a friendly AI pledges and an unfriendly one withdraws once the lock ends`() {
+        CityStateAi.updateMinorCivProtection(a, cs, MinorCivApproach.Friendly)
         assertTrue(CityStateAi.isProtectedBy(cs, a))
         // Locked for 10 turns after pledging
         CityStateAi.updateMinorCivProtection(a, cs, MinorCivApproach.Ignore)
         assertTrue(CityStateAi.isProtectedBy(cs, a))
         cs.getDiplomacyManager(a)!!.removeFlag(DiplomacyFlags.RecentlyPledgedProtection)
-        CityStateAi.updateMinorCivProtection(a, cs, MinorCivApproach.Friendly)
+        CityStateAi.updateMinorCivProtection(a, cs, MinorCivApproach.Bully)
         assertFalse(CityStateAi.isProtectedBy(cs, a))
+    }
+
+    @Test
+    fun `an AI pledges to protect its ally whatever its approach`() {
+        influence(70f)
+        cs.cityStateFunctions.updateAllyCivForCityState()
+        assertEquals(a, cs.allyCiv)
+        CityStateAi.updateMinorCivProtection(a, cs, MinorCivApproach.Ignore)
+        assertTrue(CityStateAi.isProtectedBy(cs, a))
     }
     //endregion
 
@@ -153,12 +115,10 @@ class CityStateAiTests {
     }
 
     @Test
-    fun `only Friendly or Protective city-states get gifts, Protective ones a bit more`() {
+    fun `only friendly city-states get gifts`() {
         assertNull(CityStateAi.goldGiftValue(a, cs, MinorCivApproach.Ignore, CityStateAi.GoldGift(cs)))
         assertNull(CityStateAi.goldGiftValue(a, cs, MinorCivApproach.Bully, CityStateAi.GoldGift(cs)))
-        val friendlyValue = CityStateAi.goldGiftValue(a, cs, MinorCivApproach.Friendly, CityStateAi.GoldGift(cs))!!
-        val protectiveValue = CityStateAi.goldGiftValue(a, cs, MinorCivApproach.Protective, CityStateAi.GoldGift(cs))!!
-        assertEquals(10, protectiveValue - friendlyValue)
+        assertTrue(CityStateAi.goldGiftValue(a, cs, MinorCivApproach.Friendly, CityStateAi.GoldGift(cs)) != null)
     }
 
     @Test
@@ -181,9 +141,9 @@ class CityStateAiTests {
     }
 
     @Test
-    fun `a diplomatic AI pledges to and gifts a Protective city-state the large gift`() {
+    fun `a diplomatic AI pledges to and gifts a friendly city-state the large gift`() {
         a.ai.setPersonalityFlavor(Flavor.Diplomacy, 6)
-        a.ai.minorCivApproaches[cs.civID] = MinorCivApproach.Protective
+        a.ai.minorCivApproaches[cs.civID] = MinorCivApproach.Friendly
         a.addGold(1000 - a.gold)
         val influenceBefore = cs.getDiplomacyManager(a)!!.getInfluence()
         val expectedGain = cs.cityStateFunctions.influenceGainedByGift(a, 1000)
@@ -196,7 +156,7 @@ class CityStateAiTests {
     @Test
     fun `without enough gold for a gift the AI saves for it`() {
         a.ai.setPersonalityFlavor(Flavor.Diplomacy, 6)
-        a.ai.minorCivApproaches[cs.civID] = MinorCivApproach.Protective
+        a.ai.minorCivApproaches[cs.civID] = MinorCivApproach.Friendly
         a.addGold(100 - a.gold)
         CityStateAi.contactMinorCivs(a)
         assertEquals(100, a.gold)
@@ -218,7 +178,7 @@ class CityStateAiTests {
         assertTrue(value > 100)
         assertNull(CityStateAi.bullyGoldValue(a, cs, MinorCivApproach.Friendly))
         a.ai.deals.bulliedMinors.add(cs.civID)
-        assertEquals(value + 20, CityStateAi.bullyGoldValue(a, cs, MinorCivApproach.Bully))
+        assertEquals(value + 25, CityStateAi.bullyGoldValue(a, cs, MinorCivApproach.Bully))
         influence(30f)
         assertEquals(0, CityStateAi.bullyGoldValue(a, cs, MinorCivApproach.Bully))
     }
@@ -259,10 +219,12 @@ class CityStateAiTests {
 
     //region Route wish
 
+    /** A route quest from the city-state, and the average gold rate (above 20 in the first eras) VP wants before building a route */
     private fun giveRouteQuest() {
         val json = "{\"assignedQuests\":[{\"questName\":\"Route\",\"assigner\":\"${cs.civID}\",\"assignee\":\"${a.civID}\",\"assignedOnTurn\":1}]}"
         cs.questManager = json().fromJson(QuestManager::class.java, json)
         cs.questManager.setTransients(cs)
+        a.ai.warStates.avgGoldRate = 25
     }
 
     private fun contactWithApproach(approach: MinorCivApproach) {
@@ -271,13 +233,19 @@ class CityStateAiTests {
     }
 
     @Test
-    fun `a Friendly or Protective AI wants to connect to a neighbouring city-state that gave it a route quest`() {
+    fun `a friendly AI wants to connect to a neighbouring city-state that gave it a route quest`() {
         giveRouteQuest()
         assertEquals(Proximity.Neighbors, a.getProximity(cs))
         contactWithApproach(MinorCivApproach.Friendly)
         assertTrue(cs.civID in a.ai.wantsRouteToMinors)
-        contactWithApproach(MinorCivApproach.Protective)
-        assertTrue(cs.civID in a.ai.wantsRouteToMinors)
+    }
+
+    @Test
+    fun `no route wish while our average gold rate is low`() {
+        giveRouteQuest()
+        a.ai.warStates.avgGoldRate = 20
+        contactWithApproach(MinorCivApproach.Friendly)
+        assertFalse(cs.civID in a.ai.wantsRouteToMinors)
     }
 
     @Test

@@ -30,6 +30,9 @@ class TacticalTarget(
     /** CvTacticalTarget::GetAuxIntData: what the targets are sorted by (damage of a unit, threat of a city); some moves store the damage required here */
     var aux: Int = 0,
 ) {
+    /** CvTacticalTarget::GetLastAggLevel: the highest aggression the units were sent against this target with this turn (attacking again at the same level makes no sense) */
+    var lastAggressionLevel = AggressionLevel.None
+
     /** CvTacticalTarget::IsTargetStillAlive: only unit and city targets can die */
     fun isAlive(civ: Civilization): Boolean = when (type) {
         TacticalTargetType.LowPriorityUnit, TacticalTargetType.MediumPriorityUnit, TacticalTargetType.HighPriorityUnit ->
@@ -127,7 +130,12 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
                     else if (civ.isAtWarWith(city.civ)) targets.add(TacticalTarget(TacticalTargetType.City, tile, zoneId, city.civ, city = city))
                     continue
                 }
-                targetOfTile(civ, map, danger, trade, tile, zoneId)?.let { targets.add(it) }
+                val target = targetOfTile(civ, map, danger, trade, tile, zoneId)
+                if (target != null) targets.add(target)
+                // VP FindTacticalTargets also retains an occupied camp as an independent objective.
+                if (target?.unit != null && tile.isBarbarianEncampment() && tile.getOwner() == null &&
+                    (civ.isMajorCiv || civ.isBarbarian))
+                    targets.add(TacticalTarget(TacticalTargetType.BarbarianCamp, tile, zoneId, civ.gameInfo.getBarbarianCivilization()))
             }
             if (civ.isBarbarian) identifyPriorityBarbarianTargets(civ, targets) else identifyPriorityTargets(civ, targets)
             identifyPriorityTargetsByType(targets)
@@ -160,11 +168,17 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
             if (ownerAtWar && improvement != null && tile.canPillageTileImprovement()) {
                 val resource = tile.tileResource
                 val isImportant = resource != null && (resource.resourceType == ResourceType.Strategic || resource.resourceType == ResourceType.Luxury)
-                // On land, civs prioritize improvements built on resources
+                // VP FindTacticalTargets values strategic resources above luxuries; VP's warmonger trait is absent in BNW.
+                val score = (when (resource?.resourceType) {
+                    ResourceType.Strategic -> 80
+                    ResourceType.Luxury -> 40
+                    else -> 5
+                }) + if (civ.isBarbarian) 20 else 0
+                // Keep the existing target classes for water and barbarian pillage consumers.
                 if (isImportant || tile.isWater || civ.isBarbarian)
-                    return if (civ.isBarbarian && tile.isWater) null // barbarians can't target naval improvements
-                    else TacticalTarget(TacticalTargetType.ImprovementResource, tile, zoneId, owner)
-                return TacticalTarget(TacticalTargetType.Improvement, tile, zoneId, owner)
+                    return if (civ.isBarbarian && tile.isWater) null
+                    else TacticalTarget(TacticalTargetType.ImprovementResource, tile, zoneId, owner, aux = score)
+                return TacticalTarget(TacticalTargetType.Improvement, tile, zoneId, owner, aux = score)
             }
             // ... enemy trade route? A road of a trade route is pillaged like an improvement
             if (ownerAtWar && tile.canPillageRoad() && tile in trade.anyRoute)

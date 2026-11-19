@@ -117,16 +117,23 @@ enum class DiplomacyFlags {
  */
 enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = true) {
     // Negative
-    LeaderPersonality("Our leader's temperament"),
+    BaseOpinion("Our view of foreign leaders"),
     LandDispute("You are taking land we want"),
     WonderDispute("You have beaten us to Wonders"),
     MinorCivDispute("You are allied with City-States we protect"),
     WarMongerer("Your warmongering ways are unacceptable to us."),
     CapturedOurCities("You have captured our capital!"),
+    CapturedOurHolyCity("You have captured our holy city!"),
+    CivilianKiller("You razed our cities to the ground!"),
+    StoleArtifacts("You dug up artifacts in our lands"),
     DeclaredFriendshipWithOurEnemies("You have declared friendship with our enemies!"),
+    DefensivePactWithOurEnemies("You have a defensive pact with our enemies!"),
+    DifferentReligion("We do not share your faith"),
     BetrayedDeclarationOfFriendship("Your so-called 'friendship' is worth nothing."),
     Denunciation("You have publicly denounced us!"),
+    /** No longer written: Vox Populi folds our own denouncement into [Denunciation]; kept so old saves drop it */
     WeDenouncedThem("We have publicly denounced you"),
+    DenouncedByOurFriends("Our friends have denounced you"),
     DenouncedOurAllies("You have denounced our allies"),
     AskedUsNotToSettle("You asked us not to settle near you"),
     AskedUsToStopSpying("You asked us to stop spying on you"),
@@ -154,9 +161,13 @@ enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = tr
     SidedWithProtectedMinor("You sided with a City-State over us"),
     SpiedOnUs("You stole technology from us!"),
     RecklessExpander("You are expanding recklessly"),
+    WonderSpammer("You are building too many Wonders"),
+    MilitaryPosture("Your military is massing near our borders"),
     RefusedToHelpUs("You refused to help us"),
     DislikedTheirProposal("We dislike your proposals in the World Congress"),
     FoiledOurProposal("You foiled our proposal in the World Congress"),
+    DislikedVotingHistory("You vote against our interests in the World Congress"),
+    SanctionedUs("You tried to sanction us in the World Congress"),
 
     IgnoredRequestToStopDigging("You refused to stop digging in our lands"),
     // Positive
@@ -166,9 +177,18 @@ enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = tr
     NoLandDispute("We have no quarrel over land"),
     SharedEnemy("Our mutual military struggle brings us closer together."),
     LiberatedCity("We applaud your liberation of conquered cities!"),
+    LiberatedCapital("You liberated our capital!"),
+    LiberatedHolyCity("You liberated our holy city!"),
+    HasDiplomat("We welcome your diplomat in our capital"),
     ResurrectedUs("You brought us back to life!"),
     DeclarationOfFriendship("We have signed a public declaration of friendship"),
+    SameReligion("We share the same faith"),
     DeclaredFriendshipWithOurAllies("You have declared friendship with our allies"),
+    DefensivePact("We have a defensive pact"),
+    DefensivePactWithOurAllies("You have a defensive pact with our allies"),
+    OpenBorders("Our borders are open to each other"),
+    ResearchAgreement("We are researching together"),
+    ProtectingSameCityStates("We protect the same City-States"),
     DenouncedOurEnemies("You have denounced our enemies"),
     TradedWithUs("We have traded with you recently"),
     HelpedUs("You gave us what we asked for"),
@@ -180,7 +200,9 @@ enum class DiplomaticModifiers(val text: String, val isOpinionTerm: Boolean = tr
     SameIdeology("We share the same ideology"),
     LikedTheirProposal("We like your proposals in the World Congress"),
     SupportedOurProposal("You supported our proposal in the World Congress"),
-    SupportedOurHosting("You supported us as host of the World Congress");
+    SupportedOurHosting("You supported us as host of the World Congress"),
+    LikedVotingHistory("You vote for our interests in the World Congress"),
+    UnsanctionedUs("You tried to lift sanctions against us in the World Congress");
 
     companion object{
         @Immutable private val valuesAsMap = entries.associateBy { it.name }
@@ -378,16 +400,17 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
             else -> RelationshipLevel.Neutral
         }
 
-        // CvDiplomacyAI::DoUpdateOnePlayerOpinion: the opinion is minus the opinion weight, the levels are the OPINION_THRESHOLD_* defines
+        // CvDiplomacyAI::DoUpdateOnePlayerOpinion: the opinion is minus the opinion weight, the levels are the OPINION_THRESHOLD_* defines,
+        // inclusive on the unfriendly side and strict on the friendly one (as OpinionAi.opinionLevel)
         val weight = -opinionOfOtherCiv()
         val rules = civInfo.gameInfo.ruleset.ai
         return when {
             weight >= rules.define(AiDefine.OPINION_THRESHOLD_UNFORGIVABLE) -> RelationshipLevel.Unforgivable
             weight >= rules.define(AiDefine.OPINION_THRESHOLD_ENEMY) -> RelationshipLevel.Enemy
             weight >= rules.define(AiDefine.OPINION_THRESHOLD_COMPETITOR) -> RelationshipLevel.Competitor
-            weight >= rules.define(AiDefine.OPINION_THRESHOLD_FAVORABLE) -> RelationshipLevel.Neutral
-            weight >= rules.define(AiDefine.OPINION_THRESHOLD_FRIEND) -> RelationshipLevel.Favorable
-            weight >= rules.define(AiDefine.OPINION_THRESHOLD_ALLY) -> RelationshipLevel.Friend
+            weight > rules.define(AiDefine.OPINION_THRESHOLD_FAVORABLE) -> RelationshipLevel.Neutral
+            weight > rules.define(AiDefine.OPINION_THRESHOLD_FRIEND) -> RelationshipLevel.Favorable
+            weight > rules.define(AiDefine.OPINION_THRESHOLD_ALLY) -> RelationshipLevel.Friend
             else -> RelationshipLevel.Ally
         }
     }
@@ -691,6 +714,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         otherCivDiplomacy().setFlag(DiplomacyFlags.DeclarationOfFriendship, duration)
         if (civInfo.isMajorCiv) civInfo.ai.diplomacy.memoryOf(otherCiv).doFCounter = 0
         if (otherCiv.isMajorCiv) otherCiv.ai.diplomacy.memoryOf(civInfo).doFCounter = 0
+        com.unciv.logic.automation.diplomacy.DiplomacyEvents.onDoFSigned(civInfo, otherCiv)
 
         for (thirdCiv in getCommonKnownCivsWithSpectators()) {
             thirdCiv.addNotification("[${civInfo.civName}] and [${otherCiv.civName}] have signed a Declaration of Friendship!",
@@ -704,6 +728,31 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         }
         otherCiv.forEachTriggeredUnique(UniqueType.TriggerUponDeclaringFriendship, GameContext.IgnoreConditionals, ignoreCities = false) { unique ->
             UniqueTriggerActivation.triggerUnique(unique, otherCiv)
+        }
+    }
+
+    /**
+     *  Vox Populi's DIPLO_STATEMENT_END_WORK_WITH_US: the friendship ends without a denouncement, and with it any defensive pact between
+     *  the two. What the AIs remember of it is [DiplomacyEvents.onDoFEnded].
+     */
+    fun endDeclarationOfFriendship() {
+        removeFlag(DiplomacyFlags.DeclarationOfFriendship)
+        otherCivDiplomacy().removeFlag(DiplomacyFlags.DeclarationOfFriendship)
+        if (diplomaticStatus == DiplomaticStatus.DefensivePact) {
+            diplomaticStatus = DiplomaticStatus.Peace
+            otherCivDiplomacy().diplomaticStatus = DiplomaticStatus.Peace
+            removeFlag(DiplomacyFlags.DefensivePact)
+            otherCivDiplomacy().removeFlag(DiplomacyFlags.DefensivePact)
+        }
+        if (civInfo.isMajorCiv) civInfo.ai.diplomacy.memoryOf(otherCiv).doFCounter = -666
+        if (otherCiv.isMajorCiv) otherCiv.ai.diplomacy.memoryOf(civInfo).doFCounter = -666
+        DiplomacyEvents.onDoFEnded(civInfo, otherCiv)
+
+        otherCiv.addNotification("[${civInfo.civName}] has ended our Declaration of Friendship!",
+            NotificationCategory.Diplomacy, NotificationIcon.Diplomacy, civInfo.civName)
+        for (thirdCiv in getCommonKnownCivsWithSpectators()) {
+            thirdCiv.addNotification("[${civInfo.civName}] has ended its Declaration of Friendship with [${otherCiv.civName}]!",
+                NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy, otherCiv.civName)
         }
     }
 
@@ -732,7 +781,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
     /**
      * CvDiplomacyAI::DoDenouncePlayer: the denouncement lasts GameSpeeds.RelationshipDuration turns; both embassies close; a friendship ends
      * and the former friend remembers the betrayal; a friendly war face drops; coop wars against third parties with them are off.
-     * The opinions follow from these (see [DiplomaticModifiers.Denunciation] and [DiplomaticModifiers.WeDenouncedThem]).
+     * The opinions follow from these (see [DiplomaticModifiers.Denunciation]).
      */
     fun denounce() {
         setFlag(DiplomacyFlags.Denunciation, DiplomacyTurn.relationshipDuration(civInfo))
@@ -748,6 +797,8 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
                 memory.doFCounter = -666
                 theirMemory.doFCounter = -666
                 theirMemory.friendDenouncedUs = true
+                theirMemory.friendDenouncedUsTurn = civInfo.gameInfo.turns
+                com.unciv.logic.automation.diplomacy.DiplomacyEvents.onDoFBetrayed(civInfo, otherCiv)
             }
             if (memory.warFace == WarFace.Friendly) memory.warFace = WarFace.Neutral
             for (entry in memory.coopWars.values) if (entry.state != null && entry.state!! >= CoopWarState.Soon) {

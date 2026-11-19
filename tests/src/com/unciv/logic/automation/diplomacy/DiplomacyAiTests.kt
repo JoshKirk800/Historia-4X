@@ -4,9 +4,11 @@ import com.unciv.logic.automation.civilization.DiplomacyAutomation
 import com.unciv.logic.automation.strategy.AiOperationType
 import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticModifiers
+import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.AiRuleset
@@ -14,6 +16,7 @@ import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.ai.VictoryPursuit
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -69,36 +72,29 @@ class DiplomacyAiTests {
     //region Opinion
 
     @Test
-    fun `opinion levels follow the OPINION_THRESHOLD defines inclusively`() {
-        // DoUpdateOnePlayerOpinion: >= 80 unforgivable, >= 40 enemy, >= 15 competitor, >= -15 neutral, >= -40 favorable, >= -80 friend
-        assertEquals(MajorCivOpinion.Unforgivable, OpinionAi.opinionLevel(80, rules))
-        assertEquals(MajorCivOpinion.Enemy, OpinionAi.opinionLevel(79, rules))
-        assertEquals(MajorCivOpinion.Competitor, OpinionAi.opinionLevel(15, rules))
-        assertEquals(MajorCivOpinion.Neutral, OpinionAi.opinionLevel(14, rules))
-        assertEquals(MajorCivOpinion.Neutral, OpinionAi.opinionLevel(-15, rules))
-        assertEquals(MajorCivOpinion.Favorable, OpinionAi.opinionLevel(-16, rules))
-        assertEquals(MajorCivOpinion.Friend, OpinionAi.opinionLevel(-41, rules))
-        assertEquals(MajorCivOpinion.Ally, OpinionAi.opinionLevel(-81, rules))
+    fun `opinion levels follow the OPINION_THRESHOLD defines, inclusive on the unfriendly side and strict on the friendly one`() {
+        // DoUpdateOnePlayerOpinion: >= 160 unforgivable, >= 80 enemy, >= 30 competitor, > -30 neutral, > -80 favorable, > -160 friend
+        assertEquals(MajorCivOpinion.Unforgivable, OpinionAi.opinionLevel(160, rules))
+        assertEquals(MajorCivOpinion.Enemy, OpinionAi.opinionLevel(159, rules))
+        assertEquals(MajorCivOpinion.Competitor, OpinionAi.opinionLevel(30, rules))
+        assertEquals(MajorCivOpinion.Neutral, OpinionAi.opinionLevel(29, rules))
+        assertEquals(MajorCivOpinion.Neutral, OpinionAi.opinionLevel(-29, rules))
+        assertEquals(MajorCivOpinion.Favorable, OpinionAi.opinionLevel(-30, rules))
+        assertEquals(MajorCivOpinion.Friend, OpinionAi.opinionLevel(-80, rules))
+        assertEquals(MajorCivOpinion.Ally, OpinionAi.opinionLevel(-160, rules))
     }
 
     @Test
-    fun `leader personality term is twice hostile minus friendly bias`() {
-        a.ai.setMajorCivApproachBias(MajorCivApproach.Hostile, 7)
-        a.ai.setMajorCivApproachBias(MajorCivApproach.Friendly, 3)
-        // weight (7 - 3) * 2 = 8, shown as -8
-        assertEquals(-8f, modifier(a, b, DiplomaticModifiers.LeaderPersonality), 0.001f)
-    }
-
-    @Test
-    fun `declaration of friendship and denouncements are opinion terms of 35`() {
+    fun `a declaration of friendship weighs 30, being denounced 50, both denouncing each other 50, our own denouncement nothing`() {
         a.getDiplomacyManager(b)!!.signDeclarationOfFriendship()
-        assertEquals(35f, modifier(a, b, DiplomaticModifiers.DeclarationOfFriendship), 0.001f)
-        assertEquals(35f, modifier(b, a, DiplomaticModifiers.DeclarationOfFriendship), 0.001f)
+        assertEquals(30f, modifier(a, b, DiplomaticModifiers.DeclarationOfFriendship), 0.001f)
+        assertEquals(30f, modifier(b, a, DiplomaticModifiers.DeclarationOfFriendship), 0.001f)
 
         a.getDiplomacyManager(c)!!.denounce()
-        // OPINION_WEIGHT_DENOUNCED_ME and OPINION_WEIGHT_DENOUNCED_THEM
-        assertEquals(-35f, modifier(c, a, DiplomaticModifiers.Denunciation), 0.001f)
-        assertEquals(-35f, modifier(a, c, DiplomaticModifiers.WeDenouncedThem), 0.001f)
+        assertEquals(-50f, modifier(c, a, DiplomaticModifiers.Denunciation), 0.001f)
+        assertEquals(0f, modifier(a, c, DiplomaticModifiers.Denunciation), 0.001f)
+        c.getDiplomacyManager(a)!!.denounce()
+        assertEquals(-50f, modifier(a, c, DiplomaticModifiers.Denunciation), 0.001f)
         // C is no friend of B's: B does not mind A denouncing C
         assertEquals(0f, modifier(b, a, DiplomaticModifiers.DenouncedOurAllies), 0.001f)
     }
@@ -115,29 +111,64 @@ class DiplomacyAiTests {
     }
 
     @Test
-    fun `land dispute levels map to their opinion weights`() {
+    fun `land disputes weigh by boldness and the difficulty, more for a conqueror`() {
+        // Prince: LandDisputePercent 80; boldness 6: a dispute x 480 / 750, none x 480 / 500
+        a.ai.setDiplomacyValue(DiplomacyPersonality.Boldness, 6)
+        a.ai.primaryVictoryPursuit = null
         val memory = a.ai.diplomacy.memoryOf(b)
         memory.landDispute = DisputeLevel.Fierce
-        assertEquals(-30f, modifier(a, b, DiplomaticModifiers.LandDispute), 0.001f)
+        assertEquals("40 x 480 / 750", -25f, modifier(a, b, DiplomaticModifiers.LandDispute), 0.001f)
         memory.landDispute = DisputeLevel.Weak
-        assertEquals(-10f, modifier(a, b, DiplomaticModifiers.LandDispute), 0.001f)
-        // No dispute is a small plus (OPINION_WEIGHT_LAND_NONE -6) and the dispute term is gone
+        assertEquals("15 x 480 / 750", -9f, modifier(a, b, DiplomaticModifiers.LandDispute), 0.001f)
         memory.landDispute = DisputeLevel.None
-        assertEquals(6f, modifier(a, b, DiplomaticModifiers.NoLandDispute), 0.001f)
+        assertEquals("-10 x 480 / 500", 9f, modifier(a, b, DiplomaticModifiers.NoLandDispute), 0.001f)
         assertEquals(0f, modifier(a, b, DiplomaticModifiers.LandDispute), 0.001f)
+        // A conqueror: +10 to a dispute, (-5 - neediness 0) x era 1 / 2 to none
+        a.ai.primaryVictoryPursuit = VictoryPursuit.Domination
+        assertEquals("-12 x 480 / 500", 11f, modifier(a, b, DiplomaticModifiers.NoLandDispute), 0.001f)
+        memory.landDispute = DisputeLevel.Fierce
+        assertEquals("50 x 480 / 750", -32f, modifier(a, b, DiplomaticModifiers.LandDispute), 0.001f)
     }
 
     @Test
-    fun `nuked once costs the full nuke weight and liberated cities step 30 50 60`() {
+    fun `being nuked costs the full nuke weight and each liberated city 30`() {
         b.ai.diplomacy.memoryOf(a).numTimesNuked = 1
-        assertEquals(-50f, modifier(b, a, DiplomaticModifiers.UsedNuclearWeapons), 0.001f)
+        assertEquals(-100f, modifier(b, a, DiplomaticModifiers.UsedNuclearWeapons), 0.001f)
         val memory = b.ai.diplomacy.memoryOf(a)
         memory.numCitiesLiberated = 1
         assertEquals(30f, modifier(b, a, DiplomaticModifiers.LiberatedCity), 0.001f)
         memory.numCitiesLiberated = 2
-        assertEquals(50f, modifier(b, a, DiplomaticModifiers.LiberatedCity), 0.001f)
-        memory.numCitiesLiberated = 5
         assertEquals(60f, modifier(b, a, DiplomaticModifiers.LiberatedCity), 0.001f)
+    }
+
+    @Test
+    fun `city-states we befriend and they ally make a dispute that grows the closer our influences are`() {
+        // Competitiveness 10: 100 a city-state; we are friendly towards it, b is its ally: 100 / 2 + our influence / 5, then 100 x 4
+        // with influences within 20, x 3.5 within 40
+        a.ai.setDiplomacyValue(DiplomacyPersonality.MinorCivCompetitiveness, 10)
+        fun cityState(ours: Float, theirs: Float): Civilization {
+            val cs = game.addCiv(cityStateType = "Cultured")
+            game.addCity(cs, game.getTile(HexCoord(-6 + game.gameInfo.civilizations.count { it.isCityState } * 4, -8)))
+            meet(a, cs)
+            meet(b, cs)
+            cs.getDiplomacyManager(a)!!.setInfluenceWithoutSideEffects(ours)
+            cs.getDiplomacyManager(b)!!.setInfluenceWithoutSideEffects(theirs)
+            cs.allyCiv = b
+            a.ai.minorCivApproaches[cs.civID] = MinorCivApproach.Friendly
+            return cs
+        }
+        fun level(): DisputeLevel {
+            DisputeAi.updateMinorCivDisputes(a, listOf(b), rules)
+            return a.ai.diplomacy.memoryOf(b).minorCivDispute
+        }
+        val first = cityState(50f, 60f)
+        assertEquals("50 + 10 + 400 = 460", DisputeLevel.None, level())
+        cityState(50f, 60f)
+        assertEquals("2 x 460 = 920", DisputeLevel.Weak, level())
+        first.getDiplomacyManager(b)!!.setInfluenceWithoutSideEffects(85f)
+        assertEquals("460 + 50 + 10 + 350 = 870", DisputeLevel.Weak, level())
+        first.getDiplomacyManager(a)!!.setInfluenceWithoutSideEffects(20f)
+        assertEquals("a city-state that is not our friend does not count", DisputeLevel.None, level())
     }
     //endregion
 
@@ -264,15 +295,22 @@ class DiplomacyAiTests {
 
     @Test
     fun `approach biases add to the weights, and the conquest grand strategy adds the war bias once more`() {
+        // What the stage named [stage] adds to a's war weight towards b (later stages scale the biases too)
+        fun warDelta(stage: String): Int {
+            val steps = ArrayList<Pair<String, IntArray>>()
+            ApproachAi.debugSink = { name, w -> steps.add(name to w.copyOf()) }
+            try { weights(a, b, null) } finally { ApproachAi.debugSink = null }
+            val index = steps.indexOfFirst { it.first.startsWith(stage) }
+            return steps[index + 1].second[MajorCivApproach.War.ordinal] - steps[index].second[MajorCivApproach.War.ordinal]
+        }
         val base = weights(a, b, null)
         a.ai.setMajorCivApproachBias(MajorCivApproach.Guarded, 6)
         assertEquals(6, weights(a, b, null)[MajorCivApproach.Guarded.ordinal] - base[MajorCivApproach.Guarded.ordinal])
         a.ai.setMajorCivApproachBias(MajorCivApproach.War, 7)
-        val warBias = weights(a, b, null)
-        assertEquals(7, warBias[MajorCivApproach.War.ordinal] - base[MajorCivApproach.War.ordinal])
-        // Vox Populi's conquest bias (SelectBestApproachTowardsMajorCiv, WORLD CONQUEST), not BNW's APPROACH_WAR_CONQUEST_GRAND_STRATEGY
-        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
-        assertEquals(7, weights(a, b, null)[MajorCivApproach.War.ordinal] - warBias[MajorCivApproach.War.ordinal])
+        assertEquals(7, warDelta("Personality"))
+        // Vox Populi's conquest bias (part 1, WORLD CONQUEST), not BNW's APPROACH_WAR_CONQUEST_GRAND_STRATEGY
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
+        assertEquals(7, warDelta("Conquest bias"))
     }
 
     //endregion
@@ -311,7 +349,7 @@ class DiplomacyAiTests {
         // A Pikeman can explore too (Unit_AITypes) but its own AI type is not exploring: it fills the attack/counter slot
         val pikeman = game.addUnit("Pikeman", a, game.getTile(HexCoord(1, -1)))
         assertTrue(MilitaryOperations.isAttackReady(a, formation, AiOperationType.BASIC_CITY_ATTACK))
-        // Below AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION (80) it does not count
+        // 21 damage is more than a unit that heals in the capital accepts (CvUnit::shouldHeal), whatever AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION (70) says
         pikeman.health = 79
         assertFalse(MilitaryOperations.isAttackReady(a, formation, AiOperationType.BASIC_CITY_ATTACK))
     }
@@ -319,58 +357,28 @@ class DiplomacyAiTests {
     //region Friendship and denouncements
 
     @Test
-    fun `declarations of friendship wait 20 turns after meeting`() {
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Afraid)
-        game.gameInfo.turns = 19
-        assertFalse(DiplomacyAutomation.isDoFAcceptable(a, b))
-        game.gameInfo.turns = 20
-        // Afraid always accepts once it is not too early
-        assertTrue(DiplomacyAutomation.isDoFAcceptable(a, b))
-    }
-
-    @Test
-    fun `DoF acceptance needs willingness plus approach and opinion of 12 with a 0 to 4 roll`() {
-        game.gameInfo.turns = 30
-        a.ai.setDiplomacyValue(DiplomacyPersonality.DoFWillingness, 5)
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Friendly)
-        a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Friend)
-        // 5 + 3 + 5 = 13: accepted whatever the roll
-        assertEquals(13, DiplomacyAutomation.doFWeight(a, b))
-        assertTrue(DiplomacyAutomation.isDoFAcceptable(a, b))
-
-        a.ai.setDiplomacyValue(DiplomacyPersonality.DoFWillingness, 8)
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Guarded)
-        a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Neutral)
-        // 8 - 1 + 0 = 7, at most 11 with the roll
-        assertEquals(7, DiplomacyAutomation.doFWeight(a, b))
-        assertFalse(DiplomacyAutomation.isDoFAcceptable(a, b))
-
-        a.ai.setDiplomacyValue(DiplomacyPersonality.DoFWillingness, 20)
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Hostile)
-        assertFalse(DiplomacyAutomation.isDoFAcceptable(a, b))
-    }
-
-    @Test
-    fun `denouncing needs a weight of 18`() {
+    fun `denouncing needs a weight above 25, after Vox Populi`() {
+        game.gameInfo.turns = 20 // met over 10 turns ago
         a.ai.setDiplomacyValue(DiplomacyPersonality.DenounceWillingness, 6)
         a.ai.diplomacy.setApproach(b, MajorCivApproach.Hostile)
         a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Enemy)
-        // 6 + hostile 6 + enemy 5 = 17; with the bias +3 = 20 >= 18 whatever the roll
-        assertEquals(17, DiplomacyAutomation.denounceWeightBeforeRandom(a, b, bias = false))
-        assertTrue(DiplomacyAutomation.isDenounceAcceptable(a, b, bias = true))
+        // 6 + hostile 6 + enemy 5 = 17; with a friend's request +3 = 20
+        assertEquals(17, DiplomacyAutomation.denounceWeight(a, b, bias = false))
+        assertFalse(DiplomacyAutomation.isDenounceAcceptable(a, b, bias = true))
 
-        a.ai.setDiplomacyValue(DiplomacyPersonality.DenounceWillingness, 4)
-        a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Competitor)
-        // 4 + 6 + 2 = 12, at most 16 with the roll
-        assertEquals(12, DiplomacyAutomation.denounceWeightBeforeRandom(a, b, bias = false))
-        assertFalse(DiplomacyAutomation.isDenounceAcceptable(a, b, bias = false))
+        // Our biggest competitor: +10
+        a.ai.diplomacy.biggestCompetitor = b.civID
+        assertEquals(27, DiplomacyAutomation.denounceWeight(a, b, bias = false))
+        assertTrue(DiplomacyAutomation.isDenounceAcceptable(a, b, bias = false))
 
-        // A friend of ours who denounced them adds 4 (DoF), 1 more if a neighbor
+        // A friend of ours who denounced them: our opinion of it (friend, 2 above neutral) + 4 for the DoF, 1 more if a neighbour
         a.getDiplomacyManager(c)!!.signDeclarationOfFriendship()
+        a.ai.diplomacy.setApproach(c, MajorCivApproach.Neutral)
         a.ai.diplomacy.setOpinion(c, MajorCivOpinion.Friend)
+        a.ai.warStates.militaryStrengths[c.civID] = StrengthLevel.Average
         c.getDiplomacyManager(b)!!.denounce()
         val neighbor = if (DiplomacyTurn.proximity(a, c) == DiplomacyTurn.PROXIMITY_NEIGHBORS) 1 else 0
-        assertEquals(16 + neighbor, DiplomacyAutomation.denounceWeightBeforeRandom(a, b, bias = false))
+        assertEquals(27 + 2 + 4 + neighbor, DiplomacyAutomation.denounceWeight(a, b, bias = false))
 
         // Never a friend
         a.getDiplomacyManager(b)!!.signDeclarationOfFriendship()

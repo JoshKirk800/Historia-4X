@@ -47,7 +47,10 @@ object CivilianUnitAutomation {
 
         // CvHomelandAI::PlotHealMoves takes every unit that is hurt, the civilians no earlier move took (workers, work boats, settlers) too:
         // it runs before the worker moves and the moves to safety, so such a civilian waits to heal where it stands
-        if (!hasMoveBeforeHealing(mapUnit) && TacticalSafety.heal(mapUnit)) return
+        if (!hasMoveBeforeHealing(mapUnit) && TacticalSafety.heal(mapUnit)) {
+            cache.processedUnits.add(mapUnit) // it keeps its movement to heal, nothing else may move it
+            return
+        }
 
         // To allow "found city" actions that can only trigger a limited number of times
         
@@ -83,14 +86,9 @@ object CivilianUnitAutomation {
         if (unit.isAutomatingRoadConnection())
             return mapUnit.civ.getWorkerAutomation().roadToAutomation.automateConnectRoad(unit)
 
-        if (unit.hasUnique(UniqueType.BuildImprovements))
+        // Land workers and work boats (UNITAI_WORKER_SEA) alike: CvHomelandAI::PlotWorkerMoves
+        if (unit.hasUnique(UniqueType.BuildImprovements) || unit.hasUniqueToCreateWaterImprovements())
             return mapUnit.civ.getWorkerAutomation().automateWorkerAction(unit)
-
-        if (unit.hasUniqueToCreateWaterImprovements()) {
-            if (!mapUnit.civ.getWorkerAutomation().automateWorkBoats(unit))
-                HomelandAi.exploreUnit(mapUnit, cache)
-            return
-        }
 
         if (unit.hasUnique(UniqueType.MayFoundReligion) || unit.hasUnique(UniqueType.MayEnhanceReligion)) {
             if (unit.civ().isCityState) {

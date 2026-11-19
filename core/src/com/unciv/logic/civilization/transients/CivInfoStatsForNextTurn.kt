@@ -3,7 +3,6 @@ package com.unciv.logic.civilization.transients
 import com.unciv.Constants
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.models.ruleset.Policy
@@ -33,15 +32,19 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
     @Transient
     var statsForNextTurn = Stats()
 
+    /** The maintenance-free units: the ruleset's base plus the [UniqueType.FreeUnits] uniques */
     @Readonly
-    internal fun getUnitMaintenance(): Int {
-        val baseUnitCost = 0.5f
-        val constants = civInfo.gameInfo.ruleset.modOptions.constants
-        var freeUnits = constants.unitMaintenanceFreeUnits
+    fun unitMaintenanceFreeUnits(): Int {
+        var freeUnits = civInfo.gameInfo.ruleset.modOptions.constants.unitMaintenanceFreeUnits
         civInfo.forEachMatchingUnique(UniqueType.FreeUnits, civInfo.state) { unique ->
             freeUnits += unique.params[0].toInt()
         }
+        return freeUnits
+    }
 
+    @Readonly
+    internal fun getUnitMaintenance(): Int {
+        val freeUnits = unitMaintenanceFreeUnits()
         var unitsToPayFor = civInfo.units.getCivUnits()
         if (civInfo.hasUnique(UniqueType.UnitsInCitiesNoMaintenance))
             unitsToPayFor = unitsToPayFor.filterNot {
@@ -76,13 +79,20 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         }
 
         // If more free than units, everything is free
-        val numberOfUnitsToPayFor = max(0f, totalCost - freeCosts.sum())
+        return unitCost(max(0f, totalCost - freeCosts.sum()))
+    }
 
-        // as game progresses Maintenance cost rises (CvTreasury::CalculateUnitCost: (1 + multiplier x progress) inside, 1 + progress / divisor as the exponent)
+    /**
+     *  CvTreasury::CalculateUnitCost: the gold [numberOfUnitsToPayFor] paid units cost this turn. As the game progresses the cost rises:
+     *  (1 + multiplier x progress) inside, 1 + progress / divisor as the exponent; then the unit maintenance percentages and the handicap.
+     */
+    @Readonly
+    fun unitCost(numberOfUnitsToPayFor: Float): Int {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
         val turnLimit = civInfo.gameInfo.speed.numTotalTurns().toFloat()
         val gameProgress = min(civInfo.gameInfo.turns / turnLimit, 1f)
 
-        var cost = baseUnitCost * numberOfUnitsToPayFor * (1 + constants.unitMaintenanceGameMultiplier * gameProgress)
+        var cost = 0.5f * numberOfUnitsToPayFor * (1 + constants.unitMaintenanceGameMultiplier * gameProgress)
         cost = cost.pow(1 + gameProgress / constants.unitMaintenanceExponentDivisor)
 
         // CvTreasury.cpp:576-581: Standing Army Tax and the like are added up and applied to the total, after the exponent and before the handicap
@@ -145,31 +155,67 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         return transportationUpkeep
     }
 
+    /** An AI major civilization takes its unit supply from the AI columns of the difficulty the game is played at */
+    @Readonly
+    private fun isAiMajor() = civInfo.isMajorCiv && civInfo.isAI()
+
+    /**
+     *  CvPlayer::GetUnitSupplyBreakdown (Community Patch): (the supply of the difficulty, of the cities and of the population) x
+     *  (100 + the difficulty's bonus percent) / 100. For an AI major the four values are the chosen difficulty's AIUnitSupply columns
+     *  ([com.unciv.models.ruleset.nation.Difficulty.aiUnitSupplyBase] and its siblings), for a city-state its CityStateUnitSupply
+     *  columns, for everyone else the player settings of their own difficulty with the bonus 0.
+     */
     @Readonly
     fun getUnitSupply(): Int {
-        /* TotalSupply = BaseSupply + NumCities*modifier + Population*modifier
-        * In civ5, it seems population modifier is always 0.5, so i hardcoded it down below */
-        var supply = getBaseUnitSupply() + getUnitSupplyFromCities() + getUnitSupplyFromPop()
-
-        if (civInfo.isMajorCiv && civInfo.playerType == PlayerType.AI)
-            supply = (supply*(1f + civInfo.getDifficulty().aiUnitSupplyModifier)).toInt()
-        return supply
+        val supply = getBaseUnitSupply() + getUnitSupplyFromCities() + getUnitSupplyFromPop()
+        val chosen = civInfo.gameInfo.getDifficulty()
+        val bonusPercent = when {
+            civInfo.isCityState -> chosen.cityStateUnitSupplyBonusPercent
+            isAiMajor() -> chosen.aiUnitSupplyBonusPercent
+            else -> 0
+        }
+        return supply * (100 + bonusPercent) / 100
     }
 
+    /** CvPlayer::GetNumUnitsSuppliedByHandicap: the difficulty's base supply, with the [UniqueType.BaseUnitSupply] uniques */
     @Readonly
     fun getBaseUnitSupply(): Int {
-        return civInfo.getDifficulty().unitSupplyBase +
-            civInfo.getMatchingUniques(UniqueType.BaseUnitSupply).sumOf { it.params[0].toInt() }
+        val chosen = civInfo.gameInfo.getDifficulty()
+        val fromDifficulty = when {
+            civInfo.isCityState -> chosen.cityStateUnitSupplyBase
+            isAiMajor() -> chosen.aiUnitSupplyBase
+            else -> civInfo.getDifficulty().unitSupplyBase
+        }
+        return fromDifficulty + civInfo.getMatchingUniques(UniqueType.BaseUnitSupply).sumOf { it.params[0].toInt() }
     }
+
+    /** CvPlayer::GetNumUnitsSuppliedByCities: the supply of each city, with the [UniqueType.UnitSupplyPerCity] uniques */
     @Readonly
     fun getUnitSupplyFromCities(): Int {
+        val chosen = civInfo.gameInfo.getDifficulty()
+        val perCity = when {
+            civInfo.isCityState -> chosen.cityStateUnitSupplyPerCity
+            isAiMajor() -> chosen.aiUnitSupplyPerCity
+            else -> civInfo.getDifficulty().unitSupplyPerCity
+        }
         return civInfo.cities.size *
-            (civInfo.getDifficulty().unitSupplyPerCity
-                    + civInfo.getMatchingUniques(UniqueType.UnitSupplyPerCity).sumOf { it.params[0].toInt() })
+            (perCity + civInfo.getMatchingUniques(UniqueType.UnitSupplyPerCity).sumOf { it.params[0].toInt() })
     }
+
+    /**
+     *  CvPlayer::GetNumUnitsSuppliedByPopulation: the share of the citizens of every city, with the [UniqueType.UnitSupplyPerPop] uniques.
+     *  The share is the difficulty's population percent for an AI major or a city-state, [com.unciv.models.ModConstants.unitSupplyPerPopulation]
+     *  (Civ V's 50%) for the others.
+     */
     @Readonly
     fun getUnitSupplyFromPop(): Int {
-        var totalSupply = civInfo.cities.sumOf { it.population.population } * civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyPerPopulation
+        val chosen = civInfo.gameInfo.getDifficulty()
+        val citizens = civInfo.cities.sumOf { it.population.population }
+        var totalSupply = when {
+            civInfo.isCityState -> citizens * chosen.cityStateUnitSupplyPopulationPercent / 100.0
+            isAiMajor() -> citizens * chosen.aiUnitSupplyPopulationPercent / 100.0
+            else -> citizens * civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyPerPopulation
+        }
 
         civInfo.forEachMatchingUnique(UniqueType.UnitSupplyPerPop) { unique ->
             val applicablePopulation = civInfo.cities
@@ -179,9 +225,18 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         }
         return totalSupply.toInt()
     }
-    @Readonly fun getUnitSupplyDeficit(): Int = max(0,civInfo.units.getCivUnitsSize() - getUnitSupply())
 
-    /** Per each supply missing, a player gets -10% production. Capped at -70%. */
+    /**
+     *  CvPlayer::GetNumUnitsOutOfSupply: the units that use supply ([com.unciv.logic.civilization.managers.UnitManager.getNumUnitsToSupply]:
+     *  combat units, ships, the Caravan, the Cargo Ship and the Work Boat, not workers, settlers, Great People or religious units)
+     *  less the [getUnitSupply], at least 0.
+     */
+    @Readonly fun getUnitSupplyDeficit(): Int = max(0, civInfo.units.getNumUnitsToSupply() - getUnitSupply())
+
+    /**
+     *  CvPlayer::calculateUnitProductionMaintenanceMod (Community Patch): per unit out of supply a player gets -10% production,
+     *  at most -70%.
+     */
     @Readonly fun getUnitSupplyProductionPenalty(): Float = -min(getUnitSupplyDeficit() * 10f, 70f)
 
     @Readonly

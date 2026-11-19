@@ -8,6 +8,9 @@ import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.logic.automation.diplomacy.WarSanityAi
+import com.unciv.logic.automation.strategy.WarStateAi
+import com.unciv.models.ruleset.ai.MajorCivApproach
 import java.io.File
 
 /**
@@ -51,9 +54,23 @@ class CivDecisionTrace(private val game: GameInfo, private val civName: String, 
         writer.appendLine("== turn $turn  cities ${civ.cities.size} pop ${civ.cities.sumOf { it.population.population }}" +
             "  science ${stats.science.toInt()} gold ${civ.gold} (${"%+d".format(stats.gold.toInt())}) culture ${stats.culture.toInt()} " +
             "faith ${stats.faith.toInt()} happiness ${civ.getHappiness()}  techs ${civ.tech.techsResearched.size} -> ${civ.tech.currentTechnologyName()}" +
-            "  land military $landMilitary (reserve ${military.mandatoryReserveSize}, recommended ${military.recommendedMilitarySize}, " +
-            "${military.landDefenseState}) explorers ${count(UnitAiType.EXPLORE)} settlers ${count(UnitAiType.SETTLE)} " +
+            "  land military $landMilitary (reserve ${military.mandatoryReserveSize}, recommended ${military.recommendedLandArmySize}, " +
+            "${military.landDefenseState}) navy ${military.numNavalUnits} (recommended ${military.recommendedNavySize}, ${military.navalDefenseState}) " +
+            "explorers ${count(UnitAiType.EXPLORE)} settlers ${count(UnitAiType.SETTLE)} " +
             "workers ${count(UnitAiType.WORKER)} units ${units.size}  at war with ${civ.getCivsAtWarWith().filter { !it.isBarbarian }.joinToString { it.civName }.ifEmpty { "-" }}")
+        // The majors whose best approach score is war but whose approach is not (WarTargetAi kept war from them), with the inputs it reads
+        for (other in game.civilizations) {
+            if (other == civ || !other.isMajorCiv || !other.isAlive() || !civ.knows(other) || civ.isAtWarWith(other)) continue
+            val memory = civ.ai.diplomacy.memories[other.civID] ?: continue
+            val values = memory.approachValues
+            val war = values.getOrNull(MajorCivApproach.War.ordinal) ?: continue
+            if (values.any { it > war }) continue
+            writer.appendLine("  war score highest towards ${other.civName}: approach ${memory.approach} (war $war), " +
+                "noNewWars ${WarStateAi.isNoNewWars(civ)}, sane ${WarSanityAi.isWarSane(civ, other)}, " +
+                "bankrupts ${WarSanityAi.isWarWouldBankruptUs(civ, other)}, happiness ${civ.getHappiness()}, " +
+                "peace turn ${memory.turnMadePeace}, strength ${WarStateAi.militaryStrengthComparedToUs(civ, other)}, " +
+                "canDeclare ${civ.getDiplomacyManager(other)?.canDeclareWar()}")
+        }
 
         val strategies = (civ.ai.economicStrategies.keys + civ.ai.militaryStrategies.keys).toSet()
         diff("strategies", lastStrategies, strategies)

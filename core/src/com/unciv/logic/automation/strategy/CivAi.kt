@@ -5,6 +5,7 @@ import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.diplomacy.DiplomacyAi
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
+import com.unciv.logic.automation.diplomacy.VictoryPursuitAi
 import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.automation.unit.tactical.TacticalState
 import com.unciv.logic.map.mapunit.MapUnit
@@ -19,13 +20,13 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MilitaryStrategyDef
 import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.ai.StrategyDef
+import com.unciv.models.ruleset.ai.TraitCategory
+import com.unciv.models.ruleset.ai.VictoryPursuit
 import com.unciv.utils.hashOf
 import org.jetbrains.annotations.VisibleForTesting
 import yairm210.purity.annotations.Cache
 import yairm210.purity.annotations.Readonly
 import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.sqrt
 import kotlin.random.Random
 
 /** How sure a player is of its guess of another player's grand strategy (the original's GuessConfidenceTypes) */
@@ -80,6 +81,14 @@ class CivAi : IsPartOfGameInfoSerialization {
     /** By [MinorCivApproach] name */
     var minorCivApproachBiases = LinkedHashMap<String, Int>()
     var personalityInitialized = false
+    /**
+     *  CvDiplomacyAI::m_ePrimaryVictoryPursuit and m_eSecondaryVictoryPursuit, picked once with the personality
+     *  ([VictoryPursuitAi.selectDefaultVictoryPursuits]); null for none, and for city-states
+     */
+    var primaryVictoryPursuit: VictoryPursuit? = null
+    var secondaryVictoryPursuit: VictoryPursuit? = null
+    /** CvDiplomacyAI::m_eCurrentVictoryPursuit, what [isGoingForWorldConquest] and the others read; [VictoryPursuitAi.updateCurrentVictoryPursuit] */
+    var currentVictoryPursuit: VictoryPursuit? = null
 
     /** The active grand strategy (AIGRANDSTRATEGY_* name), null before the first [GrandStrategyAi.doTurn] */
     var grandStrategy: String? = null
@@ -98,6 +107,11 @@ class CivAi : IsPartOfGameInfoSerialization {
 
     /** CvPlayer::m_bCramped, updated each turn by [updateCramped] */
     var isCramped = false
+    /**
+     *  CvPlayer::m_iCitiesNeedingTerrainImprovements: the cities whose [CityAi.terrainImprovementNeed] was above 0 at the start of this turn
+     *  (CvPlayer::UpdateNumCitiesNeedingTerrainImprovements, run first in [doTurn] from the needs the cities computed last turn)
+     */
+    var citiesNeedingTerrainImprovements = 0
     /** Aggression of other majors this player has seen, by civID */
     var aggressionMemory = HashMap<String, AggressionMemory>()
     /** CvCitySpecializationAI state, see [CitySpecializationAi] */
@@ -158,6 +172,9 @@ class CivAi : IsPartOfGameInfoSerialization {
         toReturn.majorCivApproachBiases.putAll(majorCivApproachBiases)
         toReturn.minorCivApproachBiases.putAll(minorCivApproachBiases)
         toReturn.personalityInitialized = personalityInitialized
+        toReturn.primaryVictoryPursuit = primaryVictoryPursuit
+        toReturn.secondaryVictoryPursuit = secondaryVictoryPursuit
+        toReturn.currentVictoryPursuit = currentVictoryPursuit
         toReturn.grandStrategy = grandStrategy
         toReturn.turnsSinceGrandStrategySet = turnsSinceGrandStrategySet
         toReturn.apolloProgramBuilt = apolloProgramBuilt
@@ -166,6 +183,7 @@ class CivAi : IsPartOfGameInfoSerialization {
         toReturn.economicStrategies.putAll(economicStrategies)
         toReturn.militaryStrategies.putAll(militaryStrategies)
         toReturn.isCramped = isCramped
+        toReturn.citiesNeedingTerrainImprovements = citiesNeedingTerrainImprovements
         for ((civId, memory) in aggressionMemory) toReturn.aggressionMemory[civId] = memory.clone()
         toReturn.citySpecialization = citySpecialization.clone()
         toReturn.minorCivApproaches.putAll(minorCivApproaches)
@@ -191,6 +209,8 @@ class CivAi : IsPartOfGameInfoSerialization {
         operations.setTransients(civ)
         tactical.setTransients(civ)
         plotDangerCache = null
+        // BNW's protective approach, which Vox Populi's city-state approach does not have: friendly takes its place
+        minorCivApproaches.replaceAll { _, approach -> if (approach == MinorCivApproach.Protective) MinorCivApproach.Friendly else approach }
         personalityVector = null
         activeFlavorVector = null
         strategyVersion++
@@ -277,6 +297,25 @@ class CivAi : IsPartOfGameInfoSerialization {
         return minorCivApproachBiases[approach.name] ?: rules.define(AiDefine.DEFAULT_FLAVOR_VALUE)
     }
 
+    /**
+     *  CvPlayerTraits::IsWarmonger ... IsReligious: a major civilization's leader trait categories from its personality
+     *  ([com.unciv.models.ruleset.nation.Personality.traitCategories]); Religious also with a state religion (BNW has no state religion
+     *  apart from the one we founded: that one), Smaller also with fewer than 4 cities once the turn is over twice the game's
+     *  estimated length (VP's getGameTurn() / 2 > getEstimateEndTurn()). VP evaluates the dynamic parts when it (re)initializes the
+     *  traits (game start, religion and pantheon founding, ...); here at each query.
+     */
+    fun hasTraitCategory(category: TraitCategory): Boolean {
+        if (civ.isMajorCiv) {
+            val personality = civ.nation.personality?.let { civ.gameInfo.ruleset.personalities[it] }
+            if ((personality?.traitCategories?.get(category.name) ?: 0) > 0) return true
+        }
+        return when (category) {
+            TraitCategory.Religious -> civ.religionManager.religion?.isMajorReligion() == true
+            TraitCategory.Smaller -> civ.gameInfo.turns / 2 > civ.gameInfo.speed.numTotalTurns() && civ.cities.size < 4
+            else -> false
+        }
+    }
+
     /** Sets a diplomacy personality value directly (scenario setup and tests) */
     @VisibleForTesting
     fun setDiplomacyValue(value: DiplomacyPersonality, amount: Int) {
@@ -332,7 +371,7 @@ class CivAi : IsPartOfGameInfoSerialization {
         rules.militaryStrategies.asSequence().filter { it.name in militaryStrategies }
     //endregion
 
-    //region Grand strategy (CvGrandStrategyAI, CvDiplomacyAI::IsGoingFor*)
+    //region Grand strategy (CvGrandStrategyAI) and victory pursuits (CvDiplomacyAI::IsGoingFor*)
 
     /** The active grand strategy's definition, null if none */
     fun grandStrategyDef(): GrandStrategyDef? = grandStrategy?.let { name -> rules.getGrandStrategies().firstOrNull { it.name == name } }
@@ -352,14 +391,38 @@ class CivAi : IsPartOfGameInfoSerialization {
         return Pair(guess.grandStrategy, guess.confidence)
     }
 
-    /** CvDiplomacyAI::IsGoingForWorldConquest */
-    @Readonly fun isGoingForWorldConquest() = grandStrategy == GrandStrategyAi.CONQUEST
-    /** CvDiplomacyAI::IsGoingForDiploVictory */
-    @Readonly fun isGoingForDiploVictory() = grandStrategy == GrandStrategyAi.UNITED_NATIONS
-    /** CvDiplomacyAI::IsGoingForCultureVictory */
-    @Readonly fun isGoingForCultureVictory() = grandStrategy == GrandStrategyAi.CULTURE
-    /** CvDiplomacyAI::IsGoingForSpaceshipVictory */
-    @Readonly fun isGoingForSpaceshipVictory() = grandStrategy == GrandStrategyAi.SPACESHIP
+    /** CvDiplomacyAI::IsGoingForWorldConquest: the current victory pursuit is Domination */
+    @Readonly fun isGoingForWorldConquest() = currentVictoryPursuit == VictoryPursuit.Domination
+    /** CvDiplomacyAI::IsGoingForDiploVictory: the current victory pursuit is Diplomacy */
+    @Readonly fun isGoingForDiploVictory() = currentVictoryPursuit == VictoryPursuit.Diplomacy
+    /** CvDiplomacyAI::IsGoingForCultureVictory: the current victory pursuit is Culture */
+    @Readonly fun isGoingForCultureVictory() = currentVictoryPursuit == VictoryPursuit.Culture
+    /** CvDiplomacyAI::IsGoingForSpaceshipVictory: the current victory pursuit is Science */
+    @Readonly fun isGoingForSpaceshipVictory() = currentVictoryPursuit == VictoryPursuit.Science
+
+    /** CvDiplomacyAI::IsConqueror, IsDiplomat, IsCultural, IsScientist: the leader's primary victory pursuit is Domination ... Science */
+    @Readonly fun isConqueror() = primaryVictoryPursuit == VictoryPursuit.Domination
+    @Readonly fun isDiplomat() = primaryVictoryPursuit == VictoryPursuit.Diplomacy
+    @Readonly fun isCultural() = primaryVictoryPursuit == VictoryPursuit.Culture
+    @Readonly fun isScientist() = primaryVictoryPursuit == VictoryPursuit.Science
+    /** CvDiplomacyAI::IsSecondaryConqueror ... IsSecondaryScientist: the leader's secondary victory pursuit */
+    @Readonly fun isSecondaryConqueror() = secondaryVictoryPursuit == VictoryPursuit.Domination
+    @Readonly fun isSecondaryDiplomat() = secondaryVictoryPursuit == VictoryPursuit.Diplomacy
+    @Readonly fun isSecondaryCultural() = secondaryVictoryPursuit == VictoryPursuit.Culture
+    @Readonly fun isSecondaryScientist() = secondaryVictoryPursuit == VictoryPursuit.Science
+
+    /** Sets the grand strategy and the current victory pursuit a serious AI takes from it, none without one (scenario setup and tests) */
+    @VisibleForTesting
+    fun setGrandStrategyAndPursuit(grandStrategy: String?) {
+        this.grandStrategy = grandStrategy
+        currentVictoryPursuit = when (grandStrategy) {
+            GrandStrategyAi.CONQUEST -> VictoryPursuit.Domination
+            GrandStrategyAi.UNITED_NATIONS -> VictoryPursuit.Diplomacy
+            GrandStrategyAi.CULTURE -> VictoryPursuit.Culture
+            GrandStrategyAi.SPACESHIP -> VictoryPursuit.Science
+            else -> null
+        }
+    }
     //endregion
 
     //region Economic and military strategies
@@ -383,25 +446,22 @@ class CivAi : IsPartOfGameInfoSerialization {
     //region Inputs the original keeps on CvPlayer
 
     /**
-     *  CvPlayer::GetMilitaryMight (calculateMilitaryMight), computed once per turn: per unit the unit type's power, × (1000 + 125 × level) / 1000,
-     *  × health / 100, halved for water units; the sum × min(2, 1 + √gold / 100).
-     *  The unit type's power is [com.unciv.models.ruleset.unit.BaseUnit.getAiPower] (CvUnitEntry::GetPower);
-     *  the unit level is 1 + its promotions gained by experience (CvUnit::getLevel starts at 1).
-     *  After Vox Populi (CvPlayer::updateMightStatistics, D7) nuclear weapons are not counted as units: their [nuclearMight] is added instead.
+     * CvPlayer::calculateMilitaryMight and updateMightStatistics (Vox Populi 5.4.8): offensive unit strength,
+     * with 10% per level above three, plus nuclear might. Civilian and nuclear units are excluded from the sum.
+     * [NuclearMight.attackStrength] records the approximation used for VP's contextual combat strength.
      */
     @Readonly fun militaryMight(): Int {
         val turn = civ.gameInfo.turns
         if (militaryMightTurn == turn) return militaryMightCache
         var sum = 0
         for (unit in civ.units.getCivUnits()) {
-            if (unit.isNuclearWeapon()) continue
-            var power = unit.getAiPower()
-            if (unit.baseUnit.isWaterUnit) power /= 2
-            sum += power
+            if (unit.isCivilian() || unit.isNuclearWeapon()) continue
+            val level = 1 + unit.promotions.numberOfPromotions
+            val power = NuclearMight.attackStrength(unit)
+            sum += if (level > 3) power * (100 + (level - 3) * 10) / 100 else power
         }
-        val goldMultiplier = min(2f, 1f + sqrt(max(0, civ.gold).toFloat()) / 100f)
         nuclearMightCache = NuclearMight.of(civ, null)
-        militaryMightCache = (sum * goldMultiplier).toInt() + nuclearMightCache
+        militaryMightCache = sum + nuclearMightCache
         militaryMightTurn = turn
         return militaryMightCache
     }
@@ -451,20 +511,22 @@ class CivAi : IsPartOfGameInfoSerialization {
 
     /**
      *  The strategic AI turn of this civilization, in CvPlayer::doTurn / doTurnPostDiplomacy order:
-     *  DoUpdateCramped, CvGrandStrategyAI::DoTurn (majors), the war states of CvDiplomacyAI::DoTurn (majors, [WarStateAi.doTurn]),
-     *  the rest of CvDiplomacyAI::DoTurn (majors, [DiplomacyTurn.doTurn]),
+     *  DoUpdateCramped, CvGrandStrategyAI::DoTurn (majors), the current victory pursuit and the war states of CvDiplomacyAI::DoTurn
+     *  (majors, [VictoryPursuitAi.updateCurrentVictoryPursuit], [WarStateAi.doTurn]), the rest of CvDiplomacyAI::DoTurn (majors, [DiplomacyTurn.doTurn]),
      *  then CvEconomicAI::DoTurn (recon state and antiquity sites, the strategy loop, then for AI players plot purchases and worker
-     *  disbanding - [EconomicAi]), CvMilitaryAI::DoTurn (base data and defense states, the strategy loop, then for AI players offensive
-     *  purchases and obsolete unit disbanding - [MilitaryAi]), CvCitySpecializationAI::DoTurn (as in doTurnPostDiplomacy), then each
+     *  disbanding - [EconomicAi]), CvMilitaryAI::DoTurn (base data and defense states, the strategy loop, the attack targets, then for AI
+     *  players offensive purchases and obsolete unit disbanding - [MilitaryAi]), CvCitySpecializationAI::DoTurn (as in doTurnPostDiplomacy), then each
      *  city's CvCityStrategyAI::DoTurn (in CvCity::doTurn).
      *  Runs for every living civilization except barbarians and spectators, human or AI, as in the original.
      */
     fun doTurn() {
         if (civ.isBarbarian || civ.isSpectator || civ.isDefeated()) return
         ensureInitialized()
+        citiesNeedingTerrainImprovements = civ.cities.count { it.ai.terrainImprovementNeed > 0 }
         timeThis("AI.Cramped") { updateCramped() }
         if (civ.isMajorCiv || civ.isCityState) com.unciv.logic.automation.diplomacy.WarDamageAi.doTurn(civ)
         if (civ.isMajorCiv) timeThis("AI.GrandStrategy") { GrandStrategyAi.doTurn(civ) }
+        if (civ.isMajorCiv) VictoryPursuitAi.updateCurrentVictoryPursuit(civ)
         if (civ.isMajorCiv) timeThis("AI.WarStates") { WarStateAi.doTurn(civ) }
         if (civ.isCityState) minorCivStatus = MinorCivStatusAi.status(civ)
         if (civ.isMajorCiv) timeThis("AI.Diplomacy") { DiplomacyTurn.doTurn(civ) }
@@ -477,6 +539,7 @@ class CivAi : IsPartOfGameInfoSerialization {
             military.doTurnBeforeStrategies(civ)
             runStrategyLoop(rules.militaryStrategies, militaryStrategies, civ, checkFirstTurn = true, onChange = ::onFlavorBroadcast) { StrategyTests.test(civ, it) }
         }
+        timeThis("AI.AttackTargets") { military.updateAttackTargets(civ) }
         if (!civ.isHuman()) timeThis("AI.MilitaryDoTurn") { military.doTurnAfterStrategies(civ) }
         timeThis("AI.TechFlavors") { com.unciv.logic.automation.civilization.TechAutomation.updateFlavorWeights(civ) }
         timeThis("AI.CitySpecialization") { CitySpecializationAi.doTurn(civ) }

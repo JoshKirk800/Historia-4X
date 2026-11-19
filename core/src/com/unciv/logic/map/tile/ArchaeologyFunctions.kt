@@ -292,11 +292,9 @@ object ArchaeologyFunctions {
                 tile.setImprovement(constants.landmarkImprovement, civ, unit)
                 if (owner?.isCityState == true)
                     owner.getDiplomacyManager(civ)?.addInfluence(constants.landmarkInfluenceWithCityStates.toFloat())
-                else if (owner != null && owner != civ && owner.isMajorCiv && owner.isAI()) {
-                    val diplomacy = owner.getDiplomacyManager(civ)
+                else if (owner != null && owner != civ && owner.isMajorCiv && owner.isAI())
                     // CvPlayerCulture: ChangeNumLandmarksBuiltForMe (the opinion is CvDiplomacyAI::GetLandmarksBuiltForMeScore)
-                    if (diplomacy != null) diplomacy.landmarksBuiltForUs++
-                }
+                    com.unciv.logic.automation.diplomacy.DiplomacyEvents.onLandmarkBuilt(owner, civ)
             }
             ArchaeologyChoice.ArtifactOfFirst, ArchaeologyChoice.ArtifactOfSecond, ArchaeologyChoice.Writing -> {
                 val work = getArtifact(tile) ?: return false
@@ -323,6 +321,7 @@ object ArchaeologyFunctions {
         if (owner == null || owner == civ || !owner.isMajorCiv) return
         val diplomacy = owner.getDiplomacyManager(civ) ?: return
         diplomacy.negativeArchaeologyPoints += 10
+        com.unciv.logic.automation.diplomacy.DiplomacyEvents.onArtifactStolen(owner, civ)
         if (owner.isAI() && diplomacy.negativeArchaeologyPoints >= 10 &&
             !diplomacy.hasFlag(DiplomacyFlags.IgnoreThemDiggingInOurLands))
             diplomacy.setFlag(DiplomacyFlags.DugInOurLands, 1)

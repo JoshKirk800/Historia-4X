@@ -2,9 +2,9 @@ package com.unciv.logic.automation.unit
 
 import com.unciv.Constants
 import com.unciv.logic.automation.civilization.AutomationCache
-import com.unciv.logic.automation.strategy.ExplorationAi
-import com.unciv.logic.automation.strategy.ExplorationPlots
-import com.unciv.logic.automation.strategy.ReconState
+import com.unciv.logic.automation.strategy.ExplorationPlotSets
+import com.unciv.logic.automation.strategy.UnitAiType
+import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.tactical.TacticalDominance
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -19,6 +19,7 @@ import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -26,7 +27,7 @@ import org.junit.runner.RunWith
 
 /**
  *  CvHomelandAI's military moves against the DLL formulas (Brave New World data): the priority list with flavors, which unit garrisons
- *  which city, the weight of sentry points, the explorers' plot score and goody assignments, and the movement part of upgrades.
+ *  which city, the weight of sentry points, the explorers' plot values and targets, and the movement part of upgrades.
  */
 @RunWith(GdxTestRunner::class)
 class HomelandAiTests {
@@ -303,74 +304,59 @@ class HomelandAiTests {
     }
 
     @Test
-    fun `a land plot scores the unexplored plots around it by what they are`() {
-        exploreOnlyAround(tile(0), 3)
-        val edge = tile(3)
-        val unexplored = edge.neighbors.filter { !civ.hasExplored(it) }.toList()
-        assertEquals(3, unexplored.size)
-        assertEquals(3 * 100, ExplorationAi.scoreExplorePlot(civ, edge, 1, forShip = false))
-        game.setTileTerrain(unexplored[0].position, Constants.hill)
-        assertEquals(200 + 2 * 100, ExplorationAi.scoreExplorePlot(civ, edge, 1, forShip = false))
-        game.setTileTerrain(unexplored[1].position, Constants.mountain)
-        assertEquals(200 + 10 + 100, ExplorationAi.scoreExplorePlot(civ, edge, 1, forShip = false))
-        game.setTileTerrain(unexplored[2].position, Constants.ocean)
-        assertEquals(200 + 10 + 10, ExplorationAi.scoreExplorePlot(civ, edge, 1, forShip = false))
-        // a ship values open land the most, hills and mountains less and water least
-        assertEquals(100 + 100 + 10, ExplorationAi.scoreExplorePlot(civ, edge, 1, forShip = true))
-        assertEquals(0, ExplorationAi.scoreExplorePlot(civ, tile(0), 1, forShip = false))
-    }
-
-    @Test
-    fun `an unexplored plot beside no revealed one counts 100, with a bonus for being near`() {
+    fun `a revealed plot is worth the unrevealed plots next to revealed ones within its sight, by what they are`() {
         exploreOnlyAround(tile(0), 0)
-        // Range 2 around the one revealed plot: its six neighbors (next to it, so by what they are: 100 each) + (2 - 1) near bonus, and the
-        // twelve plots at distance 2, which no revealed plot touches: 100 each + 0
-        assertEquals(6 * (100 + 1) + 12 * 100, ExplorationAi.scoreExplorePlot(civ, tile(0), 2, forShip = false))
+        game.setTileTerrain(tile(1).position, Constants.coast)
+        val plots = ExplorationPlotSets.build(civ)
+        // range 1: five grassland neighbours x LAND_EXPLORE_TILE_VALUE + the coast x COAST_EXPLORE_TILE_VALUE; the plots two away touch
+        // no revealed plot, so the wider ranges add nothing
+        assertEquals(5 * 50 + 20, plots.land.getValue(tile(0).zeroBasedIndex, 1))
+        assertEquals(5 * 50 + 20, plots.land.getValue(tile(0).zeroBasedIndex, 3))
+        assertEquals(1, plots.land.size)
     }
 
     @Test
-    fun `with fewer explorers than huts each explorer takes the hut it reaches first, with more each hut the explorer who arrives first`() {
-        val near = tile(4)
-        val far = tile(12)
-        for (hut in listOf(near, far)) hut.improvement = "Ancient ruins"
-        val scoutA = game.addUnit("Scout", civ, tile(0))
-        val scoutB = game.addUnit("Scout", civ, tile(10))
-        see()
-        val one = ExplorationPlots(civ, listOf(scoutA))
-        assertEquals(near, one.targetGoodyPlot(scoutA))
-        val two = ExplorationPlots(civ, listOf(scoutA, scoutB))
-        assertEquals(near, two.targetGoodyPlot(scoutA))
-        assertEquals(far, two.targetGoodyPlot(scoutB))
-        // an unrevealed hut is not one: the economic AI only knows revealed plots
-        far.setExplored(civ, false)
-        see()
-        assertEquals(listOf(near), ExplorationPlots(civ, listOf(scoutB)).goodyPlots)
-    }
-
-    @Test
-    fun `an explorer ends its turn on the reachable plot with the best explore score`() {
-        exploreOnlyAround(tile(0), 2)
-        // The corners of the ring of plots at distance 2 touch three unexplored plots, the other plots of it two: hills (+50) on a corner is the best
-        val hills = game.setTileTerrain(tile(2).position, Constants.hill)
+    fun `a goody hut within three turns is the explore target over any plot worth exploring`() {
+        exploreOnlyAround(tile(0), 3)
+        val hut = tile(-2)
+        hut.improvement = "Ancient ruins"
         val scout = game.addUnit("Scout", civ, tile(0))
         see()
-        HomelandAi.doTurn(civ, listOf(scout), AutomationCache())
-        assertEquals(hills, scout.getTile())
+        val plots = ExplorationPlotSets.build(civ)
+        assertEquals(hut, ExplorerAi.bestExploreTarget(scout, 3, ExplorerAi.Reach(scout), plots))
+        hut.improvement = null
+        assertNotEquals(hut, ExplorerAi.bestExploreTarget(scout, 3, ExplorerAi.Reach(scout), plots))
     }
 
     @Test
-    fun `a land explorer with no target and no way home is disbanded, and recon keeps counting it so it asks for no replacement`() {
-        exploreOnlyAround(tile(0), 6)
-        game.addCity(civ, tile(4))
+    fun `an explorer with nothing left to explore goes back to its own unit AI`() {
         val scout = game.addUnit("Scout", civ, tile(0))
-        for (neighbor in tile(0).neighbors) game.setTileTerrain(neighbor.position, Constants.ocean)
-        civ.ai.economic.doReconState(civ)
-        assertEquals("with its explorer alive recon is not needed", ReconState.Neutral, civ.ai.economic.reconState)
+        val warrior = game.addUnit("Warrior", civ, tile(2))
+        UnitAiTypes.set(warrior, UnitAiType.EXPLORE)
+        run(scout, warrior)
+        assertFalse(scout.isDestroyed)
+        assertEquals(UnitAiType.FAST_ATTACK, UnitAiTypes.current(scout))
+        assertEquals(UnitAiType.ATTACK, UnitAiTypes.current(warrior))
+    }
+
+    @Test
+    fun `a warrior that is the only explorer roams beyond six plots of the cities, with a Scout exploring it stays near them`() {
+        game.addCity(civ, tile(0))
+        val warrior = game.addUnit("Warrior", civ, tile(0))
+        UnitAiTypes.set(warrior, UnitAiType.EXPLORE)
         see()
-        HomelandAi.doTurn(civ, listOf(scout), AutomationCache())
-        assertTrue(scout.isDestroyed)
-        civ.ai.economic.doReconState(civ)
-        assertEquals("the disbanded explorer still counts", ReconState.Neutral, civ.ai.economic.reconState)
+        val far = tile(8)
+        assertFalse(ExplorerAi.limitedToHome(warrior))
+        assertTrue(ExplorerAi.isValidExplorerEndTurnPlot(warrior, far))
+        val scout = game.addUnit("Scout", civ, tile(1))
+        UnitAiTypes.set(scout, UnitAiType.EXPLORE)
+        assertTrue(ExplorerAi.limitedToHome(warrior))
+        assertFalse(ExplorerAi.isValidExplorerEndTurnPlot(warrior, far))
+        assertNull(ExplorerAi.bestExploreTarget(warrior, 12, ExplorerAi.Reach(warrior), ExplorationPlotSets.build(civ)))
+        assertTrue(ExplorerAi.isValidExplorerEndTurnPlot(scout, far))
+        // a Scout that stopped exploring is no explorer to leave it to
+        UnitAiTypes.set(scout, UnitAiType.FAST_ATTACK)
+        assertFalse(ExplorerAi.limitedToHome(warrior))
     }
 
     // endregion

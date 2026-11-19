@@ -87,7 +87,9 @@ object IntrigueAi {
         if (!canShare(human, ai)) return null
         val message = human.espionageManager.getRecentIntrigueInfo(ai) ?: return null
         val plotter = human.gameInfo.getCivilizationOrNull(message.source) ?: return null
-        ai.ai.diplomacy.memoryOf(human).numTimesIntrigueShared++
+        val memory = ai.ai.diplomacy.memoryOf(human)
+        memory.numTimesIntrigueShared++
+        memory.intrigueSharedTurn = ai.gameInfo.turns
         human.espionageManager.markRecentIntrigueAsShared(ai, plotter, message.type)
         return plotter
     }

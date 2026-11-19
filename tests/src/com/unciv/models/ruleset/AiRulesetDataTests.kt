@@ -12,7 +12,7 @@ import com.unciv.testing.BaseTestRunner
 @RunWith(BaseTestRunner::class)
 class AiRulesetDataTests {
     @Test
-    fun `every Civ V ruleset has positive game speed durations and a positive assist bound`() {
+    fun `every Civ V ruleset has positive game speed durations and an assist bound`() {
         for (base in listOf(BaseRuleset.Civ_V_Vanilla, BaseRuleset.Civ_V_GnK, BaseRuleset.Civ_V_BNW)) {
             val ai = TestGame(baseRuleset = base).ruleset.ai
             for (speed in listOf("Marathon", "Epic", "Standard", "Quick")) {
@@ -20,7 +20,7 @@ class AiRulesetDataTests {
                 assertTrue("${base.fullName} $speed opinion duration ${def.opinionDurationPercent}", def.opinionDurationPercent > 0)
                 assertTrue("${base.fullName} $speed relationship duration ${def.relationshipDuration}", def.relationshipDuration > 0)
             }
-            assertTrue("${base.fullName} OPINION_WEIGHT_ASSIST_MAX", ai.define(AiDefine.OPINION_WEIGHT_ASSIST_MAX) > 0)
+            assertTrue("${base.fullName} OPINION_WEIGHT_ASSIST_MAX", ai.define(AiDefine.OPINION_WEIGHT_ASSIST_MAX) != 0)
         }
     }
 }

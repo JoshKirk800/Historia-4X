@@ -44,6 +44,8 @@ class AiRuleset {
     /** CvFeatureInfo::getStartingLocationWeight by terrain feature name (non-zero ones), read by CvCitySiteEvaluator::ComputeStrategicValue */
     var featureStartingLocationWeights = LinkedHashMap<String, Int>()
     var policyBranches = ArrayList<PolicyBranchAiDef>()
+    /** CvPolicyAI::WeightPolicyAttributes inputs by Unciv policy name - see [PolicyAttributesDef] */
+    var policyAttributes = ArrayList<PolicyAttributesDef>()
     var eraDiplomacy = ArrayList<EraDiplomacyDef>()
     var gameSpeedDiplomacy = ArrayList<GameSpeedDiplomacyDef>()
     var worldSizes = ArrayList<WorldSizeDef>()
@@ -65,6 +67,7 @@ class AiRuleset {
     @Transient private var unitAiTypesIndex: HashMap<String, UnitAiTypesDef>? = null
     @Transient private var promotionAiByName: HashMap<String, PromotionAiDef>? = null
     @Transient private var promotionAiByType: HashMap<String, PromotionAiDef>? = null
+    @Transient private var policyAttributesIndex: HashMap<String, PolicyAttributesDef>? = null
     @Transient private val flavorCache = HashMap<String, IntArray>()
 
     companion object {
@@ -109,6 +112,7 @@ class AiRuleset {
         unitPower.putAll(other.unitPower)
         if (other.lastEra != NO_LAST_ERA) lastEra = other.lastEra
         mergeByName(policyBranches, other.policyBranches)
+        mergeByName(policyAttributes, other.policyAttributes)
         mergeByName(eraDiplomacy, other.eraDiplomacy)
         mergeByName(gameSpeedDiplomacy, other.gameSpeedDiplomacy)
         mergeByName(worldSizes, other.worldSizes)
@@ -138,6 +142,7 @@ class AiRuleset {
         coastalCivilizations.clear()
         featureStartingLocationWeights.clear()
         policyBranches.clear()
+        policyAttributes.clear()
         eraDiplomacy.clear()
         gameSpeedDiplomacy.clear()
         worldSizes.clear()
@@ -162,6 +167,7 @@ class AiRuleset {
         unitAiTypesIndex = null
         promotionAiByName = null
         promotionAiByType = null
+        policyAttributesIndex = null
         flavorCache.clear()
     }
     //endregion
@@ -231,6 +237,12 @@ class AiRuleset {
 
     /** The policy AI columns of a policy branch, null if the ruleset has no entry for it */
     fun policyBranchOf(branchName: String): PolicyBranchAiDef? = policyBranches.firstOrNull { it.name == branchName }
+
+    /** The WeightPolicyAttributes inputs of a policy, null if it has none (a policy whose effects that routine values none of) */
+    fun policyAttributesOf(policyName: String): PolicyAttributesDef? {
+        val index = policyAttributesIndex ?: policyAttributes.associateByTo(HashMap()) { it.name }.also { policyAttributesIndex = it }
+        return index[policyName]
+    }
     //endregion
 
     //region Item flavors

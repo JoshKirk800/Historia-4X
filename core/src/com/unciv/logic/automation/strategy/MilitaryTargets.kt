@@ -1,29 +1,18 @@
 package com.unciv.logic.automation.strategy
 
-import com.unciv.Constants
-
-import com.unciv.logic.battle.CityCombatant
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
-import com.unciv.models.ruleset.ai.AiDefine
-import com.unciv.models.stats.Stat
 import kotlin.math.max
-import kotlin.math.min
 
-/** CvMilitaryTarget: an attack from [musterCity] on [targetCity] */
+/** An attack from [musterCity] on [targetCity] by land or [attackBySea] (Vox Populi's CvAttackTarget, as [AttackTargetsAi] makes them) */
 class MilitaryTarget(val musterCity: City, val targetCity: City) {
-    /** Power of our units within 5 tiles of the muster city and of theirs near the target (iMusterNearbyUnitPower / iTargetNearbyUnitPower) */
-    var musterNearbyUnitPower = 0
-    var targetNearbyUnitPower = 0
     var attackBySea = false
+    /** Ships alone take the city (Vox Populi's naval army, CITY_ATTACK_NAVAL): our pure naval city attack */
+    var pureNaval = false
     /** Step path length from the muster to the target city, -1 = no path (call off) */
     var pathLength = 0
 }
-
-/** CityAttackApproaches, best to worst */
-enum class CityAttackApproach(val multiplier: Int) { UNRESTRICTED(10), OPEN(8), NEUTRAL(4), LIMITED(2), RESTRICTED(1), NONE(0) }
 
 /**
  *  The step finder of the original (GC.getStepFinder(): a hex path over terrain that ignores units) as far as the military AI needs it:
@@ -134,175 +123,86 @@ class StepFinder {
 }
 
 /**
- *  The target selection of CvMilitaryAI: FindBestAttackTarget, ShouldAttackBySea, ScoreTarget, EvaluateMilitaryApproaches,
- *  GetNearestCoastalCity, GetCoastalPlotAdjacentToTarget and GetMostThreatenedCity.
+ *  The target selection of CvMilitaryAI that Vox Populi's attack targets ([AttackTargetsAi]) leave to the operations: the targets of
+ *  RequestCityAttack ([cityAttackTargets]) and the queries that RequestBullyingOperation and CvAIOperationPillageEnemy::FindBestTarget ask
+ *  (CvPlayer::GetClosestCityByPathLength, CvPlayer::GetClosestCityToUsByPlots, CvCity::HasSharedAreaWith). BNW's FindBestAttackTarget with
+ *  its ShouldAttackBySea, ScoreTarget and EvaluateMilitaryApproaches, which Vox Populi has not, are gone.
  *
  *  Deviations: the step finder is [StepFinder] (own routes only, no ignore-units variant).
  */
 object MilitaryTargets {
 
-    /** CvUnit::IsCombatUnit units of [owner] within 5 tiles of [city] add their power; x1.1 with a Great General there */
-    private fun nearbyPower(owner: Civilization, city: City): Int {
-        val tile = city.getCenterTile()
-        var power = 0
-        var general = false
-        for (unit in owner.units.getCivUnits()) {
-            val distance = unit.getTile().aerialDistanceTo(tile)
-            if (distance > 5) continue
-            if (unit.isMilitary()) power += unit.getAiPower()
-            if (unit.isGreatPersonOfType("War")) general = true
-        }
-        return if (general) power * 11 / 10 else power
-    }
-
     /**
-     *  CvMilitaryAI::FindBestAttackTarget: for every pair of one of our cities and one revealed city of [enemy] the power of the units
-     *  near both and the way there (land route length, or by sea - [shouldAttackBySea]); the 25 shortest routes are scored
-     *  ([scoreTarget]) and one of the best quarter chosen by weight.
-     *  @return the target and its score, null (call off the attack) if there is none
+     *  The targets Vox Populi's CvMilitaryAI::RequestCityAttack tries against [enemy], in turn: the potential attack targets among their
+     *  cities ([MilitaryAi.potentialAttackTargets], best score first), only the preferred ones when [careful]; a naval or combined army
+     *  goes by sea, a naval one with ships alone.
      */
-    fun findBestAttackTarget(civ: Civilization, type: AiOperationType, enemy: Civilization): Pair<MilitaryTarget, Int>? {
-        val steps = civ.ai.military.steps
-        val ourPower = civ.cities.associateWith { nearbyPower(civ, it) }
-        val theirCities = enemy.cities.filter { it.getCenterTile().isExplored(civ) }
-        if (theirCities.isEmpty()) return null
-        val theirPower = theirCities.associateWith { nearbyPower(enemy, it) }
-        val theirTiles = theirCities.map { it.getCenterTile() }
-
-        val preliminary = ArrayList<Pair<MilitaryTarget, Int>>()
-        for (friendly in civ.cities) {
-            val lengths = steps.distances(civ, enemy, friendly.getCenterTile(), theirTiles)
-            for ((index, target) in theirCities.withIndex()) {
-                val candidate = MilitaryTarget(friendly, target)
-                candidate.musterNearbyUnitPower = ourPower.getValue(friendly)
-                candidate.targetNearbyUnitPower = theirPower.getValue(target)
-                if (type == AiOperationType.PURE_NAVAL_CITY_ATTACK) {
-                    candidate.attackBySea = true
-                    if (friendly.isCoastal() && target.isCoastal())
-                        candidate.pathLength = friendly.getCenterTile().aerialDistanceTo(target.getCenterTile())
-                } else {
-                    shouldAttackBySea(civ, candidate, lengths[index])
-                    if (!friendly.isCoastal() && candidate.attackBySea) continue
+    fun cityAttackTargets(civ: Civilization, enemy: Civilization, careful: Boolean): List<MilitaryTarget> =
+        civ.ai.military.potentialAttackTargets
+            .filter { it.targetCity.civ == enemy && (!careful || it.preferred) && it.musterCity.civ == civ }
+            .map { target ->
+                MilitaryTarget(target.musterCity, target.targetCity).apply {
+                    attackBySea = target.armyType != TargetArmyType.Land
+                    pureNaval = target.armyType == TargetArmyType.Naval
+                    pathLength = target.pathLength
                 }
-                if (candidate.pathLength > 0) preliminary.add(candidate to 10000 - candidate.pathLength)
             }
-        }
-        preliminary.sortByDescending { it.second }  // stable: ties keep our city / their city order, as the original's stable sort
 
-        val scored = ArrayList<Pair<MilitaryTarget, Int>>()
-        for ((target, _) in preliminary) {
-            if (scored.size >= 25) break
-            if (target.attackBySea) {
-                if (!target.musterCity.isCoastal() || !target.targetCity.isCoastal()) continue
-                val nearMuster = coastalPlotAdjacentToTarget(target.musterCity.getCenterTile()) ?: continue
-                val nearTarget = coastalPlotAdjacentToTarget(target.targetCity.getCenterTile()) ?: continue
-                if (!steps.seaPathExists(civ, enemy, nearMuster, nearTarget)) continue
-            }
-            scored.add(target to scoreTarget(civ, target, type))
+    /**
+     *  CvPlayer::GetClosestCityByPathLength with CvPlayer::GetCityDistancePathLength (CvDistanceMapByPathLength, Vox Populi
+     *  Release-5.4.8): our city with the shortest route to [tile] and that route's length in steps, null if none reaches it. [enemy] is
+     *  whose land the route is for ([StepFinder]'s territory rule).
+     *  Deviations: the original's map holds PT_ARMY_MIXED routes (land and embarked, the shortest wins) over every tile, revealed or not,
+     *  up to 36 turns; here it is the land route of the [StepFinder] over the tiles [civ] has explored and, only when no city of ours has
+     *  one, with [allowSea] and embarkation known, the shortest route over explored water from the shallow water next to one of our coastal
+     *  cities to that next to [tile], two steps added for the land at both ends (a sea route never beats a land one). The original
+     *  answers a minor civilization's query with its capital; ours is a major civilization's.
+     */
+    fun closestCityByPathLength(civ: Civilization, enemy: Civilization?, tile: Tile, allowSea: Boolean): Pair<City, Int>? {
+        val steps = civ.ai.military.steps
+        val lengths = steps.distances(civ, enemy, tile, civ.cities.map { it.getCenterTile() })
+        var best: Pair<City, Int>? = null
+        for ((index, city) in civ.cities.withIndex()) {
+            val length = lengths[index]
+            if (length >= 0 && (best == null || length < best.second)) best = city to length
         }
-        if (scored.isEmpty()) return null
-        scored.sortByDescending { it.second }
-        if (scored.sumOf { it.second } <= 0) return null
-        val numChoices = max(1, scored.size * 25 / 100)
-        val chosen = WonderProductionAi.chooseFromTopChoices(civ, scored, numChoices, "AttackTarget" + enemy.civID)
-        return chosen to scoreTarget(civ, chosen, type)
+        if (best != null || !allowSea || !civ.tech.unitsCanEmbark) return best
+        val landing = coastalPlotAdjacentToTarget(tile) ?: return null
+        for (city in civ.cities) {
+            val port = coastalPlotAdjacentToTarget(city.getCenterTile()) ?: continue
+            val length = steps.distance(civ, enemy, port, landing, sea = true)
+            if (length >= 0 && (best == null || length + 2 < best.second)) best = city to length + 2
+        }
+        return best
     }
 
     /**
-     *  CvMilitaryAI::ShouldAttackBySea. [landLength] is the step length of the land route from the muster to the target city (-1 = none).
-     *  With embarkation known: by sea on different landmasses, without a land route, or when the route is over twice the straight distance;
-     *  without it a missing route calls the attack off (path length -1).
+     *  CvPlayer::GetClosestCityToUsByPlots: the city of [other] that is nearest to a city of ours (CvPlayer::GetClosestCityByPlots of
+     *  each of theirs, the distance in plots); the first of them on a tie.
      */
-    fun shouldAttackBySea(civ: Civilization, target: MilitaryTarget, landLength: Int) {
-        val straight = target.musterCity.getCenterTile().aerialDistanceTo(target.targetCity.getCenterTile())
-        if (civ.tech.unitsCanEmbark) {
-            val differentLandmasses = target.musterCity.getCenterTile().getContinent() != target.targetCity.getCenterTile().getContinent()
-            if (differentLandmasses || landLength < 0 || landLength > 2 * straight) {
-                target.attackBySea = true
-                target.pathLength = straight
-                return
-            }
-        } else if (landLength < 0) {
-            target.pathLength = -1
-            return
+    fun closestCityToUsByPlots(civ: Civilization, other: Civilization): City? {
+        var best: City? = null
+        var bestDistance = Int.MAX_VALUE
+        for (theirs in other.cities) {
+            val tile = theirs.getCenterTile()
+            val distance = civ.cities.minOfOrNull { it.getCenterTile().aerialDistanceTo(tile) } ?: continue
+            if (distance < bestDistance) { bestDistance = distance; best = theirs }
         }
-        target.attackBySea = false
-        target.pathLength = landLength
+        return best
     }
 
-    /** CvMilitaryAI::ScoreTarget: high = more desirable (path, approaches, force ratio, the city's worth) */
-    fun scoreTarget(civ: Civilization, target: MilitaryTarget, type: AiOperationType): Int {
-        val rules = civ.gameInfo.ruleset.ai
-        var value = 1L
-        if (!target.attackBySea) {
-            value *= when {
-                target.pathLength < 10 -> 16
-                target.pathLength < 15 -> 8
-                target.pathLength < 20 -> 4
-                else -> 2
-            }
-            // Double if the troops can be assembled in the muster city by airlift
-            if (target.musterCity.canAirlift()) value *= 2
-        } else {
-            value *= when {
-                target.pathLength < 12 -> 5
-                target.pathLength < 20 -> 3
-                target.pathLength < 30 -> 2
-                else -> 1
-            }
-            // Coming over sea, inland cities are trickier
-            if (!target.targetCity.getCenterTile().isAdjacentToCoast()) value /= 2
-        }
-        // A sneak attack wants the edge of the empire: cube the distance factor
-        if (type == AiOperationType.SNEAK_CITY_ATTACK || type == AiOperationType.NAVAL_SNEAK_ATTACK) value = value * value * value
-
-        value *= evaluateMilitaryApproaches(target.targetCity, attackByLand = true, attackBySea = target.attackBySea).multiplier
-
-        // Don't want to start at a city that isn't connected to our capital
-        if (!target.musterCity.isConnectedToCapital() && !target.musterCity.isCapital()) value /= 4
-
-        val friendly = max(1, target.musterNearbyUnitPower)
-        val enemyStrength = max(1, target.targetNearbyUnitPower + CityCombatant(target.targetCity).getCityStrength() * 2)
-        value *= min(1000, friendly * 100 / enemyStrength)
-
-        if (target.targetCity.isOriginalCapital) value = value * rules.define(AiDefine.AI_MILITARY_CAPTURING_ORIGINAL_CAPITAL) / 100
-        if (target.targetCity.foundingCivObject == civ) value = value * rules.define(AiDefine.AI_MILITARY_RECAPTURING_OWN_CITY) / 100
-
-        // Don't want it to already be targeted by an operation that's not well on its way
-        if (civ.ai.operations.isCityAlreadyTargeted(target.targetCity, null, 50)) value /= 10
-        value /= 1000
-
-        val city = target.targetCity
-        val stats = city.cityStats.currentCityStats
-        var economic = 1L + city.population.population / 3
-        for (stat in listOf(Stat.Food, Stat.Production, Stat.Science, Stat.Gold, Stat.Culture, Stat.Faith))
-            economic += (stats[stat] * 100).toInt() / 10
-        value *= economic
-        value /= 10
-        return min(10000000L, value and 0x7fffffffL).toInt()
-    }
-
-    /** CvMilitaryAI::EvaluateMilitaryApproaches: how many of the six tiles around [city] cannot be used to get at it */
-    fun evaluateMilitaryApproaches(city: City, attackByLand: Boolean, attackBySea: Boolean): CityAttackApproach {
-        var blocked = 0
-        val center = city.getCenterTile()
-        val neighbors = center.neighbors.toList()
-        blocked += 6 - neighbors.size // the edge of the map
-        for (neighbor in neighbors) {
-            when {
-                neighbor.isWater && neighbor.getBaseTerrain().isFreshwater -> blocked++ // no one coming over a lake
-                neighbor.isWater && !attackBySea -> blocked++
-                !neighbor.isWater && (!attackByLand || neighbor.isImpassible() || neighbor.baseTerrain == Constants.mountain) -> blocked++
-            }
-        }
-        return when (blocked) {
-            0 -> CityAttackApproach.UNRESTRICTED
-            1, 2 -> CityAttackApproach.OPEN
-            3 -> CityAttackApproach.NEUTRAL
-            4 -> CityAttackApproach.LIMITED
-            5 -> CityAttackApproach.RESTRICTED
-            else -> CityAttackApproach.NONE
-        }
+    /**
+     *  CvCity::HasSharedAreaWith(other, allow land, no water): the cities stand on the same landmass, or the land around one of them
+     *  borders a landmass that also borders the other (CvPlot::hasSharedAdjacentArea, which leaves a plot's own area out of its adjacent
+     *  areas).
+     */
+    fun hasSharedLandArea(first: City, second: City): Boolean {
+        val firstTile = first.getCenterTile()
+        val secondTile = second.getCenterTile()
+        if (firstTile.getContinent() == secondTile.getContinent()) return true
+        fun adjacentLand(tile: Tile) = tile.neighbors.filter { it.isLand && it.getContinent() != tile.getContinent() }.map { it.getContinent() }.toSet()
+        val secondAreas = adjacentLand(secondTile)
+        return adjacentLand(firstTile).any { it in secondAreas }
     }
 
     /** CvMilitaryAI::GetCoastalPlotAdjacentToTarget without an army: the first shallow water tile next to [target] */

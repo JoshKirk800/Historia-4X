@@ -67,11 +67,11 @@ class NauExoticGoodsTests {
     }
 
     @Test
-    fun `AI Nau sells only after it has sailed far enough from its capital`() {
+    fun `AI Nau sells only next to a city-state after it has sailed far enough from its capital`() {
         val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
         game.makeHexagonalMap(12)
         val portugal = game.addCiv(game.ruleset.nations["Portugal"]!!)
-        val neighbor = game.addCiv()
+        val neighbor = game.addCiv(cityStateType = game.ruleset.cityStateTypes.keys.first())
         portugal.diplomacyFunctions.makeCivilizationsMeet(neighbor)
         portugal.getDiplomacyManager(neighbor)!!.makePeace()
         game.addCity(portugal, game.getTile(0, 0))

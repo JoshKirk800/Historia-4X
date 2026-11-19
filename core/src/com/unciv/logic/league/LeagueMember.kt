@@ -37,8 +37,11 @@ class LeagueMember : IsPartOfGameInfoSerialization {
 }
 
 /**
- * The turns at which the other civilization last affected our Congress interests.
- * -1 means never; entries expire 45 turns after the event (CvDiplomacyAI::Get*ProposalScore).
+ * What the other civilization did to our Congress interests: the turns (-1 never) at which we last liked or disliked a proposal of
+ * theirs, they supported or foiled one of ours, supported our hosting, tried to sanction (embargo) or unsanction us, and Vox
+ * Populi's values (CvDiplomacyAI: GetProposalAgreementValue, GetProposalSupportDelta, GetSupportedOurHostingValue,
+ * GetVotingHistoryScore, HasEverSanctionedUs / HasEverUnsanctionedUs). The opinion terms fade by them
+ * ([com.unciv.logic.automation.diplomacy.OpinionAi]); TestOpinionModifiers forgets them.
  */
 class LeagueAlignmentMemory : IsPartOfGameInfoSerialization {
     var likedProposalTurn = -1
@@ -46,6 +49,18 @@ class LeagueAlignmentMemory : IsPartOfGameInfoSerialization {
     var supportedProposalTurn = -1
     var foiledProposalTurn = -1
     var supportedHostingTurn = -1
+    /** How much we liked (< 0) or disliked (> 0) their last proposal, by our desire level */
+    var proposalAgreementValue = 0
+    /** The share of the votes they gave to our proposals' outcomes: < 0 supported, > 0 foiled (-100..100) */
+    var proposalSupportDelta = 0
+    /** The share of the votes for us they gave when we were elected host */
+    var supportedHostingValue = 0
+    /** How they voted against our desires (< 0) or with them (> 0), -VOTING_HISTORY_SCORE_MAX..VOTING_HISTORY_SCORE_MAX */
+    var votingHistoryScore = 0
+    var sanctionedTurn = -1
+    var unsanctionedTurn = -1
+    var everSanctioned = false
+    var everUnsanctioned = false
 
     fun clone() = LeagueAlignmentMemory().also {
         it.likedProposalTurn = likedProposalTurn
@@ -53,6 +68,14 @@ class LeagueAlignmentMemory : IsPartOfGameInfoSerialization {
         it.supportedProposalTurn = supportedProposalTurn
         it.foiledProposalTurn = foiledProposalTurn
         it.supportedHostingTurn = supportedHostingTurn
+        it.proposalAgreementValue = proposalAgreementValue
+        it.proposalSupportDelta = proposalSupportDelta
+        it.supportedHostingValue = supportedHostingValue
+        it.votingHistoryScore = votingHistoryScore
+        it.sanctionedTurn = sanctionedTurn
+        it.unsanctionedTurn = unsanctionedTurn
+        it.everSanctioned = everSanctioned
+        it.everUnsanctioned = everUnsanctioned
     }
 }
 

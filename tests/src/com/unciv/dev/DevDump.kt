@@ -7,12 +7,21 @@ import com.unciv.logic.automation.diplomacy.ApproachAi
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.automation.strategy.AiOperationLogic
+import com.unciv.logic.automation.strategy.AiOperationType
+import com.unciv.logic.automation.strategy.EconomicAi
+import com.unciv.logic.automation.strategy.MilitaryOperations
+import com.unciv.logic.automation.strategy.MilitaryTargets
 import com.unciv.logic.automation.strategy.NavalOperationLogic
 import com.unciv.logic.automation.strategy.OperationAbortReason
+import com.unciv.logic.automation.unit.BuilderAssignment
+import com.unciv.logic.automation.unit.BuilderDirective
+import com.unciv.logic.automation.unit.BuilderDirectives
+import com.unciv.logic.automation.unit.BuilderTaskingAi
 import com.unciv.logic.files.UncivFiles
 import com.unciv.models.metadata.GameSettings
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.testing.GdxTestRunner
 import com.unciv.ui.audio.MusicController
 import org.junit.Assume
@@ -29,7 +38,12 @@ import java.io.File
  *   and goal, warmonger threat, military strength, proximity, whether war could be declared);
  * - `operations`: every operation of every civilization: type, state, enemy, age, target and muster, its armies with their units;
  * - `nukes`: every nuclear weapon: where it stands, the enemy cities in its range with the value of a blast there
- *   ([NavalOperationLogic.nukeCityValue]).
+ *   ([NavalOperationLogic.nukeCityValue]);
+ * - `military`: per major, its unit supply, the soft supply cap, the recommended army and navy with the units it has, the defense
+ *   states and next turn's gold.
+ * - `builders`: per civilization with cities, this turn's builder plan ([BuilderTaskingAi.directives], the first DEV_DUMP_BUILDER_LIMIT, default 60):
+ *   type, build, tile, whether it can be built now, the score parts (base, potential, unused yield, penalty), the priority score, the weight
+ *   without time; then, for each builder of the civilization, the directive it would pick with its weight, build and move turns.
  * A developer tool, not a test: it does nothing unless DEV_DUMP_SAVE is set. Run it with tools/dev_dump.py.
  */
 @RunWith(GdxTestRunner::class)
@@ -56,7 +70,10 @@ class DevDump {
                 "approach" -> approach(game, out)
                 "operations" -> operations(game, out)
                 "nukes" -> nukes(game, out)
-                else -> out.append("unknown mode $mode (approach, operations, nukes)\n")
+                "targets" -> targets(game, out)
+                "military" -> military(game, out)
+                "builders" -> builders(game, out)
+                else -> out.append("unknown mode $mode (approach, operations, nukes, targets, military, builders)\n")
             }
             out.append("\n")
         }
@@ -106,6 +123,74 @@ class DevDump {
                     out.append("    army ${army.id} ${army.formation} ${army.state}, ${army.numSlotsFilled()}/${army.slots.size} filled, " +
                         "at ${army.position}, goal ${army.goalTile}: $units\n")
                 }
+            }
+        }
+    }
+
+    /** Per major: supply, soft supply cap, recommended army and navy against the units it has, defense states, gold; its attack targets and exposed cities */
+    private fun military(game: GameInfo, out: StringBuilder) {
+        out.append("army sizes at turn ${game.turns}\n")
+        for (civ in game.civilizations.filter { it.isMajorCiv && it.isAlive() }) {
+            val military = civ.ai.military
+            military.updateAttackTargets(civ)
+            military.updateBaseData(civ)
+            military.updateDefenseState(civ)
+            out.append("${civ.civName}: cities ${civ.cities.size}, units ${civ.units.getCivUnitsSize()} (${civ.units.getNumUnitsToSupply()} use supply) of supply ${civ.stats.getUnitSupply()}, " +
+                "soft cap ${EconomicAi.softSupplyCap(civ)}; land ${military.numLandUnits} of ${military.recommendedLandArmySize} (${military.landDefenseState}), " +
+                "navy ${military.numNavalUnits} of ${military.recommendedNavySize} (${military.navalDefenseState}), air ${military.numAirUnits}, " +
+                "explorers ${military.recommendedExplorers}; gold ${civ.gold} (${"%+d".format(civ.stats.statsForNextTurn.gold.toInt())}), " +
+                "unit upkeep ${civ.stats.getStatMapForNextTurn()["Unit upkeep"]?.gold?.toInt()}\n")
+            for (target in military.potentialAttackTargets)
+                out.append("  target ${target.targetCity.name} (${target.targetCity.civ.civName}) from ${target.musterCity.name}: ${target.armyType}, " +
+                    "approach ${target.approachScore}, path ${target.pathLength}${if (target.preferred) ", preferred" else ""}\n")
+            for (exposed in military.exposedCities)
+                out.append("  exposed ${exposed.targetCity.name} to ${exposed.musterCity.civ.civName} from ${exposed.musterCity.name}: ${exposed.armyType}\n")
+        }
+    }
+
+    /** Per civilization: this turn's builder directives, and the picks of the assignment pass of its builders in the order made (a fresh plan, nothing executed) */
+    private fun builders(game: GameInfo, out: StringBuilder) {
+        val limit = System.getenv("DEV_DUMP_BUILDER_LIMIT")?.toIntOrNull() ?: 60
+        out.append("builder directives at turn ${game.turns}\n")
+        for (civ in game.civilizations.filter { it.isAlive() && it.cities.isNotEmpty() }) {
+            val builders = civ.units.getCivUnits()
+                .filter { it.cache.hasUniqueToBuildImprovements || it.getMatchingUniques(UniqueType.ConstructImprovementInstantly).any() }.toList()
+            val ai = BuilderTaskingAi(civ)
+            out.append("\n${civ.civName}: ${ai.directives.size} directives, ${builders.size} builders, " +
+                "improved tiles ${civ.cities.sumOf { city -> city.getTiles().count { it.improvement != null } }} of ${civ.cities.sumOf { it.getTiles().count() }}\n")
+            val routes = ai.routes.plannedRoutes()
+            out.append("  planned routes: ${routes.size} (${routes.groupingBy { it.route }.eachCount()}), ${routes.sumOf { ai.routes.plotsOf(it).size }} plots, " +
+                "${ai.directives.count { it.build?.isRoute == true }} build directives, ${ai.directives.count { it.type == BuilderDirective.Type.RepairRoute }} repairs\n")
+            for (route in routes.take(limit)) out.append("    ${route.route} ${route.first.position} - ${route.second.position}: ${ai.routes.purposesOf(route)}, " +
+                "additive ${ai.routes.additiveValueOf(route)}, non-additive ${ai.routes.nonAdditiveValueOf(route)}, ${ai.routes.plotsOf(route).size} plots\n")
+            for (directive in ai.directives.take(limit)) {
+                val score = directive.plotBuildScore
+                out.append("  ${directive.type} ${directive.build?.improvement?.name ?: "-"}${directive.build?.removeFirst?.let { " after ${it.name}" } ?: ""} " +
+                    "at ${directive.tile.position}${if (directive.canBuild) "" else " (not yet)"}${if (directive.isGreatPerson) " (Great Person)" else ""}: " +
+                    "score ${score.score} potential ${score.potentialScore} unused ${score.unusedYieldScore} penalty ${score.scorePenalty}, " +
+                    "priority ${directive.priorityScore}, weight ${BuilderDirectives.directiveWeight(directive, 0, 0)}\n")
+            }
+            val picks = BuilderAssignment(civ, ai).assign(builders.filter { it.hasMovement() })
+            for (pick in picks) out.append("  pick ${pick.unit.name} at ${pick.unit.getTile().position}: ${pick.directive.type} ${pick.build.improvement.name} at ${pick.tile.position}, " +
+                "weight ${pick.weight}, build turns ${pick.buildTurns}, move turns ${pick.moveTurns}\n")
+            for (unit in builders) if (picks.none { it.unit == unit }) out.append("  builder ${unit.name} at ${unit.getTile().position}: no directive\n")
+        }
+    }
+
+    /** For each AI with a war approach towards a major it is not at war with: the sneak attack it would request and whether it is ready */
+    private fun targets(game: GameInfo, out: StringBuilder) {
+        out.append("sneak attack targets at turn ${game.turns}\n")
+        for (civ in game.civilizations.filter { it.isMajorCiv && it.isAlive() && !it.isHuman() }) {
+            for (other in game.civilizations.filter { it.isMajorCiv && it.isAlive() && it != civ && civ.knows(it) }) {
+                if (civ.ai.diplomacy.approachTowards(other) != MajorCivApproach.War || civ.isAtWarWith(other)) continue
+                val target = MilitaryTargets.cityAttackTargets(civ, other, careful = false).firstOrNull()
+                val explored = other.cities.count { it.getCenterTile().isExplored(civ) }
+                out.append("${civ.civName} -> ${other.civName}: their cities ${other.cities.size}, explored $explored; ")
+                if (target == null) { out.append("no target\n"); continue }
+                val formation = if (target.attackBySea) "MUFORMATION_NAVAL_INVASION" else AiOperationLogic.formationName(civ, AiOperationType.BASIC_CITY_ATTACK)
+                val type = if (target.attackBySea) AiOperationType.NAVAL_SNEAK_ATTACK else AiOperationType.SNEAK_CITY_ATTACK
+                out.append("target ${target.targetCity.name} from ${target.musterCity.name}, by sea ${target.attackBySea}, path ${target.pathLength}, " +
+                    "ready ${MilitaryOperations.isAttackReady(civ, formation, type)}, operations ${civ.ai.operations.operations.map { it.type }}\n")
             }
         }
     }

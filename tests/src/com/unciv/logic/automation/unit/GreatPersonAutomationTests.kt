@@ -9,6 +9,7 @@ import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WonderProductionAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.PublicOpinion
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.mapunit.MapUnit
@@ -56,6 +57,7 @@ class GreatPersonAutomationTests {
         val newCiv = game.addCiv(*uniques)
         for (flavor in Flavor.entries) newCiv.ai.setPersonalityFlavor(flavor, 0)
         for (value in DiplomacyPersonality.entries) newCiv.ai.setDiplomacyValue(value, 0)
+        newCiv.ai.setGrandStrategyAndPursuit(null)
         for (tile in game.tileMap.values) tile.setExplored(newCiv, true)
         return newCiv
     }
@@ -86,19 +88,19 @@ class GreatPersonAutomationTests {
 
     @Test
     fun `scientist builds an academy only for spaceship within the first quarter of the game`() {
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         game.gameInfo.turns = endTurn / 4
         assertEquals(GreatPeopleDirective.ConstructImprovement, GreatPersonAutomation.directiveScientist(civ))
         game.gameInfo.turns = endTurn / 4 + 1
         assertEquals(GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveScientist(civ))
         game.gameInfo.turns = 1
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveScientist(civ))
     }
 
     @Test
     fun `scientist bulbs when at war and not winning all wars, even as an early space racer`() {
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         atWarStrategy()
         assertEquals(GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveScientist(civ))
         civ.ai.warStates.stateAllWars = StateAllWars.Neutral
@@ -132,7 +134,7 @@ class GreatPersonAutomationTests {
     @Test
     fun `engineer without a wonder builds a manufactory for conquest in the first three quarters, else after ten turns`() {
         val engineer = greatPerson("Great Engineer")
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         game.gameInfo.turns = endTurn * 3 / 4
         engineer.turnCreated = game.gameInfo.turns
         assertEquals(GreatPeopleDirective.ConstructImprovement, GreatPersonAutomation.directiveEngineer(engineer))
@@ -171,7 +173,7 @@ class GreatPersonAutomationTests {
     fun `merchant builds a customs house for diplomacy in the first half, unless Venice`() {
         val merchant = greatPerson("Great Merchant")
         cityState()
-        civ.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.UNITED_NATIONS)
         game.gameInfo.turns = endTurn / 2
         assertEquals(GreatPeopleDirective.ConstructImprovement, GreatPersonAutomation.directiveMerchant(merchant))
         game.gameInfo.turns = endTurn / 2 + 1
@@ -180,7 +182,7 @@ class GreatPersonAutomationTests {
 
         val venice = neutralCiv("May not annex cities")
         game.addCity(venice, tile(-4, 0))
-        venice.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS
+        venice.ai.setGrandStrategyAndPursuit(GrandStrategyAi.UNITED_NATIONS)
         val venetian = game.addUnit("Great Merchant", venice, venice.cities.first().getCenterTile())
         venice.ai.militaryStrategies["MILITARYAISTRATEGY_AT_WAR"] = 0 // no trade mission
         game.gameInfo.turns = 1
@@ -232,7 +234,7 @@ class GreatPersonAutomationTests {
     //region General
 
     @Test
-    fun `a citadel goes next to a major only when we show it hostility, or neutrality over a strong land dispute`() {
+    fun `a citadel goes next to a major only when we show it guarded or worse, or covet its land`() {
         val other = neutralCiv()
         game.addCity(other, tile(3, 0))
         civ.diplomacyFunctions.makeCivilizationsMeet(other)
@@ -242,16 +244,54 @@ class GreatPersonAutomationTests {
 
         memory.approach = MajorCivApproach.Neutral
         assertNull("neutral, no dispute", target())
+        memory.landDispute = DisputeLevel.Weak
+        assertNull("neutral, a weak dispute", target())
         memory.landDispute = DisputeLevel.Strong
         assertEquals(other, target()!!.neighbors.firstNotNullOf { it.getOwner()?.takeIf { owner -> owner != civ } })
         memory.approach = MajorCivApproach.Friendly
-        assertNull("friendly despite the dispute", target())
+        assertNotNull("friendly, but a strong land dispute", target())
         memory.landDispute = DisputeLevel.None
+        assertNull("friendly", target())
+        memory.approach = MajorCivApproach.Guarded
+        assertNotNull("guarded", target())
+        memory.approach = MajorCivApproach.Hostile
+        assertNotNull("hostile", target())
         memory.approach = MajorCivApproach.War
         memory.warFace = WarFace.Hostile
         assertNotNull("the war face shown is hostile", target())
         memory.warFace = WarFace.Friendly
         assertNull("the war face shown is friendly", target())
+    }
+
+    @Test
+    fun `a citadel is not planted next to a friend`() {
+        val other = neutralCiv()
+        game.addCity(other, tile(3, 0))
+        civ.diplomacyFunctions.makeCivilizationsMeet(other)
+        val general = greatPerson("Great General")
+        civ.ai.diplomacy.memoryOf(other).approach = MajorCivApproach.Hostile
+        assertNotNull(GreatPersonAutomation.findBestArtistTargetPlot(general))
+        civ.getDiplomacyManager(other)!!.setFlag(DiplomacyFlags.DeclarationOfFriendship, 20)
+        assertNull("a friend, whatever our approach", GreatPersonAutomation.findBestArtistTargetPlot(general))
+    }
+
+    @Test
+    fun `a citadel goes next to a city-state unless we approach it as friendly or are its ally`() {
+        val cityState = game.addCiv(cityStateType = "Cultured")
+        game.addCity(cityState, tile(3, 0))
+        civ.diplomacyFunctions.makeCivilizationsMeet(cityState)
+        val general = greatPerson("Great General")
+        fun target() = GreatPersonAutomation.findBestArtistTargetPlot(general)
+
+        for (approach in listOf(MinorCivApproach.Ignore, MinorCivApproach.Conquest, MinorCivApproach.Bully)) {
+            civ.ai.minorCivApproaches[cityState.civID] = approach
+            assertNotNull("$approach", target())
+        }
+        civ.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Friendly
+        assertNull("friendly", target())
+        civ.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Ignore
+        cityState.allyCiv = civ
+        assertNull("its ally", target())
     }
     //endregion
 
@@ -273,7 +313,7 @@ class GreatPersonAutomationTests {
         assertEquals(GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveWriter(writer))
         setPublicOpinionUnhappiness(11)
         assertEquals(GreatPeopleDirective.CultureBlast, GreatPersonAutomation.directiveWriter(writer))
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveWriter(writer))
     }
 
@@ -288,9 +328,9 @@ class GreatPersonAutomationTests {
         for (tenet in ideology.policies.filter { it.tenetLevel == 1 }.take(2)) civ.policies.adopt(tenet)
         assertTrue(GreatPersonAutomation.canGetAdvancedTenet(civ))
         assertEquals(GreatPeopleDirective.CultureBlast, GreatPersonAutomation.directiveWriter(writer))
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveWriter(writer))
-        civ.ai.grandStrategy = null
+        civ.ai.setGrandStrategyAndPursuit(null)
         civ.policies.freeTenets = 0
         assertFalse("nothing to pay with", GreatPersonAutomation.canGetAdvancedTenet(civ))
     }
@@ -317,7 +357,7 @@ class GreatPersonAutomationTests {
         setPublicOpinionUnhappiness(0)
         civ.ai.militaryStrategies["MILITARYAISTRATEGY_WAR_MOBILIZATION"] = 0
         assertEquals(GreatPeopleDirective.GoldenAge, GreatPersonAutomation.directiveArtist(artist))
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveArtist(artist))
     }
 
@@ -325,11 +365,11 @@ class GreatPersonAutomationTests {
     fun `artist starts a golden age for the spaceship homestretch`() {
         val artist = creator("Great Artist", GreatWorkSlotType.ArtArtifact)
         addSlot(GreatWorkSlotType.ArtArtifact)
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         assertEquals(GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveArtist(artist))
         city.cityConstructions.addBuilding("Apollo Program")
         assertEquals(GreatPeopleDirective.GoldenAge, GreatPersonAutomation.directiveArtist(artist))
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         assertEquals("homestretch counts only when going for spaceship", GreatPeopleDirective.UsePower,
             GreatPersonAutomation.directiveArtist(artist))
     }
@@ -411,7 +451,7 @@ class GreatPersonAutomationTests {
         val musician = creator("Great Musician", GreatWorkSlotType.Music)
         addSlot(GreatWorkSlotType.Music)
         majorsForTour(influentialCount = 1) // needed: 3, half: 1, influential on 1: not more
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveMusician(musician))
     }
 
@@ -421,7 +461,7 @@ class GreatPersonAutomationTests {
         addSlot(GreatWorkSlotType.Music)
         majorsForTour(influentialCount = 2)
         assertEquals("not going for culture", GreatPeopleDirective.UsePower, GreatPersonAutomation.directiveMusician(musician))
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(GreatPeopleDirective.TourismBlast, GreatPersonAutomation.directiveMusician(musician))
     }
 
@@ -469,10 +509,10 @@ class GreatPersonAutomationTests {
             GrandStrategyAi.UNITED_NATIONS to "Great Merchant", GrandStrategyAi.SPACESHIP to "Great Scientist",
         )
         for ((strategy, name) in expected) {
-            civ.ai.grandStrategy = strategy
+            civ.ai.setGrandStrategyAndPursuit(strategy)
             assertEquals(name, GreatPersonAutomation.freeGreatPersonChoice(civ, allGreatPeople)?.name)
         }
-        civ.ai.grandStrategy = null
+        civ.ai.setGrandStrategyAndPursuit(null)
         assertNull(GreatPersonAutomation.freeGreatPersonChoice(civ, allGreatPeople))
         civ.greatPeople.freeGreatPeople = 1
         GreatPersonAutomation.chooseFreeGreatPeople(civ)
@@ -481,7 +521,7 @@ class GreatPersonAutomationTests {
 
     @Test
     fun `a wonder-competitive leader takes an engineer in the first half of the game`() {
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         civ.ai.setDiplomacyValue(DiplomacyPersonality.WonderCompetitiveness, 8)
         game.gameInfo.turns = endTurn / 2
         assertEquals("Great Engineer", GreatPersonAutomation.freeGreatPersonChoice(civ, allGreatPeople)?.name)
@@ -494,7 +534,7 @@ class GreatPersonAutomationTests {
 
     @Test
     fun `free great people are spent until the picks run out`() {
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         civ.greatPeople.freeGreatPeople = 2
         GreatPersonAutomation.chooseFreeGreatPeople(civ)
         assertEquals(0, civ.greatPeople.freeGreatPeople)
@@ -503,7 +543,7 @@ class GreatPersonAutomationTests {
 
     @Test
     fun `maya boost prefers a prophet while the religion is still to found or enhance`() {
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         assertEquals("religions can still be founded", "Great Prophet", GreatPersonAutomation.mayaBoostChoice(civ, allGreatPeople)?.name)
         setReligionState(ReligionState.Religion)
         assertEquals("Great Prophet", GreatPersonAutomation.mayaBoostChoice(civ, allGreatPeople)?.name)
@@ -515,7 +555,7 @@ class GreatPersonAutomationTests {
     fun `maya boost takes the grand strategy's person, then the engineer, then the fixed order of those not taken yet`() {
         setReligionState(ReligionState.EnhancedReligion)
         civ.ai.setDiplomacyValue(DiplomacyPersonality.WonderCompetitiveness, 8)
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals("wonder-competitive first", "Great Engineer", GreatPersonAutomation.mayaBoostChoice(civ, allGreatPeople)?.name)
         val noEngineer = allGreatPeople.filter { it.name != "Great Engineer" }
         assertEquals("Great Artist", GreatPersonAutomation.mayaBoostChoice(civ, noEngineer)?.name)

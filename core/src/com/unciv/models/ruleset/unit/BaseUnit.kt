@@ -1,6 +1,5 @@
 package com.unciv.models.ruleset.unit
 
-import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.Constants
 import com.unciv.logic.GameInfo
 import com.unciv.logic.MultiFilter
@@ -401,8 +400,9 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
             unit.currentMovement = 0f
 
         addConstructionBonuses(unit, cityConstructions)
-        // CvCity::CreateUnit: a unit trained for an operation joins it, any other may be sent exploring
-        if (!(useToSatisfyOperation && civInfo.ai.operations.finishedBuilding(unit, cityConstructions.city))) EconomicAi.onUnitTrained(unit)
+        // CvCity::CreateUnit: a unit trained for an operation joins it. Vox Populi's explorer assignment there applies to city-states
+        // only (CannotMinorCiv on NEED_RECON), which do not explore here; majors' explorers come from EconomicAi.doReconState
+        if (useToSatisfyOperation) civInfo.ai.operations.finishedBuilding(unit, cityConstructions.city)
 
         return unit
     }
@@ -527,6 +527,14 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
     @Readonly fun isMelee() = !isRanged() && strength > 0
     val isMilitary by lazy { isRanged() || isMelee() }
     @Readonly fun isCivilian() = !isMilitary
+
+    /**
+     *  Whether a unit of this type counts against unit supply. The original's CvUnitEntry::IsMilitarySupport (the `MilitarySupport` column of
+     *  Units; CvUnit::init adds such a unit to CvPlayer::getNumMilitaryUnits, which CvPlayer::GetNumUnitsToSupply counts): every unit with a
+     *  combat strength, plus those marked [UniqueType.UsesUnitSupply] - in the Civ V rulesets the Caravan, the Cargo Ship and the Work Boat.
+     *  Workers, settlers, Great People, missionaries, prophets, inquisitors and archaeologists do not.
+     */
+    val usesUnitSupply by lazy { isMilitary || hasUnique(UniqueType.UsesUnitSupply, GameContext.IgnoreConditionals) }
 
     val isLandUnit by lazy { type.isLandUnit() }
     val isWaterUnit by lazy { type.isWaterUnit() }

@@ -1,13 +1,19 @@
 package com.unciv.logic.automation.city
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
-import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
+import com.unciv.logic.automation.strategy.ProductionAi
+import com.unciv.logic.automation.strategy.ProductionSanityAi
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityFocus
+import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.tile.Tile
+import com.unciv.models.ruleset.Building
+import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.Specialist
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import kotlin.math.min
@@ -24,99 +30,83 @@ import kotlin.math.roundToInt
  */
 object CitizenAutomation {
     private const val LOSING_MONEY = "ECONOMICAISTRATEGY_LOSING_MONEY"
+    private const val DEVELOPING_RELIGION = "ECONOMICAISTRATEGY_DEVELOPING_RELIGION"
+    private const val GOOD_GP_CITY = "AICITYSTRATEGY_GOOD_GP_CITY"
     private const val FORCED_PLOT_BONUS = 10000
 
     /**
-     *  CvCityCitizens::DoTurn: AI cities and puppets choose their focus, then every city reallocates its citizens.
-     *  Each focus or flag change reallocates at once in the original; here the reallocation is deferred until the food surplus is read
-     *  or the turn's final reallocation, which gives the same result because a reallocation depends only on the city's state.
+     *  Vox Populi's CvCityCitizens::DoTurn: a puppet we may annex gets no focus. An AI city then takes the focus by the first rule that
+     *  applies: LOSING_MONEY - gold, with growth if food is the city's most deficient yield ([CityAi.mostDeficientYield], bNeedFood); a city
+     *  that must produce ([cityShouldEmphasizeProduction]) - production; a living major we have met that is close to a culture victory -
+     *  culture; else the city specialization's ([specializationFocus]), and the city is allowed to grow. Then every city reallocates its
+     *  citizens, once: the original does so after each change, which gives the same result as a reallocation depends only on the state.
+     *
+     *  VP-only inputs, none in BNW: CvCity::GetMinimumFood (food a city always keeps, so a city short of food is never exempt from bNeedFood),
+     *  the Great People focus (CITY_AI_FOCUS_TYPE_GREAT_PEOPLE doubles the value of a specialist's Great Person points; a Great People city
+     *  has no focus here), and the potential unhappiness of growth (getPotentialUnhappinessWithGrowthVal, which can lock a city's growth:
+     *  none, so the lock is always lifted, as VP does for a city that would not be unhappy).
      */
     fun doTurn(city: City): Unit = timeThis("AI.CitizenFocus") {
         val civ = city.civ
-        var dirty = city.shouldReassignPopulation
-        var reallocated = false
 
-        fun reallocate() {
-            if (city.isPuppet) city.reassignAllPopulation() else city.reassignPopulation()
-            dirty = false
-            reallocated = true
-        }
-        fun setFocus(focus: CityFocus) {
-            if (city.getCityFocus() == focus) return
-            city.setCityFocus(focus)
-            dirty = true
-        }
-        fun setNoAutoAssignSpecialists(value: Boolean) {
-            if (city.manualSpecialists == value) return
-            city.manualSpecialists = value
-            dirty = true
-        }
-        fun setForcedAvoidGrowth(value: Boolean) {
-            if (city.avoidGrowth == value) return
-            city.avoidGrowth = value
-            dirty = true
-        }
-        fun excessFood(): Float {
-            if (dirty) reallocate()
-            return city.cityStats.excessFood
+        if (ProductionSanityAi.isPuppetAndAnnexable(city)) {
+            city.setCityFocus(CityFocus.NoFocus)
+            city.avoidGrowth = false
         }
 
-        if (city.isPuppet) {
-            setFocus(CityFocus.GoldFocus)
-            setNoAutoAssignSpecialists(false)
-            setForcedAvoidGrowth(false)
-            if (excessFood() < 0f) setFocus(CityFocus.NoFocus)
-        } else if (!civ.isHuman()) {
-            val turn = civ.gameInfo.turns
-            val isWonderCity = city.ai.specializationDef()?.isWonder == true
-            if (turn % 8 == 0) {
-                setFocus(CityFocus.GoldGrowthFocus)
-                setNoAutoAssignSpecialists(true)
-                setForcedAvoidGrowth(false)
-                if (excessFood() < 2f) setFocus(CityFocus.NoFocus)
-            }
-            if (city.isCapital() && !civ.isCityState && !isWonderCity) {
-                setFocus(CityFocus.NoFocus)
-                setNoAutoAssignSpecialists(false)
-                setForcedAvoidGrowth(false)
-                if (excessFood() < 4f) setFocus(CityFocus.FoodFocus)
-            } else if (isWonderCity) {
-                setFocus(CityFocus.ProductionFocus)
-                setNoAutoAssignSpecialists(false)
-                setForcedAvoidGrowth(false)
-                if (excessFood() < 2f) setFocus(CityFocus.ProductionGrowthFocus)
-                if (excessFood() < 2f) setFocus(CityFocus.NoFocus)
-            } else if (city.population.population < 5) {
-                setFocus(CityFocus.NoFocus)
-                setForcedAvoidGrowth(false)
-            } else if (civ.ai.isEconomicStrategyActive(LOSING_MONEY)) {
-                setFocus(CityFocus.GoldGrowthFocus)
-                setNoAutoAssignSpecialists(false)
-                setForcedAvoidGrowth(false)
-                if (excessFood() < 2f) setFocus(CityFocus.NoFocus)
-            } else if (turn % 3 == 0 && civ.ai.grandStrategy == GrandStrategyAi.CULTURE) {
-                setFocus(CityFocus.CultureFocus)
-                setNoAutoAssignSpecialists(true)
-                setForcedAvoidGrowth(false)
-                if (excessFood() < 2f) setFocus(CityFocus.NoFocus)
-            } else {
-                setNoAutoAssignSpecialists(false)
-                setForcedAvoidGrowth(false)
-                setFocus(specializationFocus(city))
+        if (!civ.isHuman()) {
+            val needFood = city.ai.mostDeficientYield == Stat.Food
+            if (civ.ai.isEconomicStrategyActive(LOSING_MONEY))
+                city.setCityFocus(if (needFood) CityFocus.GoldGrowthFocus else CityFocus.GoldFocus)
+            else if (cityShouldEmphasizeProduction(city)) city.setCityFocus(CityFocus.ProductionFocus)
+            else {
+                city.setCityFocus(if (isCultureBlocked(civ)) CityFocus.CultureFocus else specializationFocus(city, needFood))
+                city.avoidGrowth = false
             }
         }
 
-        // The original reallocates every city every turn; a deferred reallocation that already ran with the final state is that one
-        if (dirty || !reallocated) reallocate()
+        if (city.isPuppet) city.reassignAllPopulation() else city.reassignPopulation()
     }
 
-    /** The focus for the city specialization's yield, from the last branch of CvCityCitizens::DoTurn */
-    private fun specializationFocus(city: City): CityFocus = when (city.ai.specializationDef()?.yieldType) {
-        Stat.Food.name -> CityFocus.FoodFocus
-        Stat.Production.name -> CityFocus.ProductionGrowthFocus
-        Stat.Gold.name -> CityFocus.GoldFocus
-        Stat.Science.name -> CityFocus.ScienceFocus
-        else -> CityFocus.NoFocus
+    /** The focus for the city's specialization, from the last branch of CvCityCitizens::DoTurn: none for no specialization or the default one */
+    private fun specializationFocus(city: City, needFood: Boolean): CityFocus {
+        val specialization = city.ai.specializationDef() ?: return CityFocus.NoFocus
+        if (city.ai.defaultSpecialization == specialization.name) return CityFocus.NoFocus
+        return when (specialization.yieldType) {
+            Stat.Food.name -> if (isAvoidGrowth(city)) CityFocus.NoFocus else CityFocus.FoodFocus
+            Stat.Production.name -> if (needFood) CityFocus.ProductionGrowthFocus else CityFocus.ProductionFocus
+            Stat.Gold.name -> if (needFood) CityFocus.GoldGrowthFocus else CityFocus.GoldFocus
+            Stat.Science.name -> CityFocus.ScienceFocus
+            Stat.Faith.name ->
+                if (city.civ.ai.isEconomicStrategyActive(DEVELOPING_RELIGION)) CityFocus.FaithFocus else CityFocus.NoFocus
+            Stat.Culture.name ->
+                // A Great People city (GOOD_GP_CITY, or a civilization going for a culture victory) gets the Great People focus, none here
+                if (city.ai.isCityStrategyActive(GOOD_GP_CITY) || city.civ.ai.isGoingForCultureVictory()) CityFocus.NoFocus
+                else CityFocus.CultureFocus
+            else -> CityFocus.NoFocus
+        }
+    }
+
+    /** The rivals of [civ] that CvCityCitizens::DoTurn watches: another major it has met, alive with a city, close to a culture victory */
+    private fun isCultureBlocked(civ: Civilization): Boolean = civ.gameInfo.civilizations.any { other ->
+        other != civ && other.isMajorCiv && civ.ai.diplomacy.isPlayerValid(other) &&
+            VictoryProgressAi.isCloseToCultureVictory(other, civ.gameInfo.ruleset.ai)
+    }
+
+    /**
+     *  CvCityCitizens::CityShouldEmphasizeProduction: not for a human's city or a city of at most 3 citizens; else when it builds a world
+     *  wonder, a World Congress project (an international project), a one-time project (Apollo Program, Manhattan Project: all of BNW's)
+     *  or a spaceship part.
+     */
+    private fun cityShouldEmphasizeProduction(city: City): Boolean {
+        if (city.civ.isHuman() || city.population.population <= 3) return false
+        val ruleset = city.civ.gameInfo.ruleset
+        return when (val construction = city.cityConstructions.getCurrentConstruction()) {
+            is Building -> construction.isWonder || ProductionAi.isProject(ruleset.ai, construction)
+            is BaseUnit -> construction.hasUnique(UniqueType.SpaceshipPart)
+            is PerpetualConstruction -> (ruleset.resolutions[construction.name]?.projectCostPerPlayer ?: 0) > 0
+            else -> false
+        }
     }
 
     /** CvCityCitizens::IsAvoidGrowth: the empire is unhappy, or the city avoids growth */

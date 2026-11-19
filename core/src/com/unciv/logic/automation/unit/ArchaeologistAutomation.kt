@@ -1,8 +1,9 @@
 package com.unciv.logic.automation.unit
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.diplomacy.TheftAi
+import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.ArchaeologyFunctions
 import com.unciv.logic.map.tile.Tile
@@ -73,8 +74,9 @@ object ArchaeologistAutomation {
     }
 
     /**
-     * CvHomelandAI::FindHomelandTargets, antiquity sites: the tiles we see now with a site we know of, not in the lands of a civilization we promised
-     * not to dig in. Sites one of our archaeologists is digging already are left out, as a second one would add nothing in Unciv.
+     * CvHomelandAI::FindHomelandTargets, antiquity sites: the tiles we see now with a site we know of, not in the lands of a bad target for
+     * an artifact ([TheftAi.isBadTheftTarget]: a friend, a civilization we promised not to dig in or whose borders are closed to us).
+     * Sites one of our archaeologists is digging already are left out, as a second one would add nothing in Unciv.
      */
     private fun getTurnTargets(civ: Civilization): TurnTargets {
         val turn = civ.gameInfo.turns
@@ -85,7 +87,7 @@ object ArchaeologistAutomation {
             if (site !in civ.viewableTiles) continue
             if (site.improvementInProgress == digName && site.getUnits().any { it.civ == civ && it.hasUnique(UniqueType.CanExcavate) }) continue
             val owner = site.getOwner()
-            if (owner != null && owner != civ && owner.getDiplomacyManager(civ)?.hasFlag(DiplomacyFlags.AgreedToNotDigInOurLands) == true) continue
+            if (owner != null && TheftAi.isBadTheftTarget(civ, owner, TheftType.Artifact)) continue
             free.add(site)
         }
         return TurnTargets(turn, free).also { targetsByCiv[civ] = it }

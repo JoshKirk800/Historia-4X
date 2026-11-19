@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.city.CityStats
 import com.unciv.logic.civilization.Civilization
@@ -60,8 +61,13 @@ class LeagueAutomationTests {
 
     private fun resolution(name: String) = game.ruleset.resolutions[name]!!
 
-    /** The scores that depend on the strategy a civilization seeks: what the original adds then, computed from the same preference */
-    private fun seeks(civ: Civilization, strategy: String) = civ.ai.grandStrategyDef()?.victoryType == strategy
+    /** The scores that depend on the victory a civilization goes for (its current victory pursuit): what the original adds then */
+    private fun seeks(civ: Civilization, victoryType: String) = when (victoryType) {
+        "Domination" -> civ.ai.isGoingForWorldConquest()
+        "Scientific" -> civ.ai.isGoingForSpaceshipVictory()
+        "Cultural" -> civ.ai.isGoingForCultureVictory()
+        else -> civ.ai.isGoingForDiploVictory()
+    }
 
     private fun evaluator(civ: Civilization) = LeagueEvaluator(civ, league)
 
@@ -93,6 +99,7 @@ class LeagueAutomationTests {
 
         val toC = a.getDiplomacyManager(c)!!
         toC.setFlag(DiplomacyFlags.Denunciation, 20)
+        toC.diplomaticModifiers.clear()
         toC.diplomaticModifiers[DiplomaticModifiers.Denunciation.name] = -80f // opinion weight 80 (OPINION_THRESHOLD_ENEMY): Enemy, -1
         assertEquals(LeagueAlignment.RIVAL, LeagueAutomation.evaluateAlignment(a, c))
     }
@@ -164,6 +171,38 @@ class LeagueAutomationTests {
         assertEquals(LeagueAlignment.RIVAL, LeagueAutomation.evaluateAlignment(b, c))
         gameInfo.turns += 45
         assertEquals(LeagueAlignment.NEUTRAL, LeagueAutomation.evaluateAlignment(b, a))
+    }
+
+    @Test
+    fun `the proposer weighs the support it got by the share of the votes each supporter cast`() {
+        for (member in league.members.values) member.proposalsLeft = 0
+        league.members.getValue(b.civID).proposalsLeft = 1
+        league.proposeEnact(resolution("World's Fair"), null, b)
+        startSession()
+        val fair = onTable().single()
+        for (civ in majors) league.vote(fair.id, civ, league.getDelegatesLeft(civ), League.YES)
+        val share = league.getDelegates(a) * 100 / majors.sumOf { league.getDelegates(it) }
+        league.doTurn()
+        val memory = league.members.getValue(b.civID).alignmentMemory.getValue(a.civID)
+        assertEquals(-share, memory.proposalSupportDelta)
+        // OPINION_WEIGHT_THEY_SUPPORTED_OUR_PROPOSAL (-10) towards _MAX (-60) by 2% per percent of the vote
+        val rules = game.ruleset.ai
+        val expected = -10 + (-60 + 10) * minOf(100, share * 2) / 100
+        val score = OpinionAi.supportedOurProposalScore(b, memory, rules)
+        assertTrue("support share $share: $score", score == expected || score == expected * 167 / 100)
+    }
+
+    @Test
+    fun `an attempted embargo on us counts half until one passes`() {
+        for (member in league.members.values) member.proposalsLeft = 0
+        league.members.getValue(b.civID).proposalsLeft = 1
+        league.proposeEnact(resolution("Embargo"), a.civID, b)
+        val memory = league.members.getValue(a.civID).alignmentMemory.getValue(b.civID)
+        val rules = game.ruleset.ai
+        val attempted = OpinionAi.sanctionedUsScore(a, memory, rules)
+        assertTrue("attempted: $attempted", attempted > 0)
+        memory.everSanctioned = true
+        assertEquals(attempted * 2, OpinionAi.sanctionedUsScore(a, memory, rules))
     }
     //endregion
 
@@ -430,20 +469,20 @@ class LeagueAutomationTests {
         setProduction(a, 30f)
         setProduction(b, 20f)
         setProduction(c, 10f)
-        a.ai.grandStrategy = GrandStrategyAi.CULTURE
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         // first of three: ratio 1, +40 and strong production
         assertEquals(40 + 30, evaluator(a).scoreEffects(resolution("World's Fair"), null))
         assertEquals(40 + 40, evaluator(a).scoreEffects(resolution("International Games"), null))
         assertEquals("not seeking science", 40 + 10, evaluator(a).scoreEffects(resolution("International Space Station"), null))
-        a.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         assertEquals(40 + 50, evaluator(a).scoreEffects(resolution("International Space Station"), null))
         assertEquals(40 + 10, evaluator(a).scoreEffects(resolution("World's Fair"), null))
 
         // second of three: ratio 2/3, +20 and still strong
-        b.ai.grandStrategy = GrandStrategyAi.CULTURE
+        b.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(20 + 30, evaluator(b).scoreEffects(resolution("World's Fair"), null))
         // last of three: ratio 1/3, -20 and weak, so the strategy bonus is not given
-        c.ai.grandStrategy = GrandStrategyAi.CULTURE
+        c.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(-20 + 10, evaluator(c).scoreEffects(resolution("World's Fair"), null))
     }
 
@@ -453,7 +492,7 @@ class LeagueAutomationTests {
         setProduction(a, 30f, fromFood = 25f)
         setProduction(b, 20f)
         setProduction(c, 10f)
-        a.ai.grandStrategy = GrandStrategyAi.CULTURE
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         assertEquals(-20 + 10, evaluator(a).scoreEffects(resolution("World's Fair"), null))
     }
     //endregion

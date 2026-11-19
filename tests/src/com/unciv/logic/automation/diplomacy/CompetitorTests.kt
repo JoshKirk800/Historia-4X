@@ -1,10 +1,12 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.VictoryPursuit
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -74,6 +76,22 @@ class CompetitorTests {
         assertTrue(CompetitorAi.isEarlyGameCompetitor(a, b, rules))
         a.tech.addTechnology("Printing Press") // Renaissance era (3)
         assertFalse(CompetitorAi.isEarlyGameCompetitor(a, b, rules))
+    }
+
+    @Test
+    fun `a close easy target spamming wonders competes early with a conqueror or cultural leader, not with a scientist`() {
+        a.proximity[b.civID] = Proximity.Close
+        a.ai.warStates.easyTargets.add(b.civID)
+        a.ai.diplomacy.memoryOf(b).wonderSpammer = true
+        a.ai.secondaryVictoryPursuit = null
+        a.ai.primaryVictoryPursuit = VictoryPursuit.Science
+        assertFalse("scientist", CompetitorAi.isEarlyGameCompetitor(a, b, rules))
+        a.ai.primaryVictoryPursuit = VictoryPursuit.Culture
+        assertTrue("cultural", CompetitorAi.isEarlyGameCompetitor(a, b, rules))
+        a.ai.primaryVictoryPursuit = VictoryPursuit.Domination
+        assertTrue("conqueror", CompetitorAi.isEarlyGameCompetitor(a, b, rules))
+        a.proximity[b.civID] = Proximity.Far
+        assertFalse("far", CompetitorAi.isEarlyGameCompetitor(a, b, rules))
     }
 
     private fun biggest(): String? {

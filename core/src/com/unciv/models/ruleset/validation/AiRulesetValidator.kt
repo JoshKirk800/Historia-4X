@@ -9,6 +9,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.ai.PlayerStrategyDef
 import com.unciv.models.ruleset.ai.StrategyDef
+import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.models.stats.Stat
 
 /** Checks of AI.json ([Ruleset.ai]) and of the AI fields of Personalities.json */
@@ -43,7 +44,7 @@ internal class AiRulesetValidator(private val ruleset: Ruleset) {
         for (def in ai.cityStrategies) checkFlavors(def.flavors, "city strategy ${def.name}")
         for (def in ai.citySpecializations) {
             checkFlavors(def.flavors, "city specialization ${def.name}")
-            checkStats(def.targetYields.keys + listOfNotNull(def.yieldType), "city specialization ${def.name}")
+            checkStats(listOfNotNull(def.yieldType), "city specialization ${def.name}")
         }
         for (entry in ai.minorCivFlavors) checkFlavors(entry.flavors, "minor civ ${entry.name}")
         for (entry in ai.itemFlavors) checkFlavors(entry.flavors, "${entry.kind} ${entry.name}")
@@ -61,6 +62,9 @@ internal class AiRulesetValidator(private val ruleset: Ruleset) {
             for (name in personality.minorCivApproachBiases.keys)
                 if (MinorCivApproach.entries.none { it.name == name })
                     lines.add("Personality ${personality.name} has unknown minor civ approach '$name'", sourceObject = personality)
+            for (name in personality.traitCategories.keys)
+                if (TraitCategory.entries.none { it.name == name })
+                    lines.add("Personality ${personality.name} has unknown trait category '$name'", sourceObject = personality)
         }
     }
 
@@ -103,5 +107,7 @@ internal class AiRulesetValidator(private val ruleset: Ruleset) {
             if (entry.name !in ruleset.difficulties) warn("handicap values for '${entry.name}', which is no difficulty")
         for (entry in ai.policyBranches)
             if (entry.name !in ruleset.policyBranches) warn("policy branch values for '${entry.name}', which is no policy branch")
+        for (entry in ai.policyAttributes)
+            if (entry.name !in ruleset.policies) warn("policy attributes for '${entry.name}', which is no policy")
     }
 }

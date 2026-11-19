@@ -1,12 +1,19 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.AiDecisionLog
+import com.unciv.logic.automation.city.HurryChoice
+import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.DisputeLevel
-import com.unciv.logic.automation.strategy.CityStrategyAi
 import com.unciv.logic.automation.strategy.EconomicAi
 import com.unciv.logic.automation.strategy.ProductionAi
+import com.unciv.logic.automation.strategy.ProductionSanityAi
 import com.unciv.logic.automation.strategy.PurchaseType
+import com.unciv.logic.automation.strategy.StateAllWars
 import com.unciv.logic.automation.strategy.UnitAiType
+import com.unciv.logic.automation.strategy.UnitAiTypes
+import com.unciv.logic.automation.strategy.UnitProductionAi
+import com.unciv.logic.automation.strategy.WarStateAi
+import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.models.ruleset.Building
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -20,12 +27,12 @@ import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
- *  Where the AI spends gold, by the rules of the original: plot purchases (CvEconomicAI::DoPlotPurchases), unit upgrades
- *  (CvHomelandAI::PlotUpgradeMoves) and military unit purchases (CvMilitaryAI::BuyEmergencyUnit), each through the purchase savings
- *  ([com.unciv.logic.automation.strategy.PurchaseSavings]). The original never buys the current construction of a city
- *  (CvEconomicAI::DoHurry's gold branch is disabled), so neither does this. City-state gifts are the city-state diplomacy port's.
+ *  Where the AI spends gold: Vox Populi's hurry and plot purchases (CvEconomicAI::DoHurry and DoPlotPurchases), unit upgrades
+ *  (CvHomelandAI::PlotUpgradeMoves) and emergency purchases (CvMilitaryAI::BuyEmergencyUnit), through the purchase savings
+ *  ([com.unciv.logic.automation.strategy.PurchaseSavings]). City-state gifts are the city-state diplomacy port's.
  */
 object UseGoldAutomation {
 
@@ -97,6 +104,51 @@ object UseGoldAutomation {
     }
     //endregion
 
+    /**
+     * CvEconomicAI::DoHurry (Vox Populi): reserve twice the other savings requests, choose one purchase per eligible city, and
+     * attempt them highest value first while above the treasury cushion. Threat ordering uses the raw city threat, including zero.
+     * VP investments, cooldowns and diplomat purchases have no BNW counterpart; purchases use existing game rules.
+     */
+    fun doHurry(civ: Civilization) {
+        val buffer = treasuryBuffer(civ)
+        if (civ.gold < buffer) return
+        val savings = civ.ai.purchaseSavings
+        val reserved = PurchaseType.entries.filter { it != PurchaseType.Unit && it != PurchaseType.Building }
+            .sumOf { (savings.requests[it.name]?.amount ?: 0).coerceAtLeast(0).toLong() * 2 }
+        if (civ.gold.toLong() <= reserved) return
+        val threatened = CityThreat.threatenedCities(civ).firstOrNull()
+        val choices = civ.cities.asSequence()
+            .filter { !ProductionSanityAi.isPuppetAndAnnexable(it) && (it != threatened || it.isCapital()) }
+            .mapNotNull { HurryChoice.choose(it) }
+            .sortedByDescending { it.score }
+            .toList()
+        for (choice in choices) {
+            if (civ.gold <= buffer) break
+            val city = choice.city
+            val construction = choice.construction
+            val cost = choice.goldCost ?: continue
+            if (!choice.canBuyNow) continue
+            val type = if (construction is BaseUnit) PurchaseType.Unit else PurchaseType.Building
+            var valuation = cost
+            if (construction is Building) {
+                valuation += when (choice.turns) {
+                    1 -> continue
+                    2 -> cost
+                    3 -> cost / 2
+                    4 -> cost / 5
+                    else -> 0
+                }
+            }
+            if (!savings.canWithdrawMoneyForPurchase(civ, type, valuation)) continue
+            if (construction is BaseUnit &&
+                UnitProductionAi.checkUnitBuildSanity(city, construction, 100, forOperation = true, forPurchase = true) <= 0) continue
+            if (!city.cityConstructions.purchaseConstruction(construction, -1, true, Stat.Gold)) continue
+            if (construction is BaseUnit && construction.isCityFounder()) civ.ai.military.numberOfTimesSettlerBuildSkippedOver = 0
+            if (choice.kind == HurryChoice.Kind.Operation) civ.ai.military.numberOfTimesOpsBuildSkippedOver = 0
+            AiDecisionLog.log(civ) { "Hurry bought: ${construction.name} in ${city.name} for $cost" }
+        }
+    }
+
     //region Plot purchases (CvEconomicAI::DoPlotPurchases)
 
     /**
@@ -112,60 +164,76 @@ object UseGoldAutomation {
     }
 
     /**
-     *  CvEconomicAI::DoPlotPurchases: not for city-states, not while AT_WAR. With more gold than the base tile cost (and that below
-     *  AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM), the score a tile needs starts at AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE and drops by
-     *  50% x (gold - cost) / (balance to halve - cost). The best tile of all cities ([buyPlotScore]) above it is bought, at most one per
-     *  turn, if the purchase savings let its cost go at its score as priority.
+     *  CvEconomicAI::DoPlotPurchases (Vox Populi): not for city-states, not while at war and losing all wars, not below the treasury cushion
+     *  ([treasuryBuffer] + 200). With the balance (gold less the cushion) beyond [currentCost] x the game's era (at least 2) and the cost below
+     *  AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM, the score a tile needs ([minimumPlotBuyScore]) is beaten by the best tile of each city
+     *  ([buyPlotScore]) whose cost the purchase savings let go at its score as priority; the best of those is bought, one per turn.
+     *  A city's best tile that the savings do not let go starts saving for it at priority 2.
      */
     fun doPlotPurchases(civ: Civilization) {
         if (civ.isCityState) return
-        if (civ.ai.isMilitaryStrategyActive(AT_WAR)) return
+        if (civ.ai.isMilitaryStrategyActive(AT_WAR) && WarStateAi.stateAllWars(civ) == StateAllWars.Losing) return
+        val buffer = treasuryBuffer(civ) + 200
+        if (civ.gold < buffer) return
         val currentCost = civ.cities.minOfOrNull { baseTileCost(it) } ?: return
-        var bestScore = minimumPlotBuyScore(civ, currentCost) ?: return
+        var bestScore = minimumPlotBuyScore(civ, currentCost, civ.gold - buffer) ?: return
 
+        val waterAreas = waterAreasOf(civ)
         var bestCity: City? = null
         var bestTile: Tile? = null
         for (city in civ.cities) {
-            val (score, tile) = buyPlotScore(city) ?: continue
-            if (score > bestScore) {
-                bestCity = city
-                bestTile = tile
-                bestScore = score
-            }
+            val (score, tile) = buyPlotScore(city, waterAreas) ?: continue
+            val cost = city.expansion.getGoldCostOfTile(tile)
+            if (civ.ai.purchaseSavings.canWithdrawMoneyForPurchase(civ, PurchaseType.Tile, cost, score)) {
+                if (score > bestScore) {
+                    bestCity = city
+                    bestTile = tile
+                    bestScore = score
+                }
+            } else civ.ai.purchaseSavings.startSaveForPurchase(PurchaseType.Tile, cost, 2)
         }
-        if (bestCity == null || bestTile == null) return
-        val cost = bestCity.expansion.getGoldCostOfTile(bestTile)
-        if (civ.gold < cost) return
-        if (civ.ai.purchaseSavings.canWithdrawMoneyForPurchase(civ, PurchaseType.Tile, cost, bestScore))
-            bestCity.expansion.buyTile(bestTile)
+        if (bestCity != null && bestTile != null) bestCity.expansion.buyTile(bestTile)
     }
 
     /**
-     *  The score a tile must beat in [doPlotPurchases]: AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE, lowered by 50% x (gold - cost) /
-     *  (AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM - cost); null (no purchase) unless the gold exceeds [currentCost] and the cost is below
-     *  that balance.
+     *  The cushion CvEconomicAI::DoPlotPurchases and DoHurry keep in the treasury (Vox Populi): AI_GOLD_TREASURY_BUFFER x the game speed's
+     *  gold percent x the civilization's era; in debt, 10 x the (negative) income more is taken off; else the income is subtracted (not below 0).
+     *  The income is the civilization's gold per turn.
      */
-    fun minimumPlotBuyScore(civ: Civilization, currentCost: Int): Int? {
+    fun treasuryBuffer(civ: Civilization): Int {
+        var buffer = civ.gameInfo.ruleset.ai.define(AiDefine.AI_GOLD_TREASURY_BUFFER)
+        buffer = buffer * (civ.gameInfo.speed.goldCostModifier * 100).roundToInt() / 100
+        buffer *= civ.getAiEraNumber()
+        val goldPerTurn = civ.stats.statsForNextTurn.gold.toInt()
+        return if (goldPerTurn < 0) buffer + 10 * goldPerTurn else max(0, buffer - goldPerTurn)
+    }
+
+    /**
+     *  The score a tile must beat in [doPlotPurchases]: AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE (150), lowered by 50% x (balance - cost) /
+     *  (AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM - cost); null (no purchase) unless the cost times the game's era (at least 2) is below the
+     *  [balance] and the cost below that gold amount.
+     */
+    fun minimumPlotBuyScore(civ: Civilization, currentCost: Int, balance: Int): Int? {
         val rules = civ.gameInfo.ruleset.ai
         val goldForHalfCost = rules.define(AiDefine.AI_GOLD_BALANCE_TO_HALVE_PLOT_BUY_MINIMUM)
-        val balance = civ.gold
-        if (currentCost >= balance || goldForHalfCost <= currentCost) return null
+        val multiplier = max(2, DiplomacyTurn.gameEraNumber(civ))
+        if (currentCost * multiplier >= balance || goldForHalfCost <= currentCost) return null
         val minimum = rules.define(AiDefine.AI_GOLD_PRIORITY_MINIMUM_PLOT_BUY_VALUE)
         val discountPercent = 50 * (balance - currentCost) / (goldForHalfCost - currentCost)
         return minimum - minimum * discountPercent / 100
     }
 
-    /** CvCity::GetBuyPlotScore: the best tile the city can buy and its [individualPlotScore]; null if it can buy none (CanBuyAnyPlot) */
-    fun buyPlotScore(city: City): Pair<Int, Tile>? {
+    /**
+     *  CvCity::GetBuyPlotScore (Vox Populi): the best tile the city may buy and its [individualPlotScore], -1 for none ([buyPlotScore] returns null).
+     *  The tiles are those of CvCity::CanBuyPlot(bIgnoreCost = true): what the civilization can afford is for [doPlotPurchases] to judge.
+     */
+    fun buyPlotScore(city: City, waterAreas: Lazy<PlotShape.WaterAreas> = waterAreasOf(city.civ)): Pair<Int, Tile>? {
         var bestScore = -1
         var bestTile: Tile? = null
         var scoring: PlotScoring? = null
-        val likeCivV = city.civ.gameInfo.ruleset.modOptions.constants.plotAcquisitionLikeCivV
         for (tile in city.tilesInRange) {
             if (!city.expansion.canBuyTile(tile)) continue
-            // CvCity::CanBuyPlot without bIgnoreCost: only a tile the civilization can pay for counts
-            if (likeCivV && city.expansion.getGoldCostOfTile(tile) > city.civ.gold) continue
-            val plotScoring = scoring ?: PlotScoring(city).also { scoring = it }
+            val plotScoring = scoring ?: PlotScoring(city, waterAreas).also { scoring = it }
             val score = plotScoring.score(tile)
             if (score > bestScore) {
                 bestScore = score
@@ -175,26 +243,42 @@ object UseGoldAutomation {
         return bestTile?.let { bestScore to it }
     }
 
+    /** The water areas of the map, computed when a plot first needs them */
+    private fun waterAreasOf(civ: Civilization) = lazy { PlotShape.WaterAreas(civ.gameInfo.tileMap) }
+
     /**
-     *  CvCity::GetIndividualPlotScore: a revealed strategic resource 50, a luxury 40 (x2 if the civilization has none of it); each yield
-     *  x10 (x20 if it is the city specialization's yield), x5 if the city is deficient in it; for every major we have a land dispute with
-     *  whose nearest city on the tile's landmass is within 10 tiles, (10 - distance) x 6 / 4 / 2 (fierce / strong / weak);
-     *  all x base tile cost / this tile's cost.
+     *  CvCity::GetIndividualPlotScore (Vox Populi): a revealed strategic resource 3 x AI_PLOT_VALUE_STRATEGIC_RESOURCE (3 x 80), a luxury
+     *  3 x AI_PLOT_VALUE_LUXURY_RESOURCE (3 x 40, x2 if the civilization has none of it); each yield x10 (x20 if it is the city specialization's
+     *  yield), x5 if it is the city's most deficient yield (CvCityStrategyAI::GetMostDeficientYield); AI_PLOT_VALUE_STRATEGIC_RESOURCE more for a
+     *  plot on a route the builders plan ([com.unciv.logic.automation.unit.PlannedRoutes.bestRouteTypeAndValue]), for a choke point
+     *  ([PlotShape.isChokePoint]) and for a water area separator ([PlotShape.isWaterAreaSeparator]); for every major we have a land dispute
+     *  with whose nearest city on the tile's landmass is within 10 tiles, (10 - distance) x 6 / 4 / 2 (fierce / strong / weak). Then x the base
+     *  tile cost; +50% for each of the plot's neighbours that is ours if a foreign great general stands on it within 3 tiles of the city;
+     *  x2 for a natural wonder next to the land of someone else; divided by this tile's cost.
+     *
+     *  BNW's version had none of the route, choke point, separator, citadel and wonder terms, and 1 x the resource values (50, 40).
+     *  Inputs of Vox Populi's version that the BNW rules lack, counted as none: the yield a trait grants for buying a terrain
+     *  (Trait_YieldFromTilePurchaseTerrainType: each yield adds that x the yield multiplier / 10) and the trait that lets a civilization buy
+     *  tiles others own (Traits.BuyOwnedTiles, America in Vox Populi: x8 / x4 / x2 for a dispute partner's tile, and the value must be positive).
+     *  The original's impassable terrain test per team (a team that crosses mountains) is the plain terrain test here.
      */
-    fun individualPlotScore(city: City, tile: Tile): Int = PlotScoring(city).score(tile)
+    fun individualPlotScore(city: City, tile: Tile, waterAreas: Lazy<PlotShape.WaterAreas> = waterAreasOf(city.civ)): Int =
+        PlotScoring(city, waterAreas).score(tile)
 
     /** What [individualPlotScore] needs of a city, computed once for all its tiles */
-    private class PlotScoring(val city: City) {
+    private class PlotScoring(val city: City, val waterAreas: Lazy<PlotShape.WaterAreas>) {
         val civ = city.civ
         val rules = civ.gameInfo.ruleset.ai
         val baseCost = baseTileCost(city)
+        /** This turn's route plan (the builder AI's [com.unciv.logic.automation.unit.PlannedRoutes]), planned when a plot is first scored */
+        val plannedRoutes by lazy { civ.getWorkerAutomation().plannedRoutes }
         /** Multiplier per yield, by index in [YIELDS] */
         val yieldMultipliers = IntArray(YIELDS.size).also { multipliers ->
             val specializationYield = city.ai.specializationDef()?.yieldType
             for ((index, stat) in YIELDS.withIndex()) {
                 var multiplier = if (stat.name == specializationYield) rules.define(AiDefine.AI_PLOT_VALUE_SPECIALIZATION_MULTIPLIER)
                     else rules.define(AiDefine.AI_PLOT_VALUE_YIELD_MULTIPLIER)
-                if (CityStrategyAi.isYieldDeficient(city, stat)) multiplier *= rules.define(AiDefine.AI_PLOT_VALUE_DEFICIENT_YIELD_MULTIPLIER)
+                if (city.ai.mostDeficientYield == stat) multiplier *= rules.define(AiDefine.AI_PLOT_VALUE_DEFICIENT_YIELD_MULTIPLIER)
                 multipliers[index] = multiplier
             }
         }
@@ -215,9 +299,9 @@ object UseGoldAutomation {
             val resource = tile.tileResource
             if (tile.resource != null && civ.canSeeResource(resource)) {
                 when (resource.resourceType) {
-                    ResourceType.Strategic -> value += rules.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE)
+                    ResourceType.Strategic -> value += rules.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE) * 3
                     ResourceType.Luxury -> {
-                        var luxuryValue = rules.define(AiDefine.AI_PLOT_VALUE_LUXURY_RESOURCE)
+                        var luxuryValue = rules.define(AiDefine.AI_PLOT_VALUE_LUXURY_RESOURCE) * 3
                         if (civ.getResourceAmount(resource) == 0) luxuryValue *= 2
                         value += luxuryValue
                     }
@@ -226,6 +310,12 @@ object UseGoldAutomation {
             }
             val natureYields = tile.stats.getTileStats(null, civ)
             for ((index, stat) in YIELDS.withIndex()) value += natureYields[stat].toInt() * yieldMultipliers[index]
+
+            // A route the builders plan, a choke point and a water area separator are each worth a strategic resource's base value
+            val strategicValue = rules.define(AiDefine.AI_PLOT_VALUE_STRATEGIC_RESOURCE)
+            if (plannedRoutes.bestRouteTypeAndValue(tile) != null) value += strategicValue
+            if (PlotShape.isChokePoint(tile)) value += strategicValue
+            if (PlotShape.isWaterAreaSeparator(tile, waterAreas.value)) value += strategicValue
 
             for ((multiplier, cities) in disputes) {
                 var nearest = Int.MAX_VALUE
@@ -239,7 +329,17 @@ object UseGoldAutomation {
 
             val cost = city.expansion.getGoldCostOfTile(tile)
             if (cost == 0) return 0
-            return value * baseCost / cost
+            value *= baseCost
+
+            // Protect against citadels: a foreign great general within 3 tiles of the city, +50% for each neighbour of the plot that is ours
+            if (city.getCenterTile().aerialDistanceTo(tile) < 4 &&
+                tile.getUnits().any { it.civ != civ && UnitAiTypes.current(it) == UnitAiType.GENERAL }) {
+                val bonus = 50 * tile.neighbors.count { it.getOwner() == civ }
+                value += value * bonus / 100
+            }
+            // Try and snatch up natural wonders next to the land of someone else
+            if (tile.isNaturalWonder() && tile.neighbors.any { val owner = it.getOwner(); owner != null && owner != civ }) value *= 2
+            return value / cost
         }
     }
 

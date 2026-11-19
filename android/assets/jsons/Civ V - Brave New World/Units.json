@@ -38,7 +38,7 @@
 		"hurryCostModifier": 20,
 		"requiredTech": "Animal Husbandry",
 		"uniques": ["Can establish trade routes with a base range of [10] tiles, travelling [2] tiles per turn", "[-100]% maintenance costs",
-			"Unbuildable <for [City-State] Civilizations>"]
+			"Unbuildable <for [City-State] Civilizations>", "Uses unit supply"]
 	},
 	{
 		"name": "Scout",
@@ -196,7 +196,7 @@
 		"cost": 50,
 		"requiredTech": "Sailing",
 		"uniques": ["Cannot enter ocean tiles <before discovering [Astronomy]>", "May create improvements on water resources",
-            "Uncapturable", "Automation is a primary action"]
+            "Uncapturable", "Automation is a primary action", "Uses unit supply"]
 	},
 	{
 		"name": "Cargo Ship",
@@ -206,7 +206,7 @@
 		"hurryCostModifier": 20,
 		"requiredTech": "Sailing",
 		"uniques": ["Can establish trade routes with a base range of [20] tiles, travelling [4] tiles per turn", "[-100]% maintenance costs",
-			"Unbuildable <for [City-State] Civilizations>"]
+			"Unbuildable <for [City-State] Civilizations>", "Uses unit supply"]
 	},
 	{
 		"name": "Trireme",

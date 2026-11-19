@@ -100,5 +100,19 @@ enum class DiplomacyPersonality {
 /** The original's MajorCivApproachTypes in XML order (MAJOR_CIV_APPROACH_WAR ...), used for the leaders' approach biases */
 enum class MajorCivApproach { War, Hostile, Deceptive, Guarded, Afraid, Friendly, Neutral }
 
-/** The original's MinorCivApproachTypes in XML order (MINOR_CIV_APPROACH_IGNORE ...), used for the leaders' approach biases */
+/**
+ *  The original's MinorCivApproachTypes in XML order (MINOR_CIV_APPROACH_IGNORE ...), used for the leaders' approach biases. Vox Populi's
+ *  approach to a city-state is one of four: war ([Conquest]), hostile ([Bully]), neutral ([Ignore]) and friendly; [Protective] is BNW's
+ *  and is never chosen (a save's Protective loads as Friendly, `CivAi.setTransients`), its leader bias is not read.
+ */
 enum class MinorCivApproach { Ignore, Friendly, Protective, Conquest, Bully }
+
+/**
+ *  Vox Populi's leader trait categories (CvPlayerTraits::IsWarmonger ... IsReligious, set by SetIsWarmonger ... SetIsReligious from the
+ *  leader's traits), used by its diplomacy, grand strategy and production AI. The static part is in [com.unciv.models.ruleset.nation.Personality.traitCategories]
+ *  (tools/gen_ai_data.py evaluates VP's rules on the ruleset's trait rows); the dynamic parts are [com.unciv.logic.automation.strategy.CivAi.hasTraitCategory]'s.
+ */
+enum class TraitCategory { Warmonger, Nerd, Tourism, Diplomat, Smaller, Expansionist, Religious }
+
+/** Vox Populi's VictoryPursuitTypes in its enum order (ties between equal pursuit scores fall to the earlier one) */
+enum class VictoryPursuit { Domination, Diplomacy, Culture, Science }

@@ -2,8 +2,11 @@ package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
+import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
@@ -39,10 +42,14 @@ class ConquestApproachTests {
         for (x in listOf(a, b, c, d)) for (y in listOf(a, b, c, d)) if (x != y && !x.knows(y)) x.diplomacyFunctions.makeCivilizationsMeet(y)
     }
 
+    /** A major with a city at [position]; its personality is fixed (flavors and diplomacy values 5): the leader's is randomized per game id */
     private fun civ(position: HexCoord): Civilization {
         val civ = game.addCiv()
         game.addCity(civ, game.getTile(position))
+        for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 5)
+        for (value in DiplomacyPersonality.entries) civ.ai.setDiplomacyValue(value, 5)
         for ((approach, bias) in MajorCivApproach.entries.zip(listOf(7, 6, 5, 4, 3, 2, 1))) civ.ai.setMajorCivApproachBias(approach, bias)
+        civ.ai.setGrandStrategyAndPursuit(null)
         return civ
     }
 
@@ -63,7 +70,10 @@ class ConquestApproachTests {
     @Test
     fun `others turn on a civilization close to world conquest`() {
         b.cities.first().moveToCiv(a)
-        val delta = stageDelta(c, a, "Close to world conquest")
+        // Far apart: only the close-to-conquest term, not the one for conquerors close to us
+        c.proximity[a.civID] = Proximity.Far
+        a.proximity[c.civID] = Proximity.Far
+        val delta = stageDelta(c, a, "They are close to winning")
         assertEquals("War: bias x 5", 35, delta.of(MajorCivApproach.War))
         assertEquals("Hostile: bias x 5", 30, delta.of(MajorCivApproach.Hostile))
         assertEquals("Guarded: bias x 5", 20, delta.of(MajorCivApproach.Guarded))
@@ -71,14 +81,26 @@ class ConquestApproachTests {
     }
 
     @Test
-    fun `a conqueror close to victory wants the rest, more so from those holding other capitals`() {
-        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
+    fun `a conqueror of capitals next to us in the Ancient era draws war and guard`() {
         b.cities.first().moveToCiv(a)
-        assertEquals("the war bias x 5 towards c", 35, stageDelta(a, c, "Close to world conquest").of(MajorCivApproach.War))
+        c.proximity[a.civID] = Proximity.Neighbors
+        val delta = stageDelta(c, a, "They are close to winning")
+        // close to world conquest: bias x 5; one capital conquered, close by, in the Ancient era: bias x 3
+        assertEquals(35 + 21, delta.of(MajorCivApproach.War))
+        assertEquals(20 + 12, delta.of(MajorCivApproach.Guarded))
+    }
+
+    @Test
+    fun `a conqueror close to victory wants the rest, more so from those holding other capitals`() {
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
+        b.cities.first().moveToCiv(a)
+        val flat = (a.ai.diplomacyValue(DiplomacyPersonality.Boldness) + a.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)) / 2
+        // flavors, the war bias x 2 for b's capital we hold, x 5 for being close
+        assertEquals(flat + 14 + 35, stageDelta(a, c, "Grand strategy: domination").of(MajorCivApproach.War))
         assertEquals("the war bias doubled by being close", 14, stageDelta(a, c, "Conquest bias").of(MajorCivApproach.War))
         c.cities.first().moveToCiv(d)
-        // d, holding 2 of 4 capitals, is close too: bias x 5 for that, and x 5 x (1 + 1) for the capital of another it holds
-        assertEquals(35 + 70, stageDelta(a, d, "Close to world conquest").of(MajorCivApproach.War))
+        // d holds another's capital: the war bias x 5 more for it (we must take all of them)
+        assertEquals(flat + 14 + 35 + 35, stageDelta(a, d, "Grand strategy: domination").of(MajorCivApproach.War))
     }
 
     @Test
@@ -124,7 +146,7 @@ class ConquestApproachTests {
 
     @Test
     fun `the leader with weapons on both sides picks war, and the others do not befriend it`() {
-        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         b.cities.first().moveToCiv(a)
         game.gameInfo.civilizations.remove(b)
         for (civ in listOf(a, c, d)) nuke(civ)
@@ -137,12 +159,19 @@ class ConquestApproachTests {
         }
     }
     @Test
-    fun `close to world conquest, a hostile approach is enough to prepare a war`() {
+    fun `close to world conquest, a hostile approach far away is enough to prepare a war`() {
         val rules = game.ruleset.ai
-        a.ai.diplomacy.memoryOf(c).approach = MajorCivApproach.Hostile
-        WarAi.doMakeWarOnPlayer(a, c, rules)
-        assertEquals("not close yet: Hostile alone is no war target", null, a.ai.diplomacy.memoryOf(c).warGoal)
+        a.proximity[c.civID] = Proximity.Far
+        val values = IntArray(MajorCivApproach.entries.size)
+        values[MajorCivApproach.War.ordinal] = 500
+        values[MajorCivApproach.Hostile.ordinal] = 800
+        a.ai.diplomacy.memoryOf(c).approachValues = ArrayList(values.toList())
+        a.ai.diplomacy.setApproach(c, MajorCivApproach.Hostile)
+        WarTargetAi.updateWarTargets(a, listOf(b, c, d), rules)
+        assertEquals("not close yet: Hostile far away is no war target", MajorCivApproach.Hostile, a.ai.diplomacy.approachTowards(c))
         b.cities.first().moveToCiv(a)
+        WarTargetAi.updateWarTargets(a, listOf(c, d), rules)
+        assertEquals(MajorCivApproach.War, a.ai.diplomacy.approachTowards(c))
         WarAi.doMakeWarOnPlayer(a, c, rules)
         assertEquals(WarGoal.Prepare, a.ai.diplomacy.memoryOf(c).warGoal)
     }

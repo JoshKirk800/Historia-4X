@@ -82,7 +82,7 @@ object PeaceAi {
         }
 
     /** CvDiplomacyAI::AdjustConditionalModifier: scale [value] by a 1-10 flavor (5 neutral), the other way round if [invert] */
-    private fun adjustConditionalModifier(value: Int, flavor: Int, invert: Boolean = false): Int {
+    internal fun adjustConditionalModifier(value: Int, flavor: Int, invert: Boolean = false): Int {
         if (value == 0 || flavor == 0) return value
         val percentTimes10 = when (flavor) {
             1 -> if (invert) 1500 else 500
@@ -160,8 +160,8 @@ object PeaceAi {
     private fun wantsPeace(civ: Civilization, other: Civilization, wantedBefore: Boolean, otherWars: Int, rules: AiRuleset): Boolean {
         val memory = civ.ai.diplomacy.memoryOf(other)
         val terrible = WarStateAi.isInTerribleShapeForWar(civ)
-        val ourAllies = WarAlliesAi.offensiveWarAllies(civ, other, includeMinors = true, reverse = false) + civ
-        val theirAllies = WarAlliesAi.offensiveWarAllies(civ, other, includeMinors = true, reverse = true) + other
+        val ourAllies = WarAlliesAi.warAllies(civ, other, includeMinors = true, reverse = false) + civ
+        val theirAllies = WarAlliesAi.warAllies(civ, other, includeMinors = true, reverse = true) + other
         val holyCity = civ.religionManager.religion?.takeIf { it.foundingCivName == civ.civName }
         val capturedKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) ||
             (holyCity != null && other.cities.any { it.isHolyCityOf(holyCity.name) })
@@ -220,12 +220,14 @@ object PeaceAi {
         if (!terrible || state == WarState.NearlyWon) {
             if (strength < StrengthLevel.Average) ourMultiplier++
             if (WarStateAi.isEasyTarget(civ, other)) ourMultiplier++
+            if (civ.ai.military.havePreferredAttackTarget(other)) ourMultiplier++
             if (state == WarState.NearlyWon || theyAreTerrible) ourMultiplier++
         }
         if (!theyAreTerrible) {
             if (strength > StrengthLevel.Average) theirMultiplier++
             if (terrible) theirMultiplier++
             if (WarStateAi.isEasyTarget(other, civ)) theirMultiplier++
+            if (civ.ai.military.isExposedToEnemy(civ, null, other)) theirMultiplier++
         }
         val negativeThreshold = WarIntentAi.warScoreThresholdNegative(civ)
         when {

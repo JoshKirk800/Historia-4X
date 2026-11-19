@@ -43,7 +43,9 @@ object EconomicMilitaryStrategyTests {
         tests.register("ECONOMICAISTRATEGY_ENOUGH_RECON") { civ, _ -> civ.ai.economic.reconState == ReconState.Enough }
         tests.register(REALLY_NEED_RECON_SEA) { civ, _ -> reallyNeedReconSea(civ) }
         tests.register(NEED_RECON_SEA) { civ, _ -> needReconSea(civ) }
-        tests.register("ECONOMICAISTRATEGY_ENOUGH_RECON_SEA") { civ, _ -> civ.ai.economic.navalReconState == ReconState.Enough }
+        // IsTestStrategy_EnoughReconSea (Vox Populi): always while LOSING_WARS
+        tests.register("ECONOMICAISTRATEGY_ENOUGH_RECON_SEA") { civ, _ ->
+            civ.ai.isMilitaryStrategyActive(LOSING_WARS) || civ.ai.economic.navalReconState == ReconState.Enough }
         tests.register(EARLY_EXPANSION) { civ, _ -> earlyExpansion(civ) }
         tests.register("ECONOMICAISTRATEGY_ENOUGH_EXPANSION") { civ, def -> enoughExpansion(civ, def) }
         tests.register("ECONOMICAISTRATEGY_NEED_HAPPINESS") { civ, def -> needHappiness(civ, def) }
@@ -121,7 +123,7 @@ object EconomicMilitaryStrategyTests {
     private val GUILDS = listOf("Writers' Guild", "Artists' Guild", "Musicians' Guild")
 
     /** CvPlayer::IsEmpireUnhappy */
-    private fun isEmpireUnhappy(civ: Civilization) = civ.getHappiness() < 0
+    internal fun isEmpireUnhappy(civ: Civilization) = civ.getHappiness() < 0
 
     private fun minimumSettleFertility(civ: Civilization) = civ.gameInfo.ruleset.ai.define(AiDefine.AI_STRATEGY_MINIMUM_SETTLE_FERTILITY)
 
@@ -420,12 +422,11 @@ object EconomicMilitaryStrategyTests {
 
     //region Military
 
-    /** IsTestStrategy_EnoughMilitaryUnits: land defense ENOUGH, unless going for conquest without losing money or a land army over 125% */
+    /** IsTestStrategy_EnoughMilitaryUnits (Vox Populi): land defense ENOUGH, never while going for conquest without losing money */
     fun enoughMilitaryUnits(civ: Civilization): Boolean {
-        val military = civ.ai.military
         val inDeficit = civ.ai.isEconomicStrategyActive(EconomicAi.LOSING_MONEY)
-        if (!inDeficit && civ.ai.isGoingForWorldConquest() && military.percentOfRecommendedMilitarySize() <= 125) return false
-        return military.landDefenseState == DefenseState.Enough
+        if (!inDeficit && civ.ai.isGoingForWorldConquest()) return false
+        return civ.ai.military.landDefenseState == DefenseState.Enough
     }
 
     /**
@@ -456,8 +457,8 @@ object EconomicMilitaryStrategyTests {
      *  IsTestStrategy_EradicateBarbarians. At war: the original's test `!GetStateAllWars() == STATE_ALL_WARS_WINNING` is true when the state
      *  is NEUTRAL, so it gives up then (winning or losing it goes on). Always when barbarians hold a settler or worker of ours. Weight =
      *  camps x 50 + visible barbarians x 25 against the weight threshold plus the personality modifier: at twice that with barbarians
-     *  visible, always; at once, unless preparing war on a major; below the threshold it stays on while a barbarian-camp operation is running
-     *  (so [MilitaryOperations.updateOperations], which kills that operation once the strategy is off, does not end it by its own check).
+     *  visible, always; at once, unless preparing war on a major. BNW also kept it on below the threshold while a barbarian-camp operation
+     *  ran; there are none since Vox Populi's UpdateOperations.
      */
     fun eradicateBarbarians(civ: Civilization, def: PlayerStrategyDef): Boolean {
         if (civ.ai.isMilitaryStrategyActive(MilitaryAi.AT_WAR) && WarStateAi.stateAllWars(civ) == StateAllWars.Neutral) return false
@@ -473,7 +474,7 @@ object EconomicMilitaryStrategyTests {
         if (weight >= threshold * 2 && military.visibleBarbarianCount > 0) return true
         if (weight >= threshold)
             return civ.gameInfo.civilizations.none { it != civ && it.isMajorCiv && civ.ai.diplomacy.warGoal(it) == WarGoal.Prepare }
-        return civ.ai.operations.firstOfType(AiOperationType.DESTROY_BARBARIAN_CAMP) != null
+        return false
     }
 
     /** IsTestStrategy_Need(Ranged|Mobile|Air)Units: units x 10 / max(1, melee + units) <= flavor (personality and grand strategy) / 2 */

@@ -1,6 +1,5 @@
 package com.unciv.logic.automation.unit.tactical
 
-import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.strategy.AiArmy
@@ -21,8 +20,8 @@ import kotlin.math.min
 
 /**
  *  The movement of the armies of the AI operations: CvTacticalAI::PlotOperationalArmyMoves (the TACTICAL_MOVE_OPERATIONS move) with
- *  PlotSingleHexOperationMoves (a settler and its escort), PlotEnemyTerritoryOperationMoves (armies against a city or camp), ExecuteGatherMoves,
- *  ExecuteFormationMoves, ClearEnemiesNearArmy, MoveWithFormation, and the army's part of CvAIOperation::ComputeCenterOfMassForTurn and
+ *  PlotArmyMovesEscort ([EscortMoves]: a settler and its escort), PlotEnemyTerritoryOperationMoves (armies against a city or camp), ExecuteGatherMoves,
+ *  ExecuteFormationMoves, CheckForEnemiesNearArmy, MoveWithFormation, and the army's part of CvAIOperation::ComputeCenterOfMassForTurn and
  *  CvArmyAI (movement rate, checkpoint turns). The operation model is [com.unciv.logic.automation.strategy.AiOperations]; the hexes the units
  *  take are scored by [Deployment]. Armies of the naval move types move by [NavalOperationMoves], which U6 adds as the `when` of [moveOperation].
  *
@@ -30,15 +29,15 @@ import kotlin.math.min
  *  around the muster point (scored for safety and terrain, the gather range for the army's size, or 3); moving, the army's center of mass is
  *  pushed along the route to its goal by the average movement of its units plus 1 hex, the units take hexes around that point (melee out front,
  *  ranged behind; the hexes nearer the rear are the safe ones) and the units that are slow arrive later. Before it moves, the enemies next to the
- *  army's position are attacked by the army's units. An army with no room to gather or move aborts (NO_ROOM_DEPLOY), one with no route to its goal
- *  too (LOST_PATH).
+ *  army's position are attacked by the army's units. An army with too little room gathers or moves what fits (Vox Populi has no
+ *  NO_ROOM_DEPLOY abort); one with no route to its goal aborts (LOST_PATH).
  *
  *  Deviations:
  *  - the original's attack operations move only their first army, as here;
  *  - the route of the center of mass is [com.unciv.logic.automation.strategy.StepFinder]'s (own and allowed land, units ignored);
  *  - TurnsToReachTarget(unit, muster) for the checkpoint turns is [AiOperationLogic.turnsToReach] (the unit's path, units not ignored);
- *  - for a settler's escort the original asks the settler for the end of the escort's path (a slip: it reads the settler's own path);
- *    the end of the escort's path is used;
+ *  - a settler and its escort move as Vox Populi's PlotArmyMovesEscort says ([EscortMoves]; its deviations are listed there), BNW's
+ *    PlotSingleHexOperationMoves and its retargeting of the civilian are gone;
  *  - CvAIOperation::ArmyMoved is never called by the original and is not either;
  *  - a unit that has been placed is marked processed.
  */
@@ -84,6 +83,8 @@ object OperationalMoves {
                 com.unciv.logic.automation.unit.NavalOperationMoves.moveOperation(civ, operation, cache)
             OperationMoveType.None -> Unit
         }
+        // CvAIOperation::Move: an operation that ends with the move releases its units, and is not checked on its target
+        if (!AiOperationLogic.continueAfterMove(civ, operation)) return
         operation.lastTurnMoved = turn
         AiOperationLogic.checkOnTarget(civ, operation)
     }
@@ -101,107 +102,10 @@ object OperationalMoves {
     /** CvUnit::TurnProcessed: something already decided this unit's moves */
     private fun isProcessed(ctx: TacticalContext, unit: MapUnit) = unit in ctx.cache.processedUnits
 
-    //region Single hex: settlers and their escort (PlotSingleHexOperationMoves)
+    //region Single hex: settlers and their escort (PlotArmyMovesEscort)
 
-    /** CvTacticalAI::PlotSingleHexOperationMoves: a civilian and its escort meet, then move to the target together, one hex stack */
-    private fun moveSingleHex(ctx: TacticalContext, operation: AiOperation) {
-        val civ = ctx.civ
-        val army = operation.firstArmy ?: return
-        val units = AiOperationLogic.armyUnits(civ, army)
-        val civilian = units.firstOrNull()?.second ?: return
-        val escort = units.getOrNull(1)?.second
-        val target = AiOperationLogic.targetTile(civ, operation) ?: return
-
-        // ESCORT AND CIVILIAN MEETING UP
-        if (army.state == ArmyState.WAITING_FOR_UNITS_TO_REINFORCE || army.state == ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP) {
-            // Escort died or was poached for other tactical action, the operation will clean itself up in CheckOnTarget
-            if (escort == null || isProcessed(ctx, escort)) return
-            val meeting = civilian.getTile()
-            // Check to make sure escort can get to civilian
-            if (escort.getTile() == meeting || escort.movement.canReach(meeting)) {
-                // He can, so have civilian remain in place
-                Deployment.executeMoveToPlot(ctx, civilian, meeting)
-                if (army.numSlotsFilled() > 1) {
-                    Deployment.executeMoveToPlot(ctx, escort, meeting)
-                    ctx.log { "moving escorting ${escort.name} to civilian ${civilian.name} for operation, ${meeting.position}" }
-                }
-                return
-            }
-            // Find a new place to meet up, look at all hexes adjacent to civilian: somewhere both can move and be empty of other units
-            for (place in meeting.neighbors) {
-                if (place.getUnits().any() || !escort.movement.canMoveTo(place)) continue
-                if (escort.movement.canReach(place) && civilian.movement.canReach(place)) {
-                    Deployment.executeMoveToPlot(ctx, escort, place)
-                    Deployment.executeMoveToPlot(ctx, civilian, place)
-                    ctx.log { "moving ${escort.name} and ${civilian.name} to open hex ${place.position}" }
-                    return
-                }
-            }
-            // Didn't find an alternative, must abort operation
-            retarget(ctx, operation, army, civilian, escort, "no empty tile adjacent to civilian to meet")
-            return
-        }
-
-        // MOVING TO TARGET: if we're not there yet, we have work to do (otherwise CheckOnTarget will finish the operation for us)
-        if (civilian.getTile() == target) return
-        // Handle the case of no path found at all for the civilian
-        val civilianPath = civilian.movement.getShortestPath(target)
-        if (civilianPath.isEmpty()) {
-            retarget(ctx, operation, army, civilian, escort, "path lost to target")
-            return
-        }
-        val civilianMove = civilianPath.first()
-        var saveMoves = civilianMove == target
-        if (army.numSlotsFilled() == 1 || escort == null) {
-            // The original's path finder sees danger only for automated (human) units: the AI's civilian keeps to its path
-            Deployment.executeMoveToPlot(ctx, civilian, civilianMove, saveMoves)
-            ctx.log { "moving ${civilian.name} without escort to ${civilian.getTile().position}" }
-            return
-        }
-
-        // See if escort can move to the same location in one turn
-        if (Deployment.turnsToReachTile(escort, civilianMove) <= 1) {
-            Deployment.executeMoveToPlot(ctx, civilian, civilianMove, saveMoves)
-            Deployment.executeMoveToPlot(ctx, escort, civilianMove)
-            ctx.log { "moving ${civilian.name} and escort ${escort.name} to ${civilianMove.position}" }
-            return
-        }
-        val blocking = civilianMove.militaryUnit?.takeIf { it.civ == civ }
-        // See if friendly blocking unit is ending the turn there, or if no blocking unit (which indicates this is somewhere the civilian can
-        // move that the escort can't - like minor civ territory), then find a new path based on moving the escort
-        if (ctx.map.isFriendlyTurnEndTile(civilianMove) || blocking == null) {
-            val escortPath = escort.movement.getShortestPath(target)
-            if (escortPath.isEmpty()) {
-                retarget(ctx, operation, army, civilian, escort, "path lost to target for the escort")
-                return
-            }
-            val escortMove = escortPath.first()
-            saveMoves = escortMove == target
-            // See if civilian can move to the same location in one turn
-            if (Deployment.turnsToReachTile(civilian, escortMove) <= 1) {
-                Deployment.executeMoveToPlot(ctx, escort, escortMove)
-                Deployment.executeMoveToPlot(ctx, civilian, escortMove, saveMoves)
-                ctx.log { "moving escort ${escort.name} and ${civilian.name} to ${escortMove.position}" }
-            } else retarget(ctx, operation, army, civilian, escort, "too many blocking units")
-            return
-        }
-        // Looks like we should be able to move the blocking unit out of the way
-        if (TacticalMoves.executeMoveOfBlockingUnit(ctx, blocking)) {
-            Deployment.executeMoveToPlot(ctx, escort, civilianMove)
-            Deployment.executeMoveToPlot(ctx, civilian, civilianMove, saveMoves)
-            ctx.log { "moving escort ${escort.name} and ${civilian.name} to ${civilianMove.position}" }
-        } else retarget(ctx, operation, army, civilian, escort, "could not move blocking unit")
-    }
-
-    /** CvAIEscortedOperation::RetargetCivilian, and both units are done for the turn */
-    private fun retarget(ctx: TacticalContext, operation: AiOperation, army: AiArmy, civilian: MapUnit, escort: MapUnit?, reason: String) {
-        AiDecisionLog.log(ctx.civ) { "operation ${operation.type} #${operation.id}: retargeting the civilian, $reason (${operation.targetTile})" }
-        AiOperationLogic.retargetCivilian(ctx.civ, operation, army, civilian)
-        civilian.currentMovement = 0f
-        escort?.currentMovement = 0f
-        ctx.unitProcessed(civilian, false)
-        escort?.let { ctx.unitProcessed(it) }
-    }
+    /** CvTacticalAI::PlotArmyMovesEscort: a civilian and its escort meet, then move to the target together, one hex stack: [EscortMoves] */
+    private fun moveSingleHex(ctx: TacticalContext, operation: AiOperation) = EscortMoves.plotArmyMovesEscort(ctx, operation)
     //endregion
 
     //region Armies against a city or camp (PlotEnemyTerritoryOperationMoves)
@@ -289,7 +193,7 @@ object OperationalMoves {
 
             // GATHERING FORCES
             ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP -> {
-                clearEnemiesNearArmy(ctx, army)
+                val contact = checkForEnemiesNearArmy(ctx, army)
                 // Request moves for all units
                 for ((index, unit) in AiOperationLogic.armyUnits(civ, army)) {
                     if (isProcessed(ctx, unit)) continue
@@ -297,7 +201,7 @@ object OperationalMoves {
                     army.slots[index].startedOnOperation = true
                     moveWithFormation(operationUnits, unit, slotDefs[index].position)
                 }
-                executeGatherMoves(ctx, operation, army, operationUnits)
+                executeGatherMoves(ctx, operation, army, operationUnits, if (contact) AiOperationLogic.centerOfMass(civ, army) else null)
             }
 
             // MOVING TO TARGET
@@ -317,73 +221,54 @@ object OperationalMoves {
                     return
                 }
                 army.position = turnTarget.position
-                clearEnemiesNearArmy(ctx, army)
+                val contact = checkForEnemiesNearArmy(ctx, army)
                 // Request moves for all units
                 for ((index, unit) in AiOperationLogic.armyUnits(civ, army)) {
                     if (isProcessed(ctx, unit)) continue
                     if (Deployment.isGeneralOrAdmiral(unit)) { if (unit.hasMovement()) generals.add(unit); continue }
                     moveWithFormation(operationUnits, unit, slotDefs[index].position)
                 }
-                executeFormationMoves(ctx, operation, army, turnTarget, closestCurrent, operationUnits)
+                // Do not move on while there are enemies around, it is too dangerous: the units keep together around their center of mass
+                val center = if (contact) AiOperationLogic.centerOfMass(civ, army) ?: turnTarget else null
+                executeFormationMoves(ctx, operation, army, center ?: turnTarget, center ?: closestCurrent, operationUnits)
             }
         }
         if (generals.isNotEmpty()) Deployment.moveGreatGenerals(ctx, generals, army)
     }
 
     /**
-     *  CvTacticalAI::ClearEnemiesNearArmy: if an enemy unit is on or next to the army's position, the army's units join the tactical units of
-     *  this turn and attack the enemies there, safe and protected bombards first, then the attacks where each unit does at least what it takes.
+     *  CvTacticalAI::CheckForEnemiesNearArmy: the army's units (those that can attack or be attacked, with those of ours around that the enemies
+     *  near could attack) that are in contact with the enemy join this turn's tactical units and fight it with the combat simulation
+     *  ([TacticalSimulation.checkForEnemiesNearArmy]).
+     *  @return whether they fought: the army then holds together around its center of mass instead of marching on
      */
-    fun clearEnemiesNearArmy(ctx: TacticalContext, army: AiArmy) {
-        val civ = ctx.civ
-        val position = tileAt(civ, army.position) ?: return
-        val range = 1
-        fun isNear(target: TacticalTarget) = target.isUnitTarget && position.aerialDistanceTo(target.tile) <= range
-        if (ctx.targets.all.none { isNear(it) }) return
-
-        // Add units from army to tactical AI for this turn
-        for ((_, unit) in AiOperationLogic.armyUnits(civ, army))
-            if (!isProcessed(ctx, unit) && !unit.isDestroyed && unit.hasMovement()) ctx.addUnit(unit)
-
-        // Now attack these targets
-        for (target in ctx.targets.all.filter { isNear(it) }) {
-            if (!target.isAlive(civ)) continue
-            ctx.map.clearDynamicFlags()
-            ctx.map.setTargetBombardCells(target.tile, ctx.map.bestFriendlyRange, ctx.map.ignoreLineOfSight)
-            TacticalBombards.executeSafeBombards(ctx, target)
-            if (target.isAlive(civ)) TacticalBombards.executeProtectedBombards(ctx, target)
-            if (target.isAlive(civ)) {
-                val defender = TacticalTargets.visibleEnemyDefender(civ, target.tile) ?: continue
-                target.aux = defender.health
-                val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1, 0)
-                if (strikers.isEmpty()) continue
-                TacticalAttacks.computeTotalExpectedDamage(target, strikers)
-                TacticalAttacks.executeAttack(ctx, target, strikers, emptyList(), inflictWhatWeTake = true, mustSurviveAttack = true)
-            }
-        }
+    fun checkForEnemiesNearArmy(ctx: TacticalContext, army: AiArmy): Boolean {
+        val units = AiOperationLogic.armyUnits(ctx.civ, army).map { it.second }
+        // The army's units join this turn's tactical units
+        for (unit in units) if (!isProcessed(ctx, unit) && !unit.isDestroyed && unit.hasMovement()) ctx.addUnit(unit)
+        val contact = TacticalSimulation.checkForEnemiesNearArmy(ctx, units)
+        if (contact) ctx.log { "army ${army.id}: contact with the enemy" }
+        return contact
     }
 
     /**
      *  CvTacticalAI::ExecuteGatherMoves: the units asked to move with the formation ([units]) gather around the army's position: everyone as a
-     *  melee unit, on hexes within the gather range for their number if there are twice as many hexes as units, else within 3. No room (even
-     *  one hex per unit) aborts the operation (NO_ROOM_DEPLOY).
+     *  melee unit, on hexes within the gather range for their number if there are twice as many hexes as units, else within 3. Too little room
+     *  only leaves some units where they are: Vox Populi never aborts an operation for it (BNW's NO_ROOM_DEPLOY kept a crowded empire's
+     *  sneak attacks from ever gathering).
      */
-    private fun executeGatherMoves(ctx: TacticalContext, operation: AiOperation, army: AiArmy, units: List<OperationUnit>) {
+    private fun executeGatherMoves(ctx: TacticalContext, operation: AiOperation, army: AiArmy, units: List<OperationUnit>, center: Tile? = null) {
         if (units.isEmpty()) return
         val civ = ctx.civ
-        val target = tileAt(civ, army.position) ?: return
+        val target = center ?: tileAt(civ, army.position) ?: return
         // Gathering - treat everyone as a melee unit; don't need ranged in the rear yet
         val count = units.size
         // Range around target based on number of units we need to place; try one time with the computed range
         val computedRange = AiOperationLogic.gatherRangeForXUnits(count)
         var scored = Deployment.scoreDeploymentPlots(ctx, operation, army, target, count, 0, computedRange)
-        // Did we get twice as many possible plots as units? If there are not enough at all, the same search again would find no more
-        if (scored.enough && scored.plots.size < count * 2) scored = Deployment.scoreDeploymentPlots(ctx, operation, army, target, count, 0, 3)
-        if (!scored.enough) {
-            ctx.log { "operation aborting, army ${army.id}: not enough spaces to deploy near target" }
-            civ.ai.operations.abort(operation, OperationAbortReason.NO_ROOM_DEPLOY)
-            return
-        }
+        // Not twice as many possible plots as units: the wider search
+        if (!scored.enough || scored.plots.size < count * 2) scored = Deployment.scoreDeploymentPlots(ctx, operation, army, target, count, 0, 3)
+        if (!scored.enough) ctx.log { "army ${army.id}: not enough spaces to gather near ${target.position}, gathering what fits" }
         gatherUnits(ctx, army, units, scored)
     }
 
@@ -412,20 +297,16 @@ object OperationalMoves {
     /**
      *  CvTacticalAI::ExecuteFormationMoves: the units asked to move with the formation ([units]) take the hexes [Deployment.scoreFormationPlots] finds
      *  around the army's goal for the turn, [forwardTarget]: melee units first, the nearest unit to each hex, then the ranged units on the hexes
-     *  nearer the rear, then wherever is left. A hex with a unit on it is not used. Not enough hexes aborts the operation (NO_ROOM_DEPLOY).
+     *  nearer the rear, then wherever is left. A hex with a unit on it is not used. Too few hexes leave units behind; as in Vox Populi the
+     *  operation goes on (BNW aborted it with NO_ROOM_DEPLOY).
      */
     private fun executeFormationMoves(ctx: TacticalContext, operation: AiOperation, army: AiArmy, forwardTarget: Tile, currentCenter: Tile, units: List<OperationUnit>) {
         if (units.isEmpty()) return
         val meleeUnits = units.count { !it.unit.baseUnit.isRanged() }
         val rangedUnits = units.size - meleeUnits
 
-        // See if we have enough places to put everyone
         val scored = Deployment.scoreFormationPlots(ctx, operation, army, forwardTarget, currentCenter, units.size)
-        if (!scored.enough) {
-            ctx.log { "operation aborting, army ${army.id}: not enough spaces to deploy along the formation's path" }
-            ctx.civ.ai.operations.abort(operation, OperationAbortReason.NO_ROOM_DEPLOY)
-            return
-        }
+        if (!scored.enough) ctx.log { "army ${army.id}: not enough spaces along the formation's path, moving what fits" }
 
         fun place(plot: DeployPlot, safeForRanged: Boolean, mustBeRanged: Boolean, what: String): Boolean {
             // Don't use if there's already someone here

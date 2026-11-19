@@ -2,7 +2,8 @@ package com.unciv.logic.automation.unit
 
 import com.unciv.logic.GameInfo
 import com.unciv.logic.automation.Timers.Companion.timeThis
-import com.unciv.logic.automation.diplomacy.DisputeLevel
+import com.unciv.logic.automation.diplomacy.TheftAi
+import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.automation.strategy.StateAllWars
 import com.unciv.logic.automation.strategy.WarStateAi
@@ -19,7 +20,6 @@ import com.unciv.models.UnitActionType
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
-import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unique.GameContext
@@ -349,11 +349,14 @@ object GreatPersonAutomation {
     }
 
     /**
-     *  CvPlayerAI::FindBestArtistTargetPlot (where a general plants its citadel): among our land tiles next to another civilization's territory,
+     *  CvPlayerAI::FindBestArtistTargetPlot with Vox Populi's theft test (CvPlayerAI::GetBestCultureBombPlots; where a general plants its
+     *  citadel): among our land tiles next to another civilization's territory,
      *  without a luxury, where [unit] can build its improvement (the original: no feature that forbids improvements) and that holds no
      *  tile-taking improvement yet, the one whose neighbours of other civilizations (not their city centers) are worth most:
-     *  [resourceWeight] × 10 for a resource, else the sum of the tile's yields. A neighbour of a city-state we do not approach as Conquest
-     *  or Ignore, or of a major we are not [isTickedOffAt], rules the tile out. Null if no tile scores above 0.
+     *  [resourceWeight] (Vox Populi's, which replaced BNW's flavor formula there) × 10 for a resource, else the sum of the tile's yields.
+     *  A neighbour whose owner is a bad target for a culture bomb ([TheftAi.isBadTheftTarget]: a friend, a city-state we are friendly to or
+     *  allied with, one whose promise we made, and for an AI any civilization it shows a face better than guarded and has no strong land
+     *  dispute with) rules the tile out. Null if no tile scores above 0.
      */
     fun findBestArtistTargetPlot(unit: MapUnit): Tile? {
         val civ = unit.civ
@@ -372,18 +375,13 @@ object GreatPersonAutomation {
             for (neighbor in tile.neighbors) {
                 val owner = neighbor.getOwner() ?: continue
                 if (owner == civ || neighbor.isCityCenter()) continue
-                if (owner.isCityState) {
-                    val approach = civ.ai.minorCivApproaches[owner.civID] ?: MinorCivApproach.Ignore
-                    if (approach != MinorCivApproach.Conquest && approach != MinorCivApproach.Ignore) {
-                        score = 0
-                        break
-                    }
-                } else if (!isTickedOffAt(civ, owner)) {
+                // We shouldn't steal from them
+                if (TheftAi.isBadTheftTarget(civ, owner, TheftType.CultureBomb)) {
                     score = 0
                     break
                 }
                 val resource = neighbor.tileResource
-                score += if (resource != null) resourceWeight(civ, resource, null, neighbor.resourceAmount) * 10
+                score += if (resource != null) resourceWeight(civ, resource, neighbor.resourceAmount) * 10
                 else neighbor.stats.getTileStats(null).let { it.sum() - it.happiness }.toInt() // the six yields
             }
             if (score > bestScore) {
@@ -392,16 +390,6 @@ object GreatPersonAutomation {
             }
         }
         return best
-    }
-
-    /**
-     *  The major-civ test of FindBestArtistTargetPlot: the approach we show [other] (CvDiplomacyAI::GetMajorCivApproach with hidden
-     *  feelings) is HOSTILE, or NEUTRAL with a STRONG or FIERCE land dispute.
-     */
-    private fun isTickedOffAt(civ: Civilization, other: Civilization): Boolean {
-        val approach = civ.ai.diplomacy.approachTowards(other, hideTrueFeelings = true)
-        return approach == MajorCivApproach.Hostile
-            || approach == MajorCivApproach.Neutral && civ.ai.diplomacy.landDisputeLevel(other) >= DisputeLevel.Strong
     }
 
     //endregion

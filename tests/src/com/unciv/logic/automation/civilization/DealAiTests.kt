@@ -4,8 +4,10 @@ import com.unciv.Constants
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.PeaceTreatyType
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.city.GreatWorkSlot
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.league.League
 import com.unciv.logic.map.HexCoord
@@ -46,6 +48,8 @@ class DealAiTests {
         a.diplomacyFunctions.makeCivilizationsMeet(b)
         a.diplomacyFunctions.makeCivilizationsMeet(c)
         b.diplomacyFunctions.makeCivilizationsMeet(c)
+        // Meeting chooses a first approach; these tests start from a neutral one
+        for (x in listOf(a, b, c)) for (y in listOf(a, b, c)) if (x != y) x.ai.diplomacy.setApproach(y, MajorCivApproach.Neutral)
     }
 
     private fun neutralCiv(at: HexCoord): Civilization {
@@ -176,12 +180,22 @@ class DealAiTests {
     }
 
     @Test
-    fun `a defensive pact is granted only from Favorable opinion`() {
-        feelings(a, b, MajorCivApproach.Neutral, MajorCivOpinion.Favorable)
-        assertEquals(100, DealAi.getDefensivePactValue(a, b, true, false))
-        feelings(a, b, MajorCivApproach.Neutral, MajorCivOpinion.Neutral)
-        assertEquals(DealAi.NEVER, DealAi.getDefensivePactValue(a, b, true, false))
-        assertEquals(100, DealAi.getDefensivePactValue(a, b, false, false))
+    fun `a defensive pact is worth its pact score when wanted, twice for the most valuable ally`() {
+        feelings(a, b, MajorCivApproach.Neutral, MajorCivOpinion.Friend)
+        assertEquals("not wanted", DealAi.NEVER, DealAi.getDefensivePactValue(a, b, false, false))
+        a.ai.diplomacy.memoryOf(b).wantsDefensivePact = true
+        a.ai.warStates.militaryStrengths[b.civID] = StrengthLevel.Average
+        a.proximity[b.civID] = Proximity.Neighbors
+        // loyalty 0 + average strength 10 + neighbours 5 + friend 10 + one landmass 5 = 30, x era 1 (Ancient: at least 1)
+        assertEquals(30, DealAi.getDefensivePactValue(a, b, false, false))
+        assertEquals("a positive score costs nothing to give", 0, DealAi.getDefensivePactValue(a, b, true, false))
+        a.ai.diplomacy.mostValuableAlly = b.civID
+        assertEquals(60, DealAi.getDefensivePactValue(a, b, false, false))
+        a.ai.diplomacy.mostValuableAlly = null
+        a.ai.diplomacy.setOpinion(b, MajorCivOpinion.Enemy)
+        // 10 + 5 - 100 + 5 = -80: giving one costs twice that, receiving one is worth nothing
+        assertEquals(160, DealAi.getDefensivePactValue(a, b, true, false))
+        assertEquals(0, DealAi.getDefensivePactValue(a, b, false, false))
     }
 
     @Test
@@ -285,6 +299,7 @@ class DealAiTests {
         val human = game.addCiv(isPlayer = true)
         game.addCity(human, game.getTile(HexCoord(0, 8)))
         a.diplomacyFunctions.makeCivilizationsMeet(human)
+        a.ai.diplomacy.setApproach(human, MajorCivApproach.Neutral)
         val trade = Trade()
         // They give an embassy (35) for open borders we give (Neutral: 75): 40 apart
         trade.theirOffers.add(TradeOffer(Constants.acceptEmbassy, TradeOfferType.Embassy, speed = game.gameInfo.speed))
@@ -366,7 +381,7 @@ class DealAiTests {
         val base = DealAi.getOpenBordersValue(a, b, false, false)
         val other = DealAi.getOpenBordersValue(a, c, false, false)
         assertFalse("not neighbours", DealAi.wantsOpenBordersWith(a, b))
-        a.ai.grandStrategy = GrandStrategyAi.CULTURE
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         // b comes first among the civs we have no influence on: CvDealAI::GetOpenBordersValue × 1000%
         assertEquals(base * 10, DealAi.getOpenBordersValue(a, b, false, false))
         assertEquals("neither the least influenced nor a cramped neighbour", other, DealAi.getOpenBordersValue(a, c, false, false))

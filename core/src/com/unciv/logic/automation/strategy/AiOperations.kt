@@ -15,8 +15,11 @@ import kotlin.math.max
 
 /**
  *  How the tactical AI moves the armies of an operation (AIOperationMovementType); [None] = the original's INVALID / STATIC type: never moved.
- *  [NavalFleet] is the original's ENEMY_TERRITORY type as the naval bombardment and pure naval city attack set it: the fleet is moved by the
- *  naval formation code ([com.unciv.logic.automation.unit.NavalOperationMoves]), which places ships on water, instead of the land army's.
+ *  [EnemyTerritory] is the land armies of Vox Populi's ARMY_TYPE_LAND (CvTacticalAI::PlotArmyMovesCombat): the attacks on a city, the pillage raids
+ *  and the land defense operations. [NavalFleet] is the original's ENEMY_TERRITORY type as the pure naval city attack and the naval superiority
+ *  set it: the fleet is moved by the naval formation code ([com.unciv.logic.automation.unit.NavalOperationMoves]), which places ships on water,
+ *  instead of the land army's. [FreeformNaval] is BNW's naval superiority movement, which no operation uses any more (Vox Populi's squadron
+ *  gathers and sails as a fleet); it stays for the tactical AI's exhaustive handling of the move types.
  */
 enum class OperationMoveType { None, SingleHex, EnemyTerritory, NavalEscort, FreeformNaval, NavalFleet }
 
@@ -35,27 +38,36 @@ enum class AiOperationType(
     QUICK_COLONIZE(OperationMoveType.SingleHex),
     BASIC_CITY_ATTACK(OperationMoveType.EnemyTerritory),
     SNEAK_CITY_ATTACK(OperationMoveType.EnemyTerritory),
-    SMALL_CITY_ATTACK(OperationMoveType.EnemyTerritory),
     CITY_STATE_ATTACK(OperationMoveType.EnemyTerritory),
-    DESTROY_BARBARIAN_CAMP(OperationMoveType.EnemyTerritory),
     PILLAGE_ENEMY(OperationMoveType.EnemyTerritory),
-    CITY_CLOSE_DEFENSE(OperationMoveType.None),
-    RAPID_RESPONSE(OperationMoveType.None),
+    CITY_CLOSE_DEFENSE(OperationMoveType.EnemyTerritory),
+    RAPID_RESPONSE(OperationMoveType.EnemyTerritory),
     NAVAL_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
     NAVAL_SNEAK_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
     CITY_STATE_NAVAL_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
-    NAVAL_BOMBARDMENT(OperationMoveType.NavalFleet, allNaval = true),
-    NAVAL_SUPERIORITY(OperationMoveType.FreeformNaval, tacticalMayInterrupt = true, allNaval = true),
+    NAVAL_SUPERIORITY(OperationMoveType.NavalFleet, tacticalMayInterrupt = true, allNaval = true),
     PURE_NAVAL_CITY_ATTACK(OperationMoveType.NavalFleet, tacticalMayInterrupt = true, allNaval = true),
     /** CvAIOperationNukeAttack: the original's STATIC move type, it only works with the nuke already in place */
-    NUKE_ATTACK(OperationMoveType.None);
+    NUKE_ATTACK(OperationMoveType.None),
+    /**
+     *  Brave New World's barbarian camp, naval bombardment and small city attack (the show of force) operations, which Vox Populi has not
+     *  (its CvMilitaryAI::RequestBullyingOperation sends the ordinary land or naval city attack): never started; kept only so that a
+     *  save holding one loads ([AiOperations.setTransients] drops them)
+     */
+    DESTROY_BARBARIAN_CAMP(OperationMoveType.None),
+    NAVAL_BOMBARDMENT(OperationMoveType.None),
+    SMALL_CITY_ATTACK(OperationMoveType.EnemyTerritory);
 
     /** The operations CvCity-bound settlers run (CvAIEscortedOperation) */
     val isEscorted get() = this == FOUND_CITY || this == QUICK_COLONIZE
-    /** CvAIEnemyTerritoryOperation and its descendants that walk (the land ones) */
-    val isEnemyTerritory get() = moveType == OperationMoveType.EnemyTerritory
-    /** The attacks on a city by land (CvAIOperationBasicCityAttack and its subclasses) */
-    val isCityAttack get() = isEnemyTerritory && this != DESTROY_BARBARIAN_CAMP && this != PILLAGE_ENEMY
+    /** CvAIOperationBasicCityAttack and its subclasses: the attacks on a city by land */
+    val isCityAttack get() = this == BASIC_CITY_ATTACK || this == SNEAK_CITY_ATTACK || this == CITY_STATE_ATTACK
+    /** CvAIOperationDefendCity and CvAIOperationDefenseRapidResponse: the operations that defend by land */
+    val isLandDefense get() = this == CITY_CLOSE_DEFENSE || this == RAPID_RESPONSE
+    /** The operations that Vox Populi's CheckLandDefenses and CheckSeaDefenses start: the land defense operations and the naval superiority squadron */
+    val isDefense get() = isLandDefense || this == NAVAL_SUPERIORITY
+    /** Retired types ([DESTROY_BARBARIAN_CAMP], [NAVAL_BOMBARDMENT], [SMALL_CITY_ATTACK]) */
+    val isRetired get() = this == DESTROY_BARBARIAN_CAMP || this == NAVAL_BOMBARDMENT || this == SMALL_CITY_ATTACK
     /** CvAIOperationNavalAttack and its subclasses: land units that embark, with warships, against a coastal city */
     val isNavalInvasion get() = this == NAVAL_ATTACK || this == NAVAL_SNEAK_ATTACK || this == CITY_STATE_NAVAL_ATTACK
     /** CvAINavalOperation and its subclasses: the operations of ships only */
@@ -70,7 +82,11 @@ enum class OperationAbortReason {
     NONE, SUCCESS, NO_TARGET, REPEAT_TARGET, LOST_TARGET, TARGET_ALREADY_CAPTURED, NO_ROOM_DEPLOY, HALF_STRENGTH, NO_MUSTER,
     LOST_CIVILIAN, ESCORT_DIED, KILLED, WAR_STATE_CHANGE, DIPLO_OPINION_CHANGE, LOST_PATH, NO_NUKES,
     /** Vox Populi's AI_ABORT_TIMED_OUT: [AiOperationLogic.shouldAbort]'s failsafe */
-    TIMED_OUT
+    TIMED_OUT,
+    /** Vox Populi's AI_ABORT_TARGET_NOT_VALID: war on the enemy may no longer be declared ([WarAi.doMakeWarOnPlayer]) */
+    TARGET_NOT_VALID,
+    /** Vox Populi's AI_ABORT_NO_UNITS: more units to build than the request allows ([MilitaryOperations.requestPillageAttack]) */
+    NO_UNITS
 }
 
 /** ArmyAIState */
@@ -97,14 +113,40 @@ class ArmySlot : IsPartOfGameInfoSerialization {
     /** Game turn the slot's unit is expected at the muster point: [UNKNOWN_TURN], [NOT_INCLUDED] or a turn */
     var estimatedTurn = UNKNOWN_TURN
     var startedOnOperation = false
+    /**
+     *  CvArmyFormationSlot::m_estTurnsToCheckpoint: the turns the slot's unit needed to get to the army's checkpoint at the last three
+     *  updates ([AiOperationLogic.continueRecruiting]), the newest first; [Int.MAX_VALUE] when it could not get there in time
+     */
+    var checkpointTurns = ArrayList<Int>()
 
-    fun clone() = ArmySlot().also { it.unitId = unitId; it.estimatedTurn = estimatedTurn; it.startedOnOperation = startedOnOperation }
+    fun clone() = ArmySlot().also {
+        it.unitId = unitId; it.estimatedTurn = estimatedTurn; it.startedOnOperation = startedOnOperation
+        it.checkpointTurns = ArrayList(checkpointTurns)
+    }
+
+    /** CvArmyFormationSlot::SetCurrentTurnsToCheckpoint: [turns] is the newest record, only the last three are kept */
+    fun pushCheckpointTurns(turns: Int) {
+        checkpointTurns.add(0, turns)
+        if (checkpointTurns.size > CHECKPOINT_HISTORY) checkpointTurns.removeAt(checkpointTurns.lastIndex)
+    }
+
+    /**
+     *  CvArmyFormationSlot::IsMakingProgressTowardsCheckpoint: with fewer than three records, or when the newest says the unit is there
+     *  next turn, yes; else only if the newest is better than the oldest (a fight or a block costs a turn now and then)
+     */
+    fun isMakingProgress(): Boolean {
+        if (checkpointTurns.size < CHECKPOINT_HISTORY) return true
+        if (checkpointTurns.first() < 2) return true
+        return checkpointTurns.first() < checkpointTurns.last()
+    }
 
     companion object {
         /** ARMYSLOT_UNKNOWN_TURN_AT_CHECKPOINT */
         const val UNKNOWN_TURN = -1
         /** ARMYSLOT_NOT_INCLUDING_IN_OPERATION */
         const val NOT_INCLUDED = -2
+        /** The records [checkpointTurns] keeps */
+        const val CHECKPOINT_HISTORY = 3
     }
 }
 
@@ -158,9 +200,6 @@ class AiOperation : IsPartOfGameInfoSerialization {
     var createdTurn = 0
     /** CvAIEscortedOperation::m_bEscorted */
     var escorted = true
-    /** CvAIOperationDestroyBarbarianCamp::m_bCivilianRescue and the barbarian unit's [MapUnit.id] */
-    var civilianRescue = false
-    var unitToRescue = -1
 
     fun clone(): AiOperation {
         val toReturn = AiOperation()
@@ -171,7 +210,6 @@ class AiOperation : IsPartOfGameInfoSerialization {
         for (slot in slotsToBuild) toReturn.slotsToBuild.add(slot.copy())
         for (commitment in committedCities) toReturn.committedCities.add(commitment.clone())
         toReturn.lastTurnMoved = lastTurnMoved; toReturn.createdTurn = createdTurn; toReturn.escorted = escorted
-        toReturn.civilianRescue = civilianRescue; toReturn.unitToRescue = unitToRescue
         return toReturn
     }
 
@@ -217,26 +255,58 @@ class AiOperations : IsPartOfGameInfoSerialization {
 
     fun setTransients(civ: Civilization) {
         this.civ = civ
+        operations.removeAll { it.type.isRetired }
     }
 
     //region Queries (CvPlayer::haveAIOperationOfType, numOperationsOfType, getAIOperation, CvUnit::getArmyID)
 
-    /** CvPlayer::haveAIOperationOfType: the first operation of [type] (against [enemy], with target [target]) */
+    /**
+     *  CvPlayer::getFirstAIOperationOfType: the first operation of [type] that is not aborted, against [enemy] (any when null) and, when
+     *  [target] is given, aimed less than [TARGET_LOOKUP_DISTANCE] plots from it
+     */
     fun firstOfType(type: AiOperationType, enemy: Civilization? = null, target: Tile? = null): AiOperation? =
-        operations.firstOrNull { it.type == type && (enemy == null || it.enemyCivId == enemy.civID) && (target == null || it.targetTile == target.position) }
+        operations.firstOrNull { operation ->
+            operation.type == type && operation.state != OperationState.ABORTED && (enemy == null || operation.enemyCivId == enemy.civID) &&
+                (target == null || operation.targetTile?.let { target.aerialDistanceTo(civ.gameInfo.tileMap[it]) < TARGET_LOOKUP_DISTANCE } == true)
+        }
 
     /** CvPlayer::numOperationsOfType */
     fun numOperationsOfType(type: AiOperationType) = operations.count { it.type == type }
 
     /**
-     *  CvPlayer::HasAnyOffensiveOperationsAgainstPlayer (Vox Populi's getFirstOffensiveAIOperation): a military operation still running
-     *  against [enemy] whose target is outside our territory (CvAIOperation::IsOffensive; rapid response never is)
+     *  CvPlayer::getFirstOffensiveAIOperation: the first military operation still running against [enemy] whose target is outside our
+     *  territory (CvAIOperation::IsOffensive); the one Vox Populi's demand and show of force look at (it has no GetShowOfForceOperation)
      */
-    fun hasAnyOffensiveOperationsAgainst(enemy: Civilization): Boolean = operations.any { op ->
-        !op.type.isEscorted && op.type != AiOperationType.RAPID_RESPONSE && op.enemyCivId == enemy.civID &&
-            op.state != OperationState.SUCCESSFUL_FINISH && op.state != OperationState.ABORTED &&
-            op.targetTile?.let { civ.gameInfo.tileMap[it].getOwner() != civ } == true
+    fun firstOffensiveOperationAgainst(enemy: Civilization): AiOperation? = operations.firstOrNull { isOffensiveAgainst(it, enemy) }
+
+    /** CvPlayer::HasAnyOffensiveOperationsAgainstPlayer ([firstOffensiveOperationAgainst] exists) */
+    fun hasAnyOffensiveOperationsAgainst(enemy: Civilization): Boolean = firstOffensiveOperationAgainst(enemy) != null
+
+    /** The operations of [hasAnyOffensiveOperationsAgainst] (CvPlayer::StopAllLand/SeaOffensiveOperationsAgainstPlayer stop these) */
+    fun offensiveOperationsAgainst(enemy: Civilization): List<AiOperation> = operations.filter { isOffensiveAgainst(it, enemy) }
+
+    /** CvPlayer::GetNumOffensiveOperations, land plus sea: the military operations not aborted whose target is outside our territory */
+    fun numOffensiveOperations(): Int = operations.count { !it.type.isEscorted && it.state != OperationState.ABORTED && isOffensive(it) }
+
+    /**
+     *  CvPlayer::StopAllLandOffensiveOperationsAgainstPlayer and its Sea / Defensive siblings: the military operations still running
+     *  against [enemy] (null: anyone) that are [offensive] or not, by sea (naval invasions and fleets, CvAIOperation::IsNavalOperation)
+     *  or not, end for [reason]
+     */
+    fun stopAll(offensive: Boolean, naval: Boolean, enemy: Civilization?, reason: OperationAbortReason) {
+        for (op in operations.toList()) {
+            if (op.type.isEscorted || op.state == OperationState.SUCCESSFUL_FINISH || op.state == OperationState.ABORTED) continue
+            if (isOffensive(op) != offensive || (op.type.isNavalInvasion || op.type.allNaval) != naval) continue
+            if (enemy == null || op.enemyCivId == enemy.civID) kill(op, reason)
+        }
     }
+
+    /** CvAIOperation::IsOffensive: the target is not friendly territory for us (ours, or that of one who allows us in) */
+    fun isOffensive(op: AiOperation): Boolean = op.targetTile?.let { !civ.gameInfo.tileMap[it].isFriendlyTerritory(civ) } == true
+
+    private fun isOffensiveAgainst(op: AiOperation, enemy: Civilization): Boolean =
+        !op.type.isEscorted && op.enemyCivId == enemy.civID &&
+            op.state != OperationState.SUCCESSFUL_FINISH && op.state != OperationState.ABORTED && isOffensive(op)
 
     /** CvPlayerAI::GetNumUnitsNeededToBeBuilt: the sum of CvAIOperation::GetNumUnitsNeededToBeBuilt, the slots not yet committed to a city */
     fun numUnitsNeededToBeBuilt() = operations.sumOf { it.slotsToBuild.size }
@@ -272,16 +342,8 @@ class AiOperations : IsPartOfGameInfoSerialization {
 
     companion object {
         const val NEVER_DEPLOYED = -100
-    }
-
-    /** CvPlayer::IsCityAlreadyTargeted: an operation heading for [city] that is less than [percentToTarget] of the way (for [mixedLandNaval] or land ones) */
-    fun isCityAlreadyTargeted(city: City, naval: Boolean?, percentToTarget: Int, ignoreOperationId: Int = -1): Boolean {
-        for (operation in operations) {
-            if (operation.id == ignoreOperationId || operation.targetTile != city.getCenterTile().position) continue
-            if (AiOperationLogic.percentFromMusterPointToTarget(civ, operation) >= percentToTarget) continue
-            if (naval == null || naval == operation.type.mixedLandNaval) return true
-        }
-        return false
+        /** CvPlayer::getFirstAIOperationOfType's iMaxTargetDistance */
+        const val TARGET_LOOKUP_DISTANCE = 3
     }
 
     /** The target tiles of the settler operations of this civilization other than [except] */
@@ -320,10 +382,14 @@ class AiOperations : IsPartOfGameInfoSerialization {
     /** CvArmyAI::AddUnit: [unit] takes slot [slot] of [army], leaving the army it was in; its estimated arrival at the muster is computed */
     fun addUnit(army: AiArmy, unit: MapUnit, slot: Int) {
         removeFromArmy(unit)
-        army.slots[slot].unitId = unit.id
+        val entry = army.slots[slot]
+        entry.unitId = unit.id
+        entry.checkpointTurns.clear()
         val muster = army.position?.let { civ.gameInfo.tileMap.getOrNull(it.x, it.y) } ?: return
         val turns = AiOperationLogic.turnsToReach(unit, muster)
         if (turns != Int.MAX_VALUE) setEstimatedTurn(army, slot, turns)
+        // CvArmyAI::AddUnit records the first estimate to the checkpoint, [Int.MAX_VALUE] for one that takes too long
+        entry.pushCheckpointTurns(if (turns > civ.gameInfo.ruleset.ai.define(AiDefine.AI_OPERATIONAL_MAX_RECRUIT_TURNS_ENEMY_TERRITORY)) Int.MAX_VALUE else turns)
     }
 
     /** CvArmyAI::SetEstimatedTurn */
@@ -332,7 +398,7 @@ class AiOperations : IsPartOfGameInfoSerialization {
             if (turns == ArmySlot.NOT_INCLUDED || turns == ArmySlot.UNKNOWN_TURN) turns else civ.gameInfo.turns + turns
     }
 
-    /** CvPlayer::removeFromArmy: the unit leaves its army; its operation is told (CvArmyAI::RemoveUnit) */
+    /** CvPlayer::removeFromArmy: the unit leaves its army and gets its own unit AI back; its operation is told (CvArmyAI::RemoveUnit) */
     fun removeFromArmy(unit: MapUnit) = removeUnitId(unit.id)
 
     internal fun removeUnitId(unitId: Int) {
@@ -340,8 +406,33 @@ class AiOperations : IsPartOfGameInfoSerialization {
             val index = army.slots.indexOfFirst { it.unitId == unitId }
             if (index < 0) continue
             army.slots[index].unitId = -1
+            army.slots[index].checkpointTurns.clear()
+            releaseUnitAi(unitId)
             AiOperationLogic.unitWasRemoved(this, operation, army, index)
         }
+    }
+
+    /**
+     *  CvArmyAI::RemoveUnit with bTempOnly: [unit] leaves its army and gets its own unit AI back, the operation is not told (a unit that is
+     *  replaced at once, CvTacticalAI's SwitchEscort, must not end the operation).
+     *  @return the slot [unit] left, -1 if it was in no army
+     */
+    fun removeFromArmyTemporarily(unit: MapUnit): Int {
+        for (operation in operations) for (army in operation.armies) {
+            val index = army.slots.indexOfFirst { it.unitId == unit.id }
+            if (index < 0) continue
+            army.slots[index].unitId = -1
+            army.slots[index].checkpointTurns.clear()
+            releaseUnitAi(unit.id)
+            return index
+        }
+        return -1
+    }
+
+    /** CvArmyAI::RemoveUnit's AI_setUnitAIType(default): a unit that leaves an army is no longer what its slot made of it */
+    private fun releaseUnitAi(unitId: Int) {
+        val unit = civ.units.getUnitById(unitId) ?: return
+        UnitAiTypes.set(unit, UnitAiTypes.defaultOf(unit.baseUnit, civ.gameInfo.ruleset.ai))
     }
 
     /** CvAIOperation::Kill with CvAIOperation::Uninit: the armies are dissolved, their units are free again */
@@ -357,6 +448,7 @@ class AiOperations : IsPartOfGameInfoSerialization {
             statsAborted++
             statsAbortReasons.getOrPut(operation.type) { HashMap() }.merge(operation.abortReason, 1, Int::plus)
         }
+        for (army in operation.armies) for (slot in army.slots) if (slot.unitId != -1) releaseUnitAi(slot.unitId)
         operation.armies.clear()
         operation.slotsToBuild.clear()
         operation.committedCities.clear()
@@ -382,10 +474,22 @@ class AiOperations : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  CvCity::GetUnitForOperation: for the next open slot on [city]'s landmass the unit CvUnitProductionAI::RecommendUnit picks for the slot's
-     *  primary unit AI, else its secondary one; null if no slot waits or the city can train neither.
+     *  Its bCitySameAsMuster: the operation of the next open slot on [city]'s landmass musters on a tile [city] owns (the rule that
+     *  only the muster city trains units for an operation, CvCity::GetUnitForOperation and CvCityStrategyAI::ChooseProduction).
+     */
+    fun isNextSlotMusteredIn(city: City): Boolean {
+        val slot = peekAtNextUnitToBuild(city.getCenterTile().getContinent()) ?: return false
+        val muster = operationById(slot.operationId)?.musterTile?.let { civ.gameInfo.tileMap.getOrNull(it.x, it.y) } ?: return false
+        return muster.getCity() == city
+    }
+
+    /**
+     *  CvCity::GetUnitForOperation: for the next open slot on [city]'s landmass, when [city] is the muster city ([isNextSlotMusteredIn]), the
+     *  unit CvUnitProductionAI::RecommendUnit picks for the slot's primary unit AI, else its secondary one; null if no slot waits or the
+     *  city can train neither.
      */
     fun nextUnitForOperationSlot(city: City): SlotOffer? {
+        if (!isNextSlotMusteredIn(city)) return null
         val slot = peekAtNextUnitToBuild(city.getCenterTile().getContinent()) ?: return null
         val army = operationById(slot.operationId)?.armyById(slot.armyId) ?: return null
         val entry = formationDef(army.formation)?.slots?.getOrNull(slot.slotId) ?: return null
@@ -435,13 +539,16 @@ class AiOperations : IsPartOfGameInfoSerialization {
 
     /**
      *  A city that no longer trains the unit it committed to (production changed, city lost) uncommits
-     *  (CvCity::popOrder / CvCity::PostKill: CityUncommitToBuildUnitForOperationSlot).
+     *  (CvCity::popOrder / CvCity::PostKill: CityUncommitToBuildUnitForOperationSlot); then the operations take what the reserves have
+     *  now ([AiOperationLogic.continueRecruiting], CvAIOperation::Move's first steps). It runs before the armies move, with the other
+     *  start-of-turn bookkeeping ([com.unciv.logic.automation.unit.tactical.OperationalMoves.prepareTurn]).
      */
     fun refreshCommitments() {
         for (operation in operations) for (commitment in operation.committedCities.toList()) {
             val city = civ.cities.firstOrNull { it.id == commitment.cityId }
             if (city == null || city.cityConstructions.currentConstructionName() != commitment.unitName) uncommit(commitment)
         }
+        AiOperationLogic.continueRecruiting(civ)
     }
 
     /**
@@ -456,10 +563,7 @@ class AiOperations : IsPartOfGameInfoSerialization {
         UnitAiType.ofXmlName(commitment.unitAi)?.let { UnitAiTypes.set(unit, it) }
         addUnit(army, unit, commitment.slot.slotId)
         operation.committedCities.remove(commitment)
-        if (operation.slotsToBuild.isEmpty() && operation.state == OperationState.RECRUITING_UNITS) {
-            operation.state = OperationState.GATHERING_FORCES
-            for (a in operation.armies) a.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
-        }
+        if (operation.slotsToBuild.isEmpty()) AiOperationLogic.finishRecruitingIfDone(civ, operation)
         return true
     }
 
@@ -495,13 +599,39 @@ class AiOperations : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  The deletion sweeps of CvPlayer::doTurnUnits: operations that are over ([AiOperationLogic.doDelayedDeath]) are killed until none is,
-     *  then armies without units (that are not still waiting for their first ones, CvArmyAI::DoDelayedDeath) are dissolved.
+     *  The deletion sweep of CvPlayer::doTurnUnits: operations that are over ([AiOperationLogic.doDelayedDeath]) are killed until none is.
+     *  Armies with no unit are no longer dissolved on their own (Vox Populi has not BNW's CvArmyAI::DoDelayedDeath): an operation that loses
+     *  its units ends by [AiOperationLogic.unitWasRemoved], one with no army by [AiOperationLogic.shouldAbort].
      */
     fun sweep() {
         do {
             val killed = operations.toList().any { AiOperationLogic.doDelayedDeath(civ, it) }
         } while (killed)
-        for (operation in operations) operation.armies.removeAll { it.numSlotsFilled() == 0 && it.state != ArmyState.WAITING_FOR_UNITS_TO_REINFORCE }
+    }
+
+    /**
+     *  CvArmyAI::ReleaseAllUnits for an operation that ends in the middle of the turn ([AiOperationLogic.continueAfterMove]): its units leave
+     *  the armies and get their own unit AI back, and the operation is not told (it is over, [kill] removes it in the sweep).
+     */
+    fun releaseAllUnits(operation: AiOperation) {
+        for (army in operation.armies) for (slot in army.slots) {
+            if (slot.unitId == -1) continue
+            releaseUnitAi(slot.unitId)
+            slot.unitId = -1
+            slot.checkpointTurns.clear()
+        }
+    }
+
+    /**
+     *  CvPlayer::deleteAIOperation of an operation that ended while it was made (CvPlayer::addAIOperation: aborted, or more units to build
+     *  than allowed): it never was, so it is no statistic. Its units are free again.
+     */
+    internal fun discard(operation: AiOperation) {
+        releaseAllUnits(operation)
+        operation.armies.clear()
+        operation.slotsToBuild.clear()
+        operation.committedCities.clear()
+        operations.remove(operation)
+        statsByType[operation.type]?.let { it[0]-- }
     }
 }

@@ -121,11 +121,8 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
         city.civ.addGold(-goldCost)
         city.civ.plotsBought++ // CvCity::BuyPlot: CvPlayer::ChangeNumPlotsBought
         acquireTile(tile)
-        // CvCity::BuyPlot: every foreign city within city radius of the tile notes it (AI_ChangeNumPlotsAcquiredByOtherPlayer)
-        for (nearbyTile in tile.getTilesInDistance(3)) {
-            val nearbyCity = nearbyTile.getCity() ?: continue
-            if (nearbyTile.isCityCenter() && nearbyCity.civ != city.civ) DiplomacyEvents.onPlotBoughtNear(nearbyCity.civ, city.civ, 1)
-        }
+        // CvCity::BuyPlot: only a tile that cost gold is noted by the foreign cities near it
+        if (goldCost > 0) DiplomacyEvents.onPlotBought(city.civ, tile)
 
         // Reapply worked tiles optimization (aka CityFocus) - doing it here means AI profits too
         city.reassignPopulationDeferred()
@@ -263,9 +260,10 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
      *  the path cost x PLOT_INFLUENCE_DISTANCE_MULTIPLIER; a resource the civilization can see PLOT_INFLUENCE_RESOURCE_COST (a bonus resource
      *  beyond the work range 0, within it one less), else water PLOT_INFLUENCE_WATER_COST and a tile beyond the work range
      *  PLOT_INFLUENCE_RING_COST; an improvement PLOT_INFLUENCE_IMPROVEMENT_COST (a barbarian camp PLOT_INFLUENCE_RING_COST); a road
-     *  PLOT_INFLUENCE_ROUTE_COST; a natural wonder PLOT_INFLUENCE_NW_COST; each point of yield PLOT_INFLUENCE_YIELD_POINT_COST; each unowned
-     *  neighbor with a visible resource (a bonus one only within the work range) -1, with a natural wonder -1 (and a further -1 once if one of
-     *  those is within the work range); PLOT_INFLUENCE_NO_ADJACENT_OWNED_COST if no neighbor belongs to this city.
+     *  PLOT_INFLUENCE_ROUTE_COST; a natural wonder PLOT_INFLUENCE_NW_COST; each point of yield PLOT_INFLUENCE_YIELD_POINT_COST (three
+     *  for the city's most deficient yield); each unowned neighbor with a visible resource (a bonus one only within the work range) -1,
+     *  with a natural wonder -1 (and a further -1 once if one of those is within the work range); PLOT_INFLUENCE_NO_ADJACENT_OWNED_COST if
+     *  no neighbor belongs to this city. VP's extra claim of neighbors for a terrain-claiming trait (bTraitExtraLand) is none in BNW.
      */
     @Readonly
     fun plotInfluenceScore(tile: Tile, pathCost: Int): Int {
@@ -293,10 +291,12 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
         if (tile.roadStatus != RoadStatus.None) score += ai.define(AiDefine.PLOT_INFLUENCE_ROUTE_COST)
         if (tile.isNaturalWonder()) score += ai.define(AiDefine.PLOT_INFLUENCE_NW_COST)
 
-        // The tile's yields (CvPlot::getYield of the six yields; no happiness), as the civilization sees it
+        // The tile's yields (CvPlot::calculateYield of the six yields; no happiness), as the civilization sees it; the city's most deficient
+        // yield (CvCityStrategyAI::GetMostDeficientYield) counts three times
         val yields = tile.stats.getTileStats(null, civ)
-        val yieldPoints = yields.food.toInt() + yields.production.toInt() + yields.gold.toInt() +
+        var yieldPoints = yields.food.toInt() + yields.production.toInt() + yields.gold.toInt() +
             yields.science.toInt() + yields.culture.toInt() + yields.faith.toInt()
+        city.ai.mostDeficientYield?.let { yieldPoints += 2 * yields[it].toInt() }
         score += ai.define(AiDefine.PLOT_INFLUENCE_YIELD_POINT_COST) * yieldPoints
 
         var wonderNearby = false

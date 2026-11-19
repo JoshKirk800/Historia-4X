@@ -120,6 +120,21 @@ class EspionageAutomationTests {
         hidden.getCenterTile().setExplored(a, false)
         assertEquals(listOf(bCapital), ai.buildOffenseCityList())
     }
+
+    @Test
+    fun `offense list leaves out a friend and one we promised not to spy on`() {
+        val ours = a.getDiplomacyManager(b)!!
+        ours.setFlag(DiplomacyFlags.DeclarationOfFriendship, 10)
+        assertEquals(emptyList<City>(), ai.buildOffenseCityList())
+        ours.removeFlag(DiplomacyFlags.DeclarationOfFriendship)
+        b.getDiplomacyManager(a)!!.setFlag(DiplomacyFlags.AgreedToNotSendSpies, 10)
+        assertEquals(emptyList<City>(), ai.buildOffenseCityList())
+        b.getDiplomacyManager(a)!!.removeFlag(DiplomacyFlags.AgreedToNotSendSpies)
+        assertEquals(listOf(bCapital), ai.buildOffenseCityList())
+        ours.declareWar()
+        b.getDiplomacyManager(a)!!.setFlag(DiplomacyFlags.AgreedToNotSendSpies, 10)
+        assertEquals("at war, no promise holds", listOf(bCapital), ai.buildOffenseCityList())
+    }
     // endregion
 
     // region defensive placement
@@ -146,6 +161,7 @@ class EspionageAutomationTests {
     // region spy numbers
     @Test
     fun `without a grand strategy a third of the spies sit in city-states and the rest guard when we lead in technologies`() {
+        a.ai.setGrandStrategyAndPursuit(null)
         game.addCity(a, game.tileMap[0, -3])
         addSpies(3)
         val targets = ai.findTargetSpyNumbers()
@@ -167,7 +183,7 @@ class EspionageAutomationTests {
 
     @Test
     fun `a spaceship strategy keeps spies out of city-states`() {
-        a.ai.grandStrategy = GrandStrategyAi.SPACESHIP
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
         game.addCity(a, game.tileMap[0, -3])
         addSpies(3)
         assertEquals(0, ai.findTargetSpyNumbers().cityState)
@@ -183,7 +199,7 @@ class EspionageAutomationTests {
 
     @Test
     fun `a diplomatic strategy with nobody worth a diplomat spends the spies elsewhere`() {
-        a.ai.grandStrategy = GrandStrategyAi.UNITED_NATIONS
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.UNITED_NATIONS)
         addSpies(1)
         val targets = ai.findTargetSpyNumbers()
         assertEquals(0, targets.diplomat)

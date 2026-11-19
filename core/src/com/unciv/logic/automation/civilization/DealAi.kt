@@ -2,6 +2,7 @@ package com.unciv.logic.automation.civilization
 
 import com.unciv.Constants
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
+import com.unciv.logic.automation.diplomacy.PactPlanningAi
 import com.unciv.logic.automation.diplomacy.PeaceTreatyType
 import com.unciv.logic.automation.diplomacy.WarProjection
 import com.unciv.logic.automation.strategy.StrengthLevel
@@ -386,15 +387,30 @@ object DealAi {
         return value
     }
 
-    /** CvDealAI::GetDefensivePactValue: 100 received; giving one 100 if our opinion is Favorable or better, else [NEVER] */
+    /**
+     *  CvDealAI::GetDefensivePactValue (Vox Populi): [NEVER] unless we want a pact with them ([PactPlanningAi]); otherwise their
+     *  [PactPlanningAi.scoreDefensivePactChoice] times our era (at least 1): receiving one is worth a positive score (twice for our most
+     *  valuable ally), giving one costs a negative score (twice unless they are our most valuable ally), else 0
+     */
     fun getDefensivePactValue(us: Civilization, them: Civilization, fromMe: Boolean, useEvenValue: Boolean): Int {
-        var value = if (!fromMe) 100
-            else if (us.ai.diplomacy.opinionOf(them) >= MajorCivOpinion.Favorable) 100 else NEVER
+        var value = defensivePactValue(us, them, fromMe)
         if (useEvenValue) {
-            value += getDefensivePactValue(them, us, !fromMe, false)
+            value += defensivePactValue(them, us, !fromMe)
             value /= 2
         }
         return value
+    }
+
+    private fun defensivePactValue(us: Civilization, them: Civilization, fromMe: Boolean): Int {
+        if (!us.isMajorCiv || !us.ai.diplomacy.memoryOf(them).wantsDefensivePact) return NEVER
+        val coastal = PactPlanningAi.numEffectiveCoastalCities(us) > 1
+        val score = PactPlanningAi.scoreDefensivePactChoice(us, them, coastal) * max(1, us.getAiEraNumber())
+        val mostValuableAlly = us.ai.diplomacy.mostValuableAlly == them.civID
+        return when {
+            score > 0 && !fromMe -> if (mostValuableAlly) score * 2 else score
+            score < 0 && fromMe -> if (mostValuableAlly) -score else -score * 2
+            else -> 0
+        }
     }
 
     /** CvDealAI::GetResearchAgreementValue: 100; giving one +100 per era they are ahead, × approach (Hostile ×10, Afraid ×0.8) */
@@ -453,7 +469,7 @@ object DealAi {
     /**
      *  CvDealAI::GetThirdPartyWarValue: we declare war on [third]: refused ([NEVER]) when our War approach bias is under 4; else
      *  400 / 600 / 1000 / 50000 by war projection, +50 per era, ±10% per point of War bias away from DEFAULT_FLAVOR_VALUE; never against
-     *  a city-state we are Friendly or Protective toward; × hatred of a major [third] (25-75%), × liking of [them] (50-125%).
+     *  a city-state we are friendly toward; × hatred of a major [third] (25-75%), × liking of [them] (50-125%).
      *  War [them] declare is worth 200 / 100 if we find [third] Unforgivable / Enemy, else -100000.
      */
     fun getThirdPartyWarValue(us: Civilization, them: Civilization, third: Civilization, fromMe: Boolean): Int {
@@ -479,7 +495,7 @@ object DealAi {
         value += warBias * 10 * value / 100
         if (third.isCityState) {
             val approach = us.ai.minorCivApproaches[third.civID]
-            if (approach == MinorCivApproach.Friendly || approach == MinorCivApproach.Protective) value = NEVER
+            if (approach == MinorCivApproach.Friendly) value = NEVER
         } else {
             when (us.ai.diplomacy.opinionOf(third)) {
                 MajorCivOpinion.Unforgivable -> value = value * 25 / 100
@@ -1312,6 +1328,15 @@ object DealAi {
     fun isOpenBordersExchangeAcceptable(us: Civilization, them: Civilization): Boolean {
         val approach = us.ai.diplomacy.approachTowards(them, true)
         return approach == MajorCivApproach.Friendly || approach == MajorCivApproach.Afraid
+    }
+
+    /** CvDealAI::IsMakeOfferForDefensivePact (Vox Populi): a defensive pact on both sides, balanced */
+    fun isMakeOfferForDefensivePact(us: Civilization, them: Civilization, trade: Trade): Boolean {
+        if (!us.diplomacyFunctions.canSignDefensivePactWith(them)) return false
+        trade.ourOffers.add(TradeOffer(Constants.defensivePact, TradeOfferType.Treaty, speed = us.gameInfo.speed))
+        trade.theirOffers.add(TradeOffer(Constants.defensivePact, TradeOfferType.Treaty, speed = us.gameInfo.speed))
+        return if (!them.isHuman()) doEqualizeDealWithAI(us, them, trade)
+            else doEqualizeDealWithHuman(us, them, trade, dontChangeMyExistingItems = true, dontChangeTheirExistingItems = false)
     }
 
     /** CvDeal::GetItemTradeableState */

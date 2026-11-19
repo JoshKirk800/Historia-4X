@@ -11,7 +11,6 @@ import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -200,12 +199,11 @@ class PlotBuyCostTests {
     }
 
     @Test
-    fun `the AI prices a tile as the civilization does and buys only what it can pay`() {
+    fun `the AI prices a tile as the civilization does and scores the tiles it cannot pay for too`() {
         civ.plotsBought = 6
         assertEquals(80, UseGoldAutomation.baseTileCost(city))
+        // CvCity::GetBuyPlotScore asks CanBuyPlot with bIgnoreCost: what it can pay is for CvEconomicAI::DoPlotPurchases to judge
         civ.addGold(10)
-        assertNull(UseGoldAutomation.buyPlotScore(city))
-        civ.addGold(1000)
         assertNotNull(UseGoldAutomation.buyPlotScore(city))
     }
 

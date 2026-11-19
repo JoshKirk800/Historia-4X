@@ -6,8 +6,6 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
-import com.unciv.models.TradeRoute
-import com.unciv.models.TradeRouteKind
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
@@ -24,7 +22,7 @@ import org.junit.runner.RunWith
 
 /**
  *  The naval operations and the nukes (CvAIOperation: CvAINavalOperation and its subclasses, CvAINavalEscortedOperation, CvAIOperationNavalAttack,
- *  CvAIOperationNukeAttack; CvMilitaryAI: RequestPureNavalAttack, the naval part of UpdateOperations, RequestNukeAttack and its trigger;
+ *  CvAIOperationNukeAttack; CvMilitaryAI: RequestCityAttack's naval army (our pure naval attack), the naval part of UpdateOperations, RequestNukeAttack and its trigger;
  *  CvTacticalAI: the naval formation moves) with the BNW XML values. A channel of coast water separates our city at x=0 from the enemy's at x=14.
  */
 @RunWith(GdxTestRunner::class)
@@ -75,12 +73,17 @@ class NavalOperationTests {
     /** The four required ships of the pure naval formation: two that attack at sea, two assault ships */
     private fun fleet(): List<MapUnit> = listOf(ship("Quinquereme", 2, 0), ship("Quinquereme", 2, 1), ship("Galleass", 3, 0), ship("Galleass", 3, 1))
 
+    /** An attack target of Vox Populi's naval army: ships alone from our port to the enemy city */
+    private fun navalTarget() = MilitaryTarget(city, enemyCity).apply { attackBySea = true; pureNaval = true }
+
+    private fun requestNavalAttack(numUnitsWillingToBuild: Int) = MilitaryOperations.requestSpecificAttack(civ, navalTarget(), numUnitsWillingToBuild)
+
     // region Pure naval city attack
 
     @Test
     fun `a pure naval attack starts when all but the number of units we are willing to build of the required slots are filled`() {
         val ships = fleet()
-        assertTrue(MilitaryOperations.requestPureNavalAttack(civ, enemy, 0))
+        assertTrue(requestNavalAttack(0))
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         assertEquals(OperationState.GATHERING_FORCES, operation.state)
         assertTrue(ships.all { ops.armyOf(it) != null })
@@ -93,9 +96,9 @@ class NavalOperationTests {
     @Test
     fun `one missing ship is built when willing, two missing are too many`() {
         val ships = listOf(ship("Quinquereme", 2, 0), ship("Quinquereme", 2, 1), ship("Galleass", 3, 0))
-        assertFalse("one short and not willing", MilitaryOperations.requestPureNavalAttack(civ, enemy, 0))
+        assertFalse("one short and not willing", requestNavalAttack(0))
         assertNull(ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK))
-        assertTrue(MilitaryOperations.requestPureNavalAttack(civ, enemy, 1))
+        assertTrue(requestNavalAttack(1))
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
         assertEquals(1, operation.slotsToBuild.size)
@@ -104,13 +107,13 @@ class NavalOperationTests {
         assertTrue(operation.hasOneMoreSlotToFill())
         ops.kill(operation, OperationAbortReason.KILLED)
         ships[2].destroy()
-        assertFalse("two short", MilitaryOperations.requestPureNavalAttack(civ, enemy, 1))
+        assertFalse("two short", requestNavalAttack(1))
     }
 
     @Test
     fun `a pure naval attack ends in success once the fleet is within a tile of the city, the tactical AI gets a zone there`() {
         fleet()
-        MilitaryOperations.requestPureNavalAttack(civ, enemy, 0)
+        requestNavalAttack(0)
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         val army = operation.firstArmy!!
         operation.state = OperationState.MOVING_TO_TARGET
@@ -124,117 +127,106 @@ class NavalOperationTests {
     @Test
     fun `a pure naval attack is called off when its city is no longer the enemy's`() {
         fleet()
-        MilitaryOperations.requestPureNavalAttack(civ, enemy, 0)
+        requestNavalAttack(0)
         val operation = ops.firstOfType(AiOperationType.PURE_NAVAL_CITY_ATTACK)!!
         assertFalse(AiOperationLogic.shouldAbort(civ, operation))
-        enemyCity.getCenterTile().setOwningCity(null)
-        enemyCity.getCenterTile().getOwner() // the owner of the tile went with the city
         enemyCity.moveToCiv(civ)
+        // CvAIOperationMilitary::VerifyOrAdjustTarget: owned by anyone but the enemy
         assertTrue(AiOperationLogic.shouldAbort(civ, operation))
+        assertEquals(OperationAbortReason.TARGET_ALREADY_CAPTURED, operation.abortReason)
     }
     // endregion
 
-    // region Superiority and bombardment
+    // region Superiority (CvAIOperationNavalSuperiority, CvMilitaryAI::CheckSeaDefenses)
 
-    /** The required slots of the naval squadron: an attack ship and an assault ship (a second assault ship takes the optional second attack slot first) */
-    private fun squadron(y: Int): List<MapUnit> = listOf(ship("Quinquereme", 2, y), ship("Galleass", 3, y), ship("Galleass", 4, y))
+    /** The required slots of the naval squadron: two ships that attack at sea and an assault ship, none bound to the coast (Vox Populi asks for ships that can enter the ocean) */
+    private fun squadron(x: Int, y: Int = 0): List<MapUnit> = listOf(ship("Ironclad", x, y), ship("Ironclad", x, y + 1), ship("Frigate", x + 1, y))
+
+    private fun losing() {
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Defensive
+    }
 
     @Test
-    fun `naval superiority starts with a squadron at hand when a colonization is under way or we are at war, never otherwise`() {
-        civ.ai.setPersonalityFlavor(Flavor.Naval, 10)
-        squadron(0)
-        game.addUnit("Trireme", enemy, tile(5, 2))
-        MilitaryOperations.launchOpportunityNavalOperations(civ)
-        assertNull("no reason", ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY))
-        civ.ai.militaryStrategies[MilitaryOperations.AT_WAR] = 1
-        MilitaryOperations.launchOpportunityNavalOperations(civ)
+    fun `a war going badly sends a squadron to the threatened coastal city, from the water next to our nearest port`() {
+        losing()
+        val ships = squadron(7)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
         val operation = ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY)!!
-        assertEquals("the enemy ship is the target", tile(5, 2).position, operation.targetTile)
-        assertEquals("it sails at once", OperationState.MOVING_TO_TARGET, operation.state)
+        assertEquals(enemy.civID, operation.enemyCivId)
+        assertTrue("all three required ships are in it", ships.all { ops.armyOf(it) != null })
+        val target = game.gameInfo.tileMap[operation.targetTile!!]
+        assertTrue("it defends the water by the city", target.isWater && target.aerialDistanceTo(city.getCenterTile()) <= 2)
+        // the army gathers where its ships are, so the muster point is water, not necessarily by the port
+        assertTrue("the squadron musters on water", game.gameInfo.tileMap[operation.musterTile!!].isWater)
+        assertEquals(city.id, operation.startCityId)
     }
 
     @Test
-    fun `naval superiority sails for an enemy trader at sea`() {
-        civ.ai.setPersonalityFlavor(Flavor.Naval, 10)
-        squadron(0)
-        val route = TradeRoute(enemyCity.location, city.location, TradeRouteKind.International, true, "Cargo Ship",
-            listOf(tile(4, 2).position, tile(5, 2).position, tile(6, 2).position), 4, 30, game.gameInfo.turns)
-        route.setTransients(enemy)
-        route.pathIndex = 1
-        enemy.tradeRoutes.routes.add(route)
-        civ.ai.militaryStrategies[MilitaryOperations.AT_WAR] = 1
-        MilitaryOperations.launchOpportunityNavalOperations(civ)
+    fun `a war that is not going badly starts no squadron`() {
+        civ.ai.warStates.warStates[enemy.civID] = WarState.Stalemate
+        squadron(7)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        assertNull(ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY))
+    }
+
+    /** PreconditionsAreMet is asked without a muster plot: the ships must be able to enter the ocean */
+    @Test
+    fun `ships that cannot enter the ocean are no squadron`() {
+        losing()
+        listOf(ship("Quinquereme", 7, 0), ship("Quinquereme", 7, 1), ship("Galleass", 8, 0))
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        assertNull(ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY))
+    }
+
+    @Test
+    fun `a squadron that is already running near the coastal city is not doubled`() {
+        losing()
+        squadron(7)
+        squadron(7, 3)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        assertEquals(1, ops.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY))
+        MilitaryOperations.updateOperations(civ)
+        assertEquals(1, ops.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY))
+    }
+
+    @Test
+    fun `a squadron that is in place at the coastal water succeeds and the city is a focus of the tactical AI`() {
+        losing()
+        val ships = squadron(7)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
         val operation = ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY)!!
-        assertEquals(tile(5, 2).position, operation.targetTile)
-    }
-
-    @Test
-    fun `the number of superiority and bombardment operations is held to half the naval flavor`() {
-        civ.ai.setPersonalityFlavor(Flavor.Naval, 0)
-        civ.ai.militaryStrategies[MilitaryOperations.AT_WAR] = 1
-        squadron(0)
-        game.addUnit("Trireme", enemy, tile(5, 2))
-        MilitaryOperations.launchOpportunityNavalOperations(civ) // 0 running <= 0
-        assertEquals(1, ops.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY))
-        squadron(3)
-        MilitaryOperations.launchOpportunityNavalOperations(civ) // 1 running > 0
-        assertEquals(1, ops.numOperationsOfType(AiOperationType.NAVAL_SUPERIORITY))
-    }
-
-    @Test
-    fun `the superiority target is the lightest reachable enemy ship, embarked units counting two thirds`() {
-        ship("Quinquereme", 1, 0)
-        game.addUnit("Trireme", enemy, tile(7, 3)) // far
-        game.addUnit("Trireme", enemy, tile(3, -2)) // near
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
-        assertEquals(tile(3, -2).position, operation.targetTile)
-    }
-
-    @Test
-    fun `with no ship to hunt a superiority fleet patrols next to the nearest coastal enemy city`() {
-        ship("Quinquereme", 1, 0)
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_SUPERIORITY)
-        val target = game.gameInfo.tileMap[operation.targetTile!!]
-        assertTrue(target.isWater)
-        assertEquals(1, target.aerialDistanceTo(enemyCity.getCenterTile()))
-    }
-
-    @Test
-    fun `a bombardment fleet targets the shallow water next to an enemy unit on the coast, cities are left alone`() {
-        ship("Quinquereme", 2, 1)
-        ship("Galleass", 2, 0)
-        game.addUnit("Warrior", enemy, tile(0, 3)) // on the coast of our side, next to water at x=1
-        seeAll()
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_BOMBARDMENT)
-        val target = game.gameInfo.tileMap[operation.targetTile!!]
-        assertTrue(target.isWater)
-        assertEquals(1, target.aerialDistanceTo(tile(0, 3)))
-    }
-
-    @Test
-    fun `bombardment without a defender on the coast aborts`() {
-        ship("Quinquereme", 2, 1)
-        ship("Galleass", 2, 0)
-        seeAll()
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_BOMBARDMENT)
-        assertEquals(OperationState.ABORTED, operation.state)
-        assertEquals(OperationAbortReason.LOST_TARGET, operation.abortReason)
-    }
-
-    @Test
-    fun `a bombardment fleet that reaches its goal gives the tactical AI a one turn bombardment zone`() {
-        ship("Quinquereme", 2, 1)
-        ship("Galleass", 2, 0)
-        game.addUnit("Warrior", enemy, tile(0, 3))
-        seeAll()
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.NAVAL_BOMBARDMENT)
         val army = operation.firstArmy!!
+        val goal = game.gameInfo.tileMap[army.goalTile!!]
+        // Within 3 plots of the goal: the squadron has arrived (Vox Populi's deploy range)
+        val places = goal.getTilesInDistance(1).filter { it.isWater && it.militaryUnit == null }.toList()
+        for ((index, ship) in ships.withIndex()) {
+            ship.removeFromTile(); ship.putInTile(places[index])
+        }
         operation.state = OperationState.MOVING_TO_TARGET
-        army.position = army.goalTile
-        AiOperationLogic.armyInPosition(civ, operation, army)
+        army.state = ArmyState.MOVING_TO_DESTINATION
+        assertTrue(AiOperationLogic.checkOnTarget(civ, operation))
         assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
-        val zone = civ.ai.tactical.temporaryZones.single()
-        assertEquals(game.gameInfo.turns + 1, zone.lastTurn)
+        assertTrue(civ.ai.tactical.isInFocusArea(city.getCenterTile()))
+    }
+
+    @Test
+    fun `a squadron ends when no coastal city is left to defend`() {
+        game.addCity(civ, tile(-6)) // an inland city, so that the port is not our last one
+        losing()
+        squadron(7)
+        seeAll()
+        MilitaryOperations.updateOperations(civ)
+        val operation = ops.firstOfType(AiOperationType.NAVAL_SUPERIORITY)!!
+        // The port is lost: no threatened coastal city to sail to
+        city.moveToCiv(enemy)
+        civ.ai.invalidateTurnCaches()
+        assertTrue(AiOperationLogic.shouldAbort(civ, operation))
+        assertEquals(OperationAbortReason.NO_TARGET, operation.abortReason)
     }
     // endregion
 
@@ -269,18 +261,21 @@ class NavalOperationTests {
         assertEquals(3, operation.slotsToBuild.size) // only the two ships are there
     }
 
+    /** Vox Populi (GrabUnitsFromTheReserves): ships that cannot enter the ocean are no recruits when muster point and target are on different waters */
     @Test
-    fun `once ships may cross the ocean a coast-bound ship no longer fills an invasion, an ocean-going one does`() {
-        civ.tech.embarkedUnitsCanEnterOcean = true
-        val coastal = ship("Trireme", 2, 0)
+    fun `a coast-bound ship does not fill an invasion across two bodies of water, an ocean-going one does`() {
+        for (y in -6..6) game.tileMap.getOrNull(7, y)?.let { game.setTileTerrain(it.position, "Grassland") } // a strip of land splits the sea
+        civ.ai.invalidateTurnCaches()
+        val coastal = ship("Quinquereme", 2, 0)
         val ocean = ship("Frigate", 2, 1)
         val operation = invade()
-        assertNull("a Trireme cannot enter the ocean", ops.armyOf(coastal))
+        assertNull("a Quinquereme cannot enter the ocean", ops.armyOf(coastal))
         assertNotNull(ops.armyOf(ocean))
         ops.kill(operation, OperationAbortReason.KILLED)
-        civ.tech.embarkedUnitsCanEnterOcean = false
+        for (y in -6..6) game.tileMap.getOrNull(7, y)?.let { game.setTileTerrain(it.position, "Coast") }
+        civ.ai.invalidateTurnCaches()
         invade()
-        assertNotNull("without the ocean tech the formation takes it", ops.armyOf(coastal))
+        assertNotNull("on one sea the formation takes it", ops.armyOf(coastal))
     }
 
     @Test
@@ -440,7 +435,7 @@ class NavalOperationTests {
         assertTrue("an enemy in our opinion", MilitaryOperations.shouldLaunchNuke(civ, enemy))
         civ.ai.diplomacy.setOpinion(enemy, com.unciv.logic.automation.diplomacy.MajorCivOpinion.Competitor)
 
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
         assertTrue("going for world conquest", MilitaryOperations.shouldLaunchNuke(civ, enemy))
     }
 

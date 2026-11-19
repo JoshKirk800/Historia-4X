@@ -65,38 +65,44 @@ class DiplomacyContactAndDemandTests {
     //region Clamped memories
 
     @Test
-    fun `the common foe value stops at 50 opinion weights of 50`() {
-        // c fights b, so c likes whoever hurts b: damage worth 20000, a quarter of it with no estimate of b's strength (VP's lowest
-        // scaling), is more than the opinion can use
+    fun `the common foe value stops at its maximum, where the opinion is the full -100`() {
+        // c fights b, so c likes whoever hurts b: damage worth 20000 is more than the opinion can use
         c.getDiplomacyManager(b)!!.declareWar()
         WarDamageAi.applyWarDamage(a, b, 20000)
-        assertEquals(2500, c.ai.diplomacy.memoryOf(a).commonFoeValue)
-        assertEquals(-50, OpinionAi.commonFoeScore(c.ai.diplomacy.memoryOf(a).commonFoeValue, rules))
-        // Stays at the cap; a negative change comes off it
-        WarDamageAi.applyWarDamage(a, b, 400)
-        assertEquals(2500, c.ai.diplomacy.memoryOf(a).commonFoeValue)
-        c.ai.diplomacy.changeCommonFoeValue(a, -3000)
+        val max = c.ai.diplomacy.maxCommonFoeValue()
+        assertEquals(max, c.ai.diplomacy.memoryOf(a).commonFoeValue)
+        assertEquals(-100, OpinionAi.commonFoeScore(c, a, rules))
+        c.ai.diplomacy.changeCommonFoeValue(a, -max - 1)
         assertEquals(0, c.ai.diplomacy.memoryOf(a).commonFoeValue)
     }
 
     @Test
-    fun `the recent trade value stops at 30 weights of 10 and never goes below 0`() {
-        a.ai.diplomacy.changeRecentTradeValue(b, 3000)
-        assertEquals(300, a.ai.diplomacy.memoryOf(b).recentTradeValue)
-        a.ai.diplomacy.changeRecentTradeValue(b, -100)
-        assertEquals(200, a.ai.diplomacy.memoryOf(b).recentTradeValue)
-        a.ai.diplomacy.changeRecentTradeValue(b, -1000)
+    fun `the recent trade value stops at its maximum, a loss is not scaled, and it never goes below 0`() {
+        val max = a.ai.diplomacy.maxRecentTradeValue()
+        a.ai.diplomacy.changeRecentTradeValue(b, 30000)
+        assertEquals(max, a.ai.diplomacy.memoryOf(b).recentTradeValue)
+        assertEquals(-40, OpinionAi.recentTradeScore(a, b, rules))
+        a.ai.diplomacy.changeRecentTradeValue(b, -10)
+        assertEquals(max - 10, a.ai.diplomacy.memoryOf(b).recentTradeValue)
+        a.ai.diplomacy.changeRecentTradeValue(b, -100000)
         assertEquals(0, a.ai.diplomacy.memoryOf(b).recentTradeValue)
     }
 
     @Test
-    fun `the recent assist value stays within plus or minus 30 weights of 10`() {
-        a.ai.diplomacy.changeRecentAssistValue(b, 3000)
-        assertEquals(300, a.ai.diplomacy.memoryOf(b).recentAssistValue)
-        a.ai.diplomacy.changeRecentAssistValue(b, -9000)
-        assertEquals(-300, a.ai.diplomacy.memoryOf(b).recentAssistValue)
-        a.ai.diplomacy.changeRecentAssistValue(b, 50)
-        assertEquals(-250, a.ai.diplomacy.memoryOf(b).recentAssistValue)
+    fun `help and refusals have their own maximum, refusals do not count at war, and the decay stops at 0`() {
+        val diplomacy = a.ai.diplomacy
+        diplomacy.changeRecentAssistValue(b, 30000)
+        assertEquals(diplomacy.maxRecentAssistValue(failed = true), diplomacy.memoryOf(b).recentAssistValue)
+        assertEquals(30, OpinionAi.recentAssistScore(a, b, rules))
+        diplomacy.changeRecentAssistValue(b, -90000)
+        assertEquals(-diplomacy.maxRecentAssistValue(failed = false), diplomacy.memoryOf(b).recentAssistValue)
+        assertEquals(-30, OpinionAi.recentAssistScore(a, b, rules))
+        diplomacy.memoryOf(b).recentAssistValue = -2
+        diplomacy.changeRecentAssistValue(b, 3, decay = true)
+        assertEquals(0, diplomacy.memoryOf(b).recentAssistValue)
+        a.getDiplomacyManager(b)!!.declareWar()
+        diplomacy.changeRecentAssistValue(b, 100)
+        assertEquals(0, diplomacy.memoryOf(b).recentAssistValue)
     }
     //endregion
 
@@ -235,7 +241,7 @@ class DiplomacyContactAndDemandTests {
     }
 
     @Test
-    fun `an AI gives in to a demand at once and remembers nothing of it`() {
+    fun `an AI gives in to a demand at once and counts it against the demander`() {
         b.addGold(1000 - b.gold)
         a.getDiplomacyManager(b)!!.signDeclarationOfFriendship()
         val ours = a.gold
@@ -243,9 +249,28 @@ class DiplomacyContactAndDemandTests {
         DiplomacyAutomation.contactMajorCivs(a)
         assertEquals(800, b.gold)
         assertEquals(ours + 200, a.gold)
-        // CvDiplomacyAI::DoDemandMade belongs to the demands made of an AI by a human, not to the AI demanding
-        assertEquals(-1, b.ai.diplomacy.memoryOf(a).demandCounter)
+        // CvDiplomacyAI::DoSendStatementToPlayer: the AI target's DoDemandMade counts the demand and stamps the turn
+        assertEquals(1, b.ai.diplomacy.memoryOf(a).numDemandsMade)
+        assertEquals(game.gameInfo.turns, b.ai.diplomacy.memoryOf(a).demandMadeTurn)
+        assertTrue("the demander was given in to", WarTargetAi.isRecentDemandAccepted(a, b))
         assertEquals(b.civID, a.ai.diplomacy.demandTarget)
+    }
+
+    @Test
+    fun `demands made of us weigh less when we gave nothing and halve in count once their duration passes`() {
+        val memory = b.ai.diplomacy.memoryOf(a)
+        b.ai.setDiplomacyValue(DiplomacyPersonality.Forgiveness, 5)
+        memory.numDemandsMade = 2
+        memory.demandMadeTurn = game.gameInfo.turns
+        // (20 + 10) halved by OPINION_WEIGHT_MADE_DEMAND_YOU_NO_TAKE_DIVISOR 200: nothing of ours was taken recently
+        assertEquals(15, OpinionAi.demandMadeScore(b, a, rules))
+
+        val duration = 50 * DiplomacyTurn.opinionDurationPercent(b) / 100
+        game.gameInfo.turns += duration
+        OpinionAi.testOpinionModifiers(b, listOf(a), rules)
+        assertEquals(1, memory.numDemandsMade)
+        assertEquals(game.gameInfo.turns, memory.demandMadeTurn)
+        assertEquals("one demand left, $duration turns later", 10, OpinionAi.demandMadeScore(b, a, rules))
     }
 
     @Test
@@ -275,38 +300,6 @@ class DiplomacyContactAndDemandTests {
         TradeAutomation.respondToTradeRequests(b, tradeAndChangeState = true)
         assertEquals(800, b.gold)
         assertEquals(ours + 200, a.gold)
-    }
-    //endregion
-
-    //region A human asks to work together
-
-    @Test
-    fun `a request to work together too early restarts both counters and is refused`() {
-        game.gameInfo.turns = 5 // met on turn 0, DOF_TURN_BUFFER 20
-        a.ai.diplomacy.memoryOf(b).doFCounter = -1
-        assertFalse(DiplomacyAutomation.answerDoFRequest(a, b))
-        assertEquals(0, a.ai.diplomacy.memoryOf(b).doFCounter)
-        assertEquals(0, b.ai.diplomacy.memoryOf(a).doFCounter)
-    }
-
-    @Test
-    fun `asking again within the buffer is refused and leaves the counters alone`() {
-        game.gameInfo.turns = 30
-        a.ai.diplomacy.memoryOf(b).doFCounter = 7
-        b.ai.diplomacy.memoryOf(a).doFCounter = 9
-        assertFalse(DiplomacyAutomation.answerDoFRequest(a, b))
-        assertEquals(7, a.ai.diplomacy.memoryOf(b).doFCounter)
-        assertEquals(9, b.ai.diplomacy.memoryOf(a).doFCounter)
-    }
-
-    @Test
-    fun `a new answer restarts both counters whatever it is`() {
-        game.gameInfo.turns = 30
-        a.ai.diplomacy.memoryOf(b).doFCounter = 25
-        b.ai.diplomacy.memoryOf(a).doFCounter = 25
-        DiplomacyAutomation.answerDoFRequest(a, b)
-        assertEquals(0, a.ai.diplomacy.memoryOf(b).doFCounter)
-        assertEquals(0, b.ai.diplomacy.memoryOf(a).doFCounter)
     }
     //endregion
 }

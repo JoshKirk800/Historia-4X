@@ -35,7 +35,7 @@ class TacticalContext(
     /** CvTacticalAI::TurnOffMove: moves a posture disabled for the rest of the turn (TacticalMoveDef names) */
     val disabledMoves = HashSet<String>()
 
-    /** ClearEnemiesNearArmy: [unit] joins this turn's tactical units (CvTacticalAI::m_CurrentTurnUnits) if it is not one yet */
+    /** CheckForEnemiesNearArmy: [unit] joins this turn's tactical units (CvTacticalAI::m_CurrentTurnUnits) if it is not one yet */
     fun addUnit(unit: MapUnit) {
         if (unit !in units) units.add(unit)
     }

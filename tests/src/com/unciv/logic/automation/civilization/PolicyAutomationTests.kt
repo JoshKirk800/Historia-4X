@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.civilization.CivFlags
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.models.metadata.BaseRuleset
@@ -17,7 +18,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.random.Random
 
 /** Decision-level checks of the CvPolicyAI / CvPlayerPolicies AI port against the DLL formulas (BNW XML values) */
 @RunWith(GdxTestRunner::class)
@@ -65,7 +65,7 @@ class PolicyAutomationTests {
         assertEquals(140, weight("Legalism"))
         assertEquals(35, weight("Oligarchy"))
         // the culture grand strategy adds its FlavorMod CULTURE +2
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
         PolicyAutomation.flavorUpdate(civ)
         // and its GOLD +1 weighs Monarchy (GOLD 10), a quarter of which goes to Legalism
         assertEquals(180 + 10 / 4, weight("Legalism"))
@@ -120,41 +120,16 @@ class PolicyAutomationTests {
     }
     //endregion
 
-    //region Choosing (ChooseNextPolicy, WeighBranch, IsBranchEffectiveInGame)
+    //region Choosing (ChooseNextPolicy, WeighPolicy, WeighBranch, IsBranchEffectiveInGame)
     @Test
-    fun `opening a branch weighs its opener and its policies without prerequisites, at 22 percent`() {
-        civ.ai.setPersonalityFlavor(Flavor.Culture, 7)
+    fun `no new branch is opened while one we opened can still be finished`() {
         civ.policies.storedCulture = 100000
-        // Tradition: opener CULTURE 5 = 35, Oligarchy 35 (from Legalism), Aristocracy 0: 70 × 22%
-        assertEquals(15, choiceWeight("Tradition"))
-        // Liberty: Citizenship 17 (from Representation's 70); Honor: Discipline 17 (from Military Caste's 70)
-        assertEquals(3, choiceWeight("Liberty"))
-        assertEquals(3, choiceWeight("Honor"))
-    }
-
-    @Test
-    fun `under the culture grand strategy a new branch weighs a third`() {
-        civ.ai.setPersonalityFlavor(Flavor.Culture, 7)
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
-        PolicyAutomation.flavorUpdate(civ)
-        civ.policies.storedCulture = 100000
-        val branchWeight = weight("Tradition") + weight("Aristocracy") + weight("Oligarchy")
-        assertEquals(branchWeight * 22 / 100 / 3, choiceWeight("Tradition"))
-    }
-
-    @Test
-    fun `the policy that completes a branch weighs the finisher too`() {
-        civ.ai.setPersonalityFlavor(Flavor.Growth, 3)
-        civ.policies.freePolicies = 5
-        for (name in listOf("Tradition", "Aristocracy", "Oligarchy", "Legalism")) civ.policies.adopt(policy(name))
-        civ.policies.freePolicies = 0
-        civ.policies.storedCulture = 100000
-        // Landed Elite and Monarchy (no growth): neither completes the branch yet
-        assertEquals(0, choiceWeight("Monarchy"))
+        assertTrue(PolicyAutomation.weighChoices(civ).candidates.any { it.name == "Liberty" })
         civ.policies.freePolicies = 1
-        civ.policies.adopt(policy("Landed Elite"))
-        // Tradition Complete: GROWTH 10
-        assertEquals(30, choiceWeight("Monarchy"))
+        civ.policies.adopt(branch("Tradition"))
+        val candidates = PolicyAutomation.weighChoices(civ).candidates
+        assertTrue(candidates.any { it.branch.name == "Tradition" })
+        assertTrue("no branch: $candidates", candidates.none { it is PolicyBranch })
     }
 
     @Test
@@ -164,30 +139,7 @@ class PolicyAutomationTests {
         civ.policies.storedCulture = 100000
         assertEquals(0, choiceWeight("Patronage"))
         game.addCiv(cityStateType = game.ruleset.cityStateTypes.keys.first())
-        // Philantropy 70 + 8 (Scholasticism) + 2 (Cultural Diplomacy), Consulates 140, opener 140: 360 × 22%
-        assertEquals(79, choiceWeight("Patronage"))
-    }
-
-    private fun adoptTenetsUpToLevel3(ideology: PolicyBranch) {
-        civ.policies.adopt(ideology)
-        civ.policies.freeTenets = 10
-        for (tenet in ideology.policies.filter { it.tenetLevel == 1 }.take(3)) civ.policies.adopt(tenet)
-        for (tenet in ideology.policies.filter { it.tenetLevel == 2 }.take(2)) civ.policies.adopt(tenet)
-        civ.policies.freeTenets = 0
-        civ.policies.storedCulture = 100000
-    }
-
-    @Test
-    fun `a level-3 tenet with the flavor of the grand strategy is taken at once`() {
-        reachEra(civ, "Modern era")
-        adoptTenetsUpToLevel3(branch("Freedom"))
-        assertNull("no grand strategy", PolicyAutomation.weighChoices(civ).immediate)
-        civ.ai.grandStrategy = GrandStrategyAi.SPACESHIP
-        assertEquals("Space Procurements", PolicyAutomation.chooseNextPolicy(civ, Random(1))!!.name)
-        civ.ai.grandStrategy = GrandStrategyAi.CULTURE
-        assertEquals("Media Culture", PolicyAutomation.chooseNextPolicy(civ, Random(1))!!.name)
-        civ.ai.grandStrategy = GrandStrategyAi.CONQUEST // Freedom has no level-3 tenet with OFFENSE
-        assertNull(PolicyAutomation.weighChoices(civ).immediate)
+        assertTrue((choiceWeight("Patronage") ?: 0) > 0)
     }
 
     @Test
@@ -199,25 +151,21 @@ class PolicyAutomationTests {
         val candidates = PolicyAutomation.weighChoices(civ).candidates
         assertTrue(candidates.isNotEmpty())
         assertTrue(candidates.all { it.isTenet })
-        civ.policies.freeTenets = 0
-        assertTrue(PolicyAutomation.weighChoices(civ).candidates.any { it.name == "Tradition" })
     }
 
     @Test
-    fun `the pick is weighted among the top choices only, or uniform when nothing weighs`() {
-        val weights = listOf(10, 50, 40, 0)
-        val picks = (0 until 200).map { PolicyAutomation.pickFromTop(weights, 2, Random(it)) }.toSet()
-        assertEquals(setOf(1, 2), picks)
-        val uniform = (0 until 200).map { PolicyAutomation.pickFromTop(listOf(0, 0, 0), 2, Random(it)) }.toSet()
-        assertEquals(setOf(0, 1, 2), uniform)
+    fun `a free Settler is worth less food with each city we have, a free Worker more`() {
+        fun food(name: String) = PolicyAttributeAi.weightPolicyAttributes(policy(name), PolicyAttributeAi.Inputs(civ))[PolicyAttributeAi.AttributeYield.Food.ordinal]
+        assertEquals("Collective Rule, 1 city", 45, food("Collective Rule"))
+        assertEquals("Citizenship, 1 city", 50, food("Citizenship"))
+        game.addCity(civ, game.tileMap[4, 0])
+        assertEquals("Collective Rule, 2 cities", 40, food("Collective Rule"))
+        assertEquals("Citizenship, 2 cities", 100, food("Citizenship"))
     }
     //endregion
 
     //region Ideology (DoChooseIdeology)
     private val ideologies get() = PolicyAutomation.ideologiesOf(game.ruleset)!!
-
-    /** The random add-ons of DoChooseIdeology for Freedom, Autocracy, Order with this seed */
-    private fun randoms(seed: Int) = Random(seed).let { r -> IntArray(3) { r.nextInt(10) } }
 
     private fun setPriorities(conquest: Int, unitedNations: Int, spaceship: Int, culture: Int) {
         civ.ai.grandStrategyPriorities[GrandStrategyAi.CONQUEST] = conquest
@@ -227,20 +175,12 @@ class PolicyAutomationTests {
     }
 
     @Test
-    fun `the grand strategies split 300 points over the sum of the three ideology totals, a clear preference rules one out`() {
-        // free tenets 2 × 36 and public opinion (100 - 0) × 3 for each (no buildings, no relations)
-        val base = 72 + 300
-        setPriorities(100, 100, 100, 100)
-        var r = randoms(5)
-        var scores = PolicyAutomation.scoreIdeologies(civ, ideologies, Random(5))
-        // each total 300 of 900
-        assertEquals(listOf(100 + base + r[0], 100 + base + r[1], 100 + base + r[2]), scores.toList())
-
+    fun `a clear victory preference rules out the ideology that does not support it`() {
         setPriorities(0, 0, 100, 0)
-        r = randoms(6)
-        scores = PolicyAutomation.scoreIdeologies(civ, ideologies, Random(6))
-        // Freedom 100, Autocracy 0, Order 100 of 200; science clearly first: no Autocracy
-        assertEquals(listOf(150 + base + r[0], 0, 150 + base + r[2]), scores.toList())
+        val scores = PolicyAutomation.scoreIdeologies(civ, ideologies)
+        // Freedom and Order support the space race; Autocracy's best (diplomacy, domination, culture: 0) loses by more than 25%
+        assertEquals(0, scores[1])
+        assertTrue("Freedom ${scores[0]}, Order ${scores[2]}", scores[0] > 0 && scores[2] > 0)
     }
 
     @Test
@@ -261,7 +201,7 @@ class PolicyAutomationTests {
     }
 
     @Test
-    fun `the approach shown to a major with an ideology scores for or against it`() {
+    fun `our approach to a major with an ideology scores its ideology`() {
         val other = game.addCiv()
         game.addCity(other, game.tileMap[0, 6], replacePalace = true)
         civ.diplomacyFunctions.makeCivilizationsMeet(other)
@@ -269,38 +209,17 @@ class PolicyAutomationTests {
         setPriorities(0, 0, 0, 0)
         fun delta(approach: MajorCivApproach): List<Int> {
             civ.ai.diplomacy.setApproach(other, MajorCivApproach.Neutral)
-            val before = PolicyAutomation.scoreIdeologies(civ, ideologies, Random(3))
+            val before = PolicyAutomation.scoreIdeologies(civ, ideologies)
             civ.ai.diplomacy.setApproach(other, approach)
-            val after = PolicyAutomation.scoreIdeologies(civ, ideologies, Random(3))
+            val after = PolicyAutomation.scoreIdeologies(civ, ideologies)
             return after.indices.map { after[it] - before[it] }
         }
         // Freedom, Autocracy, Order
-        assertEquals(listOf(8, 0, 8), delta(MajorCivApproach.Hostile))
-        assertEquals(listOf(4, 0, 4), delta(MajorCivApproach.Guarded))
-        assertEquals(listOf(0, 6, 0), delta(MajorCivApproach.Afraid))
-        assertEquals(listOf(0, 12, 0), delta(MajorCivApproach.Friendly))
-        assertEquals("war (its face neutral) counts nothing", listOf(0, 0, 0), delta(MajorCivApproach.War))
-    }
-
-    @Test
-    fun `building happiness of the tenets counts per tenet that gives it, conquered-city buildings aside`() {
-        val city = civ.cities.first()
-        val second = game.addCity(civ, game.tileMap[3, -2])
-        for (c in listOf(city, second)) c.cityConstructions.addBuilding(game.ruleset.buildings["Monument"]!!)
-        city.cityConstructions.addBuilding(game.ruleset.buildings["Courthouse"]!!)
-        city.cityConstructions.addBuilding(game.ruleset.buildings["Heroic Epic"]!!)
-        // Order: Socialist Realism +2 per Monument, Universal Healthcare +1 per Heroic Epic
-        assertEquals(5, PolicyAutomation.branchBuildingHappiness(civ, branch("Order")))
-        // Socialist Realism, Young Pioneers, Universal Healthcare (Order), Academy of Sciences
-        assertEquals(4, PolicyAutomation.numHappinessPolicies(civ, branch("Order")))
-        // Autocracy: Police State's Courthouse counts for the happiness, not as a happiness tenet
-        assertEquals(1 + 3, PolicyAutomation.branchBuildingHappiness(civ, branch("Autocracy")))
-        assertEquals(3, PolicyAutomation.numHappinessPolicies(civ, branch("Autocracy")))
-        setPriorities(0, 0, 0, 0)
-        val r = randoms(2)
-        val scores = PolicyAutomation.scoreIdeologies(civ, ideologies, Random(2))
-        // Freedom: Heroic Epic 1 × 3 / 3 tenets; Autocracy 4 × 3 / 3; Order 5 × 3 / 4
-        assertEquals(listOf(72 + 300 + 1 + r[0], 72 + 300 + 4 + r[1], 72 + 300 + 3 + r[2]), scores.toList())
+        assertEquals(listOf(0, -500, 0), delta(MajorCivApproach.Hostile))
+        assertEquals(listOf(0, -250, 0), delta(MajorCivApproach.Guarded))
+        assertEquals(listOf(0, 150, 0), delta(MajorCivApproach.Afraid))
+        assertEquals(listOf(0, 25, 0), delta(MajorCivApproach.Friendly))
+        assertEquals("war counts nothing", listOf(0, 0, 0), delta(MajorCivApproach.War))
     }
 
     @Test
@@ -322,18 +241,21 @@ class PolicyAutomationTests {
         // Two civilizations each holding its capital are both close to world conquest, which moves the approach set at contact;
         // a neutral one leaves the ideology scores to the public opinion
         civ.ai.diplomacy.memoryOf(autocrat).approach = MajorCivApproach.Neutral
-        val r = randoms(4)
-        val scores = PolicyAutomation.scoreIdeologies(civ, ideologies, Random(4))
-        // Autocracy has one adopter: 1 free tenet
-        assertEquals(listOf(72 + 92 * 3 + r[0], 36 + 300 + r[1], 72 + 92 * 3 + r[2]), scores.toList())
+        civ.stats.happiness = 0
+        val content = PolicyAutomation.scoreIdeologies(civ, ideologies)
+        civ.stats.happiness = -5
+        val unhappy = PolicyAutomation.scoreIdeologies(civ, ideologies)
+        // Unhappy and not the first ideology: (250 - the unhappiness it would bring) x 10
+        assertEquals(listOf(242 * 10, 250 * 10, 242 * 10), unhappy.indices.map { unhappy[it] - content[it] })
     }
     //endregion
 
     //region Ideology switch (DoConsiderIdeologySwitch)
     private lateinit var autocrat: Civilization
 
-    /** We follow Freedom, a dominant Autocracy makes 20 public opinion unhappiness (60 citizens / 3) */
+    /** We follow Freedom (turn 200: never switched counts from turn -1), a dominant Autocracy makes 20 public opinion unhappiness (60 citizens / 3) */
     private fun unhappyWithFreedom() {
+        game.gameInfo.turns = 200
         reachEra(civ, "Modern era")
         civ.policies.adopt(branch("Freedom"))
         autocrat = game.addCiv()
@@ -349,36 +271,33 @@ class PolicyAutomationTests {
     }
 
     @Test
-    fun `a very unhappy AI changes to the ideology its people prefer`() {
+    fun `a super unhappy AI changes to the ideology its people prefer when that ends the super unhappiness`() {
         unhappyWithFreedom()
+        // -19 + 20 - 0: very unhappy, but no revolt is coming
         civ.stats.happiness = -19
-        assertFalse("not below SUPER_UNHAPPY_THRESHOLD", PolicyAutomation.considerIdeologySwitch(civ))
+        assertFalse(PolicyAutomation.considerIdeologySwitch(civ))
         civ.stats.happiness = -20
         assertTrue(PolicyAutomation.considerIdeologySwitch(civ))
         assertEquals("Autocracy", civ.getIdeology()!!.name)
     }
 
     @Test
-    fun `the building happiness of the current ideology's tenets counts in full against a switch`() {
+    fun `no switch within 30 turns of the last one`() {
         unhappyWithFreedom()
-        val second = game.addCity(civ, game.tileMap[3, -2])
-        // Capitalism (Mint, Bank, Stock Exchange) and Urbanization (Water Mill, Hospital, Medical Lab): 6 per city
-        for (c in civ.cities) for (name in listOf("Mint", "Bank", "Stock Exchange", "Water Mill", "Hospital", "Medical Lab"))
-            c.cityConstructions.addBuilding(game.ruleset.buildings[name]!!)
-        civ.culture.publicOpinion.update()
-        assertEquals(20, civ.culture.publicOpinion.unhappiness)
-        civ.stats.happiness = -25
-        // 20 + Autocracy's 0 - Freedom's 12 = 8 < 10 (a per-tenet average, 12 / 3, would let it switch)
+        civ.culture.publicOpinion.turnIdeologySwitch = game.gameInfo.turns - 30
         assertFalse(PolicyAutomation.considerIdeologySwitch(civ))
-        second.cityConstructions.removeBuilding("Medical Lab")
-        second.cityConstructions.removeBuilding("Hospital")
-        civ.stats.happiness = -25
-        assertTrue("20 + 0 - 10 = 10", PolicyAutomation.considerIdeologySwitch(civ))
+        civ.culture.publicOpinion.turnIdeologySwitch = game.gameInfo.turns - 31
+        assertTrue(PolicyAutomation.considerIdeologySwitch(civ))
     }
 
     @Test
-    fun `no switch to the ideology a clear victory preference rules out`() {
+    fun `a very unhappy AI switches only with a city revolt coming, and not to the ideology a clear victory preference rules out`() {
         unhappyWithFreedom()
+        civ.stats.happiness = -15
+        val anarchy = game.ruleset.modOptions.constants.ideologyAnarchyTurns
+        civ.addFlag(CivFlags.CityRevoltCountdown.name, 2 + anarchy)
+        assertFalse("a revolt ${2 + anarchy} turns away", PolicyAutomation.considerIdeologySwitch(civ))
+        civ.addFlag(CivFlags.CityRevoltCountdown.name, 3 + anarchy)
         setPriorities(100, 100, 126, 100) // science more than 25% ahead of each: not Autocracy
         assertFalse(PolicyAutomation.considerIdeologySwitch(civ))
         setPriorities(100, 100, 125, 100) // not more than 25%

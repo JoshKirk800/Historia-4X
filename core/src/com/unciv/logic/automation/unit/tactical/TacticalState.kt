@@ -23,6 +23,20 @@ class TemporaryZone : IsPartOfGameInfoSerialization {
     }
 }
 
+/** CvFocusArea (CvTacticalAI.h): a plot the military AI has just acted at, which boosts the threat of our cities around it for a few turns */
+class FocusArea : IsPartOfGameInfoSerialization {
+    var position = HexCoord()
+    var radius = 0
+    /** The last game turn the area lasts through (CvFocusArea::m_iLastTurn) */
+    var lastTurn = 0
+
+    fun clone() = FocusArea().also {
+        it.position = position
+        it.radius = radius
+        it.lastTurn = lastTurn
+    }
+}
+
 /** CvTacticalPosture (CvTacticalAI.h): the posture chosen for the zone of ([ownerId], [isWater], [cityId]) the last time it was used */
 class ZonePosture : IsPartOfGameInfoSerialization {
     /** [Civilization.civName] of the zone's owner, null for no owner */
@@ -41,17 +55,21 @@ class ZonePosture : IsPartOfGameInfoSerialization {
 }
 
 /**
- *  The tactical AI state of a civilization (`civ.ai.tactical`): the part of CvTacticalAI that lives across turns - the postures chosen
- *  for each dominance zone (m_Postures, remembered so that a posture is kept while it is only "less stringent" true) and the temporary zones
- *  operations register (m_TempZones) - and the per-turn [map] (CvTacticalAnalysisMap::RefreshDataForNextPlayer).
+ *  The tactical AI state of a civilization (`civ.ai.tactical`): the current postures consumed by tactical moves, the temporary zones
+ *  operations register (m_TempZones), and the per-turn [map] (CvTacticalAnalysisMap).
  *
  *  Old saves have neither postures nor zones.
  */
 class TacticalState : IsPartOfGameInfoSerialization {
     var postures = ArrayList<ZonePosture>()
     var temporaryZones = ArrayList<TemporaryZone>()
+    /** CvTacticalAI::m_focusAreas, which Vox Populi's operations register where they deploy ([addFocusArea]) */
+    var focusAreas = ArrayList<FocusArea>()
     /** CvUnit::GetTacticalAIPlot: the destination a barbarian ship keeps heading for over several turns, by [com.unciv.logic.map.mapunit.MapUnit.id] */
     var unitDestinations = HashMap<Int, HexCoord>()
+
+    /** The turn's city threat values ([CityThreat]), made from the [map] they are for */
+    @Transient internal var cityThreats: CityThreat.CityThreats? = null
 
     @Transient private lateinit var civ: Civilization
     @Transient private var cachedMap: TacticalMap? = null
@@ -62,6 +80,7 @@ class TacticalState : IsPartOfGameInfoSerialization {
         val toReturn = TacticalState()
         for (posture in postures) toReturn.postures.add(posture.clone())
         for (zone in temporaryZones) toReturn.temporaryZones.add(zone.clone())
+        for (area in focusAreas) toReturn.focusAreas.add(area.clone())
         toReturn.unitDestinations.putAll(unitDestinations)
         return toReturn
     }
@@ -121,10 +140,26 @@ class TacticalState : IsPartOfGameInfoSerialization {
         cachedMap = null
     }
 
-    /** CvTacticalAI::DropObsoleteZones */
+    /** CvTacticalAI::DropObsoleteZones (and DropOldFocusAreas, which CvTacticalAI::Update runs first) */
     private fun dropObsoleteZones() {
         val turn = civ.gameInfo.turns
         temporaryZones.removeAll { it.lastTurn < turn }
+        focusAreas.removeAll { it.lastTurn < turn }
+    }
+
+    /** CvTacticalAI::AddFocusArea: a temporary focus of attention around [tile], for [turns] more turns */
+    fun addFocusArea(tile: Tile, radius: Int, turns: Int) {
+        val area = FocusArea()
+        area.position = tile.position
+        area.radius = radius
+        area.lastTurn = civ.gameInfo.turns + turns
+        focusAreas.add(area)
+    }
+
+    /** CvTacticalAI::IsInFocusArea: [tile] lies within the radius of a focus area that has not run out */
+    fun isInFocusArea(tile: Tile): Boolean {
+        val turn = civ.gameInfo.turns
+        return focusAreas.any { it.lastTurn >= turn && tile.aerialDistanceTo(civ.gameInfo.tileMap[it.position]) <= it.radius }
     }
 
     /** CvTacticalAI::IsTemporaryZoneCity: an operation just deployed in front of [city] */

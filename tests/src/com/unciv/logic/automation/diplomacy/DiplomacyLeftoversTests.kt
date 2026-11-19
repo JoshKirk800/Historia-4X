@@ -126,8 +126,8 @@ class DiplomacyLeftoversTests {
 
         // The violation turns into the broken promise, with the human told
         NextTurnAutomation.automateCivMoves(a)
-        val broken = memory(a, human).brokenExpansionPromiseValue
-        assertEquals(rules.define(AiDefine.OPINION_WEIGHT_EXPANSION_PROMISE_BROKE_MAX) * DiplomacyTurn.opinionDurationPercent(a), broken)
+        assertTrue(memory(a, human).brokenExpansionPromise)
+        assertEquals(game.gameInfo.turns, memory(a, human).promiseTurns[PromiseAi.PromiseKind.Expansion.name])
         assertFalse(toHuman.hasFlag(DiplomacyFlags.AgreedToNotSettleNearUs))
         assertEquals(1, alerts(human, AlertType.CitySettledNearOtherCivDespiteOurPromise).size)
     }
@@ -154,8 +154,7 @@ class DiplomacyLeftoversTests {
         PromiseAi.testPromises(a, listOf(human), rules)
         assertTrue(toHuman.hasFlag(DiplomacyFlags.BoughtLandNearUs))
         NextTurnAutomation.automateCivMoves(a)
-        assertEquals(rules.define(AiDefine.OPINION_WEIGHT_BORDER_PROMISE_BROKE_MAX) * DiplomacyTurn.opinionDurationPercent(a),
-            memory(a, human).brokenBorderPromiseValue)
+        assertTrue(memory(a, human).brokenBorderPromise)
         assertEquals(1, alerts(human, AlertType.LandBoughtNearUsDespiteOurPromise).size)
 
         // A promise whose flag ran out: the human is told
@@ -167,10 +166,27 @@ class DiplomacyLeftoversTests {
     }
 
     @Test
-    fun `refusing a border request is remembered as an ignored border promise`() {
+    fun `a refused border request is an ignored promise that fades and is forgotten after its duration`() {
         human.getDiplomacyManager(a)!!.refuseDemand(Demand.DoNotBuyLandNearUs)
-        assertEquals(rules.define(AiDefine.OPINION_WEIGHT_BORDER_PROMISE_IGNORED_MAX) * DiplomacyTurn.opinionDurationPercent(a),
-            memory(a, human).ignoredBorderPromiseValue)
+        val memory = memory(a, human)
+        val full = rules.define(AiDefine.OPINION_WEIGHT_IGNORED_BORDER_PROMISE)
+        assertEquals(full, PromiseAi.promiseScore(a, memory, PromiseAi.PromiseKind.Border))
+        val duration = rules.define(AiDefine.BORDER_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN) * DiplomacyTurn.opinionDurationPercent(a) / 100
+        val start = game.gameInfo.turns
+
+        game.gameInfo.turns = start + duration / 2
+        PromiseAi.testPromiseExpiry(a, memory)
+        assertEquals("half way: $duration turns", full - full * (duration / 2 * 100 / duration) / 100,
+            PromiseAi.promiseScore(a, memory, PromiseAi.PromiseKind.Border))
+        game.gameInfo.turns = start + duration - 1
+        PromiseAi.testPromiseExpiry(a, memory)
+        assertTrue("a turn before the end", memory.ignoredBorderPromise)
+
+        game.gameInfo.turns = start + duration
+        PromiseAi.testPromiseExpiry(a, memory)
+        assertFalse(memory.ignoredBorderPromise)
+        assertEquals(0, PromiseAi.promiseScore(a, memory, PromiseAi.PromiseKind.Border))
+        assertEquals("a forgotten border promise counts as ever made", start + duration, memory.borderPromiseTurn)
     }
     //endregion
 
@@ -180,10 +196,10 @@ class DiplomacyLeftoversTests {
 
     @Test
     fun `a statement takes the turn's slot so the friendship statement waits a turn`() {
-        // Both accept a Declaration of Friendship once it is not too early
-        a.ai.diplomacy.setApproach(b, MajorCivApproach.Afraid)
+        // a wants a Declaration of Friendship (Vox Populi's planning) and b, afraid, accepts it once it is not too early
+        memory(a, b).wantsDoF = true
         b.ai.diplomacy.setApproach(a, MajorCivApproach.Afraid)
-        memory(a, b).brokenExpansionPromiseValue = 100
+        memory(a, b).brokenExpansionPromise = true
         DiplomacyAutomation.contactMajorCivs(a)
         assertEquals(50, memory(a, b).statementTurns[DiploStatement.ExpansionBrokenPromise])
         assertNull("the slot was used", memory(a, b).statementTurns[DiploStatement.WorkWithUs])
@@ -298,8 +314,9 @@ class DiplomacyLeftoversTests {
         game.gameInfo.league = league
         a.ai.setDiplomacyValue(DiplomacyPersonality.Chattiness, 10)
         for (other in listOf(b, human)) {
-            league.members.getValue(a.civID).alignmentMemory.getOrPut(other.civID) { LeagueAlignmentMemory() }
-                .likedProposalTurn = 49
+            val memory = league.members.getValue(a.civID).alignmentMemory.getOrPut(other.civID) { LeagueAlignmentMemory() }
+            memory.likedProposalTurn = 49
+            memory.proposalAgreementValue = rules.define(AiDefine.OPINION_WEIGHT_WE_LIKED_THEIR_PROPOSAL)
             a.ai.diplomacy.setOpinion(other, MajorCivOpinion.Favorable)
         }
         assertEquals(DiploStatement.WeLikedTheirProposal, pick(a, b))
@@ -326,7 +343,7 @@ class DiplomacyLeftoversTests {
     private fun wantWarOn(target: Civilization) {
         a.ai.diplomacy.setApproach(target, MajorCivApproach.War)
         a.ai.diplomacy.setOpinion(target, MajorCivOpinion.Unforgivable)
-        a.ai.grandStrategy = GrandStrategyAi.CONQUEST
+        a.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CONQUEST)
     }
 
     @Test

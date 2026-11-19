@@ -84,4 +84,30 @@ class KeyPlayersTests {
         assertEquals(5 * 2, added[MajorCivApproach.Guarded.ordinal])
         assertEquals(0, added[MajorCivApproach.War.ordinal])
     }
+
+    @Test
+    fun `one who denounced or fights our most valuable friend draws war, more while we are friends`() {
+        b.getDiplomacyManager(c)!!.denounce()
+        val base = keyPlayers(b)
+        a.ai.diplomacy.mostValuableFriend = c.civID
+        val notFriends = keyPlayers(b)
+        // WorkWithWillingness 5 x bias 5 / 8
+        assertEquals(3, notFriends[MajorCivApproach.War.ordinal] - base[MajorCivApproach.War.ordinal])
+        assertEquals(3, notFriends[MajorCivApproach.Deceptive.ordinal] - base[MajorCivApproach.Deceptive.ordinal])
+        a.getDiplomacyManager(c)!!.signDeclarationOfFriendship()
+        val friends = keyPlayers(b)
+        assertEquals("/ 4 while friends", 6, friends[MajorCivApproach.War.ordinal] - base[MajorCivApproach.War.ordinal])
+        assertEquals(6, friends[MajorCivApproach.Hostile.ordinal] - base[MajorCivApproach.Hostile.ordinal])
+    }
+
+    @Test
+    fun `our most valuable friend draws friendship, all of it while we are friends`() {
+        a.ai.diplomacy.mostValuableFriend = b.civID
+        val notFriends = keyPlayers(b)
+        assertEquals("5 x bias", 25, notFriends[MajorCivApproach.Friendly.ordinal])
+        assertTrue("war halved", notFriends[MajorCivApproach.War.ordinal] < 0)
+        a.getDiplomacyManager(b)!!.signDeclarationOfFriendship()
+        val friends = keyPlayers(b)
+        assertEquals("10 x bias", 50, friends[MajorCivApproach.Friendly.ordinal])
+    }
 }

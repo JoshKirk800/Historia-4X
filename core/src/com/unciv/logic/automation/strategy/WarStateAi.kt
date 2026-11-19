@@ -18,6 +18,8 @@ import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
+import com.unciv.models.ruleset.ai.TraitCategory
+import com.unciv.models.ruleset.unique.UniqueType
 import kotlin.math.pow
 
 /** CvDiplomacyAI WarStateTypes, worst to best (the original's order matters: comparisons use it) */
@@ -53,6 +55,10 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
     var noNewWars = false
     /** CvDiplomacyAI::IsEasyTarget (Vox Populi), by civID: see [WarStateAi.updateEasyTargets] */
     var easyTargets = HashSet<String>()
+    /** CvTreasury::m_GoldChangeForTurnTimes100 (Vox Populi): our gold income of the last HISTORY_NUM_TURNS_TO_AVERAGE turns, oldest first */
+    var goldIncomeHistory = ArrayList<Int>()
+    /** CvPlayer::m_iCachedGoldRate (Vox Populi's getAvgGoldRate): see [WarStateAi.updateAverageGoldRate] */
+    var avgGoldRate = 0
 
     fun clone() = WarStateMemory().also {
         it.turnsAtWar.putAll(turnsAtWar)
@@ -63,6 +69,8 @@ class WarStateMemory : IsPartOfGameInfoSerialization {
         it.terribleShapeForWar = terribleShapeForWar
         it.noNewWars = noNewWars
         it.easyTargets.addAll(easyTargets)
+        it.goldIncomeHistory.addAll(goldIncomeHistory)
+        it.avgGoldRate = avgGoldRate
     }
 }
 
@@ -101,9 +109,51 @@ object WarStateAi {
     /** CvDiplomacyAI::GetPlayerNumTurnsAtWar */
     fun turnsAtWar(civ: Civilization, other: Civilization): Int = civ.ai.warStates.turnsAtWar[other.civID] ?: 0
 
+    /** CvPlayer::getAvgGoldRate (Vox Populi): as of the last [updateAverageGoldRate] */
+    fun avgGoldRate(civ: Civilization): Int = civ.ai.warStates.avgGoldRate
+
+    /**
+     *  CvPlayer::getTurnsToBankruptcy (Vox Populi): never for a city-state or while the average gold rate ([avgGoldRate]) less
+     *  [assumedExtraExpense] stays positive, else the treasury over that deficit
+     */
+    fun turnsToBankruptcy(civ: Civilization, assumedExtraExpense: Int): Int {
+        if (!civ.isMajorCiv) return Int.MAX_VALUE
+        val goldRate = avgGoldRate(civ) - assumedExtraExpense
+        if (goldRate > 0) return Int.MAX_VALUE
+        return civ.gold / maxOf(1, -goldRate)
+    }
+
+    /**
+     *  CvPlayer::cacheAvgGoldRate and CvTreasury::DoGold's history (Vox Populi): the gold rate is this turn's income plus the average income
+     *  of the last HISTORY_NUM_TURNS_TO_AVERAGE turns (VP's formula, which counts a steady income about twice); then this turn's income
+     *  joins the history. A single turn's swing of the income no longer decides whether we are broke.
+     */
+    fun updateAverageGoldRate(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
+        val income = civ.stats.statsForNextTurn.gold.toInt()
+        val history = memory.goldIncomeHistory
+        memory.avgGoldRate = income + if (history.isEmpty()) 0 else history.sum() / history.size
+        history.add(income)
+        while (history.size > rules.define(AiDefine.HISTORY_NUM_TURNS_TO_AVERAGE)) history.removeAt(0)
+    }
+
     /** CvMilitaryAI::GetNumberCivsAtWarWith: the valid majors we have a war state with */
     fun numberCivsAtWarWith(civ: Civilization): Int =
         civ.gameInfo.civilizations.count { it.isMajorCiv && it != civ && isPlayerValid(civ, it) && warState(civ, it) != null }
+
+    /**
+     *  CvPlayer::CountNumDangerousMajorsAtWarWith (Vox Populi): the living majors with cities we are at war with - for a city-state any
+     *  major it fights - leaving out phony wars ([excludePhonyWars], [WarIntentAi.isPhonyWar]) and ([excludeIfNoTarget]) those our
+     *  cities are not exposed to ([MilitaryAi.isExposedToEnemy]) that threaten none of them ([CityDangerAi.numberOfThreatenedCities])
+     */
+    fun numDangerousMajorsAtWarWith(civ: Civilization, excludePhonyWars: Boolean, excludeIfNoTarget: Boolean): Int {
+        val enemies = civ.gameInfo.civilizations.filter { it.isMajorCiv && civ.isAtWarWith(it) }
+        if (civ.isCityState) return enemies.size
+        return enemies.count { other ->
+            other.isAlive() && other.cities.isNotEmpty()
+                && !(excludePhonyWars && WarIntentAi.isPhonyWar(civ, other))
+                && !(excludeIfNoTarget && !civ.ai.military.isExposedToEnemy(civ, null, other) && CityDangerAi.numberOfThreatenedCities(civ, other) <= 0)
+        }
+    }
 
     /** CvDiplomacyAI::IsPlayerValid: alive, with at least one city, met, not ourselves (Unciv has no teams) */
     fun isPlayerValid(civ: Civilization, other: Civilization): Boolean =
@@ -129,6 +179,7 @@ object WarStateAi {
             else memory.targetValues.remove(other.civID)
         }
         updateWarStates(civ, memory, rules)
+        updateAverageGoldRate(civ, memory, rules)
         updateBadShapeForWar(civ, memory, rules)
         updateEasyTargets(civ, memory, rules)
     }
@@ -143,17 +194,25 @@ object WarStateAi {
      *  city of theirs for 30 turns: not easy. A city-state: easy when a favourable target or better. Not easy either when another war of
      *  ours (unless this one is phony) goes defensive or worse, or (for a major target) calm or worse against a foe still taking new
      *  wars. Easy when they are in terrible shape. Otherwise deterrents (we are unhappy, they took more of our cities than we of theirs,
-     *  their combat rating beats ours, we are less aggressive, we do not want to conquer them) against aggravators (a coop war against
-     *  them, they are unhappy and we are not, we took more of their cities, our rating beats theirs, we are more aggressive, we want to
-     *  conquer them) choose between their raw and adjusted target value and strength (one form each here) and settle it by VP's table.
-     *  VP's preferred attack target and exposure (CvMilitaryAI), Nuclear Gandhi and the leader traits have no input: a conqueror is one
-     *  going for world conquest, a scientist one going for a spaceship.
+     *  their combat rating beats ours, we are less aggressive, we do not want to conquer them, our cities are exposed to them -
+     *  [MilitaryAi.isExposedToEnemy]) against aggravators (a coop war against them, they are unhappy and we are not, we took more of their
+     *  cities, our rating beats theirs, we are more aggressive, we want to conquer them, a preferred attack target among their cities -
+     *  [MilitaryAi.havePreferredAttackTarget]) choose between their raw and adjusted target value and strength (one form each here) and
+     *  settle it by VP's table. Personality: more aggressive for a conqueror (primary or secondary victory pursuit) or with the warmonger
+     *  or expansionist trait ([CivAi.hasTraitCategory]), less for a scientist (primary pursuit) or with the nerd trait (neither for
+     *  Assyria, CvPlayerTraits::IsTechFromCityConquer) or the smaller trait, neither with both. Nuclear Gandhi has no input.
      */
     fun updateEasyTargets(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
-        val conqueror = civ.ai.isGoingForWorldConquest()
-        val scientist = civ.ai.isGoingForSpaceshipVictory()
-        val moreAggressive = conqueror && !scientist
-        val lessAggressive = scientist && !conqueror
+        val ai = civ.ai
+        val assyriaException = civ.hasUnique(UniqueType.TechnologyFromConqueringCity)
+        var moreAggressive = ai.isConqueror() || ai.isSecondaryConqueror() || ai.hasTraitCategory(TraitCategory.Warmonger) ||
+            ai.hasTraitCategory(TraitCategory.Expansionist)
+        var lessAggressive = (ai.isScientist() && !assyriaException) ||
+            (ai.hasTraitCategory(TraitCategory.Nerd) && !assyriaException) || ai.hasTraitCategory(TraitCategory.Smaller)
+        if (moreAggressive && lessAggressive) {
+            moreAggressive = false
+            lessAggressive = false
+        }
         val terrible = memory.terribleShapeForWar
         val valid = civ.gameInfo.civilizations.filter { isPlayerValid(civ, it) }
         // The tests below (the early-game competitor) read last turn's easy targets while the new ones are found
@@ -194,9 +253,10 @@ object WarStateAi {
             ourMemory.opinion == MajorCivOpinion.Unforgivable || civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe ||
             CoopWarAi.isLockedIntoCoopWar(civ, other, rules) || CompetitorAi.isEarlyGameCompetitor(civ, other, rules)
         val deterrents = listOf(unhappy, skillPenalty, ourMemory.numCitiesCapturedBy > theirMemory.numCitiesCapturedBy,
-            lessAggressive, !wantsConquest).count { it }
+            lessAggressive, !wantsConquest, civ.ai.military.isExposedToEnemy(civ, null, other)).count { it }
         val aggravators = listOf(coop == CoopWarState.Soon || coop == CoopWarState.Accepted, !unhappy && other.getHappiness() < 0,
-            theirMemory.numCitiesCapturedBy > ourMemory.numCitiesCapturedBy, skillBoost, moreAggressive, wantsConquest).count { it }
+            theirMemory.numCitiesCapturedBy > ourMemory.numCitiesCapturedBy, skillBoost, moreAggressive, wantsConquest,
+            civ.ai.military.havePreferredAttackTarget(other)).count { it }
         val noNewWars = memory.noNewWars && !civ.isAtWarWith(other)
         val military = memory.militaryStrengths[other.civID] ?: StrengthLevel.Average
         val economic = ourMemory.economicStrength ?: StrengthLevel.Average
@@ -273,7 +333,7 @@ object WarStateAi {
 
     private fun isTerribleShapeNow(civ: Civilization, memory: WarStateMemory, rules: AiRuleset): Boolean {
         if (memory.stateAllWars == StateAllWars.Losing) return true
-        if (civ.gold <= 0 && civ.stats.statsForNextTurn.gold <= 0) return true
+        if (civ.gold <= 0 && memory.avgGoldRate <= 0) return true
         if (VictoryProgressAi.hasLostCapital(civ)) return true
         if (civ.getHappiness() <= rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) return true
         return civ.gameInfo.civilizations.any { other ->
@@ -394,23 +454,9 @@ object WarStateAi {
         return value
     }
 
-    /** CvDiplomacyAI::IsPlayerRecklessExpander */
-    fun isPlayerRecklessExpander(civ: Civilization, other: Civilization): Boolean {
-        if (proximityRank(civ.getProximity(other)) < proximityRank(Proximity.Close)) return false
-        val numCities = other.cities.size
-        if (numCities < 4) return false
-        var players = 0
-        var totalCities = 0
-        for (major in civ.gameInfo.civilizations) {
-            if (!major.isMajorCiv || !major.isAlive() || major == other) continue
-            players++
-            totalCities += major.cities.size
-        }
-        if (players == 0) return false
-        if (numCities < totalCities.toDouble() / players * 1.5) return false
-        val strength = civ.ai.warStates.militaryStrengths[other.civID]
-        return strength == null || strength < StrengthLevel.Average
-    }
+    /** CvDiplomacyAI::IsRecklessExpander (Vox Populi, D7): the flag [com.unciv.logic.automation.diplomacy.ExpanderAi] keeps each turn */
+    fun isPlayerRecklessExpander(civ: Civilization, other: Civilization): Boolean =
+        civ.ai.diplomacy.memories[other.civID]?.recklessExpander == true
 
     /** PlayerProximityTypes order of the original: DISTANT 0, FAR 1, CLOSE 2, NEIGHBORS 3; no cities (NO_PLAYER_PROXIMITY) -1 */
     fun proximityRank(proximity: Proximity): Int = when (proximity) {

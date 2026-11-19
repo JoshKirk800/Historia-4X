@@ -1,6 +1,9 @@
 package com.unciv.logic.automation.city
 
+import com.unciv.logic.automation.strategy.BuildingProductionAi
 import com.unciv.logic.automation.strategy.ProductionAi
+import com.unciv.logic.automation.strategy.ProductionSanityAi
+import com.unciv.logic.automation.strategy.SpaceshipProductionAi
 import com.unciv.logic.automation.strategy.WonderProductionAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -9,6 +12,7 @@ import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.stats.Stat
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -88,75 +92,140 @@ class ProductionChoiceTests {
         assertEquals(work * 100 + 1, ProductionAi.turnsLeft(city, building))
     }
 
+    /** A building no other one needs and that no strategy touches: the sanity is the normalised weight plus 200 for the era */
+    private fun plainBuilding() = game.createBuilding().apply { cost = 30 }
+
     @Test
-    fun `the pick is a weighted roll among the top two on Prince`() {
+    fun `the pick is a weighted roll among the choices within 90 percent of the best`() {
         val automation = ConstructionAutomation(city.cityConstructions)
+        val monument = plainBuilding()
+        val library = plainBuilding()
+        val granary = plainBuilding()
         val counts = HashMap<String, Int>()
         for (turn in 1..300) {
             game.gameInfo.turns = turn
             val candidates = listOf(
-                ConstructionAutomation.Buildable(PerpetualConstruction.Culture, 100, 1),
-                ConstructionAutomation.Buildable(PerpetualConstruction.Gold, 300, 1),
-                ConstructionAutomation.Buildable(PerpetualConstruction.Science, 200, 1),
+                ConstructionAutomation.Buildable(monument, 20000, 1),
+                ConstructionAutomation.Buildable(library, 30000, 1),
+                ConstructionAutomation.Buildable(granary, 28000, 1),
             )
-            val chosen = automation.pickFromTopChoices(candidates)!!.construction.name
+            val chosen = automation.choose(candidates)!!.construction.name
             counts[chosen] = (counts[chosen] ?: 0) + 1
         }
-        assertEquals(null, counts[PerpetualConstruction.Culture.name])
-        val gold = counts[PerpetualConstruction.Gold.name] ?: 0
-        val science = counts[PerpetualConstruction.Science.name] ?: 0
-        // 300 : 200 - both happen, the heavier more often
-        assertTrue("gold $gold science $science", science > 60 && gold > science)
+        // normalised to sqrt(10 x weight) + 200: 647, 747, 729; 647 is below 90% of 747, 747 : 729 both happen
+        assertEquals(null, counts[monument.name])
+        val libraryCount = counts[library.name] ?: 0
+        val granaryCount = counts[granary.name] ?: 0
+        assertTrue("library $libraryCount granary $granaryCount", libraryCount > 60 && granaryCount > 60)
     }
 
     @Test
-    fun `the time penalty can reorder the top choices`() {
+    fun `the current build goes on while it weighs at least half the best`() {
         val automation = ConstructionAutomation(city.cityConstructions)
-        // 1000 over 40 turns is 62, 100 over 1 turn stays 100: only the quick item and the 80 are in the top two
+        val monument = plainBuilding()
+        val library = plainBuilding()
+        city.cityConstructions.setCurrentConstruction(monument.name)
+        fun choice(monumentWeight: Int) = automation.choose(listOf(
+            ConstructionAutomation.Buildable(library, 30000, 1),
+            ConstructionAutomation.Buildable(monument, monumentWeight, 1),
+        ))!!.construction
+        // the library is worth 547 + 200 = 747, half of it 373: sqrt(29930) + 200 is 373, sqrt(29920) + 200 372
+        assertEquals(monument, choice(2993))
+        assertEquals(library, choice(2992))
+    }
+
+    @Test
+    fun `the time penalty can reorder the choices`() {
+        val automation = ConstructionAutomation(city.cityConstructions)
+        // 516 each for the monument and library, 300 for the granary; the monument over 40 turns falls to 32: only the library is within 90% of the best
+        val monument = plainBuilding()
+        val library = plainBuilding()
+        val granary = plainBuilding()
         val candidates = listOf(
-            ConstructionAutomation.Buildable(PerpetualConstruction.Culture, 1000, 40),
-            ConstructionAutomation.Buildable(PerpetualConstruction.Gold, 100, 1),
-            ConstructionAutomation.Buildable(PerpetualConstruction.Science, 80, 1),
+            ConstructionAutomation.Buildable(monument, 10000, 40),
+            ConstructionAutomation.Buildable(library, 10000, 1),
+            ConstructionAutomation.Buildable(granary, 1000, 1),
         )
         for (turn in 1..50) {
             game.gameInfo.turns = turn
-            val chosen = automation.pickFromTopChoices(candidates.map { ConstructionAutomation.Buildable(it.construction, it.weight, it.turns) })!!
-            assertTrue(chosen.construction != PerpetualConstruction.Culture)
+            val chosen = automation.choose(candidates)!!
+            assertEquals(library, chosen.construction)
         }
     }
 
+    @Test
+    fun `a process is worth next to nothing while the army is tiny`() {
+        // no military unit: at most 2 per city, -100%; the weight stays at least 1
+        assertEquals(1, ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
+        game.addUnit("Warrior", civ, game.tileMap[1, 0])
+        game.addUnit("Warrior", civ, game.tileMap[0, 1])
+        game.addUnit("Warrior", civ, game.tileMap[1, 1])
+        assertEquals(ProductionSanityAi.normalise(1000), ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
+    }
+
+    @Test
+    fun `a process making the city's most deficient yield gets 150 percent more`() {
+        for (tile in listOf(game.tileMap[1, 0], game.tileMap[0, 1], game.tileMap[1, 1])) game.addUnit("Warrior", civ, tile)
+        val normal = ProductionSanityAi.normalise(1000)
+        city.ai.mostDeficientYield = Stat.Gold
+        assertEquals(normal * 250 / 100, ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
+        assertEquals(normal, ProductionSanityAi.processSanity(city, PerpetualConstruction.Science, 1000))
+        city.ai.mostDeficientYield = null
+        assertEquals(normal, ProductionSanityAi.processSanity(city, PerpetualConstruction.Gold, 1000))
+    }
+
+    @Test
+    fun `with the Apollo Program the parts still needed that a known technology allows go to the planner's best cities`() {
+        game.gameInfo.gameParameters.victoryTypes = ArrayList(game.ruleset.victories.keys)
+        civ.tech.addTechnology("Advanced Ballistics")
+        assertEquals("no Apollo Program yet", 0, SpaceshipProductionAi.numPartsBuildableNow(civ))
+        city.cityConstructions.addBuilding("Apollo Program")
+        // the three SS Boosters of the six parts are what Advanced Ballistics allows
+        assertEquals(3, SpaceshipProductionAi.numPartsBuildableNow(civ))
+        assertEquals(listOf(city), SpaceshipProductionAi.bestCitiesForParts(civ))
+        civ.victoryManager.currentsSpaceshipParts.add("SS Booster", 3)
+        assertEquals("the boosters are all built", 0, SpaceshipProductionAi.numPartsBuildableNow(civ))
+    }
+
     private fun makeWonderCity() = game.createWonder().apply { cost = 100 }.also { wonder ->
-        civ.ai.wonderCityId = city.id
         civ.ai.citySpecialization.nextWonderDesired = wonder.name
     }
 
     @Test
-    fun `the wonder city starts the next wonder when a 0-10 roll is at most the wonder flavor`() {
+    fun `a city told to interrupt wonders starts the next wonder when it is the best city for it and there is an Engineer`() {
         val wonder = makeWonderCity()
-        // max(WONDER, GREAT_PEOPLE): 10 passes every roll 0..10
-        civ.ai.setPersonalityFlavor(Flavor.GreatPeople, 10)
-        for (turn in 1..40) {
-            game.gameInfo.turns = turn
-            city.cityConstructions.setCurrentConstruction(PerpetualConstruction.Idle.name)
-            ConstructionAutomation(city.cityConstructions).chooseNextConstruction()
-            assertEquals(wonder.name, city.cityConstructions.currentConstructionName())
-        }
-        // flavor 0: only a roll of 0 starts it (1 in 11); nothing else has weight, so otherwise the city stays idle
-        civ.ai.setPersonalityFlavor(Flavor.GreatPeople, 0)
-        var started = 0
-        for (turn in 1..220) {
-            game.gameInfo.turns = turn
-            city.cityConstructions.setCurrentConstruction(PerpetualConstruction.Idle.name)
-            ConstructionAutomation(city.cityConstructions).chooseNextConstruction()
-            if (city.cityConstructions.currentConstructionName() == wonder.name) started++
-        }
-        assertTrue("started $started of 220", started in 5..45)
+        val automation = ConstructionAutomation(city.cityConstructions)
+        // VP asks for an Engineer (UNITAI_ENGINEER) and for the interruption: neither alone starts the wonder
+        automation.chooseNextConstruction(interruptWonders = true)
+        assertTrue(city.cityConstructions.currentConstructionName() != wonder.name)
+        game.addUnit("Great Engineer", civ, game.tileMap[1, 0])
+        city.cityConstructions.setCurrentConstruction(PerpetualConstruction.Idle.name)
+        automation.chooseNextConstruction()
+        assertTrue(city.cityConstructions.currentConstructionName() != wonder.name)
+        city.cityConstructions.setCurrentConstruction(PerpetualConstruction.Idle.name)
+        automation.chooseNextConstruction(interruptWonders = true)
+        assertEquals(wonder.name, city.cityConstructions.currentConstructionName())
     }
 
     @Test
-    fun `a wonder the wonder city cannot build any more makes the specializations dirty`() {
-        makeWonderCity()
-        civ.ai.citySpecialization.nextWonderDesired = "Pyramids" // needs Masonry
+    fun `a city that is not the best for the next wonder does not start it`() {
+        val wonder = makeWonderCity()
+        game.addUnit("Great Engineer", civ, game.tileMap[1, 0])
+        val second = game.addCity(civ, game.tileMap[3, 0], initialPopulation = 8)
+        // production already put into the wonder makes that city the best for it (x10)
+        second.cityConstructions.inProgressConstructions[wonder.name] = 40
+        assertTrue(BuildingProductionAi.isBestForWonder(second, wonder))
+        assertTrue(!BuildingProductionAi.isBestForWonder(city, wonder))
+        city.cityConstructions.setCurrentConstruction(PerpetualConstruction.Idle.name)
+        ConstructionAutomation(city.cityConstructions).chooseNextConstruction(interruptWonders = true)
+        assertTrue(city.cityConstructions.currentConstructionName() != wonder.name)
+    }
+
+    @Test
+    fun `a world wonder some civilization has built makes the specializations dirty`() {
+        val wonder = makeWonderCity()
+        val other = game.addCiv()
+        game.addCity(other, game.tileMap[3, 0]).cityConstructions.addBuilding(wonder.name)
         civ.ai.citySpecialization.specializationsDirty = false
         city.cityConstructions.setCurrentConstruction(PerpetualConstruction.Idle.name)
         ConstructionAutomation(city.cityConstructions).chooseNextConstruction()
@@ -189,18 +258,51 @@ class ProductionChoiceTests {
     }
 
     @Test
-    fun `puppets avoid wonders and double buildings without maintenance`() {
+    fun `puppets we may annex build no building of a later era than ours minus one`() {
+        civ.ai.setPersonalityFlavor(Flavor.Culture, 5)
+        val other = game.addCiv()
+        val puppet = game.addCity(other, game.tileMap[2, 0])
+        puppet.puppetCity(civ)
+        val ancient = game.createBuilding().apply { cost = 30; culture = 1f }
+        val pottery = game.createBuilding().apply { cost = 30; culture = 1f; requiredTech = "Pottery" }
+        val classical = game.createBuilding().apply { cost = 30; culture = 1f; requiredTech = "Mathematics" }
+        fun weights() = ConstructionAutomation(puppet.cityConstructions).getBuildables().associate { it.construction.name to it.weight }
+        civ.tech.addTechnology("Pottery")
+        // era 0 (the ancient era): only what needs no technology (VP: GetEra -1) is not later than era - 1
+        assertEquals(10 * 5, weights()[ancient.name])
+        assertEquals(null, weights()[pottery.name])
+        civ.tech.addTechnology("Mathematics")
+        // era 1: the buildings of the ancient era pass, those of the classical era do not
+        assertEquals(10 * 5, weights()[pottery.name])
+        assertEquals(null, weights()[classical.name])
+    }
+
+    @Test
+    fun `puppets we may annex build no building with maintenance and no defense while losing money`() {
         civ.ai.setPersonalityFlavor(Flavor.Culture, 5)
         val other = game.addCiv()
         val puppet = game.addCity(other, game.tileMap[2, 0])
         puppet.puppetCity(civ)
         val cheap = game.createBuilding().apply { cost = 30; culture = 1f; maintenance = 0 }
         val upkeep = game.createBuilding().apply { cost = 30; culture = 1f; maintenance = 1 }
+        val walls = game.createBuilding().apply { cost = 30; culture = 1f; maintenance = 1; cityStrength = 5.0 }
+        fun weights() = ConstructionAutomation(puppet.cityConstructions).getBuildables().associate { it.construction.name to it.weight }
+        // the weights are the flavor weights now (no doubling of the cheap ones): derived flavors CULTURE 10 per culture point
+        assertEquals(10 * 5, weights()[upkeep.name])
+        civ.ai.economicStrategies["ECONOMICAISTRATEGY_LOSING_MONEY"] = 0
+        val losing = weights()
+        assertEquals(10 * 5, losing[cheap.name])
+        assertEquals(null, losing[upkeep.name])
+        assertEquals(10 * 5, losing[walls.name])
+    }
+
+    @Test
+    fun `puppets get no wonder because they are never the best city for one`() {
+        civ.ai.setPersonalityFlavor(Flavor.Culture, 5)
+        val other = game.addCiv()
+        val puppet = game.addCity(other, game.tileMap[2, 0])
+        puppet.puppetCity(civ)
         val wonder = game.createWonder().apply { cost = 30; culture = 1f }
-        val weights = ConstructionAutomation(puppet.cityConstructions).getBuildables().associate { it.construction.name to it.weight }
-        // derived flavors: CULTURE 10 per culture point
-        assertEquals(2 * 10 * 5, weights[cheap.name])
-        assertEquals(10 * 5, weights[upkeep.name])
-        assertEquals(null, weights[wonder.name])
+        assertEquals(ProductionSanityAi.SR_STRATEGY, ProductionSanityAi.buildingSanity(puppet, wonder, 1000))
     }
 }

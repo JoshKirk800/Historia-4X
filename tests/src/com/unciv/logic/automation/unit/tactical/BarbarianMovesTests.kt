@@ -14,6 +14,7 @@ import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -94,9 +95,8 @@ class BarbarianMovesTests {
         game.addUnit("Archer", civ, tile(-7))
         assertEquals(tile(4), BarbarianMoves.findBestLandMove(context(hunter), hunter))
         near.removeFromTile()
-        val explore = BarbarianMoves.findBestLandMove(context(hunter), hunter)
-        assertNotNull("no target in range: it explores", explore)
-        assertTrue(explore != tile(-7) && explore != tile(4))
+        // no target in range, and on a map all revealed, visible and nobody's there is nothing to explore either
+        assertNull(BarbarianMoves.findBestLandMove(context(hunter), hunter))
     }
 
     @Test

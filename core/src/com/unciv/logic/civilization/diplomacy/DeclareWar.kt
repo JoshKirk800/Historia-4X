@@ -3,6 +3,7 @@ package com.unciv.logic.civilization.diplomacy
 import com.unciv.Constants
 import com.unciv.logic.automation.diplomacy.DiplomacyEvents
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.DiplomacyAction
@@ -52,6 +53,10 @@ object DeclareWar {
         forgetLandmarks(diplomacyManager)
 
         breakTreaties(diplomacyManager)
+
+        // CvTeam::declareWar: both sides set up their defenses
+        MilitaryOperations.setupInstantDefenses(civInfo, otherCiv)
+        MilitaryOperations.setupInstantDefenses(otherCiv, civInfo)
 
         triggerUniques(otherCiv, civInfo)
     }

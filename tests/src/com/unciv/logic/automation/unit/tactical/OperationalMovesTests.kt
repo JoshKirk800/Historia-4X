@@ -107,7 +107,7 @@ class OperationalMovesTests {
     }
 
     @Test
-    fun `an army with too few free hexes around its muster point aborts`() {
+    fun `an army with too few free hexes around its muster point gathers what fits and goes on`() {
         val operation = gatheringAttack()
         val muster = AiOperationLogic.musterTile(civ, operation)!!
         // Ocean around the muster point but for the city and one hex: two hexes for three units
@@ -115,8 +115,7 @@ class OperationalMovesTests {
         for (tile in muster.getTilesInDistance(3)) if (tile != muster && tile != keep) game.setTileTerrain(tile.position, "Ocean")
         civ.ai.invalidateTurnCaches()
         OperationalMoves.moveOperation(civ, operation, AutomationCache())
-        assertEquals(OperationState.ABORTED, operation.state)
-        assertEquals(OperationAbortReason.NO_ROOM_DEPLOY, operation.abortReason)
+        assertNotEquals("Vox Populi never aborts for want of room", OperationState.ABORTED, operation.state)
     }
 
     /** Departure: an army moving to its target with no melee unit left cannot take it, and its ranged units never advance it */
@@ -146,7 +145,7 @@ class OperationalMovesTests {
     private fun recruiting(): Pair<AiOperation, MapUnit> {
         val operation = AiOperationLogic.addOperation(civ, AiOperationType.BASIC_CITY_ATTACK, enemy, enemyCity, city)
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
-        val warrior = unit("Warrior", -3, 0)
+        val warrior = unit("Warrior", -5, 0)
         ops.addUnit(operation.firstArmy!!, warrior, 1)
         return operation to warrior
     }
@@ -156,7 +155,7 @@ class OperationalMovesTests {
         val (operation, warrior) = recruiting()
         val cache = AutomationCache()
         OperationalMoves.moveOperation(civ, operation, cache)
-        assertEquals(tile(-3, 0), warrior.getTile())
+        assertEquals(tile(-5, 0), warrior.getTile())
         assertFalse(warrior in cache.processedUnits)
     }
 
@@ -168,13 +167,13 @@ class OperationalMovesTests {
         for (index in army.slots.indices) if (index != 1) ops.setEstimatedTurn(army, index, 10)
         val cache = AutomationCache()
         OperationalMoves.moveOperation(civ, operation, cache)
-        assertEquals("no hurry", tile(-3, 0), warrior.getTile())
+        assertEquals("no hurry", tile(-5, 0), warrior.getTile())
 
         operation.lastTurnMoved = -1
-        // Now the army expects its last unit in 2 turns: the warrior is that late already
+        // Now the army expects its last unit in 2 turns: the warrior is that late already (3 plots to a plot 2 from the muster point)
         for (index in army.slots.indices) if (index != 1) ops.setEstimatedTurn(army, index, 2)
         OperationalMoves.moveOperation(civ, operation, cache)
-        assertTrue("it heads for the muster point", warrior.getTile().aerialDistanceTo(tile(0, 0)) < 3)
+        assertTrue("it heads for the muster point", warrior.getTile().aerialDistanceTo(tile(0, 0)) < 5)
         assertTrue(warrior in cache.processedUnits)
     }
 
@@ -294,7 +293,7 @@ class OperationalMovesTests {
     }
 
     // endregion
-    // region ClearEnemiesNearArmy
+    // region CheckForEnemiesNearArmy
 
     @Test
     fun `enemies next to the army's position are attacked by the army's units, which then count as the tactical AI's for the turn`() {
@@ -308,22 +307,10 @@ class OperationalMovesTests {
         for ((index, unit) in units(operation).withIndex()) { unit.removeFromTile(); unit.putInTile(placed[index]) }
         val army3 = units(operation)
         val ctx = context()
-        OperationalMoves.clearEnemiesNearArmy(ctx, army)
+        assertTrue("the army fought", OperationalMoves.checkForEnemiesNearArmy(ctx, army))
         assertTrue("the victim is hit or dead", victim.isDestroyed || victim.health < 20)
         assertTrue(army3.any { it.attacksThisTurn > 0 })
         assertTrue("army units joined this turn's units", army3.all { it in ctx.units || it in ctx.cache.processedUnits })
-    }
-
-    @Test
-    fun `enemies farther than one hex from the army's position are not its business`() {
-        val operation = gatheringAttack()
-        val army = operation.firstArmy!!
-        army.position = tile(0, 0).position
-        val victim = unit("Warrior", 3, 3, enemy)
-        val ctx = context()
-        OperationalMoves.clearEnemiesNearArmy(ctx, army)
-        assertEquals(100, victim.health)
-        assertTrue(ctx.units.isEmpty())
     }
 
     // endregion
@@ -334,8 +321,10 @@ class OperationalMovesTests {
         val operation = gatheringAttack()
         val army = operation.firstArmy!!
         val target = enemyCity.getCenterTile()
-        val ring = target.getTilesAtDistance(5).filter { it.militaryUnit == null && it.getContinent() == target.getContinent() }.toList()
-        for ((index, unit) in units(operation).withIndex()) { unit.removeFromTile(); unit.putInTile(ring[index * 2]) }
+        val inArmy = units(operation)
+        // CvAIOperationMilitary::GetDeployRange: within 3 plots of the city is there
+        val near = target.getTilesAtDistance(2).filter { it.militaryUnit == null }.toList()
+        for ((index, unit) in inArmy.withIndex()) { unit.removeFromTile(); unit.putInTile(near[index * 2]) }
         operation.state = OperationState.MOVING_TO_TARGET
         army.state = ArmyState.MOVING_TO_DESTINATION
         army.position = target.position
@@ -343,6 +332,9 @@ class OperationalMovesTests {
         assertTrue(AiOperationLogic.checkOnTarget(civ, operation))
         assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
         assertTrue(civ.ai.tactical.isTemporaryZoneCity(enemyCity))
+        // the units wait further out for the tactical turn
+        val ring = target.getTilesAtDistance(5).filter { it.militaryUnit == null && it.getContinent() == target.getContinent() }.toList()
+        for ((index, unit) in inArmy.withIndex()) { unit.removeFromTile(); unit.putInTile(ring[index * 2]) }
         civ.ai.operations.sweep()
 
         val soldiers = civ.units.getCivUnits().filter { it.isMilitary() }.toList()
@@ -389,25 +381,6 @@ class OperationalMovesTests {
         assertEquals("together", settler.getTile(), warrior.getTile())
         assertTrue(settler.getTile().aerialDistanceTo(target) < start.aerialDistanceTo(target))
         assertTrue(settler in cache2.processedUnits && warrior in cache2.processedUnits)
-    }
-
-    @Test
-    fun `a settler without escort keeps to its path when the enemy threatens it, as the original's AI path finder ignores danger`() {
-        fertileLand()
-        val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
-        assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
-        val target = AiOperationLogic.targetTile(civ, operation)!!
-        val start = settler.getTile()
-        val endOfTurn = settler.movement.getShortestPath(target).first()
-        // an enemy next to where the settler ends its turn: that tile, and the settler's own, are in danger
-        game.addUnit("Warrior", enemy, endOfTurn.neighbors.first { it.militaryUnit == null && it.civilianUnit == null && !it.isCityCenter() && it != start })
-        civ.ai.invalidateTurnCaches()
-        assertTrue(civ.ai.plotDanger.get(endOfTurn) > 0)
-        val cache = AutomationCache()
-        OperationalMoves.moveOperation(civ, operation, cache)
-        assertEquals(endOfTurn, settler.getTile())
-        assertTrue(settler in cache.processedUnits)
     }
 
     // endregion

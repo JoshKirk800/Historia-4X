@@ -2,10 +2,12 @@ package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.unit.tactical.AggressionLevel
 import com.unciv.logic.automation.unit.tactical.BarbarianMoves
 import com.unciv.logic.automation.unit.tactical.TacticalContext
 import com.unciv.logic.automation.unit.tactical.TacticalMoves
 import com.unciv.logic.automation.unit.tactical.TacticalSafety
+import com.unciv.logic.automation.unit.tactical.TacticalSimulation
 import com.unciv.logic.automation.unit.tactical.TacticalTargetType
 import com.unciv.logic.automation.unit.tactical.TacticalTargets
 import com.unciv.logic.automation.unit.tactical.TradeMoves
@@ -19,7 +21,9 @@ import com.unciv.models.ruleset.ai.AiDefine
  *  AI_TACTICAL_MOVE_PRIORITY_RANDOMNESS per move (EstablishBarbarianPriorities, once a turn; a negative base priority never runs):
  *  capture city 9, damage city 5, destroy high/medium/low priority units 16/15/14, civilian attacks 13, camp defense 13, pillaging 12/14/4,
  *  escorting captured civilians 30, plundering trade units 20, attrition 10/7/6, move to safety 10, aggressive move 3, desperate attack 0
- *  (BNW data). The attacks are [TacticalMoves] (the same routines the other civilizations use), the trade unit plunder is [TradeMoves], the
+ *  (BNW data). The attacks on units and cities are [TacticalSimulation]'s with AL_BRAVEHEART (Vox Populi's PlotBarbarianAttacks: every unit
+ *  target, then the cities; the damage city, attrition and desperate attack rows have no code of their own), pillaging and the capture of
+ *  civilians are [TacticalMoves], the trade unit plunder is [TradeMoves], the
  *  hunting, sea raids, camp defense and captive escort are [BarbarianMoves]. Replaces the per-unit chain (pillage to heal, upgrade, attack
  *  nearby, pillage, wander).
  *
@@ -30,21 +34,20 @@ class BarbarianAutomation(val civInfo: Civilization) {
 
     /** AIBarbarianTacticalMove: the moves of the barbarian list with their base priority and what they do */
     enum class Move(val define: AiDefine, internal val run: (TacticalContext) -> Unit) {
-        CAPTURE_CITY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_CAPTURE_CITY, { TacticalMoves.plotCaptureCityMoves(it) }),
-        DAMAGE_CITY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DAMAGE_CITY, { TacticalMoves.plotDamageCityMoves(it) }),
+        CAPTURE_CITY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_CAPTURE_CITY, { TacticalSimulation.executeCaptureCityMoves(it) }),
+        /** Vox Populi has no damaging of cities: ExecuteCaptureCityMoves attacks them when it is time */
+        DAMAGE_CITY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DAMAGE_CITY, { }),
         DESTROY_HIGH_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESTROY_HIGH_UNIT,
-            { TacticalMoves.plotDestroyUnitMoves(it, TacticalTargetType.HighPriorityUnit, true) }),
+            { TacticalMoves.destroyEnemyUnits(it, AggressionLevel.Braveheart, TacticalTargetType.HighPriorityUnit) }),
         DESTROY_MEDIUM_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESTROY_MEDIUM_UNIT,
-            { TacticalMoves.plotDestroyUnitMoves(it, TacticalTargetType.MediumPriorityUnit, true) }),
+            { TacticalMoves.destroyEnemyUnits(it, AggressionLevel.Braveheart, TacticalTargetType.MediumPriorityUnit) }),
         DESTROY_LOW_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESTROY_LOW_UNIT,
-            { TacticalMoves.plotDestroyUnitMoves(it, TacticalTargetType.LowPriorityUnit, true) }),
+            { TacticalMoves.destroyEnemyUnits(it, AggressionLevel.Braveheart, TacticalTargetType.LowPriorityUnit) }),
         MOVE_TO_SAFETY(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_TO_SAFETY, { moveToSafety(it) }),
-        ATTRIT_HIGH_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_HIGH_UNIT,
-            { TacticalMoves.plotDestroyUnitMoves(it, TacticalTargetType.HighPriorityUnit, false) }),
-        ATTRIT_MEDIUM_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_MEDIUM_UNIT,
-            { TacticalMoves.plotDestroyUnitMoves(it, TacticalTargetType.MediumPriorityUnit, false) }),
-        ATTRIT_LOW_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_LOW_UNIT,
-            { TacticalMoves.plotDestroyUnitMoves(it, TacticalTargetType.LowPriorityUnit, false) }),
+        /** Vox Populi has no attrition attacks for barbarians: the units were sent against every target above */
+        ATTRIT_HIGH_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_HIGH_UNIT, { }),
+        ATTRIT_MEDIUM_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_MEDIUM_UNIT, { }),
+        ATTRIT_LOW_PRIORITY_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ATTRIT_LOW_UNIT, { }),
         PILLAGE(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PILLAGE, { TacticalMoves.plotPillageMoves(it, TacticalTargetType.ImprovementResource, true) }),
         PILLAGE_CITADEL(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PILLAGE_CITADEL, { TacticalMoves.plotPillageMoves(it, TacticalTargetType.Citadel, true) }),
         PILLAGE_NEXT_TURN(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PILLAGE_NEXT_TURN, {
@@ -61,8 +64,8 @@ class BarbarianAutomation(val civInfo: Civilization) {
         AGGRESSIVE_MOVE(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_AGGRESSIVE_MOVE, { BarbarianMoves.executeMoves(it, true) }),
         PASSIVE_MOVE(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PASSIVE_MOVE, { BarbarianMoves.executeMoves(it, false) }),
         CAMP_DEFENSE(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_CAMP_DEFENSE, { BarbarianMoves.plotCampDefenseMoves(it) }),
-        DESPERATE_ATTACK(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESPERATE_ATTACK,
-            { TacticalMoves.plotDestroyUnitMoves(it, TacticalTargetType.LowPriorityUnit, false, attackAtPoorOdds = true) }),
+        /** Vox Populi has no such move: PlotBarbarianAttacks attacks every unit target with AL_BRAVEHEART and goes for the cities, the attrition and the desperate attack are the same plan */
+        DESPERATE_ATTACK(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_DESPERATE_ATTACK, { }),
         ESCORT_CIVILIAN(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_ESCORT_CIVILIAN, { BarbarianMoves.executeCivilianEscortMoves(it) }),
         PLUNDER_TRADE_UNIT(AiDefine.AI_TACTICAL_BARBARIAN_PRIORITY_PLUNDER_TRADE_UNIT, { TradeMoves.plotPlunderTradeUnitMoves(it) });
     }

@@ -10,7 +10,6 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.metadata.BaseRuleset
-import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -23,10 +22,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- *  The tactical targets and attacks (CvTacticalAI::FindTacticalTargets, PlotCaptureCityMoves, PlotDamageCityMoves, PlotDestroyUnitMoves,
- *  ExecuteAttack, safe and protected bombards, flank attacks) with Brave New World data. Expected damage is read from the code's own
- *  [TacticalAttacks.computeTotalExpectedDamage] (BattleDamage at the mean of the randomness), the thresholds of the original are then
- *  tested around it.
+ *  The tactical targets and the attacks that are not the combat simulation's (CvTacticalAI::FindTacticalTargets, FindUnitsWithinStrikingDistance,
+ *  launching a series of attacks, safe and protected bombards, civilians, pillaging, garrisons) with Brave New World data. The simulation's
+ *  attacks are [TacticalSimulationTests]'.
  */
 @RunWith(BaseTestRunner::class)
 class TacticalAttackTests {
@@ -63,9 +61,6 @@ class TacticalAttackTests {
     }
 
     private fun neighbors(tile: Tile, count: Int) = tile.neighbors.take(count).toList()
-
-    private fun expected(ctx: TacticalContext, target: TacticalTarget, turns: Int = 1, includeBlocked: Boolean = true): Int =
-        TacticalAttacks.computeTotalExpectedDamage(target, TacticalAttacks.findUnits(ctx, target.tile, turns, includeBlocked = includeBlocked))
 
     // region Targets
 
@@ -112,22 +107,6 @@ class TacticalAttackTests {
     }
 
     @Test
-    fun `the targets of a dominance zone are those on its tiles and those within 2 tiles of its city`() {
-        val city = enemyCity(0)
-        val inside = game.addUnit("Warrior", enemy, tile(1)) // on the city's land
-        val near = game.addUnit("Warrior", enemy, tile(2)) // unowned land, 2 from the city
-        val far = game.addUnit("Warrior", enemy, tile(4)) // 4 away
-        val ctx = context()
-        val zone = ctx.map.zoneByCity(city, false)!!
-        assertEquals(TacticalTerritory.Enemy, zone.territory)
-        val units = ctx.targets.forZone(zone).mapNotNull { it.unit }
-        assertTrue(inside in units)
-        assertTrue("2 tiles from the city is near enough", near in units)
-        assertFalse(far in units)
-        assertTrue("all targets for no zone", ctx.targets.forZone(null).mapNotNull { it.unit }.containsAll(listOf(inside, near, far)))
-    }
-
-    @Test
     fun `targets are sorted by damage, the most damaged unit first`() {
         val healthy = game.addUnit("Warrior", enemy, tile(5))
         val hurt = game.addUnit("Warrior", enemy, tile(7)).also { it.health = 40 }
@@ -143,193 +122,13 @@ class TacticalAttackTests {
     private fun melee(count: Int, around: Tile, name: String = "Swordsman") =
         around.neighbors.filter { it.militaryUnit == null && !it.isCityCenter() }.take(count).map { game.addUnit(name, civ, it) }.toList()
 
-    @Test
-    fun `a city is attacked to capture it when what our units do is at least half its hit points, and not below`() {
-        val city = enemyCity(0)
-        melee(3, city.getCenterTile(), "Swordsman")
-        val ctx = context()
-        val target = target(ctx, city.getCenterTile())
-        val total = expected(ctx, target)
-        assertTrue("the scenario has units that hurt the city", total > 0)
-
-        city.health = 2 * total + 2 // total < health / 2
-        TacticalMoves.plotCaptureCityMoves(ctx)
-        assertEquals("below half, the capture move does nothing", 2 * total + 2, city.health)
-        assertTrue(ctx.units.all { it.attacksThisTurn == 0 })
-
-        city.health = 2 * total // total >= health / 2
-        TacticalMoves.plotCaptureCityMoves(ctx)
-        assertTrue("at half, the units attack", city.health < 2 * total || city.civ == civ)
-        assertTrue(ctx.units.size < 3)
-    }
-
-    @Test
-    fun `a city is damaged when our units do more than an eighth of its hit points, and not at an eighth`() {
-        val city = enemyCity(0)
-        melee(3, city.getCenterTile(), "Swordsman")
-        val ctx = context()
-        val target = target(ctx, city.getCenterTile())
-        val total = expected(ctx, target)
-        assertTrue(total > 0)
-
-        city.health = 8 * total // total is not more than health / 8
-        TacticalMoves.plotDamageCityMoves(ctx)
-        assertEquals(8 * total, city.health)
-        assertTrue(ctx.units.all { it.attacksThisTurn == 0 })
-
-        city.health = 8 * total - 8 // total > health / 8
-        val before = city.health
-        TacticalMoves.plotDamageCityMoves(ctx)
-        assertTrue(city.health < before)
-    }
-
-    @Test
-    fun `units that would not survive attacking a city to damage it stay out, to capture it they go`() {
-        val city = enemyCity(0)
-        val warrior = melee(1, city.getCenterTile(), "Warrior").single()
-        warrior.health = 3
-        val ctx = context()
-        val target = target(ctx, city.getCenterTile())
-        val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1, includeBlocked = true)
-        TacticalAttacks.computeTotalExpectedDamage(target, strikers)
-        assertTrue("it takes more than it has", strikers.single().expectedSelfDamage >= warrior.health)
-        target.aux = city.health
-
-        assertTrue(TacticalAttacks.planAttack(ctx, target, strikers, emptyList(), mustSurviveAttack = true).isEmpty())
-        assertEquals(warrior, TacticalAttacks.planAttack(ctx, target, strikers, emptyList(), mustSurviveAttack = false).attacks.single().unit)
-    }
-
-    @Test
-    fun `a city at minimum health is taken by a unit that would otherwise die, a healthy one is not thrown at it`() {
-        val city = enemyCity(0)
-        city.health = 200
-        val wounded = melee(1, city.getCenterTile(), "Swordsman").single().also { it.health = 5 }
-        var ctx = context()
-        TacticalMoves.plotCaptureCityMoves(ctx)
-        TacticalMoves.plotDamageCityMoves(ctx)
-        assertFalse(wounded.isDestroyed)
-        assertEquals("not attacked", 0, wounded.attacksThisTurn)
-
-        city.health = 1
-        ctx = context()
-        TacticalMoves.plotCaptureCityMoves(ctx)
-        assertEquals(civ, city.civ)
-    }
-
     // endregion
     // region Units: destroy and attrition
 
     private fun defender(position: Int, name: String = "Swordsman"): MapUnit = game.addUnit(name, enemy, tile(position))
 
-    @Test
-    fun `a unit is destroyed only when our units together do more than its hit points`() {
-        val victim = defender(0)
-        melee(3, victim.getTile(), "Warrior")
-        val ctx = context()
-        val target = target(ctx, victim.getTile())
-        val total = expected(ctx, target, includeBlocked = false)
-        assertTrue(total in 1..99)
-
-        victim.health = total // does not exceed
-        TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.LowPriorityUnit, mustBeAbleToKill = true)
-        assertEquals(total, victim.health)
-        assertTrue(ctx.units.all { it.attacksThisTurn == 0 })
-
-        victim.health = total - 1
-        TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.LowPriorityUnit, mustBeAbleToKill = true)
-        assertTrue("it was attacked", victim.isDestroyed || victim.health < total - 1)
-    }
-
-    @Test
-    fun `units that would be destroyed by attacking a low priority target stay out, but not for a high priority one`() {
-        val victim = defender(0, "Swordsman")
-        val warrior = melee(1, victim.getTile(), "Warrior").single()
-        warrior.health = 5
-        victim.health = 5
-        val ctx = context()
-        val target = target(ctx, victim.getTile())
-        val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1)
-        TacticalAttacks.computeTotalExpectedDamage(target, strikers)
-        assertTrue(strikers.single().expectedSelfDamage >= warrior.health)
-        assertTrue(strikers.single().expectedTargetDamage >= victim.health)
-        target.aux = victim.health
-
-        assertTrue(TacticalAttacks.planAttack(ctx, target, strikers, emptyList(), mustSurviveAttack = true).isEmpty())
-        assertEquals(1, TacticalAttacks.planAttack(ctx, target, strikers, emptyList(), mustSurviveAttack = false).attacks.size)
-    }
-
-    @Test
-    fun `attrition attacks only with units that inflict at least what they take, unless together they take the target below 40 percent`() {
-        val victim = defender(0, "Swordsman")
-        val warriors = melee(1, victim.getTile(), "Warrior")
-        victim.health = 100
-        val ctx = context()
-        val target = target(ctx, victim.getTile())
-        val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1)
-        val total = TacticalAttacks.computeTotalExpectedDamage(target, strikers)
-        assertTrue("the scenario has warriors that take more than they give", strikers.all { it.expectedSelfDamage > it.expectedTargetDamage })
-        assertTrue("and does not take the swordsman to 40%", total < 40)
-
-        TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.LowPriorityUnit, mustBeAbleToKill = false)
-        assertEquals("each would lose more than it gives: nobody attacks", 100, victim.health)
-        assertTrue(warriors.all { it.attacksThisTurn == 0 })
-
-        // The same warriors, now that together they take it to 40% of its strength or less
-        victim.health = 40
-        val strikers2 = TacticalAttacks.findUnits(ctx, target.tile, 1)
-        assertTrue(TacticalAttacks.computeTotalExpectedDamage(target, strikers2) >= 40 * 40 / 100)
-        TacticalMoves.plotDestroyUnitMoves(ctx, TacticalTargetType.LowPriorityUnit, mustBeAbleToKill = false)
-        assertTrue("they go in", warriors.any { it.attacksThisTurn > 0 })
-    }
-
     // endregion
-    // region ExecuteAttack
-
-    @Test
-    fun `the attack stops adding units when their expected damage covers the target's hit points plus the overkill percent`() {
-        val victim = defender(0, "Swordsman")
-        victim.health = 60
-        melee(6, victim.getTile(), "Swordsman")
-        val ctx = context()
-        val target = target(ctx, victim.getTile())
-        val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1)
-        TacticalAttacks.computeTotalExpectedDamage(target, strikers)
-        val perUnit = strikers.map { it.expectedTargetDamage }
-        target.aux = victim.health
-        val budget = victim.health * (100 + ctx.rules.define(AiDefine.AI_TACTICAL_OVERKILL_PERCENT)) / 100
-        var sum = 0
-        var needed = 0
-        for (damage in perUnit) {
-            if (sum >= budget) break
-            sum += damage
-            needed++
-        }
-        assertTrue("the scenario needs some but not all of the units", needed in 2 until perUnit.size)
-
-        val series = TacticalAttacks.planAttack(ctx, target, strikers, emptyList())
-        assertEquals(needed, series.attacks.size)
-    }
-
-    @Test
-    fun `our cities shoot first and what they do counts against the budget`() {
-        val home = game.addCity(civ, tile(-2)) // a bombard range of 2 reaches the target
-        val victim = defender(0, "Swordsman")
-        victim.health = 50
-        melee(6, victim.getTile(), "Swordsman")
-        val ctx = context()
-        val target = target(ctx, victim.getTile())
-        val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1)
-        val withoutCity = TacticalAttacks.planAttack(ctx, target.also { it.aux = victim.health }, strikers.also { TacticalAttacks.computeTotalExpectedDamage(target, it) }, emptyList())
-
-        val cities = TacticalAttacks.findCities(ctx, victim.getTile())
-        assertEquals(listOf(home), cities.map { it.city })
-        TacticalAttacks.computeTotalExpectedBombardDamage(Battle.getMapCombatantOfTile(victim.getTile())!!, cities)
-        assertTrue(cities.single().expectedTargetDamage > 0)
-        val series = TacticalAttacks.planAttack(ctx, target, strikers, cities)
-        assertEquals("the city is the first attack", home, series.attacks.first().city)
-        assertTrue("the units after it are fewer", series.attacks.size - 1 < withoutCity.attacks.size)
-        assertTrue(series.attacks.drop(1).all { it.unit != null })
-    }
+    // region Launching attacks
 
     @Test
     fun `a series stops when the target is dead and the rest of the units stay free`() {
@@ -337,12 +136,8 @@ class TacticalAttackTests {
         victim.health = 3
         val attackers = melee(3, victim.getTile(), "Swordsman")
         val ctx = context()
-        val target = target(ctx, victim.getTile())
-        val strikers = TacticalAttacks.findUnits(ctx, target.tile, 1)
-        TacticalAttacks.computeTotalExpectedDamage(target, strikers)
-        target.aux = 1000 // wants all of them
-        val series = TacticalAttacks.planAttack(ctx, target, strikers, emptyList())
-        assertEquals(3, series.attacks.size)
+        val series = AttackSeries(target(ctx, victim.getTile()))
+        for (attacker in attackers) series.addUnit(attacker, false, null)
         assertTrue(TacticalAttacks.launch(ctx, series))
         assertTrue(victim.isDestroyed)
         assertEquals("one attacked, the others were released", 1, attackers.count { it.attacksThisTurn > 0 })
@@ -483,36 +278,6 @@ class TacticalAttackTests {
     }
 
     // endregion
-    // region Flanks
-
-    @Test
-    fun `flank tiles are filled when one unit can fill three of them or two units can attack at once`() {
-        val victim = defender(0, "Swordsman")
-        val units = victim.getTile().getTilesAtDistance(2).take(4).map { game.addUnit("Swordsman", civ, it) }.toList()
-        val ctx = context()
-        ctx.map.clearDynamicFlags()
-        ctx.map.setTargetFlankBonusCells(victim.getTile())
-        assertEquals("every free tile around a land unit gives the bonus", 6, victim.getTile().neighbors.count { ctx.map.helpsProvideFlankBonus(it) })
-
-        TacticalBombards.executeFlankAttack(ctx, target(ctx, victim.getTile()))
-        val around = units.count { it.getTile().aerialDistanceTo(victim.getTile()) == 1 || it.attacksThisTurn > 0 }
-        assertTrue("at least two units went in", around >= 2)
-        assertTrue("and attacked", units.any { it.attacksThisTurn > 0 })
-    }
-
-    @Test
-    fun `a single melee unit is not enough for a flank attack`() {
-        val victim = defender(0, "Swordsman")
-        val unit = game.addUnit("Swordsman", civ, tile(-3))
-        val ctx = context()
-        ctx.map.clearDynamicFlags()
-        ctx.map.setTargetFlankBonusCells(victim.getTile())
-        TacticalBombards.executeFlankAttack(ctx, target(ctx, victim.getTile()))
-        assertEquals(tile(-3), unit.getTile())
-        assertEquals(0, unit.attacksThisTurn)
-    }
-
-    // endregion
     // region Other moves
 
     @Test
@@ -631,34 +396,26 @@ class TacticalAttackTests {
     }
 
     @Test
-    fun `an aircraft is expected to take no damage from its strike`() {
+    fun `an aircraft that can strike is among the units that may attack a target, with the damage it would do`() {
         val base = airBase()
         val bomber = game.addUnit("Bomber", civ, base)
         val victim = defender(4)
         val ctx = context()
-        val target = target(ctx, victim.getTile())
-        val striker = Striker(bomber, 100, 100, base)
-        val defenderCombatant = Battle.getMapCombatantOfTile(victim.getTile())!!
-        assertTrue("Unciv's air strike would cost it hit points",
-            BattleDamage.calculateDamageToAttacker(MapUnitCombatant(bomber), defenderCombatant, base, 0.5f) > 0)
-        TacticalAttacks.computeTotalExpectedDamage(target, listOf(striker))
-        assertTrue(striker.expectedTargetDamage > 0)
-        assertEquals(0, striker.expectedSelfDamage)
+        assertEquals(listOf(bomber), TacticalSimulation.findUnitsWithinStrikingDistance(ctx, victim.getTile()))
+        assertTrue(TacticalSimulation.computeTotalExpectedDamage(ctx, victim.getTile(), listOf(bomber)) > 0)
     }
 
     @Test
-    fun `an aircraft destroys a unit in its range as part of the tactical turn and is done for the turn`() {
+    fun `an aircraft destroys a unit in its range when the unit target is attacked and is done for the turn`() {
         val base = airBase()
         val bomber = game.addUnit("Bomber", civ, base)
         val victim = defender(4)
         victim.health = 10
-        civ.viewableTiles = game.tileMap.values.toSet()
-        civ.ai.invalidateTurnCaches()
-        val cache = AutomationCache()
-        TacticalAi.automate(civ, civ.units.getCivUnits().toList(), cache)
+        val ctx = context()
+        TacticalMoves.destroyEnemyUnits(ctx, AggressionLevel.Medium)
         assertTrue(victim.isDestroyed)
         assertEquals(1, bomber.attacksThisTurn)
-        assertTrue(bomber in cache.processedUnits)
+        assertTrue(bomber in ctx.cache.processedUnits)
         assertEquals(base, bomber.getTile())
     }
 
@@ -671,33 +428,13 @@ class TacticalAttackTests {
     }
 
     // endregion
-    // region The tactical turn
-
-    @Test
-    fun `the tactical turn takes an almost defeated city with the units next to it and does not touch the units that were not needed`() {
-        val city = enemyCity(0)
-        city.health = 2
-        val attackers = melee(4, city.getCenterTile(), "Swordsman")
-        civ.viewableTiles = game.tileMap.values.toSet()
-        civ.ai.invalidateTurnCaches()
-        val cache = AutomationCache()
-        TacticalAi.automate(civ, civ.units.getCivUnits().toList(), cache)
-        assertEquals(civ, city.civ)
-        assertTrue("the units that attacked are done", attackers.any { it.attacksThisTurn > 0 && it in cache.processedUnits })
-    }
-
-    // endregion
-
     @Test
     fun `expected damage is the damage at the mean of the randomness`() {
         val victim = defender(0, "Swordsman")
         val attacker = melee(1, victim.getTile(), "Swordsman").single()
         val ctx = context()
-        val target = target(ctx, victim.getTile())
-        val striker = TacticalAttacks.findUnits(ctx, target.tile, 1).single()
-        TacticalAttacks.computeTotalExpectedDamage(target, listOf(striker))
         val defenderCombatant = Battle.getMapCombatantOfTile(victim.getTile())!!
-        assertEquals(BattleDamage.calculateDamageToDefender(MapUnitCombatant(attacker), defenderCombatant, striker.attackFrom!!, 0.5f), striker.expectedTargetDamage)
-        assertEquals(BattleDamage.calculateDamageToAttacker(MapUnitCombatant(attacker), defenderCombatant, striker.attackFrom!!, 0.5f), striker.expectedSelfDamage)
+        val expected = BattleDamage.calculateDamageToDefender(MapUnitCombatant(attacker), defenderCombatant, attacker.getTile(), 0.5f, ignoreFlanking = true)
+        assertEquals(expected, TacticalSimulation.computeTotalExpectedDamage(ctx, victim.getTile(), listOf(attacker)))
     }
 }

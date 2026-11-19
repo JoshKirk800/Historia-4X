@@ -66,6 +66,8 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var treatyWillingToOffer = PeaceTreatyType.None
     var treatyWillingToAccept = PeaceTreatyType.None
     var numWarsFought = 0
+    /** CvDiplomacyAI::GetNumWarsDeclaredOnUs (Vox Populi): how many times they declared war on us */
+    var numWarsDeclaredOnUs = 0
     /** CvTeam::GetTurnMadePeaceTreatyWithTeam: game turn, -1 = never */
     var turnMadePeace = -1
     /** CvTeam::GetNumTurnsLockedIntoWar */
@@ -91,7 +93,10 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     // Memories feeding opinion
     var recentTradeValue = 0
     var commonFoeValue = 0
-    /** CvCityAI::AI_GetNumPlotsAcquiredByOtherPlayer summed over our cities: tiles they bought within 3 tiles of our cities */
+    /**
+     *  CvCityAI::AI_GetNumPlotsAcquiredByOtherPlayer summed over our cities: the weight (1 to 3) of the tiles they bought within 3 tiles of our
+     *  cities, see [DiplomacyEvents.onPlotBought]; reset when they refuse to stop ([PromiseAi.onDemandRefused])
+     */
     var numPlotsBoughtNearUs = 0
     var recentAssistValue = 0
     var numCiviliansReturned = 0
@@ -105,6 +110,29 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var negativeReligiousConversionPoints = 0
     var numTimesNuked = 0
     var numTimesRobbed = 0
+    /**
+     *  Vox Populi's turn stamps of the stacked deeds (CvDiplomacyAI::Get*Turn): set whenever the count changes and is above 0, -1 at 0;
+     *  the counts halve once per duration ([OpinionAi.testOpinionModifiers]) and their opinion terms fade ([OpinionTimers.adjust])
+     */
+    var civiliansReturnedTurn = -1
+    var landmarksBuiltTurn = -1
+    var intrigueSharedTurn = -1
+    var robbedTurn = -1
+    var beatenToWonderTurn = -1
+    var religiousConversionTurn = -1
+    /** CvDiplomacyAI::GetNegativeArchaeologyPoints (Vox Populi): artifacts they dug up in our lands, and the turn of the last */
+    var numArtifactsStolen = 0
+    var stoleArtifactTurn = -1
+    /** CvDiplomacyAI::GetNumCitiesEverLiberatedBy (Vox Populi): cities of ours they ever liberated, as long as they took none since */
+    var numCitiesEverLiberated = 0
+    /** CvDiplomacyAI::IsPlayerLiberatedCapital / IsPlayerLiberatedHolyCity (Vox Populi): they gave back our capital / holy city */
+    var liberatedCapital = false
+    var liberatedHolyCity = false
+    /** CvDiplomacyAI::IsPlayerCapturedCapital / IsPlayerCapturedHolyCity (Vox Populi): they took our original capital / holy city */
+    var capturedCapital = false
+    var capturedHolyCity = false
+    /** CvDiplomacyAI::GetCivilianKillerValue (Vox Populi): their razing of our cities, capped, decaying each turn */
+    var civilianKillerValue = 0
     var turnsSinceAttackedProtectedMinor = -1
     var numProtectedMinorsAttacked = 0
     var turnsSinceKilledProtectedMinor = -1
@@ -120,26 +148,47 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var denouncedCounter = -1
     /** The denouncement we track the expiry of (Unciv keeps the denouncement itself as [com.unciv.logic.civilization.diplomacy.DiplomacyFlags.Denunciation]) */
     var denouncementActive = false
+    /** CvDiplomacyAI::IsFriendDenouncedUs / GetFriendDenouncedUsTurn (Vox Populi): forgiven after FRIEND_DENOUNCED_US_TURNS_UNTIL_FORGIVEN */
     var friendDenouncedUs = false
+    var friendDenouncedUsTurn = -1
+    /** CvDiplomacyAI::IsFriendDeclaredWarOnUs / its turn (Vox Populi): forgiven after FRIEND_DECLARED_WAR_ON_US_TURNS_UNTIL_FORGIVEN */
     var friendDeclaredWarOnUs = false
-    /** CvDiplomacyAI::m_paiDeclaredWarOnFriendValue (decays) */
-    var declaredWarOnFriendValue = 0
+    var friendDeclaredWarOnUsTurn = -1
+    /** CvDiplomacyAI::IsResurrectorAttackedUs (Vox Populi): the civilization that resurrected us declared war on us */
+    var resurrectorAttackedUs = false
+    /** CvDiplomacyAI::GetDoFType (Vox Populi): our friendship's history with them, kept by [DiplomacyEvents.onDoFSigned] and
+     *  [DiplomacyEvents.onDoFBetrayed] */
+    var doFLevel = DoFLevel.New
+    /** CvDiplomacyAI::GetDoFBrokenTurn (Vox Populi): the turn they broke a DoF with us (war or denouncement), -1 = never */
+    var doFBrokenTurn = -1
+    /** CvDiplomacyAI::GetLiberatedCitiesTurn (Vox Populi): the turn they last liberated a city of ours or resurrected us, -1 = never */
+    var liberatedCitiesTurn = -1
+    /** CvDiplomacyAI::GetDemandAcceptedTurn (Vox Populi): the turn they last paid a tribute we demanded, -1 = never or refused since */
+    var demandAcceptedTurn = -1
+    /** CvDiplomacyAI::IsRecklessExpander (Vox Populi): set each turn by [ExpanderAi.updateRecklessExpanders] */
+    var recklessExpander = false
+    /** CvDiplomacyAI::IsWonderSpammer (Vox Populi): set each turn by [ExpanderAi.updateWonderSpammers] */
+    var wonderSpammer = false
 
     // Coop wars with them as partner, by target civID
     var coopWars = HashMap<String, CoopWarEntry>()
 
     // Requests, demands, promises
-    /** CvDiplomacyAI::m_paiDemandCounter: turns since they made a demand of us, -1 never */
-    var demandCounter = -1
-    var noSettleRequestEverAsked = false
-    var stopSpyingRequestEverAsked = false
+    /** CvDiplomacyAI::GetNumDemandsMade / GetDemandMadeTurn (Vox Populi): the tributes they demanded of us, halving over time, and the last turn */
+    var numDemandsMade = 0
+    var demandMadeTurn = -1
+    /**
+     *  CvDiplomacyAI::Get*PromiseTurn (Vox Populi): the turn each of their promises to us was last broken or ignored, by [PromiseKind]
+     *  name; the broken and ignored flags below clear once its duration has passed ([PromiseAi.testPromiseExpiry])
+     */
+    var promiseTurns = LinkedHashMap<String, Int>()
     var madeMilitaryPromise = false
     var brokenMilitaryPromise = false
     var ignoredMilitaryPromise = false
-    var brokenExpansionPromiseValue = 0
-    var ignoredExpansionPromiseValue = 0
-    var brokenBorderPromiseValue = 0
-    var ignoredBorderPromiseValue = 0
+    var brokenExpansionPromise = false
+    var ignoredExpansionPromise = false
+    var brokenBorderPromise = false
+    var ignoredBorderPromise = false
     var brokenAttackCityStatePromise = false
     var ignoredAttackCityStatePromise = false
     var brokenBullyCityStatePromise = false
@@ -152,6 +201,12 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var ignoredNoDiggingPromise = false
     var brokenCoopWarPromise = false
     var wantsResearchAgreement = false
+    /** CvDiplomacyAI::IsWantsDoFWithPlayer / IsWantsToEndDoFWithPlayer (Vox Populi): set each turn by [FriendshipPlanningAi.updateFriendships] */
+    var wantsDoF = false
+    var wantsToEndDoF = false
+    /** CvDiplomacyAI::IsWantsDefensivePactWithPlayer / IsWantsToEndDefensivePactWithPlayer (Vox Populi): set by [PactPlanningAi.updatePacts] */
+    var wantsDefensivePact = false
+    var wantsToEndDefensivePact = false
     /** CvDiplomacyAI::m_paiPlayerMadeExpansionPromiseTurn: turn they promised not to expand towards us, -1 = never (EverMadeExpansionPromise) */
     var expansionPromiseTurn = -1
     /** CvDiplomacyAI::m_paePlayerExpansionPromiseData: their expansion posture when they promised; the promise breaks when it rises above it */
@@ -203,6 +258,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.economicStrength = economicStrength; copy.militaryThreat = militaryThreat; copy.warmongerThreat = warmongerThreat
         copy.warmongerAmount = warmongerAmount; copy.treatyWillingToOffer = treatyWillingToOffer
         copy.treatyWillingToAccept = treatyWillingToAccept; copy.numWarsFought = numWarsFought; copy.turnMadePeace = turnMadePeace
+        copy.numWarsDeclaredOnUs = numWarsDeclaredOnUs
         copy.turnsLockedIntoWar = turnsLockedIntoWar; copy.musteringForAttack = musteringForAttack; copy.aggressor = aggressor
         copy.warProgress = warProgress
         copy.landDispute = landDispute; copy.lastTurnLandDispute = lastTurnLandDispute; copy.wonderDispute = wonderDispute
@@ -216,6 +272,14 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.numTimesCultureBombed = numTimesCultureBombed
         copy.negativeReligiousConversionPoints = negativeReligiousConversionPoints
         copy.numTimesNuked = numTimesNuked; copy.numTimesRobbed = numTimesRobbed
+        copy.civiliansReturnedTurn = civiliansReturnedTurn; copy.landmarksBuiltTurn = landmarksBuiltTurn
+        copy.intrigueSharedTurn = intrigueSharedTurn; copy.robbedTurn = robbedTurn; copy.beatenToWonderTurn = beatenToWonderTurn
+        copy.religiousConversionTurn = religiousConversionTurn
+        copy.numArtifactsStolen = numArtifactsStolen; copy.stoleArtifactTurn = stoleArtifactTurn
+        copy.numCitiesEverLiberated = numCitiesEverLiberated
+        copy.liberatedCapital = liberatedCapital; copy.liberatedHolyCity = liberatedHolyCity
+        copy.capturedCapital = capturedCapital; copy.capturedHolyCity = capturedHolyCity
+        copy.civilianKillerValue = civilianKillerValue
         copy.turnsSinceAttackedProtectedMinor = turnsSinceAttackedProtectedMinor
         copy.numProtectedMinorsAttacked = numProtectedMinorsAttacked
         copy.turnsSinceKilledProtectedMinor = turnsSinceKilledProtectedMinor; copy.numProtectedMinorsKilled = numProtectedMinorsKilled
@@ -223,14 +287,16 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.turnsSinceSidedWithProtectedMinor = turnsSinceSidedWithProtectedMinor
         copy.doFCounter = doFCounter; copy.denouncedCounter = denouncedCounter; copy.denouncementActive = denouncementActive
         copy.friendDenouncedUs = friendDenouncedUs; copy.friendDeclaredWarOnUs = friendDeclaredWarOnUs
-        copy.declaredWarOnFriendValue = declaredWarOnFriendValue
+        copy.friendDenouncedUsTurn = friendDenouncedUsTurn; copy.friendDeclaredWarOnUsTurn = friendDeclaredWarOnUsTurn
+        copy.resurrectorAttackedUs = resurrectorAttackedUs
+        copy.doFLevel = doFLevel; copy.doFBrokenTurn = doFBrokenTurn; copy.liberatedCitiesTurn = liberatedCitiesTurn
+        copy.demandAcceptedTurn = demandAcceptedTurn; copy.recklessExpander = recklessExpander; copy.wonderSpammer = wonderSpammer
         for ((target, entry) in coopWars) copy.coopWars[target] = entry.clone()
-        copy.demandCounter = demandCounter
-        copy.noSettleRequestEverAsked = noSettleRequestEverAsked; copy.stopSpyingRequestEverAsked = stopSpyingRequestEverAsked
+        copy.numDemandsMade = numDemandsMade; copy.demandMadeTurn = demandMadeTurn; copy.promiseTurns.putAll(promiseTurns)
         copy.madeMilitaryPromise = madeMilitaryPromise; copy.brokenMilitaryPromise = brokenMilitaryPromise
         copy.ignoredMilitaryPromise = ignoredMilitaryPromise
-        copy.brokenExpansionPromiseValue = brokenExpansionPromiseValue; copy.ignoredExpansionPromiseValue = ignoredExpansionPromiseValue
-        copy.brokenBorderPromiseValue = brokenBorderPromiseValue; copy.ignoredBorderPromiseValue = ignoredBorderPromiseValue
+        copy.brokenExpansionPromise = brokenExpansionPromise; copy.ignoredExpansionPromise = ignoredExpansionPromise
+        copy.brokenBorderPromise = brokenBorderPromise; copy.ignoredBorderPromise = ignoredBorderPromise
         copy.brokenAttackCityStatePromise = brokenAttackCityStatePromise
         copy.ignoredAttackCityStatePromise = ignoredAttackCityStatePromise
         copy.brokenBullyCityStatePromise = brokenBullyCityStatePromise; copy.ignoredBullyCityStatePromise = ignoredBullyCityStatePromise
@@ -238,6 +304,8 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.brokenNoConvertPromise = brokenNoConvertPromise; copy.ignoredNoConvertPromise = ignoredNoConvertPromise
         copy.brokenNoDiggingPromise = brokenNoDiggingPromise; copy.ignoredNoDiggingPromise = ignoredNoDiggingPromise
         copy.brokenCoopWarPromise = brokenCoopWarPromise; copy.wantsResearchAgreement = wantsResearchAgreement
+        copy.wantsDoF = wantsDoF; copy.wantsToEndDoF = wantsToEndDoF
+        copy.wantsDefensivePact = wantsDefensivePact; copy.wantsToEndDefensivePact = wantsToEndDefensivePact
         copy.expansionPromiseTurn = expansionPromiseTurn; copy.expansionPromisePosture = expansionPromisePosture
         copy.borderPromiseTurn = borderPromiseTurn; copy.borderPromisePosture = borderPromisePosture
         copy.protectedMinorAttacked = protectedMinorAttacked; copy.protectedMinorAttackedUnseen = protectedMinorAttackedUnseen
@@ -264,6 +332,9 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     /** CvDiplomacyAI::m_eDemandTargetPlayer, civID */
     var demandTarget: String? = null
     var demandReady = false
+    /** CvDiplomacyAI::m_eCSWarTarget and m_eCSBullyTarget (Vox Populi), civIDs: the city-states [CityStateAi.updateMinorCivApproaches] chose */
+    var csWarTarget: String? = null
+    var csBullyTarget: String? = null
     /** CvDiplomacyAI::GetTotalLandDisputeLevel as of the last [DiplomacyTurn.doTurn] (the disputes it sums change only there) */
     var lastTotalLandDisputeLevel = 0
     /** CvPlayer::m_iTurnsSinceSettledLastCity: turns since this civilization founded a city, -1 = never (counted by [DiplomacyTurn.doTurn]) */
@@ -272,6 +343,16 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     var biggestCompetitor: String? = null
     /** CvPlayer::m_iMilitaryRating (Vox Populi), -1 = not moved yet (the starting rating): read through [WarDamageAi.militaryRating] */
     var militaryRating = -1
+    /** CvDiplomacyAI::IsSaneDiplomaticTarget (Vox Populi) is false for these civIDs: set each turn by [WarSanityAi.updateSaneTargets] */
+    var insaneTargets = HashSet<String>()
+    /** CvPlayer::GetWondersConstructed (Vox Populi): the world wonders this civilization has built */
+    var wondersConstructed = 0
+    /** CvDiplomacyAI::GetMostValuableFriend (Vox Populi), civID; null = none. Set each turn by [FriendshipPlanningAi.updateFriendships] */
+    var mostValuableFriend: String? = null
+    /** CvDiplomacyAI::GetMostValuableAlly (Vox Populi), civID; null = none. Set by [PactPlanningAi.updatePacts] */
+    var mostValuableAlly: String? = null
+    /** The turn of CvDiplomacyAI::HasEndedFriendshipThisTurn: we last broke a friendship (war, denouncement or ending it), -1 = never */
+    var endedFriendshipTurn = -1
 
     @Transient lateinit var civ: Civilization
 
@@ -280,10 +361,17 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         for ((id, memory) in memories) copy.memories[id] = memory.clone()
         copy.demandTarget = demandTarget
         copy.demandReady = demandReady
+        copy.csWarTarget = csWarTarget
+        copy.csBullyTarget = csBullyTarget
         copy.turnsSinceSettledLastCity = turnsSinceSettledLastCity
         copy.lastTotalLandDisputeLevel = lastTotalLandDisputeLevel
         copy.biggestCompetitor = biggestCompetitor
         copy.militaryRating = militaryRating
+        copy.insaneTargets.addAll(insaneTargets)
+        copy.wondersConstructed = wondersConstructed
+        copy.mostValuableFriend = mostValuableFriend
+        copy.mostValuableAlly = mostValuableAlly
+        copy.endedFriendshipTurn = endedFriendshipTurn
         return copy
     }
 
@@ -401,37 +489,67 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         memoryOf(other).lastContactTurn = civ.gameInfo.turns
     }
 
+    /** The game speed's OpinionDurationPercent, which VP's value changes and caps scale by */
+    private fun opinionDuration() = DiplomacyTurn.opinionDurationPercent(civ)
+
+    /** GetMaxRecentTradeValue: DEAL_VALUE_PER_OPINION_WEIGHT x -OPINION_WEIGHT_TRADE_MAX x the game speed's OpinionDurationPercent / 100 */
+    fun maxRecentTradeValue(): Int {
+        val rules = civ.gameInfo.ruleset.ai
+        return maxOf(0, rules.define(AiDefine.DEAL_VALUE_PER_OPINION_WEIGHT) * -rules.define(AiDefine.OPINION_WEIGHT_TRADE_MAX) * opinionDuration() / 100)
+    }
+
+    /** GetMaxCommonFoeValue: COMMON_FOE_VALUE_PER_OPINION_WEIGHT x -OPINION_WEIGHT_COMMON_FOE_MAX x OpinionDurationPercent / 100 */
+    fun maxCommonFoeValue(): Int {
+        val rules = civ.gameInfo.ruleset.ai
+        return maxOf(0, rules.define(AiDefine.COMMON_FOE_VALUE_PER_OPINION_WEIGHT) * -rules.define(AiDefine.OPINION_WEIGHT_COMMON_FOE_MAX) * opinionDuration() / 100)
+    }
+
     /**
-     *  CvDiplomacyAI::ChangeRecentTradeValue: what a deal with [from] was worth to us (CvDealAI::DoAcceptedDeal: in full if generous, else half),
-     *  kept between 0 and the most the opinion can use (DEAL_VALUE_PER_OPINION_WEIGHT × -OPINION_WEIGHT_TRADE_MAX)
+     *  GetMaxRecentAssistValue / GetMaxRecentFailedAssistValue: ASSIST_VALUE_PER_OPINION_WEIGHT x the size of OPINION_WEIGHT_ASSIST_MAX
+     *  (help) or OPINION_WEIGHT_FAILED_ASSIST_MAX (refusals) x OpinionDurationPercent / 100
+     */
+    fun maxRecentAssistValue(failed: Boolean): Int {
+        val rules = civ.gameInfo.ruleset.ai
+        val weight = rules.define(if (failed) AiDefine.OPINION_WEIGHT_FAILED_ASSIST_MAX else AiDefine.OPINION_WEIGHT_ASSIST_MAX)
+        return rules.define(AiDefine.ASSIST_VALUE_PER_OPINION_WEIGHT) * kotlin.math.abs(weight) * opinionDuration() / 100
+    }
+
+    /**
+     *  CvDiplomacyAI::ChangeRecentTradeValue: what a deal with [from] was worth to us (CvDealAI::DoAcceptedDeal: in full if generous, else
+     *  half); a gain scaled by the game speed's OpinionDurationPercent, kept between 0 and [maxRecentTradeValue]
      */
     fun changeRecentTradeValue(from: Civilization, value: Int) {
-        val rules = civ.gameInfo.ruleset.ai
         val memory = memoryOf(from)
-        memory.recentTradeValue = (memory.recentTradeValue + value)
-            .coerceIn(0, rules.define(AiDefine.DEAL_VALUE_PER_OPINION_WEIGHT) * -rules.define(AiDefine.OPINION_WEIGHT_TRADE_MAX))
+        val change = if (value > 0) value * opinionDuration() / 100 else value
+        memory.recentTradeValue = (memory.recentTradeValue + change).coerceIn(0, maxRecentTradeValue())
     }
 
-    /**
-     *  CvDiplomacyAI::ChangeCommonFoeValue: damage [from] did to a foe of ours, kept between 0 and the most the opinion can use
-     *  (COMMON_FOE_VALUE_PER_OPINION_WEIGHT × -OPINION_WEIGHT_COMMON_FOE_MAX)
-     */
+    /** CvDiplomacyAI::ChangeCommonFoeValue: damage [from] did to a foe of ours, a gain scaled as [changeRecentTradeValue], kept within 0..[maxCommonFoeValue] */
     fun changeCommonFoeValue(from: Civilization, value: Int) {
-        val rules = civ.gameInfo.ruleset.ai
         val memory = memoryOf(from)
-        memory.commonFoeValue = (memory.commonFoeValue + value)
-            .coerceIn(0, rules.define(AiDefine.COMMON_FOE_VALUE_PER_OPINION_WEIGHT) * -rules.define(AiDefine.OPINION_WEIGHT_COMMON_FOE_MAX))
+        val change = if (value > 0) value * opinionDuration() / 100 else value
+        memory.commonFoeValue = (memory.commonFoeValue + change).coerceIn(0, maxCommonFoeValue())
     }
 
     /**
-     *  CvDiplomacyAI::ChangeRecentAssistValue: negative = [from] helped us, positive = they refused, kept within
-     *  ±(DEAL_VALUE_PER_OPINION_WEIGHT × OPINION_WEIGHT_ASSIST_MAX)
+     *  CvDiplomacyAI::ChangeRecentAssistValue (our sign: negative = [from] helped us, positive = they refused; VP's is the other way):
+     *  nothing for a human's shadow AI, and a refusal does not count at war with them; scaled by the game speed's OpinionDurationPercent
+     *  (the turn's decay, [decay], is not); kept within -[maxRecentAssistValue] of help .. +that of refusals; a decay never crosses 0
      */
-    fun changeRecentAssistValue(from: Civilization, value: Int) {
-        val rules = civ.gameInfo.ruleset.ai
+    fun changeRecentAssistValue(from: Civilization, value: Int, decay: Boolean = false) {
+        if (civ.isHuman()) return
         val memory = memoryOf(from)
-        val max = rules.define(AiDefine.DEAL_VALUE_PER_OPINION_WEIGHT) * rules.define(AiDefine.OPINION_WEIGHT_ASSIST_MAX)
-        memory.recentAssistValue = (memory.recentAssistValue + value).coerceIn(-max, max)
+        val current = memory.recentAssistValue
+        if (decay) {
+            if ((current > 0 && current + value < 0) || (current < 0 && current + value > 0)) {
+                memory.recentAssistValue = 0
+                return
+            }
+            memory.recentAssistValue = (current + value).coerceIn(-maxRecentAssistValue(false), maxRecentAssistValue(true))
+            return
+        }
+        if (value > 0 && civ.isAtWarWith(from)) return
+        memory.recentAssistValue = (current + value * opinionDuration() / 100).coerceIn(-maxRecentAssistValue(false), maxRecentAssistValue(true))
     }
 
     /** Sets the approach towards [other] directly (scenario setup and tests) */

@@ -1,10 +1,13 @@
 package com.unciv.logic.automation.diplomacy
 
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
+import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.MinorCivApproach
@@ -100,16 +103,19 @@ object DiplomacyEvents {
                 }
             }
             if (me == victim) {
-                val rules = me.gameInfo.ruleset.ai
+                if (declarer.isMajorCiv) memory.numWarsDeclaredOnUs++
                 if (wasFriends) {
                     memory.friendDeclaredWarOnUs = true
-                    memory.declaredWarOnFriendValue += rules.define(AiDefine.OPINION_WEIGHT_WAR_FRIEND_EACH) * DiplomacyTurn.opinionDurationPercent(me)
+                    memory.friendDeclaredWarOnUsTurn = me.gameInfo.turns
+                    if (declarer.isMajorCiv) onDoFBetrayed(declarer, me)
                 }
+                if (memory.resurrectedUs) memory.resurrectorAttackedUs = true
                 if (declarer.isMajorCiv) {
                     memory.approach = MajorCivApproach.War
                     memory.warFace = WarFace.Neutral
                 }
-                if (memory.madeMilitaryPromise) memory.brokenMilitaryPromise = true
+                if (memory.madeMilitaryPromise && !memory.brokenMilitaryPromise)
+                    PromiseAi.markBroken(memory, PromiseAi.PromiseKind.Military, me.gameInfo.turns)
                 // Clear what made us like them
                 memory.numCiviliansReturned = 0
                 memory.recentTradeValue = 0
@@ -127,6 +133,78 @@ object DiplomacyEvents {
             memory.protectedMinorAttackedUnseen = true
             memory.numProtectedMinorsAttacked++
         }
+    }
+
+    /** CvDiplomacyAI::SetDoFAccepted (Vox Populi): a DoF between majors lifts both sides' DoF level one step from the higher of the
+     *  two (a betrayed or new friendship to friends, friends to allies, allies to battle brothers) */
+    fun onDoFSigned(a: Civilization, b: Civilization) {
+        if (!a.isMajorCiv || !b.isMajorCiv) return
+        val ours = a.ai.diplomacy.memoryOf(b)
+        val theirs = b.ai.diplomacy.memoryOf(a)
+        val next = when (maxOf(ours.doFLevel, theirs.doFLevel)) {
+            DoFLevel.Untrustworthy, DoFLevel.New -> DoFLevel.Friends
+            DoFLevel.Friends -> DoFLevel.Allies
+            DoFLevel.Allies, DoFLevel.BattleBrothers -> DoFLevel.BattleBrothers
+        }
+        ours.doFLevel = next
+        theirs.doFLevel = next
+    }
+
+    /** Vox Populi's ending of a friendship by war (DoSomeoneDeclaredWarOnMe), denouncement (DoDenouncePlayer) or statement
+     *  ([onDoFEnded]): both sides' DoF level becomes untrustworthy, the [victim] notes when the [betrayer] broke it (SetDoFBroken), and the
+     *  [betrayer] has ended a friendship this turn */
+    fun onDoFBetrayed(betrayer: Civilization, victim: Civilization) {
+        betrayer.ai.diplomacy.memoryOf(victim).doFLevel = DoFLevel.Untrustworthy
+        betrayer.ai.diplomacy.endedFriendshipTurn = betrayer.gameInfo.turns
+        val memory = victim.ai.diplomacy.memoryOf(betrayer)
+        memory.doFLevel = DoFLevel.Untrustworthy
+        memory.doFBrokenTurn = victim.gameInfo.turns
+    }
+
+    /**
+     *  DIPLO_STATEMENT_END_WORK_WITH_US (Vox Populi): [ender] ends its friendship with [friend] without denouncing them. The coop wars
+     *  between them are off (CancelCoopWarsWithPlayer with a penalty: one being prepared - our Soon - is a broken promise worth VP's
+     *  -300 assist), the friend resents it (another -300), and each other AI that [ender] may deal with and that does not hate it judges:
+     *  ending it with a backstabber +75, with one it fights +50 (+25 more when that war goes badly: defensive or worse, VP's troubled),
+     *  with one who denounced it +50, with its own friend, pact partner or ally -75 (-150 if it hates the ender). Our recent assist value
+     *  has the opposite sign of VP's. VP's coop war agreement score has no input.
+     */
+    fun onDoFEnded(ender: Civilization, friend: Civilization) {
+        if (!ender.isMajorCiv || !friend.isMajorCiv) return
+        val friendAi = friend.ai.diplomacy
+        val friendMemory = friendAi.memoryOf(ender)
+        for (entry in friendMemory.coopWars.values) if (entry.state != null && entry.state!! >= CoopWarState.Soon) {
+            if (entry.state == CoopWarState.Soon) {
+                PromiseAi.markBroken(friendMemory, PromiseAi.PromiseKind.CoopWar, friend.gameInfo.turns)
+                friendAi.changeRecentAssistValue(ender, 300)
+            }
+            entry.state = null
+            entry.counter = -666
+        }
+        for (entry in ender.ai.diplomacy.memoryOf(friend).coopWars.values) if (entry.state != null && entry.state!! >= CoopWarState.Soon) {
+            entry.state = null
+            entry.counter = -666
+        }
+        friendAi.changeRecentAssistValue(ender, 300)
+        for (third in ender.gameInfo.civilizations) {
+            if (third == ender || third == friend || !third.isMajorCiv || third.isHuman() || !WarStateAi.isPlayerValid(ender, third)) continue
+            val theirAi = third.ai.diplomacy
+            val tiedToFriend = OpinionAi.isDoFAccepted(third, friend) || theirAi.opinionOf(friend) == MajorCivOpinion.Ally ||
+                third.getDiplomacyManager(friend)?.diplomaticStatus == DiplomaticStatus.DefensivePact
+            val hatesUs = third.isAtWarWith(ender) || OpinionAi.isDenouncedPlayer(ender, third) || OpinionAi.isDenouncedPlayer(third, ender) ||
+                OpinionAi.isUntrustworthyFriend(ender) || theirAi.opinionOf(ender) == MajorCivOpinion.Unforgivable
+            if (!hatesUs) {
+                if (OpinionAi.isUntrustworthyFriend(friend)) theirAi.changeRecentAssistValue(ender, -75)
+                else if (third.isAtWarWith(friend)) {
+                    theirAi.changeRecentAssistValue(ender, -50)
+                    val warState = WarStateAi.warState(third, friend)
+                    if (warState != null && warState <= WarState.Defensive) theirAi.changeRecentAssistValue(ender, -25)
+                }
+                else if (OpinionAi.isDenouncedPlayer(friend, third)) theirAi.changeRecentAssistValue(ender, -50)
+                else if (tiedToFriend) theirAi.changeRecentAssistValue(ender, 75)
+            } else if (tiedToFriend) theirAi.changeRecentAssistValue(ender, 150)
+        }
+        onDoFBetrayed(ender, friend)
     }
 
     /** CvTeam::makePeace: both sides run DoWeMadePeaceWithSomeone and remember the turn of the treaty */
@@ -169,8 +247,10 @@ object DiplomacyEvents {
 
     /**
      *  CvPlayer::acquireCity by conquest: the war damage (CvUnitCombat: the conqueror applies the city's [WarDamageAi.cityWarValue];
-     *  BNW's record of the loser's losses notes it too), the loser forgets liberation credit, and the warmonger penalties
-     *  (CvDiplomacyAIHelpers::ApplyWarmongerPenalties) unless the city was the conqueror's. Call before the city changes hands.
+     *  BNW's record of the loser's losses notes it too), the loser forgets liberation credit (Vox Populi: the liberated cities, ever
+     *  liberated, the liberated capital and holy city, the resurrection) and remembers a major taking its original capital or the holy
+     *  city of the religion it founded, and the warmonger penalties (CvDiplomacyAIHelpers::ApplyWarmongerPenalties) unless the city was
+     *  the conqueror's. Call before the city changes hands.
      */
     fun onCityConquered(conqueror: Civilization, loser: Civilization, city: City) {
         if (conqueror.isBarbarian || loser.isBarbarian) return
@@ -178,7 +258,22 @@ object DiplomacyEvents {
         if (conqueror.isMajorCiv) conqueror.ai.diplomacy.memoryOf(loser).theirWarValueLostToUs += value
         WarDamageAi.applyWarDamage(conqueror, loser, value)
         WarProgressAi.onCityConquered(conqueror, loser, city)
-        if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesLiberated = 0
+        if (loser.isMajorCiv) {
+            val memory = loser.ai.diplomacy.memoryOf(conqueror)
+            memory.numCitiesLiberated = 0
+            memory.liberatedCitiesTurn = -1
+            memory.numCitiesEverLiberated = 0
+            memory.liberatedCapital = false
+            memory.liberatedHolyCity = false
+            if (conqueror.isMajorCiv) {
+                memory.resurrectedUs = false
+                if (city.isOriginalCapital && city.foundingCivObject == loser) memory.capturedCapital = true
+                else {
+                    val ownReligion = loser.religionManager.religion?.takeIf { it.foundingCivName == loser.civName }
+                    if (ownReligion != null && city.isHolyCityOf(ownReligion.name)) memory.capturedHolyCity = true
+                }
+            }
+        }
         // CvPlayer::acquireCity (Vox Populi): the loser counts the cities the conqueror took, the conqueror the turn it last took one
         if (loser.isMajorCiv) loser.ai.diplomacy.memoryOf(conqueror).numCitiesCapturedBy++
         if (conqueror.isMajorCiv) conqueror.ai.diplomacy.memoryOf(loser).lastCityCaptureTurn = conqueror.gameInfo.turns
@@ -210,32 +305,41 @@ object DiplomacyEvents {
     }
 
     /**
-     *  CvPlayer::DoLiberatePlayer: [liberator] gave [city] back to [receiver]. A living receiver counts the liberated city; a dead one is
-     *  resurrected and forgets its grievances; the liberator's warmonger amounts go down for everyone who knows it.
+     *  CvPlayer::DoLiberatePlayer: [liberator] gave [city] back to [receiver], who counts its liberated capital, its holy city (of the
+     *  religion it founded), or else the liberated city (and the cities ever liberated); a dead receiver is also resurrected and forgets
+     *  its grievances; the liberator's warmonger amounts go down for everyone who knows it.
      *  Call before the city changes hands, with [receiverWasAlive] the receiver's state before.
      */
-    fun onCityLiberated(liberator: Civilization, receiver: Civilization, receiverWasAlive: Boolean) {
+    fun onCityLiberated(liberator: Civilization, receiver: Civilization, city: City, receiverWasAlive: Boolean) {
         if (receiver.isMajorCiv) {
             val memory = receiver.ai.diplomacy.memoryOf(liberator)
-            if (receiverWasAlive) memory.numCitiesLiberated++
-            else {
+            val ownReligion = receiver.religionManager.religion?.takeIf { it.foundingCivName == receiver.civName }
+            when {
+                city.isOriginalCapital && city.foundingCivObject == receiver -> memory.liberatedCapital = true
+                ownReligion != null && city.isHolyCityOf(ownReligion.name) -> memory.liberatedHolyCity = true
+                else -> {
+                    memory.numCitiesLiberated++
+                    memory.numCitiesEverLiberated++
+                    memory.liberatedCitiesTurn = receiver.gameInfo.turns // CvDiplomacyAI::SetNumCitiesLiberatedBy (Vox Populi)
+                }
+            }
+            if (!receiverWasAlive) {
                 memory.resurrectedUs = true
                 memory.landDispute = DisputeLevel.None
                 memory.wonderDispute = DisputeLevel.None
                 memory.minorCivDispute = DisputeLevel.None
                 memory.warmongerThreat = AiThreat.None
-                memory.noSettleRequestEverAsked = false
-                memory.stopSpyingRequestEverAsked = false
-                memory.demandCounter = -1
+                memory.numDemandsMade = 0
+                memory.demandMadeTurn = -1
                 memory.numTimesCultureBombed = 0
                 memory.negativeReligiousConversionPoints = 0
                 memory.numTimesRobbed = 0
                 memory.brokenMilitaryPromise = false
                 memory.ignoredMilitaryPromise = false
-                memory.brokenBorderPromiseValue = 0
-                memory.ignoredBorderPromiseValue = 0
-                memory.brokenExpansionPromiseValue = 0
-                memory.ignoredExpansionPromiseValue = 0
+                memory.brokenBorderPromise = false
+                memory.ignoredBorderPromise = false
+                memory.brokenExpansionPromise = false
+                memory.ignoredExpansionPromise = false
                 memory.brokenNoConvertPromise = false
                 memory.ignoredNoConvertPromise = false
                 memory.brokenNoDiggingPromise = false
@@ -243,12 +347,16 @@ object DiplomacyEvents {
                 memory.brokenSpyPromise = false
                 memory.ignoredSpyPromise = false
                 memory.brokenCoopWarPromise = false
+                memory.promiseTurns.clear()
                 memory.numProtectedMinorsKilled = 0
                 memory.numProtectedMinorsAttacked = 0
                 memory.numProtectedMinorsBullied = 0
                 memory.turnsSinceSidedWithProtectedMinor = -1
                 memory.friendDenouncedUs = false
+                memory.friendDenouncedUsTurn = -1
                 memory.friendDeclaredWarOnUs = false
+                memory.friendDeclaredWarOnUsTurn = -1
+                memory.resurrectorAttackedUs = false
                 memory.numTimesNuked = 0
                 receiver.getDiplomacyManager(liberator)?.let {
                     it.negativeArchaeologyPoints = 0
@@ -288,7 +396,15 @@ object DiplomacyEvents {
 
     /** CvCity: [loser] was building [wonder] when [builder] completed it (CvDiplomacyAI::ChangeNumWondersBeatenTo) */
     fun onWonderBeaten(loser: Civilization, builder: Civilization) {
-        if (loser.isMajorCiv && builder.isMajorCiv && loser != builder) loser.ai.diplomacy.memoryOf(builder).numWondersBeatenTo++
+        if (!loser.isMajorCiv || !builder.isMajorCiv || loser == builder) return
+        val memory = loser.ai.diplomacy.memoryOf(builder)
+        memory.numWondersBeatenTo++
+        memory.beatenToWonderTurn = loser.gameInfo.turns
+    }
+
+    /** CvCity::processBuilding (Vox Populi): [builder] completed a world wonder (CvPlayer::ChangeWondersConstructed) */
+    fun onWonderConstructed(builder: Civilization) {
+        if (builder.isMajorCiv) builder.ai.diplomacy.wondersConstructed++
     }
 
     /** CvMinorCivAI::DoMajorBullied -> DoPlayerBulliedSomeone for every major that has met the bully */
@@ -322,7 +438,10 @@ object DiplomacyEvents {
 
     /** CvPlayerEspionage: a spy of [thief] stealing from [victim] was identified or killed */
     fun onRobbed(victim: Civilization, thief: Civilization) {
-        if (victim.isMajorCiv) victim.ai.diplomacy.memoryOf(thief).numTimesRobbed++
+        if (!victim.isMajorCiv) return
+        val memory = victim.ai.diplomacy.memoryOf(thief)
+        memory.numTimesRobbed++
+        memory.robbedTurn = victim.gameInfo.turns
     }
 
     /** CvPlayerEspionage::ProcessSpy: a spy of [thief] stealing from [victim] was identified (the victim's CvEspionageAI::m_aiTurnLastSpyCaught) */
@@ -354,17 +473,64 @@ object DiplomacyEvents {
             city.isHolyCityOf(ownReligion) -> rules.define(AiDefine.RELIGION_DIPLO_HIT_CONVERT_HOLY_CITY)
             else -> rules.define(AiDefine.RELIGION_DIPLO_HIT_RELIGIOUS_FLIP_FRIENDLY_CITY)
         }
-        owner.ai.diplomacy.memoryOf(responsible).negativeReligiousConversionPoints += points
+        val memory = owner.ai.diplomacy.memoryOf(responsible)
+        memory.negativeReligiousConversionPoints += points
+        memory.religiousConversionTurn = owner.gameInfo.turns
     }
 
     /** CvPlayer::DoCivilianReturnLogic: [returner] gave back a captured civilian of [owner] */
     fun onCivilianReturned(owner: Civilization, returner: Civilization) {
-        if (owner.isMajorCiv) owner.ai.diplomacy.memoryOf(returner).numCiviliansReturned++
+        if (!owner.isMajorCiv) return
+        val memory = owner.ai.diplomacy.memoryOf(returner)
+        memory.numCiviliansReturned++
+        memory.civiliansReturnedTurn = owner.gameInfo.turns
     }
 
-    /** CvCity::BuyPlot: [buyer] bought a tile within 3 tiles of one of [owner]'s cities (AI_ChangeNumPlotsAcquiredByOtherPlayer) */
-    fun onPlotBoughtNear(owner: Civilization, buyer: Civilization, count: Int) {
-        if (owner.isMajorCiv && owner != buyer) owner.ai.diplomacy.memoryOf(buyer).numPlotsBoughtNearUs += count
+    /** CvPlayerCulture: [builder] built a Landmark in [owner]'s lands (CvDiplomacyAI::ChangeNumLandmarksBuiltForMe) */
+    fun onLandmarkBuilt(owner: Civilization, builder: Civilization) {
+        val diplomacy = owner.getDiplomacyManager(builder) ?: return
+        diplomacy.landmarksBuiltForUs++
+        owner.ai.diplomacy.memoryOf(builder).landmarksBuiltTurn = owner.gameInfo.turns
+    }
+
+    /** CvPlayerCulture: [digger] took an artifact or writing from [owner]'s lands (CvDiplomacyAI::ChangeNegativeArchaeologyPoints, Vox Populi) */
+    fun onArtifactStolen(owner: Civilization, digger: Civilization) {
+        if (!owner.isMajorCiv) return
+        val memory = owner.ai.diplomacy.memoryOf(digger)
+        memory.numArtifactsStolen++
+        memory.stoleArtifactTurn = owner.gameInfo.turns
+    }
+
+    /**
+     *  CvCity::BuyPlot (Vox Populi), for a tile [buyer] paid gold for: the first city, ring by ring up to 3 tiles from the tile, of a civilization
+     *  that is neither the buyer nor a city-state and to which the purchase means something notes it (AI_ChangeNumPlotsAcquiredByOtherPlayer):
+     *  1 for a tile with a resource that civilization can see, 3 for a natural wonder, else 2 if more of the tile's neighbours are that
+     *  civilization's than the buyer's, 1 if any are, and nothing (the search goes on) otherwise. A major civilization that the buyer promised
+     *  not to buy land near it has the promise broken ([PromiseAi.onPlotBoughtNear]). BNW noted every foreign city within 3 tiles, 1 each.
+     *  The original keeps the count per city; here it is per civilization, over the cities it has had ([MajorCivMemory.numPlotsBoughtNearUs]).
+     *  The order of the tiles within a ring is Unciv's, not the original's: it decides only between two foreign cities at the same distance.
+     */
+    fun onPlotBought(buyer: Civilization, tile: Tile) {
+        for (nearby in tile.getTilesInDistance(3)) {
+            if (!nearby.isCityCenter()) continue
+            val owner = nearby.getCity()?.civ ?: continue
+            if (owner == buyer || owner.isCityState) continue
+            val value = when {
+                tile.resource != null && owner.canSeeResource(tile.tileResource) -> 1
+                tile.isNaturalWonder() -> 3
+                else -> {
+                    val theirs = tile.neighbors.count { it.getOwner() == owner }
+                    val ours = tile.neighbors.count { it.getOwner() == buyer }
+                    if (theirs > ours) 2 else if (theirs > 0) 1 else 0
+                }
+            }
+            if (value == 0) continue
+            if (owner.isMajorCiv) {
+                owner.ai.diplomacy.memoryOf(buyer).numPlotsBoughtNearUs += value
+                PromiseAi.onPlotBoughtNear(owner, buyer)
+            }
+            return
+        }
     }
     //endregion
 }

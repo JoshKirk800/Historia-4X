@@ -1,9 +1,10 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.diplomacy.TheftAi
+import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.MapType
 import com.unciv.logic.map.mapunit.MapUnit
@@ -46,10 +47,6 @@ object ReligionAutomation {
     /** CvPlayer::GetNumUnitsWithUnitAI(UNITAI_MISSIONARY) */
     private fun numberOfMissionaries(civ: Civilization): Int =
         civ.units.getCivUnits().count { it.baseUnit.hasUnique(UniqueType.CanSpreadReligion) && !it.baseUnit.isGreatPerson }
-
-    /** CvDiplomacyAI::IsPlayerAgreeNotToConvert: we promised [other] not to spread our religion to it */
-    private fun agreedNotToConvert(civ: Civilization, other: Civilization): Boolean =
-        civ.getDiplomacyManager(other)?.hasFlag(DiplomacyFlags.AgreedToNotSpreadReligion) == true
 
     private fun isIndustrialOrLater(civ: Civilization): Boolean =
         civ.getEraNumber() >= (civ.gameInfo.ruleset.eras["Industrial era"]?.eraNumber ?: -1)
@@ -167,7 +164,7 @@ object ReligionAutomation {
     /**
      *  CvReligionAI::HaveNearbyConversionTarget: a revealed city not of our religion within missionary moves × RELIGION_MISSIONARY_RANGE_IN_TURNS
      *  of our capital, owned by a city-state or by a major that has not founded a religion (or any major, with [canIncludeReligionStarter]),
-     *  skipping majors we promised not to convert.
+     *  skipping majors that are a bad target for a conversion ([TheftAi.isBadTheftTarget]).
      */
     internal fun haveNearbyConversionTarget(civ: Civilization, religion: Religion, canIncludeReligionStarter: Boolean): Boolean {
         val missionary = missionaryUnit(civ) ?: return false
@@ -176,7 +173,7 @@ object ReligionAutomation {
         for (other in civ.gameInfo.civilizations) {
             if (other == civ || !other.isAlive() || other.isBarbarian || other.isSpectator) continue
             val startedOwnReligion = if (other.isCityState) false else {
-                if (agreedNotToConvert(civ, other)) continue
+                if (TheftAi.isBadTheftTarget(civ, other, TheftType.Conversion)) continue
                 religionToSpread(other) != null
             }
             if (startedOwnReligion && !canIncludeReligionStarter) continue
@@ -430,7 +427,8 @@ object ReligionAutomation {
     }
 
     /**
-     *  CvReligionAI::ScoreCityForMissionary: 0 if unrevealed, already of our religion, or a major we promised not to convert; else 100,
+     *  CvReligionAI::ScoreCityForMissionary: 0 if unrevealed, already of our religion, or a major that is a bad target for a conversion
+     *  ([TheftAi.isBadTheftTarget]: a friend, one we promised, and the like); else 100,
      *  × 2 if the visit makes our religion the majority, × 5 for our own city or × 3 for an owner without a religion of its own,
      *  − the distance, × 2 if not at war with the owner, ÷ 2 for the owner's holy city.
      */
@@ -440,7 +438,7 @@ object ReligionAutomation {
         var score = 100
         if (shouldBecomeNewMajority(city, religion.name, UnitActionsReligion.getPressureAddedFromSpread(unit))) score *= 2
         val owner = city.civ
-        if (!owner.isCityState && owner != civ && agreedNotToConvert(civ, owner)) return 0
+        if (owner.isMajorCiv && TheftAi.isBadTheftTarget(civ, owner, TheftType.Conversion)) return 0
         val ownersReligion = religionToSpread(owner)
         if (owner == civ) score *= 5
         else if (ownersReligion == null) score *= 3

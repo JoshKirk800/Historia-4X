@@ -12,6 +12,7 @@ import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
+import yairm210.purity.annotations.Cache
 import yairm210.purity.annotations.Readonly
 
 class UnitManager(val civInfo: Civilization) {
@@ -27,6 +28,11 @@ class UnitManager(val civInfo: Civilization) {
      *  The other solution, casting toList() every "get", has a performance cost
      */
     private var unitList = listOf<MapUnit>()
+
+    /** [getNumUnitsToSupply], or -1 after [unitList] changed. Counted on the first read, not when a unit is added: a unit loaded from a save has
+     *  no [MapUnit.baseUnit] yet when [addUnit] assigns it. */
+    @Transient @Cache
+    private var numUnitsToSupply = -1
 
     /** Creates a new [MapUnit] and places it on the map.
      *  @param  unitName The [BaseUnit] name to create a MapUnit instance of - auto-mapped to a nation equivalent if one exists
@@ -142,6 +148,17 @@ class UnitManager(val civInfo: Civilization) {
     }
 
     @Readonly fun getCivUnitsSize(): Int = unitList.size
+
+    /**
+     *  CvPlayer::GetNumUnitsToSupply (CvPlayer::getNumMilitaryUnits less the supply-free units, which we have none of): the units that
+     *  use supply, those the original gives the MilitarySupport flag ([MapUnit.usesUnitSupply]). Not the workers, settlers, Great People
+     *  and religious units, which [getCivUnitsSize] counts.
+     */
+    @Readonly fun getNumUnitsToSupply(): Int {
+        if (numUnitsToSupply < 0) numUnitsToSupply = unitList.count { it.usesUnitSupply() }
+        return numUnitsToSupply
+    }
+
     @Readonly fun getCivUnits(): Sequence<MapUnit> = unitList.asSequence()
     @Readonly fun getCivGreatPeople(): Sequence<MapUnit> = getCivUnits().filter { mapUnit -> mapUnit.isGreatPerson() }
 
@@ -155,6 +172,7 @@ class UnitManager(val civInfo: Civilization) {
         val newList = unitList.toMutableList()
         newList.add(mapUnit)
         unitList = newList
+        numUnitsToSupply = -1
 
         if (updateCivInfo) {
             // Not relevant when updating Tile transients, since some info of the civ itself isn't yet available,
@@ -170,6 +188,7 @@ class UnitManager(val civInfo: Civilization) {
         val newList = unitList.toMutableList()
         newList.remove(mapUnit)
         unitList = newList
+        numUnitsToSupply = -1
         if (!updateCivInfo) return
 
         civInfo.updateStatsForNextTurn() // unit upkeep

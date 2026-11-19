@@ -81,6 +81,15 @@ object UnitAiTypes {
         return count
     }
 
+    /** Vox Populi's CvPlayer::GetNumUnitsWithUnitAI with bDefaultAI: units whose type's default unit AI is [type], water units included, optionally with the units cities are training */
+    fun numUnitsWithDefaultUnitAi(civ: Civilization, type: UnitAiType, includeBeingTrained: Boolean): Int {
+        val rules = civ.gameInfo.ruleset.ai
+        var count = civ.units.getCivUnits().count { defaultOf(it.baseUnit, rules) == type }
+        if (includeBeingTrained)
+            count += civ.cities.count { city -> (city.cityConstructions.getCurrentConstruction() as? BaseUnit)?.let { defaultOf(it, rules) } == type }
+        return count
+    }
+
     /** The unit AI of a unit type without a Unit_AITypes entry, from what the unit is */
     private fun derivedDefault(unit: BaseUnit): UnitAiType = when {
         unit.isCityFounder() -> UnitAiType.SETTLE

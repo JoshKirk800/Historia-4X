@@ -1,10 +1,14 @@
 package com.unciv.logic.automation.unit
 
+import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.city.City
+import com.unciv.logic.city.CityFocus
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.TradeRouteManager
 import com.unciv.models.TradeRouteKind
+import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.unit.BaseUnit
+import com.unciv.models.stats.Stats
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -25,7 +29,7 @@ class TradeRouteAutomationTests {
 
     @Before
     fun setUp() {
-        game = TestGame()
+        game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
         game.makeHexagonalMap(16)
         civA = game.addCiv("[+4] Trade Route slots")
         civB = game.addCiv()
@@ -67,63 +71,71 @@ class TradeRouteAutomationTests {
     fun `an international route with a gain scores positive and a plundered one scores nothing`() {
         val near = cityOf(civB, 6)
         giveCivBTechs()
-        val danger = PlotDanger(civA)
+        val scorer = VpInternationalTradeScore(civA, VpTradePathScore(civA))
         val candidate = candidateTo(near)
-        assertTrue(TradeRouteAutomation.scoreInternational(civA, candidate, danger) > 0)
+        assertTrue(scorer.score(candidate) > 0)
         civA.tradeRoutes.plunderedConnections[TradeRouteManager.plunderKey(origin.location, near.location)] = game.gameInfo.turns
-        assertEquals(0, TradeRouteAutomation.scoreInternational(civA, candidate, danger))
+        assertEquals(0, scorer.score(candidate))
     }
 
-    @Test
-    fun `routes through enemy land are penalised by a thousand per tile`() {
-        val near = cityOf(civB, 6)
-        val danger = PlotDanger(civA)
-        val path = listOf(game.tileMap[0, 10].also { it.setOwningCity(near) })
-        val atPeace = TradeRouteAutomation.dangerSum(civA, path, danger)
-        civA.getDiplomacyManager(civB)!!.declareWar()
-        val atWar = TradeRouteAutomation.dangerSum(civA, path, PlotDanger(civA))
-        assertEquals(1000, atWar - atPeace)
-    }
 
     @Test
-    fun `a longer path through unseen tiles is more dangerous`() {
-        val path = List(3) { game.tileMap[0, it + 10] }
-        assertEquals(1 + 3, TradeRouteAutomation.dangerSum(civA, path, PlotDanger(civA)))
-    }
-
-    @Test
-    fun `technology difference counts what the other knows and we lack, and is zero with city-states`() {
-        val techs = game.ruleset.technologies.keys.filter { !civB.tech.isResearched(it) }.take(3)
-        for (tech in techs) civB.tech.addTechnology(tech)
-        assertEquals(3, TradeRouteAutomation.techDifference(civA, civB))
-        assertEquals(0, TradeRouteAutomation.techDifference(civB, civA))
-        val cityState = game.addCiv(cityStateType = "Maritime")
-        assertEquals(0, TradeRouteAutomation.techDifference(civA, cityState))
-    }
-
-    @Test
-    fun `international candidates are ordered with the lowest score first as in the shipped comparator`() {
-        // City-states: a route that gives us less than nothing still scores 1, so every path is a candidate
-        for (y in listOf(5, 7, 9)) {
-            val cityState = game.addCiv(cityStateType = "Maritime")
-            civA.diplomacyFunctions.makeCivilizationsMeet(cityState)
-            cityOf(cityState, y)
-        }
-        val danger = PlotDanger(civA)
-        val ordered = TradeRouteAutomation.prioritizeTradeRoutes(civA).filter { it.destination.kind == TradeRouteKind.International }
-        val scores = ordered.map { TradeRouteAutomation.scoreInternational(civA, it, danger) }
-        assertTrue("$scores", scores.size >= 3)
-        assertTrue("$scores", scores.all { it > 0 })
-        assertEquals(scores.sorted(), scores)
-    }
-
-    @Test
-    fun `a trade unit waiting in its origin city takes the first connection of its domain`() {
-        val near = cityOf(civB, 6)
+    fun `a trade unit takes the higher scoring international connection`() {
+        val low = cityOf(civB, 6)
+        val high = cityOf(civB, -6)
         giveCivBTechs()
+        high.cityConstructions.addBuilding(game.createBuilding("[+10] Gold on incoming [International] trade routes for their origin <in this city>"))
+        val scorer = VpInternationalTradeScore(civA, VpTradePathScore(civA))
+        val lowScore = scorer.score(candidateTo(low))
+        val highScore = scorer.score(candidateTo(high))
+        assertTrue(lowScore > 0 && highScore > lowScore)
         val unit = game.addUnit(caravan.name, civA, origin.getCenterTile())
+
         TradeRouteAutomation.automateTradeUnit(unit)
-        val route = civA.tradeRoutes.routes.single()
-        assertEquals(near.location, route.destination)
+
+        assertEquals(high.location, civA.tradeRoutes.routes.single().destination)
     }
+
+    @Test
+    fun `trade unit avoids a besieged destination even when it offers more gold`() {
+        val besieged = cityOf(civB, 6)
+        val safe = cityOf(civB, -6)
+        besieged.cityConstructions.addBuilding(game.createBuilding("[+10] Gold on incoming [International] trade routes for their origin <in this city>"))
+        safe.cityConstructions.addBuilding(game.createBuilding("[+1] Gold on incoming [International] trade routes for their origin <in this city>"))
+        val enemy = game.addCiv()
+        civB.diplomacyFunctions.makeCivilizationsMeet(enemy)
+        civB.getDiplomacyManager(enemy)!!.declareWar()
+        val blockaded = besieged.getCenterTile().neighbors.first { it.getOwner() == civB }
+        game.addUnit("Warrior", enemy, blockaded)
+        besieged.damageTakenLastTurn = 10
+        assertTrue(CityDangerAi.isUnderSiege(besieged))
+        val unit = game.addUnit(caravan.name, civA, origin.getCenterTile())
+
+        TradeRouteAutomation.automateTradeUnit(unit)
+
+        assertEquals(safe.location, civA.tradeRoutes.routes.single().destination)
+    }
+
+    @Test
+    fun `food route favors a city focused on food rather than always the smallest`() {
+        val focused = game.addCity(civA, game.tileMap[4, 0])
+        val smallest = cityOf(civA, 6)
+        origin.population.addPopulation(2)
+        focused.population.addPopulation(1)
+        focused.setCityFocus(CityFocus.FoodFocus)
+        origin.cityConstructions.addBuilding(game.createBuilding("Allows [Food] trade routes between your cities"))
+        origin.cityConstructions.addBuilding(game.createBuilding().apply { food = 10f })
+        for (city in civA.cities) city.cityStats.update()
+        civA.stats.statsForNextTurn = Stats(gold = 10f)
+        val unit = game.addUnit(caravan.name, civA, origin.getCenterTile())
+
+        TradeRouteAutomation.automateTradeUnit(unit)
+
+        val route = civA.tradeRoutes.routes.single()
+        assertEquals(TradeRouteKind.Food, route.kind)
+        assertEquals(focused.location, route.destination)
+        assertTrue(focused.population.population > smallest.population.population)
+    }
+
+
 }

@@ -1,117 +1,94 @@
 package com.unciv.logic.automation.unit.tactical
 
+import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.ai.AiDefine
 
 /**
- *  Which posture the units around each dominance zone take, and what the tactical AI remembers of it: CvTacticalAI::UpdatePostures,
- *  SelectPosture, UseThisDominanceZone (FindPosture is [TacticalState.findPosture]). This chooses and keeps the posture; what the units do in
- *  a posture is the posture moves'.
+ * Select a tactical posture per zone: Vox Populi 5.4.8's CvTacticalAnalysisMap::UpdatePostures for every zone (CvTacticalDominanceZone::
+ * SelectPostureSingleZone, then SelectPostureMultiZone), temporary operation zones keeping the current framework's assault and shore-bombardment
+ * overrides. Every zone has a posture: ProcessDominanceZones runs the posture of each zone that has targets, so the barbarians that the zones'
+ * strengths ignore ("do not base tactical decisions on transients") are still fought where they are: with the counterattack of the zones in
+ * our land, the flank attacks of the unclaimed ones. (BNW's CvTacticalAnalysisMap::UseThisDominanceZone, which skipped the quiet zones, is not in
+ * Vox Populi 5.4.8: BNW's attacks on units were not tied to a zone, the combat simulation's are.)
  */
 object PostureSelection {
 
-    /** CvTacticalAI::UseThisDominanceZone: temporary zones, the capital's zone, zones where we have units near the enemy's city, where they have units near us, or both have units */
-    fun useThisZone(civ: Civilization, state: TacticalState, zone: DominanceZone): Boolean {
-        val city = zone.closestCity
-        val isOurCapital = city != null && city == civ.getCapital()
-        val isTempZone = city != null && state.isTemporaryZoneCity(city)
-        val weHaveUnitsNearEnemy = zone.friendlyUnitCount > 0 && zone.territory == TacticalTerritory.Enemy
-        val theyHaveUnitsNearUs = zone.dominance != TacticalDominance.NoUnitsVisible && zone.territory == TacticalTerritory.Friendly
-        val bothHaveUnits = zone.friendlyUnitCount > 0 && zone.enemyUnitCount > 0
-        return isTempZone || isOurCapital || weHaveUnitsNearEnemy || theyHaveUnitsNearUs || bothHaveUnits
-    }
-
-    /**
-     *  CvTacticalAI::UpdatePostures: the posture of every zone worth using ([useThisZone]), chosen with last turn's as the zone's memory
-     *  (a posture is kept under less stringent conditions than it is taken up with); the new postures replace the remembered ones.
-     */
+    /** Choose a fresh posture for each zone. */
     fun updatePostures(civ: Civilization, state: TacticalState, map: TacticalMap) {
         val newPostures = ArrayList<ZonePosture>()
         for (zone in map.zones) {
-            if (!useThisZone(civ, state, zone)) continue
             val ownerId = zone.owner?.civName
             val cityId = zone.closestCity?.id
-            val last = state.findPosture(ownerId, zone.isWater, cityId)
             val entry = ZonePosture()
             entry.ownerId = ownerId
             entry.isWater = zone.isWater
             entry.cityId = cityId
-            entry.posture = selectPosture(civ, state, zone, last)
+            entry.posture = coordinateWithNeighbors(zone, selectPosture(civ, state, zone))
             newPostures.add(entry)
         }
         state.postures = newPostures
     }
 
-    /** CvTacticalAI::SelectPosture */
-    fun selectPosture(civ: Civilization, state: TacticalState, zone: DominanceZone, last: TacticalPosture): TacticalPosture {
-        val dominancePercentage = civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_MAP_DOMINANCE_PERCENTAGE)
-        val rangedDominance = when {
-            zone.enemyRangedStrength <= 0 -> TacticalDominance.Friendly
-            else -> ratioDominance(zone.friendlyRangedStrength.toLong() * 100 / zone.enemyRangedStrength, dominancePercentage)
-        }
-        val unitCountDominance = when {
-            zone.enemyUnitCount <= 0 -> TacticalDominance.Friendly
-            else -> ratioDominance(zone.friendlyUnitCount.toLong() * 100 / zone.enemyUnitCount, dominancePercentage)
-        }
-
-        return when (zone.territory) {
-            TacticalTerritory.Enemy -> {
-                val isTemporaryZone = zone.closestCity?.let { state.isTemporaryZoneCity(it) } ?: false
-                when {
-                    // Withdraw if the enemy is dominant overall or we have nothing but ranged left
-                    !isTemporaryZone && (zone.dominance == TacticalDominance.Enemy || zone.friendlyRangedUnitCount == zone.friendlyUnitCount) ->
-                        TacticalPosture.Withdraw
-                    // A temporary zone wants us to close in on the city
-                    isTemporaryZone ->
-                        if (zone.dominance != TacticalDominance.Enemy) TacticalPosture.Steamroll else TacticalPosture.SurgicalCityStrike
-                    // Destroy units then assault: dominance in total strength but not the enemy's in ranged units, or double the total strength
-                    zone.enemyUnitCount > 0 && zone.dominance == TacticalDominance.Friendly
-                        && (rangedDominance != TacticalDominance.Enemy || zone.friendlyStrength.toLong() > zone.enemyStrength.toLong() * 2) ->
-                        TacticalPosture.Steamroll
-                    last == TacticalPosture.Steamroll && zone.dominance == TacticalDominance.Friendly && zone.enemyUnitCount > 0 ->
-                        TacticalPosture.Steamroll
-                    // Sit and bombard: dominance in ranged strength and total unit count
-                    rangedDominance == TacticalDominance.Friendly && unitCountDominance != TacticalDominance.Enemy ->
-                        TacticalPosture.SitAndBombard
-                    last == TacticalPosture.SitAndBombard && rangedDominance != TacticalDominance.Enemy && unitCountDominance != TacticalDominance.Enemy ->
-                        TacticalPosture.SitAndBombard
-                    // Go right after the city: tactical dominance
-                    zone.dominance == TacticalDominance.Friendly -> TacticalPosture.SurgicalCityStrike
-                    // Exploit flanks: dominance in unit count
-                    unitCountDominance == TacticalDominance.Friendly && zone.enemyUnitCount > 1 -> TacticalPosture.ExploitFlanks
-                    last == TacticalPosture.ExploitFlanks && unitCountDominance != TacticalDominance.Enemy && zone.enemyUnitCount > 1 ->
-                        TacticalPosture.ExploitFlanks
-                    else -> TacticalPosture.SurgicalCityStrike
-                }
+    /** CvTacticalDominanceZone::SelectPostureMultiZone: support threatened friendly neighbors and avoid exposed naval advances. */
+    private fun coordinateWithNeighbors(zone: DominanceZone, initial: TacticalPosture): TacticalPosture {
+        if (zone.owner == null) return initial
+        var posture = initial
+        for (neighbor in zone.neighbors) {
+            if (zone.isWater && posture == TacticalPosture.Steamroll && !neighbor.isWater &&
+                neighbor.dominance == TacticalDominance.Enemy && neighbor.enemyRangedStrength > zone.friendlyNavalRangedStrength)
+                posture = TacticalPosture.ExploitFlanks
+            if (zone.territory != TacticalTerritory.Friendly && zone.isWater == neighbor.isWater &&
+                neighbor.territory == TacticalTerritory.Friendly && neighbor.dominance == TacticalDominance.Enemy) {
+                val city = neighbor.closestCity
+                if (city == null || !CityDangerAi.isInDangerOfFalling(city, false)) posture = TacticalPosture.Withdraw
             }
-            TacticalTerritory.Neutral, TacticalTerritory.NoOwner -> when {
-                rangedDominance == TacticalDominance.Friendly && unitCountDominance != TacticalDominance.Enemy -> TacticalPosture.AttritFromRange
-                last == TacticalPosture.AttritFromRange && rangedDominance != TacticalDominance.Enemy -> TacticalPosture.AttritFromRange
-                else -> TacticalPosture.ExploitFlanks
-            }
-            TacticalTerritory.Friendly -> when {
-                rangedDominance == TacticalDominance.Friendly && zone.friendlyRangedUnitCount > 1 -> TacticalPosture.AttritFromRange
-                last == TacticalPosture.AttritFromRange && zone.friendlyRangedUnitCount > 1 && rangedDominance != TacticalDominance.Enemy ->
-                    TacticalPosture.AttritFromRange
-                unitCountDominance == TacticalDominance.Friendly && zone.enemyUnitCount > 0 -> TacticalPosture.ExploitFlanks
-                last == TacticalPosture.ExploitFlanks && unitCountDominance != TacticalDominance.Enemy && zone.enemyUnitCount > 0 ->
-                    TacticalPosture.ExploitFlanks
-                // Counterattack: stronger, or even with the enemy having a ranged advantage
-                zone.dominance == TacticalDominance.Friendly || (zone.dominance == TacticalDominance.Even && rangedDominance == TacticalDominance.Enemy) ->
-                    TacticalPosture.Counterattack
-                last == TacticalPosture.Counterattack && zone.dominance != TacticalDominance.Enemy -> TacticalPosture.Counterattack
-                else -> TacticalPosture.Hedgehog
-            }
-            // A temporary zone on water is bombarded from the sea; on land it should be a barbarian camp
-            TacticalTerritory.TempZone -> if (zone.isWater) TacticalPosture.ShoreBombardment else TacticalPosture.ExploitFlanks
-            TacticalTerritory.None -> TacticalPosture.None
         }
+        return posture
     }
 
-    /** The ratio of friendly to enemy [percent] against 100 +- the dominance percentage */
-    private fun ratioDominance(percent: Long, dominancePercentage: Int): TacticalDominance = when {
-        percent > 100 + dominancePercentage -> TacticalDominance.Friendly
-        percent < 100 - dominancePercentage -> TacticalDominance.Enemy
-        else -> TacticalDominance.Even
+    /**
+     * CvTacticalDominanceZone::SelectPostureSingleZone. Temporary operation zones retain the current framework's assault and
+     * shore-bombardment overrides until operations move to VP's focus areas.
+     */
+    fun selectPosture(civ: Civilization, state: TacticalState, zone: DominanceZone): TacticalPosture {
+        val city = zone.closestCity
+        if (zone.territory == TacticalTerritory.TempZone)
+            return if (zone.isWater) TacticalPosture.ShoreBombardment else TacticalPosture.ExploitFlanks
+        if (zone.territory == TacticalTerritory.Enemy && city != null && state.isTemporaryZoneCity(city))
+            return if (zone.dominance == TacticalDominance.Enemy) TacticalPosture.SurgicalCityStrike else TacticalPosture.Steamroll
+        if (zone.owner == null) return TacticalPosture.ExploitFlanks
+
+        val percentage = civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_MAP_DOMINANCE_PERCENTAGE)
+        val friendlyRanged = zone.friendlyDomainRangedStrength
+        val enemyRanged = zone.enemyDomainRangedStrength
+        val rangedRatio = (0.5f + 100 * (friendlyRanged.toFloat() / maxOf(1, enemyRanged))).toInt()
+        val rangedAdvantage = (enemyRanged == 0 && friendlyRanged > 0) || rangedRatio > 100 + percentage
+        val friendlyFront = if (zone.isWater) zone.friendlyNavalStrength else zone.friendlyMeleeStrength
+        val enemyFront = if (zone.isWater) zone.enemyNavalStrength else zone.enemyMeleeStrength
+        val counterattackRisk = enemyFront.toLong() > 3L * friendlyFront && friendlyRanged.toLong() > 3L * friendlyFront
+
+        return when (zone.territory) {
+            TacticalTerritory.Enemy -> when {
+                city != null && CityDangerAi.isInDangerOfFalling(city, false) -> TacticalPosture.SurgicalCityStrike
+                zone.dominance == TacticalDominance.Enemy || counterattackRisk -> TacticalPosture.Withdraw
+                zone.dominance == TacticalDominance.Even && zone.enemyMeleeStrength > zone.friendlyMeleeStrength ->
+                    if (rangedAdvantage) TacticalPosture.AttritFromRange else TacticalPosture.ExploitFlanks
+                zone.dominance == TacticalDominance.Even ->
+                    if (rangedAdvantage) TacticalPosture.Steamroll else TacticalPosture.ExploitFlanks
+                zone.dominance == TacticalDominance.Friendly -> TacticalPosture.Steamroll
+                else -> TacticalPosture.AttritFromRange
+            }
+            TacticalTerritory.Neutral, TacticalTerritory.NoOwner, TacticalTerritory.None -> when {
+                zone.dominance == TacticalDominance.Enemy && !rangedAdvantage -> TacticalPosture.Withdraw
+                zone.dominance == TacticalDominance.Enemy && zone.enemyMeleeStrength <= zone.friendlyMeleeStrength ->
+                    TacticalPosture.ExploitFlanks
+                rangedAdvantage -> TacticalPosture.AttritFromRange
+                else -> TacticalPosture.ExploitFlanks
+            }
+            TacticalTerritory.Friendly ->
+                if (zone.dominance == TacticalDominance.Enemy) TacticalPosture.Hedgehog else TacticalPosture.Counterattack
+            TacticalTerritory.TempZone -> if (zone.isWater) TacticalPosture.ShoreBombardment else TacticalPosture.ExploitFlanks
+        }
     }
 }

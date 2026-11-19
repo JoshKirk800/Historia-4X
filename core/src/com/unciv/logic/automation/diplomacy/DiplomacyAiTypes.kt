@@ -17,11 +17,21 @@ enum class WarGoal { Demand, Prepare, Conquest, Damage, Peace }
 /** PeaceTreatyTypes: what a side gives up for peace, nothing to everything. [None] = NO_PEACE_TREATY_TYPE */
 enum class PeaceTreatyType { None, WhitePeace, Armistice, Settlement, Backdown, Submission, Surrender, Cession, Capitulation, UnconditionalSurrender }
 
+/** Vox Populi's DoFLevelTypes, worst to best: a friendship betrayed, none yet, then one, two, three or more DoFs signed */
+enum class DoFLevel { Untrustworthy, New, Friends, Allies, BattleBrothers }
+
 /** ThreatTypes (military threat, warmonger threat) */
 enum class AiThreat { None, Minor, Major, Severe, Critical }
 
 /** DisputeLevelTypes (land, wonder, minor civ, victory) */
 enum class DisputeLevel { None, Weak, Strong, Fierce }
+
+/**
+ *  TheftTypes of [TheftAi.isBadTheftTarget]: what we would take from a player. Vox Populi's other types (trade route plunder, tile theft
+ *  of the American unique, an embassy) need rules BNW does not have: no trade route can be plundered, no plot is stolen outside a
+ *  culture bomb, and Unciv's BNW has no embassy improvement.
+ */
+enum class TheftType { CultureBomb, Conversion, Artifact, Spy }
 
 /** AggressivePostureTypes (expansion, plot buying, military) */
 enum class AggressivePosture { None, Low, Medium, High, Incredible }
@@ -37,8 +47,8 @@ enum class CoopWarState { Rejected, Soon, Accepted }
 
 /** The DiploStatementTypes this port sends, kept in the statement log for their resend intervals */
 enum class DiploStatement {
-    WorkWithUs, WorkWithUsRandFailed, DenounceFriend, Denounce, DenounceRandFailed, RequestFriendDenounce, CoopWarRequest, CoopWarTime,
-    Demand, Request, RequestRandFailed, RequestPeace, AggressiveMilitaryWarning,
+    WorkWithUs, EndWorkWithUs, DenounceFriend, Denounce, DenounceRandFailed, RequestFriendDenounce, CoopWarRequest, CoopWarTime,
+    Demand, Request, RequestRandFailed, RequestPeace, AggressiveMilitaryWarning, DefensivePactRequest,
     // The informational statements before the friendship statement (InformationalStatementAi)
     AttackedProtectedCityState, BulliedProtectedCityState, ExpansionWarning, ExpansionBrokenPromise, PlotBuyingWarning, PlotBuyingBrokenPromise,
     WeAttackedYourMinor, WeBulliedYourMinor, KilledYourSpy, KilledMySpy, CaughtYourSpy,

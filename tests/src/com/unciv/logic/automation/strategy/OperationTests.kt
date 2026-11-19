@@ -4,7 +4,6 @@ import com.unciv.Constants
 import com.unciv.logic.automation.city.ConstructionAutomation
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.unit.tactical.OperationalMoves
-import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
@@ -76,18 +75,15 @@ class OperationTests {
         for ((index, pair) in units.withIndex()) { pair.second.removeFromTile(); pair.second.putInTile(tiles[index]) }
     }
 
-    private fun closeDefense() = AiOperationLogic.addOperation(civ, AiOperationType.CITY_CLOSE_DEFENSE, enemy)
+    /**
+     *  The army of the machinery tests: a city-state attack on the enemy's city from ours, whose required slots are CITY_BOMBARD/RANGED (slot 0)
+     *  and ATTACK/DEFENSE (slot 2), each with an optional second one. Vox Populi's defense operations are no vehicle for them: their recruits keep
+     *  away from the city they defend, and they do not start without a unit at hand ([DefenseOperationTests]).
+     */
+    private fun army(muster: City = city) = AiOperationLogic.addOperation(civ, AiOperationType.CITY_STATE_ATTACK, enemy, enemyCity, muster)
 
     private fun slotCandidate(): ConstructionAutomation.Buildable? =
         ConstructionAutomation(city.cityConstructions).getBuildables().firstOrNull { it.slotOffer != null }
-
-    private fun threatenSecondCity(): City {
-        val second = game.addCity(civ, game.getTile(HexCoord(-3, 0)))
-        civ.getDiplomacyManager(enemy)!!.declareWar()
-        game.addUnit("Warrior", enemy, game.getTile(HexCoord(-4, 0)))
-        civ.ai.invalidateTurnCaches()
-        return second
-    }
 
     /** What Vox Populi's CheckUnitBuildSanity wants before a city trains a combat unit: a second building and a treasury that is not broke */
     private fun developCity() {
@@ -101,12 +97,12 @@ class OperationTests {
     fun `a city offers the unit of the next open slot with the operation unit weight`() {
         civ.ai.setPersonalityFlavor(Flavor.Offense, 4)
         developCity()
-        closeDefense()
+        army()
         val candidate = slotCandidate()
         assertNotNull(candidate)
-        // Required slots COUNTER/DEFENSE and RANGED/DEFENSE: the last open one is built first; no archery yet, so the secondary AI DEFENSE
+        // Required slots CITY_BOMBARD/RANGED and ATTACK/DEFENSE: the last open one is built first, by its primary unit AI
         assertEquals("Warrior", candidate!!.construction.name)
-        assertEquals(UnitAiType.DEFENSE, candidate.slotOffer!!.unitAi)
+        assertEquals(UnitAiType.ATTACK, candidate.slotOffer!!.unitAi)
         assertEquals(2, candidate.slotOffer!!.slot.slotId)
         val warrior = game.ruleset.units["Warrior"]!!
         // 5000 (Vox Populi's AI_CITYSTRATEGY_OPERATION_UNIT_BASE_WEIGHT) + 250 x (OFFENSE 4 + 0 skipped over) + the unit's own weight
@@ -117,7 +113,7 @@ class OperationTests {
     fun `every offer that is not taken raises the next one by the flavor multiplier`() {
         civ.ai.setPersonalityFlavor(Flavor.Offense, 4)
         developCity()
-        closeDefense()
+        army()
         val first = slotCandidate()!!.weight
         assertEquals(1, civ.ai.military.numberOfTimesOpsBuildSkippedOver)
         assertEquals(first + 250, slotCandidate()!!.weight)
@@ -139,8 +135,9 @@ class OperationTests {
 
     @Test
     fun `only the muster city offers a slot, takes it off the list, and gives it back when it builds something else`() {
+        civ.tech.addTechnology("Archery")
         val second = game.addCity(civ, game.getTile(HexCoord(4, 0)))
-        val operation = closeDefense()
+        val operation = army()
         assertEquals(2, operation.slotsToBuild.size)
         val musterCity = game.getTile(operation.musterTile!!).getCity()!!
         val other = if (musterCity == city) second else city
@@ -167,17 +164,17 @@ class OperationTests {
 
     @Test
     fun `the unit a city trained for a slot joins the army with the slot's unit AI, and the last one starts the gathering`() {
-        val operation = closeDefense()
-        val warrior = game.ruleset.units["Warrior"]!!
+        civ.tech.addTechnology("Archery")
+        val operation = army()
         for (index in 0 until 2) {
             val offer = ops.nextUnitForOperationSlot(city)!!
-            city.cityConstructions.setCurrentConstruction("Warrior")
+            city.cityConstructions.setCurrentConstruction(offer.unit.name)
             ops.commitToBuild(city, offer, 2)
             assertEquals(OperationState.RECRUITING_UNITS, operation.state)
-            val trained = unit(warrior.name)
+            val trained = unit(offer.unit.name)
             assertTrue(ops.finishedBuilding(trained, city))
             assertEquals(trained.id, operation.firstArmy!!.slots[offer.slot.slotId].unitId)
-            assertEquals(UnitAiType.DEFENSE, UnitAiTypes.current(trained))
+            assertEquals(offer.unitAi, UnitAiTypes.current(trained))
             assertEquals(index == 1, operation.state == OperationState.GATHERING_FORCES)
         }
         assertEquals(ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP, operation.firstArmy!!.state)
@@ -187,13 +184,12 @@ class OperationTests {
 
     @Test
     fun `the final unit bought for an operation fills the last slot, not the one its city committed to`() {
-        civ.tech.addTechnology("Bronze Working")
-        val operation = closeDefense()
+        civ.tech.addTechnology("Mathematics")
+        val operation = army()
         val offer = ops.nextUnitForOperationSlot(city)!!
-        // The city trains a spearman for its slot, the very unit the purchase for the other (COUNTER) slot recommends
-        val spearman = game.ruleset.units["Spearman"]!!
-        city.cityConstructions.setCurrentConstruction(spearman.name)
-        ops.commitToBuild(city, AiOperations.SlotOffer(offer.slot, spearman, UnitAiType.DEFENSE, true), 3)
+        // The city trains the unit of the slot it is offered, the melee one; the bombard slot is the last one left
+        city.cityConstructions.setCurrentConstruction(offer.unit.name)
+        ops.commitToBuild(city, offer, 3)
         val last = operation.slotsToBuild.single()
         assertTrue(operation.hasOneMoreSlotToFill())
         civ.addGold(1000)
@@ -207,11 +203,11 @@ class OperationTests {
 
     @Test
     fun `an idle city that chooses its production while the final unit is bought does not take the slot`() {
-        civ.tech.addTechnology("Bronze Working")
+        civ.tech.addTechnology("Mathematics")
         val other = game.addCity(civ, game.getTile(HexCoord(4, 0)))
-        val operation = closeDefense()
-        val offer = ops.nextUnitForOperationSlot(other)!!
-        other.cityConstructions.setCurrentConstruction("Warrior")
+        val operation = army()
+        val offer = ops.nextUnitForOperationSlot(city)!!
+        other.cityConstructions.setCurrentConstruction(offer.unit.name)
         ops.commitToBuild(other, offer, 3)
         city.cityConstructions.setCurrentConstruction(PerpetualConstruction.Idle.name)
         civ.addGold(1000)
@@ -227,7 +223,7 @@ class OperationTests {
     fun `an operation takes the free units that fit its slots and starts gathering when all required slots are filled`() {
         val warrior = unit("Warrior")
         val archer = unit("Archer", HexCoord(1, 0))
-        val operation = closeDefense()
+        val operation = army()
         assertEquals(OperationState.GATHERING_FORCES, operation.state)
         assertTrue(operation.slotsToBuild.isEmpty())
         assertEquals(operation.firstArmy, ops.armyOf(warrior))
@@ -241,7 +237,7 @@ class OperationTests {
         val walker = unit("Warrior", HexCoord(1, 0))
         val paratrooper = unit("Warrior", HexCoord(0, 1))
         paratrooper.promotions.addPromotion(drop.name, true)
-        closeDefense()
+        army()
         assertNotNull("the plain unit of the same kind is recruited", ops.armyOf(walker))
         assertNull(ops.armyOf(paratrooper))
     }
@@ -254,7 +250,7 @@ class OperationTests {
         wounded.health = 79
         val deployed = unit("Warrior", HexCoord(0, 1))
         ops.deployFromOperationTurns[deployed.id] = game.gameInfo.turns
-        val operation = closeDefense()
+        val operation = army()
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
         assertEquals(2, operation.slotsToBuild.size)
         assertNull(ops.armyOf(explorer)); assertNull(ops.armyOf(wounded)); assertNull(ops.armyOf(deployed))
@@ -265,7 +261,7 @@ class OperationTests {
 
     @Test
     fun `losing units of an operation that is still recruiting asks for them again, below half strength it aborts`() {
-        val operation = closeDefense()
+        val operation = army()
         ops.nextUnitForOperationSlot(city)
         val warrior = unit("Warrior")
         val archer = unit("Archer")
@@ -295,7 +291,7 @@ class OperationTests {
         val obsolete = unit(base.name)
         assertEquals(obsolete, civ.ai.military.findUnitToScrap(civ, isLand = true)?.first)
         // CvMilitaryAI::FindUnitToScrap: canUseForAIOperation - a unit in an army is skipped; the game forcing a disband (the deficit) does not look
-        val operation = closeDefense()
+        val operation = army()
         ops.nextUnitForOperationSlot(city)
         ops.addUnit(operation.firstArmy!!, obsolete, 0)
         assertNull(civ.ai.military.findUnitToScrap(civ, isLand = true))
@@ -304,7 +300,7 @@ class OperationTests {
 
     @Test
     fun `a city that chose a process also builds the unit of an open operation slot`() {
-        closeDefense()
+        army()
         civ.ai.military.numberOfTimesOpsBuildSkippedOver = 3
         city.cityConstructions.setCurrentConstruction(PerpetualConstruction.Gold.name)
         ConstructionAutomation(city.cityConstructions).fallThroughToOperationUnit()
@@ -578,7 +574,7 @@ class OperationTests {
         civ.getDiplomacyManager(enemy)!!.declareWar()
         fillAttackReserves()
         attack()
-        closeDefense()
+        army()
         assertEquals(2, ops.operations.size)
         val diplomacy = civ.getDiplomacyManager(enemy)!!
         diplomacy.makePeace()
@@ -619,24 +615,6 @@ class OperationTests {
         civ.ai.warStates.warStates[enemy.civID] = WarState.NearlyDefeated
         MilitaryOperations.updateOperations(civ)
         assertFalse(onOther in ops.operations)
-    }
-    //endregion
-
-    //region City defense operations (CvAIOperationCityCloseDefense)
-
-    @Test
-    fun `the defense operation targets the most threatened city, else the city nearest the enemy capital`() {
-        val second = threatenSecondCity()
-        civ.ai.invalidateTurnCaches()
-        assertTrue(civ.ai.plotDanger.cityThreat(second) > 0)
-        assertEquals(second, CityThreat.mostThreatenedCity(civ))
-        assertEquals(second.getCenterTile().position, closeDefense().targetTile)
-        // Without a threat: the city closest to the enemy's capital (the capital at (0, 0) is nearer to (8, 0) than (-3, 0))
-        game.gameInfo.tileMap[HexCoord(-4, 0)].getUnits().toList().forEach { it.destroy() }
-        civ.ai.invalidateTurnCaches()
-        assertNull(CityThreat.mostThreatenedCity(civ))
-        ops.operations.clear()
-        assertEquals(city.getCenterTile().position, closeDefense().targetTile)
     }
     //endregion
 

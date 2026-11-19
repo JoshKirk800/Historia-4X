@@ -2,6 +2,7 @@ package com.unciv.logic.automation.unit
 
 import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.logic.battle.CityCombatant
+import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.metadata.BaseRuleset
@@ -10,7 +11,6 @@ import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -18,7 +18,8 @@ import org.junit.runner.RunWith
 
 /**
  *  CvDangerPlots as the unit AI reads it (Brave New World data): the danger value of a tile, its low "within one move" bit
- *  (IsUnderImmediateThreat), the city threat value (GetCityDanger) and what CvMilitaryAI::GetMostThreatenedCity makes of it.
+ *  (IsUnderImmediateThreat) and the city threat value of the danger map (GetCityDanger); what Vox Populi's tactical map makes of a
+ *  capital's surroundings (CityStrategyAIHelpers::IsTestCityStrategy_CapitalUnderThreat).
  */
 @RunWith(BaseTestRunner::class)
 class PlotDangerTests {
@@ -120,46 +121,35 @@ class PlotDangerTests {
         assertEquals(tilesInBoth * (strength("Warrior") * 100 or 1), danger.cityThreat(city))
     }
 
-    @Test
-    fun `the most threatened city is the one with the highest threat times population, the capital counted 125 percent`() {
-        val capital = game.addCity(civ, tile(-8), initialPopulation = 4)
-        val second = game.addCity(civ, tile(8), initialPopulation = 4)
-        // one Warrior threatens each city's surroundings equally: only the capital weight tells them apart
-        game.addUnit("Warrior", enemy, tile(-9))
-        game.addUnit("Warrior", enemy, tile(9))
-        civ.ai.invalidateTurnCaches()
+    /** An enemy unit on every tile within two plots of [city]: the enemy dominates its zone, whatever the city is worth */
+    private fun surround(city: City) {
+        for (tile in city.getCenterTile().getTilesInDistance(2)) if (tile != city.getCenterTile()) game.addUnit("Warrior", enemy, tile)
         civ.viewableTiles = game.tileMap.values.toSet()
-        assertEquals(civ.ai.plotDanger.cityThreat(capital), civ.ai.plotDanger.cityThreat(second))
-        assertEquals(capital, CityThreat.mostThreatenedCity(civ))
-        assertEquals(second, CityThreat.mostThreatenedCity(civ, 1))
-        assertNull(CityThreat.mostThreatenedCity(civ, 2))
+        civ.ai.invalidateTurnCaches()
     }
 
     @Test
-    fun `a city nobody threatens is not the most threatened one, and the capital is under threat only at war above 200`() {
+    fun `a capital is under threat when the enemy dominates a zone around it, not while the zone is ours`() {
         val capital = game.addCity(civ, tile(0))
-        civ.ai.invalidateTurnCaches()
         civ.viewableTiles = game.tileMap.values.toSet()
-        assertNull(CityThreat.mostThreatenedCity(civ))
-        assertFalse(CityThreat.isCapitalUnderThreat(capital))
-
-        game.addUnit("Warrior", enemy, tile(3))
         civ.ai.invalidateTurnCaches()
-        civ.viewableTiles = game.tileMap.values.toSet()
-        assertTrue(civ.ai.plotDanger.cityThreat(capital) > 200)
+        assertFalse("alone with its city, the zone is ours", CityThreat.isCapitalUnderThreat(capital))
+        surround(capital)
         assertTrue(CityThreat.isCapitalUnderThreat(capital))
+    }
 
-        civ.getDiplomacyManager(enemy)!!.makePeace()
-        civ.ai.invalidateTurnCaches()
-        assertFalse("at peace nothing threatens", CityThreat.isCapitalUnderThreat(capital))
+    @Test
+    fun `a city that is not a capital is never the capital under threat`() {
+        game.addCity(civ, tile(0))
+        val other = game.addCity(civ, tile(8))
+        surround(other)
+        assertFalse(CityThreat.isCapitalUnderThreat(other))
     }
 
     @Test
     fun `the capital under threat strategy becomes active when the test holds`() {
         val capital = game.addCity(civ, tile(0))
-        game.addUnit("Warrior", enemy, tile(3))
-        civ.ai.invalidateTurnCaches()
-        civ.viewableTiles = game.tileMap.values.toSet()
+        surround(capital)
         capital.ai.doTurn()
         assertTrue(capital.ai.isCityStrategyActive("AICITYSTRATEGY_CAPITAL_UNDER_THREAT"))
     }

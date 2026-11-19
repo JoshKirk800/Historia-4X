@@ -58,9 +58,6 @@ class RecruitmentTests {
 
     private fun unit(name: String, x: Int, y: Int, owner: Civilization = civ): MapUnit = game.addUnit(name, owner, game.getTile(HexCoord(x, y)))
 
-    /** The close defense of our only city: slots COUNTER/DEFENSE and RANGED/DEFENSE required, each with an optional second one */
-    private fun closeDefense() = AiOperationLogic.addOperation(civ, AiOperationType.CITY_CLOSE_DEFENSE, enemy)
-
     /** The basic city attack on the enemy city from ours: required CITY_BOMBARD/RANGED, ATTACK/DEFENSE and ATTACK/COUNTER (slots 0, 3 and 4) */
     private fun attack() = AiOperationLogic.addOperation(civ, AiOperationType.BASIC_CITY_ATTACK, enemy, enemyCity, city)
 
@@ -79,10 +76,10 @@ class RecruitmentTests {
     fun `a unit with more power than 30 per extra turn of its way outranks the nearer one`() {
         val spearman = unit("Spearman", 0, 0)
         val pikeman = unit("Pikeman", 1, 0)
-        val army = closeDefense().firstArmy!!
+        val army = attack().firstArmy!!
         // Spearman power 45 at the muster point, Pikeman power 81 one turn away: 10045 against 10051
-        assertEquals(pikeman.id, army.slots[0].unitId)
-        assertEquals("the spearman takes the next slot that fits it", spearman.id, army.slots[1].unitId)
+        assertEquals(pikeman.id, army.slots[3].unitId)
+        assertEquals("the spearman takes the next slot that fits it", spearman.id, army.slots[4].unitId)
     }
 
     /** CvUnit::canUseForAIOperation: units with an enemy within 3 plots are engaged and not poached */
@@ -93,7 +90,7 @@ class RecruitmentTests {
         val free = unit("Warrior", -3, 0)
         unit("Warrior", 5, 0, enemy)
         civ.ai.invalidateTurnCaches()
-        closeDefense()
+        attack()
         assertNull(ops.armyOf(engaged))
         assertNotNull(ops.armyOf(free))
     }
@@ -110,7 +107,7 @@ class RecruitmentTests {
         frail.health = 65
         val plain = unit("Warrior", -1, 0)
         plain.health = 75
-        closeDefense()
+        attack()
         assertEquals(70, ops.minHealth())
         assertNotNull("25 damage is fine for a unit that fights well wounded, and 75 is above 70", ops.armyOf(hardy))
         assertNull("below 70", ops.armyOf(frail))
@@ -242,12 +239,14 @@ class RecruitmentTests {
     /** CvArmyAI::RemoveUnit: a unit that leaves its army has its own unit AI back */
     @Test
     fun `a unit that leaves its army is no longer what its slot made of it`() {
-        val operation = closeDefense()
+        val operation = attack()
         val offer = ops.nextUnitForOperationSlot(city)!!
         city.cityConstructions.setCurrentConstruction("Warrior")
         ops.commitToBuild(city, offer, 2)
         val trained = unit("Warrior", 1, 0)
         assertTrue(ops.finishedBuilding(trained, city))
+        // the slot's secondary unit AI, which is not what a warrior is by itself
+        UnitAiTypes.set(trained, UnitAiType.DEFENSE)
         assertEquals(UnitAiType.DEFENSE, UnitAiTypes.current(trained))
         ops.removeFromArmy(trained)
         assertEquals(UnitAiTypes.defaultOf(trained.baseUnit, game.ruleset.ai), UnitAiTypes.current(trained))

@@ -25,7 +25,9 @@ import kotlin.math.ceil
  * city strength x100; tiles next to a revealed hostile citadel: the power of our strongest buildable land unit x50. Each value is scaled by
  * CvDangerPlots::ModifyDangerByRelationship (AI_DANGER_* by approach, our own territory zeroed for those we only distrust).
  * The lowest bit of a value tells that the danger is within one move of the source ([isUnderImmediateThreat], CvDangerPlots::IsUnderImmediateThreat).
- * [cityThreat] is CvCity::getThreatValue, the sum of the values within AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT of a city (GetCityDanger).
+ * [cityThreat] is the sum of the values within AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT of a city (GetCityDanger), BNW's CvCity::getThreatValue; Vox Populi
+ * works that value out from the tactical map ([com.unciv.logic.automation.unit.tactical.CityThreat], which the military and production AI read), and keeps
+ * this sum for the homeland and tactical target code that has not moved to its border score yet.
  *
  * Deviations: turns away is distance / base moves rounded up instead of the ignore-units path finder, and a unit only threatens tiles of its own
  * domain (the path finder's result for the other domain), its own tile always; the strength is the unit's base strength (GetMaxAttackStrength
@@ -72,7 +74,7 @@ class PlotDanger(private val civ: Civilization) {
     /** CvDangerPlots::IsUnderImmediateThreat (CvPlayer::IsPlotUnderImmediateThreat): some source can reach the tile within one move */
     fun isUnderImmediateThreat(tile: Tile): Boolean = get(tile) and 1 != 0
 
-    /** CvCity::getThreatValue, set by CvDangerPlots::UpdateDanger from GetCityDanger: the sum of the danger of the tiles around [city] */
+    /** BNW's CvCity::getThreatValue, set by CvDangerPlots::UpdateDanger from GetCityDanger: the sum of the danger of the tiles around [city] */
     fun cityThreat(city: City): Int = cityThreats.getOrPut(city.id) {
         var sum = 0
         city.getCenterTile().forEachTileInDistance(threatRange) { sum += get(it) }

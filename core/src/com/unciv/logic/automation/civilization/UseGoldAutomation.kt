@@ -13,6 +13,7 @@ import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.strategy.UnitProductionAi
 import com.unciv.logic.automation.strategy.WarStateAi
+import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.models.ruleset.Building
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -115,7 +116,7 @@ object UseGoldAutomation {
         val reserved = PurchaseType.entries.filter { it != PurchaseType.Unit && it != PurchaseType.Building }
             .sumOf { (savings.requests[it.name]?.amount ?: 0).coerceAtLeast(0).toLong() * 2 }
         if (civ.gold.toLong() <= reserved) return
-        val threatened = civ.cities.maxByOrNull { civ.ai.plotDanger.cityThreat(it) }
+        val threatened = CityThreat.threatenedCities(civ).firstOrNull()
         val choices = civ.cities.asSequence()
             .filter { !ProductionSanityAi.isPuppetAndAnnexable(it) && (it != threatened || it.isCapital()) }
             .mapNotNull { HurryChoice.choose(it) }

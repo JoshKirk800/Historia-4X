@@ -10,6 +10,7 @@ import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.diplomacy.PactPlanningAi
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.automation.unit.tactical.TacticalDominance
+import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.tile.RoadStatus
@@ -345,7 +346,7 @@ object UnitProductionAi {
                 bonus += warBooster * 100
             }
             if (atWar) {
-                val threat = civ.ai.plotDanger.cityThreat(city)
+                val threat = CityThreat.threatValue(city)
                 if (combat) bonus += threat else bonus -= threat
             }
             if (combat && forOperation && military.numberOfTimesOpsBuildSkippedOver > 0)

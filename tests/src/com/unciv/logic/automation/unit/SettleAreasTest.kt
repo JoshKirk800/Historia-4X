@@ -284,7 +284,7 @@ class SettleAreasTest {
         val civ = twoLandmasses()
         val island = tile(7, 7).getContinent()
         val settler = game.addUnit("Settler", civ, tile(-7, -3))
-        // A quick colony of the island (no embarking yet): the best site is unreachable, so is the one the retarget finds (AI_ABORT_REPEAT_TARGET)
+        // A quick colony of the island (no embarking yet): the best site is unreachable, so is every plot near it (PlotArmyMovesEscort: AI_ABORT_LOST_PATH)
         val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, island)
         assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
         OperationalMoves.moveOperation(civ, operation, AutomationCache())

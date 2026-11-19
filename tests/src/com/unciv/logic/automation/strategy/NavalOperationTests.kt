@@ -25,7 +25,8 @@ import org.junit.runner.RunWith
 /**
  *  The naval operations and the nukes (CvAIOperation: CvAINavalOperation and its subclasses, CvAINavalEscortedOperation, CvAIOperationNavalAttack,
  *  CvAIOperationNukeAttack; CvMilitaryAI: RequestCityAttack's naval army (our pure naval attack), the naval part of UpdateOperations, RequestNukeAttack and its trigger;
- *  CvTacticalAI: the naval formation moves) with the BNW XML values. A channel of coast water separates our city at x=0 from the enemy's at x=14.
+ *  CvTacticalAI: PlotArmyMovesCombat on water) with the BNW XML values and the CP formations. A channel of coast water separates our city
+ *  at x=0 from the enemy's at x=14.
  */
 @RunWith(GdxTestRunner::class)
 class NavalOperationTests {

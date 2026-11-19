@@ -114,12 +114,21 @@ object VictoryProgressAi {
     @Readonly
     fun cultureVictoryProgress(civ: Civilization, rules: AiRuleset): Int {
         if (!civ.isAlive() || civ.gameInfo.victoryData != null || !isVictoryOpen(civ, MilestoneType.InfluentialOverAllCivs)) return 0
+        return minOf(99, lowestTourismInfluence(civ, rules))
+    }
+
+    /**
+     *  CvDiplomacyAI::GetLowestTourismInfluence: the lowest influence percent of [civ] over the other living majors, starting from
+     *  CULTURE_LEVEL_INFLUENTIAL (no point in more than that)
+     */
+    @Readonly
+    fun lowestTourismInfluence(civ: Civilization, rules: AiRuleset): Int {
         var lowest = rules.define(AiDefine.CULTURE_LEVEL_INFLUENTIAL)
         for (other in civ.gameInfo.civilizations) {
             if (other == civ || !other.isMajorCiv || !other.isAlive()) continue
             lowest = minOf(lowest, maxOf(0, civ.culture.getInfluencePercent(other)))
         }
-        return minOf(99, lowest)
+        return lowest
     }
 
     /** Whether one of the victories open to [civ] has [milestone] */

@@ -1,38 +1,47 @@
 package com.unciv.logic.automation.civilization
 
-import com.unciv.logic.automation.diplomacy.AiThreat
 import com.unciv.logic.automation.diplomacy.CompetitorAi
+import com.unciv.logic.automation.diplomacy.CoopWarAi
+import com.unciv.logic.automation.diplomacy.CoopWarState
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
+import com.unciv.logic.automation.diplomacy.DisputeLevel
 import com.unciv.logic.automation.diplomacy.DoFLevel
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.diplomacy.OpinionTimers
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
+import com.unciv.logic.automation.diplomacy.VictoryPursuitAi
 import com.unciv.logic.automation.diplomacy.WarIntentAi
+import com.unciv.logic.automation.diplomacy.WarSanityAi
+import com.unciv.logic.automation.strategy.TargetValue
+import com.unciv.logic.automation.strategy.WarState
+import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.city.CityStats.Companion.EXCESS_FOOD_TO_PRODUCTION
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
-import com.unciv.logic.civilization.diplomacy.DiplomacyManager
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
-import com.unciv.logic.civilization.diplomacy.RelationshipLevel
+import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.league.ActiveResolution
 import com.unciv.logic.league.League
 import com.unciv.logic.league.LeagueAlignmentMemory
 import com.unciv.logic.league.LeagueProposal
 import com.unciv.logic.league.VoteCommitment
+import com.unciv.logic.league.getProjectCostPerPlayer
 import com.unciv.models.ruleset.Resolution
 import com.unciv.models.ruleset.ResolutionDecision
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
+import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.VictoryPursuit
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
- * World Congress proposals, votes and vote commitments (CvLeagueAI, CvVotingClasses.cpp:7365-9860).
- * No team alliances or resurrection.
+ * World Congress proposals, votes and vote commitments (CvLeagueAI, Vox Populi CvVotingClasses.cpp:10196-14450). No teams or vassals.
  */
 object LeagueAutomation {
     /** CvLeagueAI::DoProposals and DoVotes stop after this many loops (CvVotingClasses.cpp:7449-7486) */
@@ -380,7 +389,7 @@ object LeagueAutomation {
         }
     }
 
-    private fun hasDefensivePact(civ: Civilization, other: Civilization) =
+    internal fun hasDefensivePact(civ: Civilization, other: Civilization) =
         civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
 
     /** The majors alive with cities that the counts of CvDiplomacyAI (GetNumMutualFriends and the like) go over; the friendship counts skip a human's view of a human */
@@ -688,60 +697,43 @@ enum class LeagueDesire {
 enum class DiplomatUsefulness { NONE, LOW, MEDIUM, HIGH }
 
 /**
- * Scores what [civ] likes in the World Congress (CvLeagueAI::ScoreVoteChoice and friends, CvVotingClasses.cpp:7905-8030, 8759-9600).
- * Positive is like. The scores are the integers of the original.
+ * Scores what [civ] likes in the World Congress (CvLeagueAI::ScoreVoteChoice and friends, Vox Populi CvVotingClasses.cpp:11729-14253).
+ * Positive is like. The scores are the integers of the original; a desire level is 50 to 2500 of them ([LeagueDesire]).
  *
  * ## Mapping layer: inputs of the original and what stands in for them
- * - Grand strategy (`bSeeking*`): CvDiplomacyAI::IsGoingFor* of the active grand strategy ([com.unciv.logic.automation.strategy.CivAi]):
- *   Conquest, United Nations (diplomacy), Spaceship (space race), Culture. Before the first grand strategy is chosen none of them is sought.
+ * - The victories enabled: [VictoryPursuitAi.isVictoryEnabled] (the diplomatic, culture and space race victories). The game's era: [DiplomacyTurn.gameEraNumber].
  * - Production might: the production of the cities without what excess food adds (CvPlayer::calculateProductionMight, getRawProductionDifference
- *   with bIgnoreFood). Tech rank: the number of researched technologies (CvTechAI::GetTechRatio, position among the living major civilizations,
- *   ties by civilization order).
- * - Alignment: [LeagueAutomation.evaluateAlignment].
- * - Opinion: [DiplomacyManager.relationshipIgnoreAfraid]; "opinion above neutral" is Favorable or better, "at most enemy" Enemy or Unforgivable,
- *   "below neutral" Competitor or worse. Approach "hostile or worse" is a denunciation or an Enemy level, approach "afraid or friendly" has no equivalent.
- * - Warmonger threat at least severe: CvDiplomacyAI::GetWarmongerThreat, [com.unciv.logic.automation.diplomacy.DiplomacyAi.warmongerThreat].
- * - Trade connections: routes between the two civilizations in either direction. Morocco's trait (incoming route yield): [UniqueType.TradeRouteGoldForOrigin],
- *   Venice's (more routes): a positive [UniqueType.TradeRouteSlotsPercent]. Possible routes: [com.unciv.logic.civilization.managers.TradeRouteManager.getNumSlots].
- * - Gross gold and unit maintenance: the gold entries of the stat map of the next turn, "Unit upkeep" being the maintenance.
+ *   with bIgnoreFood). Tech counts: the number of researched technologies of the living major civilizations (the teams of the original).
+ * - Alignment: [LeagueAutomation.evaluateAlignment]. Opinion, approach, warmonger threat, target value, war state: the state of [com.unciv.logic.automation.diplomacy.DiplomacyAi]
+ *   ([com.unciv.logic.automation.strategy.WarStateAi.targetValue] for the raw target value). Willingness: [DiplomacyPersonality.WorkWithWillingness]
+ *   and [DiplomacyPersonality.WorkAgainstWillingness].
+ * - Trade connections: routes between the two civilizations (from one only, or in either direction, as the original asks). Possible routes:
+ *   [com.unciv.logic.civilization.managers.TradeRouteManager.getNumSlots].
  * - Wonders: the world wonders in the cities. Natural wonders and resources "in owned plots": the tiles of the cities. Empire unhappy: happiness below 0.
- * - Great person improvements: tiles with a great improvement; landmarks: tiles with the improvement [LANDMARK].
- * - Sciencey unique unit (Merchant of Venice): the civilization's equivalent of [GREAT_MERCHANT] is another unit.
- * - Resolutions are found by effect (uniques and typed fields), except Nuclear Non-Proliferation and the projects, which have no effect field: by name.
+ * - Great person improvements: tiles with a great improvement; landmarks: tiles with the improvement [LANDMARK]. A unique great person unit: the
+ *   civilization's equivalent of the base unit is another unit.
+ * - Resolutions are found by effect (uniques and typed fields), except Nuclear Non-Proliferation, which has no effect field, and the projects: by name.
  *
  * ## Gaps
- * Teams (no LEADER or teammate ALLY), resurrection (LIBERATOR), diplomat knowledge,
- * the approach of the diplomacy AI, resources of civilizations met only through trade.
- * Congress proposal/host memories are saved with members and expire after 45 game turns.
- *
- * Deviations: the choice for a tie between equal best choices is No for yes/no (the status quo) and the civilization itself for civilization votes,
- * the original leaves it to an unstable sort. A division by zero when the gross gold is 0 (CvVotingClasses.cpp:9147) counts as ratio 0.
+ * Teams and vassals, the prime league ally and competitor, the victory dispute and block levels, the coop war agreement score, the value of our deals with
+ * a civilization (embargo), the raw target value, monopolies, Nuclear Gandhi, the policies that give influence from trade routes with city-states,
+ * the league bonus for civilizations behind in score (Arts and Sciences Funding), what Vox Populi does with the halved score of last session's proposals.
  */
 class LeagueEvaluator(private val civ: Civilization, private val league: League) {
     companion object {
         const val LANDMARK = "Landmark"
-        const val GREAT_MERCHANT = "Great Merchant"
-        /** The resolutions that start an international project, with the "culture" or "science" strategy that profits (CvVotingClasses.cpp:8866-8898) */
-        private val projects = mapOf("World's Fair" to (30 to CULTURE), "International Games" to (40 to CULTURE),
-            "International Space Station" to (50 to SCIENCE))
+        private const val WORLDS_FAIR = "World's Fair"
+        private const val INTERNATIONAL_GAMES = "International Games"
+        private const val INTERNATIONAL_SPACE_STATION = "International Space Station"
         private const val NUCLEAR_NON_PROLIFERATION = "Nuclear Non-Proliferation"
         private val artsyPersons = setOf("Great Artist", "Great Writer", "Great Musician")
         private val scienceyPersons = setOf("Great Scientist", "Great Engineer", "Great Merchant")
-
-        /** The strategy (seeking culture or science) a project profits */
-        private const val SCIENCE = "Scientific"
-        private const val CULTURE = "Cultural"
     }
 
     private val gameInfo = league.gameInfo
     private val rules = gameInfo.ruleset.ai
-    private val seekingConquest = civ.ai.isGoingForWorldConquest()
-    private val seekingDiplomacy = civ.ai.isGoingForDiploVictory()
-    private val seekingScience = civ.ai.isGoingForSpaceshipVictory()
-    private val seekingCulture = civ.ai.isGoingForCultureVictory()
 
     private val ownedTiles by lazy { civ.cities.flatMap { it.getTiles().toList() } }
-    private val statMap by lazy { civ.stats.getStatMapForNextTurn() }
 
     //region Entry points
 
@@ -866,6 +858,7 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
     private fun scoreYesNo(resolution: Resolution, target: String?, proposerId: String?, choice: String, enact: Boolean, global: Boolean,
                            forSelf: Boolean = true, proposing: Boolean = false): Int {
         var score = scoreEffects(resolution, target, forSelf)
+        if (proposing && resolution.embargoesPlayer && target != null) score += sanctionProposalScore(target)
         if (!enact) score = -score
         if (global && proposerId != null) score += proposerAlignmentScore(proposerId)
         if (choice == League.NO) score = -score
@@ -927,94 +920,82 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
         return total * 16 / (10 + voters)
     }
 
-    /** The effects part of ScoreVoteChoiceYesNo, in the order of the original, which matters for the caps and the hard set to 0 */
-    fun scoreEffects(resolution: Resolution, choice: String?, @Suppress("UNUSED_PARAMETER") forSelf: Boolean = true): Int {
+    /**
+     * The effects part of ScoreVoteChoiceYesNo (CvVotingClasses.cpp:12117-13682) for YES on enacting [resolution] with the proposer's [target] choice, as the
+     * sum of what each effect is worth to us, [forSelf] being false when another civilization's evaluator scores it for us (the terms that only the civilization
+     * itself pays are left out). Scores are large: a desire level is 50 to 2500 of them (see [LeagueDesire]).
+     * Resolutions without a counterpart in the rules (Treasure Fleet, Wargames, United Nations, Casus Belli, Open Door, Decolonization, Spaceship Control
+     * Committee, Cold War, Reduced Tourism, Sphere of Influence, the vassal resolutions) are not scored.
+     */
+    fun scoreEffects(resolution: Resolution, target: String?, forSelf: Boolean = true): Int {
         var score = 0
 
-        if (resolution.isProject) score += scoreProject(resolution.name)
-
-        if (resolution.embargoesCityStates) score += scoreEmbargoCityStates()
-        if (resolution.embargoesPlayer) score += scoreEmbargoPlayer(choice)
-        if (resolution.bansLuxuryHappiness) score = scoreBanLuxury(score, choice)
+        if (resolution.isProject) score += scoreProject(resolution.name, forSelf)
+        if (resolution.embargoesCityStates) score += scoreEmbargoCityStates(forSelf)
+        if (resolution.embargoesPlayer) score += scoreEmbargoPlayer(target, forSelf)
+        if (resolution.bansLuxuryHappiness) score += scoreBanLuxury(target, forSelf)
 
         val maintenancePercent = resolution.getMatchingUniques(UniqueType.UnitGoldMaintenancePercent).sumOf { it.params[0].toInt() }
-        if (maintenancePercent != 0) score += scoreStandingArmyTax(if (maintenancePercent > 0) 1 else -1)
+        if (maintenancePercent != 0) score += scoreStandingArmyTax(maintenancePercent)
 
         if (resolution.hasUnique(UniqueType.TechKnownByAnyCivResearchSpeed)) score += scoreScholars()
 
         val cultureFrom = resolution.getMatchingUniques(UniqueType.StatsFromObject)
             .filter { it.stats[Stat.Culture] != 0f }.map { it.params[1] }.toSet()
-        if ("World Wonder" in cultureFrom) {
-            var temp = -50
-            val wonders = civ.cities.sumOf { city -> city.cityConstructions.getBuiltBuildings().count { it.isWonder } }
-            if (wonders > 0) temp += wonders * (if (seekingCulture) 20 else 15)
-            score = min(70, score + temp)
-        }
-        if ("Natural Wonder" in cultureFrom) {
-            var temp = -35
-            val wonders = ownedTiles.count { it.isNaturalWonder() }
-            if (wonders > 0) temp += wonders * (if (seekingCulture) 20 else 15)
-            score = min(70, score + temp)
-        }
+        if ("World Wonder" in cultureFrom) score += 40 * numWonders + 20 * numGreatWorks - (if (forSelf) 75 * era else 0)
+        if ("Natural Wonder" in cultureFrom) score += 200 * ownedTiles.count { it.isNaturalWonder() } - (if (forSelf) 100 else 0)
 
-        if (resolution.name == NUCLEAR_NON_PROLIFERATION) score += if (seekingConquest) -50 else 35
+        if (resolution.name == NUCLEAR_NON_PROLIFERATION) score += scoreNuclearNonProliferation()
 
         if (resolution.votesForFollowingReligion != 0 || resolution.holyCityTourismPercent != 0 || resolution.religionSpreadStrengthPercent != 0)
-            score += scoreWorldReligion(choice)
-        if (resolution.votesForFollowingIdeology != 0 || resolution.ideologyPressure != 0)
-            score += scoreWorldIdeology(choice)
+            score += scoreWorldReligion(target, forSelf)
+        if (resolution.votesForFollowingIdeology != 0 || resolution.ideologyPressure != 0) score += scoreWorldIdeology(target, forSelf)
 
         val greatPersonRates = resolution.getMatchingUniques(UniqueType.GreatPersonEarnedFaster)
-        val artsy = greatPersonRates.filter { it.params[0] in artsyPersons }.sumOf { it.params[1].toInt() }
-        val sciencey = greatPersonRates.filter { it.params[0] in scienceyPersons }.sumOf { it.params[1].toInt() }
-        if (artsy > 0 || sciencey < 0) {
-            if (seekingCulture) score += 80 else if (seekingScience) score -= 80
-            if (hasScienceyUniqueUnit()) score -= 60
-        }
-        if (sciencey > 0 || artsy < 0) {
-            if (seekingScience) score += 80 else if (seekingCulture) score -= 80
-            if (hasScienceyUniqueUnit()) score += 60
-        }
+        val artsyMod = greatPersonRates.filter { it.params[0] in artsyPersons }.sumOf { it.params[1].toInt() }
+        val scienceyMod = greatPersonRates.filter { it.params[0] in scienceyPersons }.sumOf { it.params[1].toInt() }
+        if (artsyMod != 0 || scienceyMod != 0) score += scoreFunding(artsyMod, scienceyMod)
 
         if ("Great Improvement" in cultureFrom || LANDMARK in cultureFrom) {
-            val improvements = gameInfo.ruleset.tileImprovements
-            val greatImprovements = ownedTiles.count { tile -> tile.improvement?.let { improvements[it]?.isGreatImprovement() } == true }
             val landmarks = ownedTiles.count { it.improvement == LANDMARK }
-            var temp = -50
-            if (greatImprovements > 0 || landmarks > 0) {
-                val factor = if (seekingCulture) 20 else 15
-                temp += greatImprovements * factor + landmarks * factor
-                score += min(70, temp)
-            }
-            score += temp // the original counts it twice (CvVotingClasses.cpp:9395-9406)
+            score += 40 * greatImprovements + 50 * landmarks - (if (forSelf) 100 * era else 0)
         }
         return score
     }
 
-    /**
-     * International projects (CvVotingClasses.cpp:8806-8898): the production rank decides (+40/+20/-20/-40), then the project: +30 World's Fair or
-     * +40 International Games when seeking culture, +50 International Space Station when seeking science, with strong production; else +10.
-     * A project the DLL does not know gets the production part only.
-     */
-    private fun scoreProject(projectName: String): Int {
-        val alive = gameInfo.getAliveMajorCivs()
-        var score = 0
-        var strong = false
-        if (alive.isNotEmpty()) {
-            val ours = productionMight(civ)
-            val higher = alive.count { it != civ && productionMight(it) > ours }
-            val ratio = ((alive.size - higher).toFloat() / alive.size).coerceIn(0f, 1f)
-            when {
-                ratio >= 0.75f -> { score += 40; strong = true }
-                ratio >= 0.5f -> { score += 20; strong = true }
-                ratio >= 0.25f -> score -= 20
-                else -> score -= 40
-            }
+    //region Inputs
+
+    private val era by lazy { DiplomacyTurn.gameEraNumber(civ) }
+    private val numWonders by lazy { civ.cities.sumOf { city -> city.cityConstructions.getBuiltBuildings().count { it.isWonder } } }
+    private val numGreatWorks by lazy { civ.cities.sumOf { it.greatWorks.getNumWorks() } }
+    private val greatImprovements by lazy {
+        val improvements = gameInfo.ruleset.tileImprovements
+        ownedTiles.count { tile -> tile.improvement?.let { improvements[it]?.isGreatImprovement() } == true }
+    }
+    private val diploVictoryEnabled by lazy { VictoryPursuitAi.isVictoryEnabled(civ, VictoryPursuit.Diplomacy) }
+    private val cultureVictoryEnabled by lazy { VictoryPursuitAi.isVictoryEnabled(civ, VictoryPursuit.Culture) }
+    private val scienceVictoryEnabled by lazy { VictoryPursuitAi.isVictoryEnabled(civ, VictoryPursuit.Science) }
+
+    /** CvPlayer::GetNumEffectiveCities: cities, at least 1 (the cities not yet decided on are not tracked) */
+    private fun numEffectiveCities() = max(1, civ.cities.size)
+
+    /** The living major civilizations, the technologies each has and what the original's loops over the teams make of them */
+    private class TechStats(val teams: Int, val total: Int, val most: Int, val ours: Int)
+
+    private fun techStats(): TechStats {
+        var teams = 0
+        var total = 0
+        var most = 0
+        var ours = 0
+        for (other in gameInfo.getAliveMajorCivs()) {
+            teams++
+            val techs = other.tech.researchedTechnologies.size
+            if (techs <= 0) continue
+            total += techs
+            most = max(most, techs)
+            if (other == civ) ours = techs
         }
-        val project = projects[projectName] ?: return score
-        val seeking = if (project.second == CULTURE) seekingCulture else seekingScience
-        score += if (seeking && strong) project.first else 10
-        return score
+        return TechStats(teams, total, most, ours)
     }
 
     /** CvPlayer::calculateProductionMight: the sum over the cities of their production without the excess food a settler turns into production */
@@ -1023,8 +1004,98 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
         (city.cityStats.currentCityStats.production - fromFood).toInt()
     }
 
-    /** (CvVotingClasses.cpp:8901-8973) */
-    private fun scoreEmbargoCityStates(): Int {
+    private fun routesFrom(a: Civilization, b: Civilization): Int = a.tradeRoutes.routes.count { it.getDestinationCiv() == b }
+
+    private fun routesBetween(a: Civilization, b: Civilization): Int = routesFrom(a, b) + routesFrom(b, a)
+
+    private fun isFriendOrAlly(a: Civilization, b: Civilization) = OpinionAi.isDoFAccepted(a, b) || LeagueAutomation.hasDefensivePact(a, b)
+
+    /** The state of the coop war [partner] agreed to against [target] with [of] is at least being prepared (COOP_WAR_STATE_PREPARING) */
+    private fun isPreparingCoopWar(of: Civilization, partner: Civilization, target: Civilization) =
+        (CoopWarAi.state(of, partner, target) ?: CoopWarState.Rejected) >= CoopWarState.Soon
+
+    private fun hasUniqueUnit(vararg baseUnits: String) =
+        baseUnits.any { it in gameInfo.ruleset.units && civ.getEquivalentUnit(it).name != it }
+
+    /** The other living majors with cities that we have met: the loops of the original over MAX_MAJOR_CIVS with these tests */
+    private fun metMajors() = gameInfo.getAliveMajorCivs().filter { it != civ && it.cities.isNotEmpty() && civ.knows(it) }
+
+    //endregion
+    //region Effects
+
+    /**
+     * International projects (CvVotingClasses.cpp:12118-12442). Our production might against the highest: 80% of it can get gold (our share of winning
+     * 100 / (the civilizations with more + 1)), 50% silver or a contribution of the share of the tier 2 threshold, 25% bronze or the tier 1 threshold.
+     * The World's Fair: 30 per city and 2 per percent for gold, the turns for a policy (70 x the speed's culture percent / turns) for silver, 500 for
+     * bronze, -400 for the proposer. International Games: by the lowest influence percent on others (10 to 50 when the culture victory is on), 200 for
+     * silver, 100 per percent over 25 for bronze, -250 and 40 per percent under 25 for the proposer. The International Space Station: gold by our
+     * technology over the mean (+10), silver 20 x that, bronze 150, -500 for the proposer, half without the space race. Another project: gold 2 per
+     * percent, silver 150, bronze 100, -200 for the proposer.
+     */
+    private fun scoreProject(projectName: String, forSelf: Boolean): Int {
+        val alive = gameInfo.getAliveMajorCivs()
+        val ours = productionMight(civ)
+        var higher = 0
+        var highest = 0
+        for (other in alive) {
+            val might = productionMight(other)
+            if (other != civ && might > ours) higher++
+            highest = max(highest, might)
+        }
+        val mightPercent = ours * 100 / max(1, highest)
+        val canGold = mightPercent >= 80
+        val percentOfWinning = if (canGold) 100 / max(higher + 1, 1) else 0
+        val constants = gameInfo.ruleset.modOptions.constants
+        val cost = league.getProjectCostPerPlayer(projectName)
+        val canSilver = mightPercent >= 50 || ours.toFloat() > constants.leagueProjectTier2Threshold * cost
+        val canBronze = mightPercent >= 25 || ours.toFloat() > constants.leagueProjectTier1Threshold * cost
+        var extra = 0
+        when (projectName) {
+            WORLDS_FAIR -> {
+                if (canGold) extra += percentOfWinning * 30 * numEffectiveCities() / 100 + 2 * percentOfWinning
+                if (canSilver) {
+                    val culture = (civ.stats.statsForNextTurn.culture * 100).toInt()
+                    val turnsForPolicy = civ.policies.getCultureNeededForNextPolicy() * 100 / max(1, culture)
+                    extra += 70 * (gameInfo.speed.cultureCostModifier * 100).roundToInt() / max(1, turnsForPolicy)
+                }
+                if (canBronze) extra += 500
+                if (forSelf) extra -= 400
+            }
+            INTERNATIONAL_GAMES -> {
+                val lowest = VictoryProgressAi.lowestTourismInfluence(civ, rules)
+                if (canGold) extra += if (cultureVictoryEnabled) percentOfWinning * (lowest - 15).coerceIn(10, 50) / 2 else 2 * percentOfWinning
+                if (canSilver) extra += 200
+                if (canBronze && cultureVictoryEnabled && lowest > 25) extra += 100 * min(lowest - 25, 50)
+                if (forSelf) {
+                    if (lowest <= 25) extra += 40 * max(lowest - 25, -25)
+                    extra -= 250
+                }
+            }
+            INTERNATIONAL_SPACE_STATION -> {
+                val techs = techStats()
+                val techPercent = max(0, techs.ours * techs.teams * 100 / max(1, techs.total) - 100)
+                if (canGold) extra += percentOfWinning * (10 + techPercent)
+                if (canSilver) extra += 20 * (10 + techPercent)
+                if (canBronze) extra += 150
+                if (forSelf) extra -= 500
+                if (!scienceVictoryEnabled) extra /= 2
+            }
+            else -> {
+                if (canGold) extra += 2 * percentOfWinning
+                if (canSilver) extra += 150
+                if (canBronze) extra += 100
+                if (forSelf) extra -= 200
+            }
+        }
+        return extra
+    }
+
+    /**
+     * Embargo City-States (CvVotingClasses.cpp:12443-12499): -75 for each city-state we have a trade connection with, -100 per route we could no longer
+     * fill (at most -1000) with the cities of the other civilizations not embargoed and our own as destinations, and +40 per era for the proposer.
+     * The influence our policies give from trade routes with city-states has no counterpart.
+     */
+    private fun scoreEmbargoCityStates(forSelf: Boolean): Int {
         var partners = 0
         var civDestinations = 0
         for (other in gameInfo.civilizations) {
@@ -1033,139 +1104,247 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
                 if (routesBetween(civ, other) > 0) partners++
             } else if (!league.isTradeEmbargoed(civ, other)) civDestinations += other.cities.size
         }
-        var score = if (partners > 0) max(-50, partners * -15) else 25
-        if (civDestinations <= 0) score -= 50
-        else if (civDestinations * civ.cities.size / 3 < civ.tradeRoutes.getNumSlots()) score -= 40
-        if (hasIncomingRouteTrait()) score -= 40
-        if (hasMoreRoutesTrait()) score -= 20
-        return score
+        var extra = -75 * partners
+        val deficit = civ.tradeRoutes.getNumSlots() - (civDestinations + civ.cities.size)
+        if (deficit > 0) extra -= min(100 * deficit, 1000)
+        if (forSelf) extra += 40 * era
+        return extra
     }
 
-    /** (CvVotingClasses.cpp:8975-9033) */
-    private fun scoreEmbargoPlayer(choice: String?): Int {
-        val target = choice?.let { gameInfo.getCivilizationOrNull(it) } ?: return 0
-        if (target == civ) return -100
-        if (!target.isMajorCiv) return 0
-        val diplomacy = civ.getDiplomacyManager(target)
-        var score = when {
-            civ.isAtWarWith(target) -> 70
-            civ.ai.diplomacy.warmongerThreat(target) >= AiThreat.Severe -> 40
-            diplomacy != null && (diplomacy.relationshipIgnoreAfraid() < RelationshipLevel.Neutral
-                || diplomacy.relationshipIgnoreAfraid() <= RelationshipLevel.Enemy
-                || diplomacy.hasFlag(DiplomacyFlags.Denunciation)) -> 20
-            else -> -30
+    /**
+     * Embargo (CvVotingClasses.cpp:12500-12563). On us: -1000 for the proposer's choice, and -100 per route to and -50 per opinion level above neutral of every other
+     * major. On another major, for ourselves: its target value above average x100 and its warmonger threat x150 when our approach is below guarded,
+     * +200 at war, -100 per opinion level above competitor, -75 per route to it. The value of our deals with them is not counted.
+     */
+    private fun scoreEmbargoPlayer(target: String?, forSelf: Boolean): Int {
+        val victim = target?.let { gameInfo.getCivilizationOrNull(it) } ?: return 0
+        val diplomacy = civ.ai.diplomacy
+        var extra = 0
+        if (victim == civ) {
+            if (forSelf) extra -= 1000
+            var tradeValue = 0
+            for (other in gameInfo.getAliveMajorCivs()) {
+                if (other == civ) continue
+                tradeValue += routesFrom(civ, other) * 100
+                val opinion = diplomacy.opinionOf(other)
+                if (opinion > MajorCivOpinion.Neutral) extra -= (opinion.ordinal - MajorCivOpinion.Neutral.ordinal) * 50
+            }
+            extra -= tradeValue
+        } else if (victim.isMajorCiv && forSelf) {
+            if (diplomacy.approachTowards(victim) < MajorCivApproach.Guarded) {
+                val value = WarStateAi.targetValue(civ, victim) ?: TargetValue.Average
+                if (value > TargetValue.Average) extra += (value.ordinal - TargetValue.Average.ordinal) * 100
+                extra += diplomacy.warmongerThreat(victim).ordinal * 150
+            }
+            if (civ.isAtWarWith(victim)) extra += 200
+            extra -= (diplomacy.opinionOf(victim).ordinal - MajorCivOpinion.Competitor.ordinal) * 100
+            extra -= routesFrom(civ, victim) * 75
         }
-        val routes = routesBetween(civ, target)
-        if (routes > 0) score += max(-40, routes * -10)
-        if (hasIncomingRouteTrait()) score -= 20
-        if (hasMoreRoutesTrait()) score -= 20
-        return score
+        return extra
     }
 
-    /** (CvVotingClasses.cpp:9035-9134); [running] is the score so far, which is replaced by 0 if nobody owns the luxury */
-    private fun scoreBanLuxury(running: Int, luxury: String?): Int {
-        if (luxury == null) return running
-        var score = running
-        var factor = 0
-        var ownedByAnyone = false
+    /**
+     * Ban Luxury (CvVotingClasses.cpp:12564-12597): -100 if we have the luxury (-150 more with an unhappy empire), -75 for each of our tiles with it,
+     * +100 for the proposer. Monopolies have no counterpart.
+     */
+    private fun scoreBanLuxury(luxury: String?, forSelf: Boolean): Int {
+        if (luxury == null) return 0
+        var extra = 0
+        if (civ.getResourceAmount(luxury) > 0) {
+            extra -= 100
+            if (civ.stats.happiness < 0) extra -= 150
+        }
+        extra -= 75 * ownedTiles.count { it.resource == luxury }
+        if (forSelf) extra += 100
+        return extra
+    }
+
+    /**
+     * Standing Army Tax (CvVotingClasses.cpp:12598-12670), for a resolution that changes the unit maintenance by [factor] percent. A rise is also
+     * what Vox Populi's Global Peace Accords is: the warmonger threat of the civilizations we have met (x150, at most 750) is for it, the wars
+     * we do badly in (2 x the war state over stalemate - 1, x100, at most 500) and the targets we eye (the target value over average, x100, at
+     * most 500) against. Then -half the percent our military might is above or below the mean of the civilizations we have met (at most 50) x [factor].
+     * The target value we hold stands in for the raw one (without the reduction by boldness), which is not ported.
+     */
+    private fun scoreStandingArmyTax(factor: Int): Int {
+        var extra = 0
+        if (factor > 0) {
+            var threat = 0
+            var warStates = 0
+            var warTargets = 0
+            for (other in metMajors()) {
+                threat += civ.ai.diplomacy.warmongerThreat(other).ordinal
+                if (civ.isAtWarWith(other)) {
+                    val state = WarStateAi.warState(civ, other)
+                    if (state != null) warStates += 2 * (state.ordinal - WarState.Stalemate.ordinal) - 1
+                } else {
+                    val value = WarStateAi.targetValue(civ, other) ?: TargetValue.Average
+                    if (value > TargetValue.Average) warTargets += value.ordinal - TargetValue.Average.ordinal
+                }
+            }
+            extra += min(threat * 150, 750)
+            extra -= min(warStates * 100, 500)
+            extra -= min(warTargets * 100, 500)
+        }
+        var civs = 0
+        var total = 0L
+        var ours = 0L
         for (other in gameInfo.getAliveMajorCivs()) {
-            if (other == civ || !civ.knows(other)) continue
-            if (other.getResourceAmount(luxury) <= 0) continue
-            ownedByAnyone = true
-            val diplomacy = civ.getDiplomacyManager(other)
-            val level = diplomacy?.relationshipIgnoreAfraid() ?: RelationshipLevel.Neutral
-            factor += when {
-                civ.isAtWarWith(other) -> -3
-                diplomacy?.hasFlag(DiplomacyFlags.DeclarationOfFriendship) == true -> 3
-                level == RelationshipLevel.Competitor -> -1
-                level < RelationshipLevel.Competitor -> -2
-                level == RelationshipLevel.Favorable -> 1
-                level > RelationshipLevel.Favorable -> 2
-                else -> 0
+            if (other.cities.isEmpty() || (other != civ && !civ.knows(other))) continue
+            civs++
+            val might = other.ai.militaryMight()
+            if (might <= 0) continue
+            total += might
+            if (other == civ) ours = might.toLong()
+        }
+        val mightPercent = (ours * civs * 100 / max(1L, total) - 100).toInt()
+        return extra - mightPercent.coerceIn(-50, 50) * factor / 2
+    }
+
+    /**
+     * Scholars in Residence (CvVotingClasses.cpp:12841-12891): -60 per percent (at most 10) our technologies are above the mean of the living majors, and 60
+     * more for each of the technologies the best has more than we (0 to 10) over two; more by 10% for each city-state ally when it is a gain.
+     */
+    private fun scoreScholars(): Int {
+        val techs = techStats()
+        val techPercent = (techs.ours * techs.teams * 100 / max(1, techs.total) - 100).coerceIn(-10, 10)
+        var extra = -techPercent * 60 + ((techs.most - techs.ours).coerceIn(0, 10) - 2) * 60
+        if (extra > 0) extra = extra * (100 + gameInfo.getAliveCityStates().count { it.allyCiv == civ } * 10) / 100
+        return extra
+    }
+
+    /**
+     * Nuclear Non-Proliferation (CvVotingClasses.cpp:12924-12962): (8 - our nuclear flavor) x 20 for each step our approach to a major we have a strong
+     * land dispute with is below deceptive. Nuclear Gandhi (-1000) has no counterpart.
+     */
+    private fun scoreNuclearNonProliferation(): Int {
+        var dislikedNeighbours = 0
+        for (other in gameInfo.getAliveMajorCivs()) {
+            if (civ.ai.diplomacy.landDisputeLevel(other) < DisputeLevel.Strong) continue
+            val approach = civ.ai.diplomacy.approachTowards(other)
+            if (approach < MajorCivApproach.Deceptive) dislikedNeighbours += MajorCivApproach.Deceptive.ordinal - approach.ordinal
+        }
+        val nukeFlavor = civ.ai.personalityAndGrandStrategy(Flavor.Nuke).coerceIn(0, 20)
+        return (8 - nukeFlavor) * dislikedNeighbours * 20
+    }
+
+    /**
+     * World Religion (CvVotingClasses.cpp:12963-13051), for the proposer's [religion]. If we founded one: the other majors with it in most cities x150 (for the one we
+     * founded, against another when we propose; halved without the diplomatic victory), its holy city's tourism / 50 (a tenth without the culture victory)
+     * and 10 per city that follows it likewise; and +150 (-150 for ourselves) if the chosen religion is that of most of our cities.
+     */
+    private fun scoreWorldReligion(religion: String?, forSelf: Boolean): Int {
+        val target = religion?.let { gameInfo.religions[it] } ?: return 0
+        var extra = 0
+        val founded = civ.religionManager.religion?.takeIf { it.isMajorReligion() && it.foundingCiv == civ }
+        if (founded != null) {
+            val foundedTarget = founded.name == target.name
+            val possibleExtraVotes = gameInfo.getAliveMajorCivs().count { it != civ && it.religionManager.isMajorityReligionForCiv(founded) }
+            if (foundedTarget) extra += 150 * possibleExtraVotes else if (forSelf) extra -= 150 * possibleExtraVotes
+            if (!diploVictoryEnabled) extra /= 2
+            val holyCity = gameInfo.getCities().firstOrNull { it.religion.religionThisIsTheHolyCityOf == founded.name }
+            var tourism = if (holyCity == null) 0 else min(50000, holyCity.civ.culture.getCityTourism(holyCity) * 100)
+            if (!cultureVictoryEnabled) tourism /= 10
+            if (foundedTarget) extra += tourism / 50 else if (forSelf) extra -= tourism / 50
+            val following = gameInfo.getCities().count { it.religion.getMajorityReligionName() == founded.name } * 10
+            if (foundedTarget) extra += following else if (forSelf) extra -= following
+        }
+        if (civ.religionManager.isMajorityReligionForCiv(target)) extra += 150 else if (forSelf) extra -= 150
+        return extra
+    }
+
+    /** What the delegates we could have are worth towards the diplomatic victory (CvVotingClasses.cpp:13061-13093): 10000 at the votes needed, else by the percent of them */
+    private fun scoreVoteRatio(forSelf: Boolean): Int {
+        val ratio = league.getDelegates(civ) * 100 / max(1, league.getVotesNeededForWorldLeader())
+        if (ratio >= 100) return 10000
+        var extra = 0
+        if (ratio >= 80) extra += 75 * (ratio - 80)
+        if (ratio >= 60) extra += 100 * (ratio - 60)
+        if (ratio >= 40) extra += 75 * (ratio - 40) else if (forSelf) extra -= 25 * (40 - ratio)
+        return extra
+    }
+
+    /**
+     * World Ideology (CvVotingClasses.cpp:13052-13145), for the proposer's [ideology]: the votes ratio when the diplomatic victory is on, and, with an
+     * ideology of our own, the delegates it could give (1 + the majors with it, half without the diplomatic victory) x200 and 100 for every level
+     * our influence on a major of another ideology is above theirs on us, for our ideology and against another one when we propose it.
+     */
+    private fun scoreWorldIdeology(ideology: String?, forSelf: Boolean): Int {
+        var extra = 0
+        if (diploVictoryEnabled) extra += scoreVoteRatio(forSelf)
+        val ours = civ.getIdeology() ?: return extra
+        var pressure = 0
+        var potentialExtraVotes = 1
+        for (other in gameInfo.getAliveMajorCivs()) {
+            if (other == civ) continue
+            val theirs = other.getIdeology() ?: continue
+            if (theirs == ours) potentialExtraVotes++
+            else {
+                val difference = (civ.culture.getInfluenceLevel(other) ?: InfluenceLevel.Unknown).ordinal -
+                    (other.culture.getInfluenceLevel(civ) ?: InfluenceLevel.Unknown).ordinal
+                if (difference > 0) pressure += difference
             }
         }
-        if (factor > 0) { score -= 10; if (factor > 3) score -= 10 }
-        else if (factor < 0) { score += 10; if (factor < -3) score += 10 }
-
-        val inPlots = ownedTiles.count { it.resource == luxury }
-        if (civ.getResourceAmount(luxury) > 0) {
-            ownedByAnyone = true
-            score -= 30
-            if (inPlots > 0) score -= 20
-            if (civ.stats.happiness < 0) score -= 20
-        } else score += if (inPlots > 0) -20 else 15
-        return if (ownedByAnyone) score else 0
+        if (!diploVictoryEnabled) potentialExtraVotes = (potentialExtraVotes + 1) / 2
+        val worth = potentialExtraVotes * 200 + pressure * 100
+        if (ours.name == ideology) extra += worth else if (forSelf) extra -= worth
+        return extra
     }
 
-    /** (CvVotingClasses.cpp:9136-9164); [factor] is 1 for more maintenance, -1 for less */
-    private fun scoreStandingArmyTax(factor: Int): Int {
-        var score = if (seekingConquest) -40 * factor else 0
-        val maintenance = -(statMap["Unit upkeep"]?.gold ?: 0f)
-        val gross = statMap.values.sumOf { max(it.gold, 0f).toDouble() }.toFloat()
-        val ratio = if (gross > 0f) maintenance / gross else 0f
-        score += when {
-            gross - maintenance < 0 -> -50 * factor
-            ratio >= 0.5f -> -40 * factor
-            ratio >= 0.2f -> -15 * factor
-            else -> 15 * factor
+    /**
+     * Arts Funding and Sciences Funding (CvVotingClasses.cpp:13146-13246): the great person rate change of the sciencey persons ([scienceMod], percent)
+     * x 20 with a unique unit among them, x half our tiles with a great improvement, that of the artsy ([artsMod]) x 20 with a unique unit among them
+     * and x half our great works. The league bonus for the poorer half of the civilizations (VP's score ranks) has no counterpart.
+     */
+    private fun scoreFunding(artsMod: Int, scienceMod: Int): Int {
+        var extra = 0
+        if (hasUniqueUnit("Great Scientist", "Great Engineer", "Great Merchant")) extra += scienceMod * 20
+        extra += greatImprovements * scienceMod / 2
+        if (hasUniqueUnit("Great Writer", "Great Artist", "Great Musician")) extra += artsMod * 20
+        extra += numGreatWorks * artsMod / 2
+        return extra
+    }
+
+    /**
+     * Sanctions we propose (CvVotingClasses.cpp:13684-13760, against [targetId]): never against ourselves (-100000), not against a friend, ally, liberator
+     * or partner of a coop war we are in (-10000, when we do not fear them). Else for each other major with cities: a friend of ours (not feared, or in a
+     * coop war against the target) +100 if in a coop war against the target, -50 if it likes the target, +50 if it dislikes it (denounced either way or at
+     * war), all by our work-with willingness; an enemy of ours (denounced either way, at war or our biggest competitor) that likes the target +50,
+     * and -50 when it dislikes it unless the target is our biggest competitor and it is a worse enemy (or the biggest competitor), by our work-against
+     * willingness. The prime league ally and competitor, and teams, are not ported.
+     */
+    private fun sanctionProposalScore(targetId: String): Int {
+        val target = gameInfo.getCivilizationOrNull(targetId) ?: return 0
+        if (target == civ) return -100000
+        val diplomacy = civ.ai.diplomacy
+        fun fears(other: Civilization) = diplomacy.approachTowards(other) <= MajorCivApproach.Afraid
+        fun isLiberator(of: Civilization, other: Civilization) = WarSanityAi.isLiberator(of, other, false)
+        fun dislikes(other: Civilization, victim: Civilization) = OpinionAi.isDenouncedPlayer(other, victim) ||
+            OpinionAi.isDenouncedPlayer(victim, other) || other.isAtWarWith(victim)
+        if (!fears(target) && (isFriendOrAlly(civ, target) || isLiberator(civ, target) ||
+                (CoopWarAi.globalState(civ, target) ?: CoopWarState.Rejected) >= CoopWarState.Soon)) return -10000
+
+        var score = 0
+        val workWith = civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness)
+        val workAgainst = civ.ai.diplomacyValue(DiplomacyPersonality.WorkAgainstWillingness)
+        for (other in gameInfo.getAliveMajorCivs()) {
+            if (other.cities.isEmpty() || other == civ || other == target) continue
+            val coopWar = isPreparingCoopWar(civ, other, target)
+            val likesTarget = isFriendOrAlly(other, target) || isLiberator(other, target)
+            if (!fears(other) && (isFriendOrAlly(civ, other) || isLiberator(civ, other) || coopWar)) {
+                if (coopWar) score += OpinionAi.adjustConditional(100, workWith)
+                else if (likesTarget) score -= OpinionAi.adjustConditional(50, workWith)
+                else if (dislikes(other, target)) score += OpinionAi.adjustConditional(50, workWith)
+            } else if (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ) || civ.isAtWarWith(other) ||
+                diplomacy.biggestCompetitor == other.civID) {
+                if (likesTarget) score += OpinionAi.adjustConditional(50, workAgainst)
+                else if (dislikes(other, target) && diplomacy.biggestCompetitor != target.civID &&
+                    (diplomacy.biggestCompetitor == other.civID || diplomacy.memoryOf(other).opinionWeight > diplomacy.memoryOf(target).opinionWeight))
+                    score -= OpinionAi.adjustConditional(50, workAgainst)
+            }
         }
         return score
     }
-
-    /** (CvVotingClasses.cpp:9166-9191) */
-    private fun scoreScholars(): Int {
-        val ratio = (TechAutomation.techRatio(civ) - 0.5f) * 2f // -1 if in first, 1 if in last
-        return if (ratio < 0f) (ratio * 30).toInt() + (if (seekingScience) -30 else 0)
-        else (ratio * 50).toInt() + (if (seekingScience) 40 else 0)
-    }
-
-    /** (CvVotingClasses.cpp:9231-9278) */
-    private fun scoreWorldReligion(choice: String?): Int {
-        val religion = choice?.let { gameInfo.religions[it] } ?: return 0
-        var score = 0
-        if (civ.religionManager.isMajorityReligionForCiv(religion)) {
-            score += 40
-            if (seekingDiplomacy) score += 20
-        } else score -= 30
-        if (civ.cities.any { it.isHolyCityOf(religion.name) }) {
-            score += 10
-            if (seekingCulture) score += 30
-        }
-        val founded = civ.religionManager.religion?.takeIf { it.isMajorReligion() && it.foundingCiv == civ }
-        if (founded?.name == religion.name) score += 40
-        else if (founded != null) score -= 20
-        return score
-    }
-
-    /** (CvVotingClasses.cpp:9280-9313) */
-    private fun scoreWorldIdeology(choice: String?): Int {
-        val ours = civ.getIdeology() ?: return 0
-        var score = 0
-        val unhappy = civ.culture.publicOpinion.unhappiness > 0
-        val sign = if (ours.name == choice) 1 else -1
-        score += 50 * sign
-        if (seekingDiplomacy) score += 25 * sign
-        if (unhappy) score += 25 * sign
-        return score
-    }
-
-    private fun hasScienceyUniqueUnit(): Boolean =
-        GREAT_MERCHANT in gameInfo.ruleset.units && civ.getEquivalentUnit(GREAT_MERCHANT).name != GREAT_MERCHANT
-
-    /** Morocco: yield for incoming trade routes (YieldChangeIncomingTradeRoute) */
-    private fun hasIncomingRouteTrait() = hasPositiveUnique(UniqueType.TradeRouteGoldForOrigin)
-
-    /** Venice: more trade routes (NumTradeRoutesModifier) */
-    private fun hasMoreRoutesTrait() = hasPositiveUnique(UniqueType.TradeRouteSlotsPercent)
-
-    private fun hasPositiveUnique(type: UniqueType): Boolean {
-        var found = false
-        civ.forEachMatchingUnique(type) { if (it.params[0].toInt() > 0) found = true }
-        return found
-    }
-
-    private fun routesBetween(a: Civilization, b: Civilization): Int =
-        a.tradeRoutes.routes.count { it.getDestinationCiv() == b } + b.tradeRoutes.routes.count { it.getDestinationCiv() == a }
 
     //endregion
 }

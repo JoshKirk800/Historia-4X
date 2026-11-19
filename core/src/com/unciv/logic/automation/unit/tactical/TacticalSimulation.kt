@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.unit.tactical
 
+import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
@@ -26,14 +27,15 @@ import kotlin.math.min
  *  survives or dies unexpectedly): CvTacticalAI.cpp's FindAndExecuteBestUnitAssignments and ExecuteUnitAssignments.
  *
  *  The callers: ExecuteAttackWithUnits (with its air attack and spotter move), ExecuteDestroyEnemyUnits, ExecuteCaptureCityMoves (for the posture moves,
- *  [TacticalMoves] and barbarians), CheckForEnemiesNearArmy ([OperationalMoves]) and PerformRangedOpportunityAttack (units that withdraw or flee).
+ *  [TacticalMoves] and barbarians), CheckForEnemiesNearArmy ([OperationalMoves]) and PerformRangedOpportunityAttack (garrisons, units that heal,
+ *  withdraw or flee and units that arrive somewhere; its melee counterpart and KillLoneEnemyIfPossible are [OpportunityAttacks]).
  *
  *  What is not ported, and why:
  *  - PositionUnitsAroundTarget (the AL_LOW plan that places units around a friendly or distant target) belongs to the deployment code of the armies;
  *    the plan itself can place units without enemies (a target and [AggressionLevel.Low]) but nothing calls it for that;
  *  - the support pass (CvSupportPosition, AddSupportMoves: generals, admirals and siege towers) and citadels, repair fleet and the other powers
  *    (A_USE_POWER): the units that use them have their own moves ([Deployment.moveGreatGenerals]); their bonus is not in the plan;
- *  - air sweeps, naval embarkation plans (MS_EMBARKED), KillLoneEnemyIfPossible and PerformOpportunityAttack (melee);
+ *  - air sweeps and naval embarkation plans (MS_EMBARKED);
  *  - what the real combat does that the plan cannot know (see [SimWorld]); a plan that goes wrong is made again, up to [MAX_ATTEMPTS] times.
  */
 object TacticalSimulation {
@@ -469,8 +471,9 @@ object TacticalSimulation {
      */
     fun performRangedOpportunityAttack(ctx: TacticalContext, unit: MapUnit, allowMovement: Boolean = false, saveMovement: Float = 0f): Boolean {
         if (unit.isDestroyed || !unit.baseUnit.isRanged() || !unit.hasMovement() || unit.baseUnit.isAirUnit()) return false
-        // A garrison stays where it is
-        val garrisoned = unit.baseUnit.isLandUnit && unit.getTile().isCityCenter() && unit.getTile().getOwner() == unit.civ
+        // A garrison that the city needs stays where it is
+        val city = unit.getTile().getCity()?.takeIf { unit.baseUnit.isLandUnit && unit.getTile().isCityCenter() && it.civ == unit.civ && it.getGarrison() == unit }
+        val garrisoned = city != null && AiOperationLogic.needsGarrison(unit.civ, city)
         val mayMove = allowMovement && !garrisoned
         if (mayMove || unit.hasUnique(UniqueType.CanMoveAfterAttacking)) {
             val result = TacticalSimSearch.findBestUnitAssignments(ctx, listOf(unit), unit.getTile(), AggressionLevel.Low,
@@ -556,13 +559,7 @@ object TacticalSimulation {
         return findAndExecuteBestUnitAssignments(ctx, finalUnits, closest, AggressionLevel.Medium)
     }
 
-    /** Whether [unit] can attack [tile] this coming turn (CvPlayer::GetPossibleAttackers): within its movement and range, on its domain if it does not shoot */
-    private fun canThreaten(unit: MapUnit, tile: Tile): Boolean {
-        val ranged = unit.baseUnit.isRanged()
-        val range = if (ranged) unit.getRange() else 1
-        val distance = unit.getTile().aerialDistanceTo(tile)
-        if (distance > unit.baseUnit.movement.coerceAtLeast(1) + range) return false
-        return ranged || unit.baseUnit.isLandUnit == tile.isLand || tile.isCityCenter()
-    }
+    /** Whether [unit] can attack [tile] this coming turn: within its movement and range, on its domain if it does not shoot ([UnitDanger.canThreaten]) */
+    private fun canThreaten(unit: MapUnit, tile: Tile) = UnitDanger.canThreaten(unit, tile)
     //endregion
 }

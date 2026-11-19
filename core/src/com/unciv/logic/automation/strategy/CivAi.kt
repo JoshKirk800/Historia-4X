@@ -8,6 +8,7 @@ import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.VictoryPursuitAi
 import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.automation.unit.tactical.TacticalState
+import com.unciv.logic.automation.unit.tactical.UnitDanger
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.ai.AiDefine
@@ -163,6 +164,8 @@ class CivAi : IsPartOfGameInfoSerialization {
     @Transient private var tourismCache = 0
     @Transient private var plotDangerTurn = -1
     @Transient private var plotDangerCache: PlotDanger? = null
+    @Transient private var unitDangerTurn = -1
+    @Transient private var unitDangerCache: UnitDanger? = null
     //endregion
 
     fun clone(): CivAi {
@@ -209,6 +212,7 @@ class CivAi : IsPartOfGameInfoSerialization {
         operations.setTransients(civ)
         tactical.setTransients(civ)
         plotDangerCache = null
+        unitDangerCache = null
         // BNW's protective approach, which Vox Populi's city-state approach does not have: friendly takes its place
         minorCivApproaches.replaceAll { _, approach -> if (approach == MinorCivApproach.Protective) MinorCivApproach.Friendly else approach }
         personalityVector = null
@@ -233,10 +237,25 @@ class CivAi : IsPartOfGameInfoSerialization {
             }
         }
 
+    /**
+     *  What the enemies can do to one of our units on a tile (CvUnit::GetDanger, CvPlayer::GetPossibleAttackers) for the current turn, built on
+     *  first use like [plotDanger] and forgotten with it by [invalidateTurnCaches].
+     */
+    val unitDanger: UnitDanger
+        get() {
+            val turn = civ.gameInfo.turns
+            unitDangerCache?.let { if (unitDangerTurn == turn) return it }
+            return UnitDanger(civ).also {
+                unitDangerCache = it
+                unitDangerTurn = turn
+            }
+        }
+
     /** Forgets the danger map and the tactical analysis map of this turn, so the next read sees the current units, borders and wars */
     fun invalidateTurnCaches() {
         plotDangerCache = null
         tactical.invalidateMap()
+        unitDangerCache = null
     }
 
     /**

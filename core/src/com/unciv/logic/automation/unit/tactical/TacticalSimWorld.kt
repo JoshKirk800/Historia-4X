@@ -484,23 +484,11 @@ class SimWorld(
     //endregion
 
     //region Damage
-    /**
-     *  CvTacticalAI GetSimulatedDamageFromAttackOnUnit: (damage the defender takes, damage the attacker takes) of [attacker] attacking from
-     *  [attackerTile] the [defender], each at the health given. Flanking is left to the caller.
-     */
+    /** [SimWorld.Companion.damageOnUnit] (flanking is left to the caller) */
     fun damageOnUnit(
         attacker: MapUnit, attackerTile: Tile, attackerHealth: Int, defender: MapUnit, defenderTile: Tile, defenderHealth: Int,
         ignoreFlanking: Boolean,
-    ): Pair<Int, Int> {
-        val attackerCombatant = SimCombatant(attacker, attackerTile, attackerHealth.coerceAtLeast(1))
-        val defenderCombatant = SimCombatant(defender, defenderTile, defenderHealth.coerceAtLeast(1))
-        // Naval units cannot fire from cities
-        if (attacker.baseUnit.isRanged() && attacker.baseUnit.isWaterUnit && attackerTile.isCityCenter()) return 0 to 0
-        val dealt = BattleDamage.calculateDamageToDefender(attackerCombatant, defenderCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = ignoreFlanking)
-        val taken = if (attacker.baseUnit.isRanged()) 0
-            else BattleDamage.calculateDamageToAttacker(attackerCombatant, defenderCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = ignoreFlanking)
-        return dealt to taken
-    }
+    ): Pair<Int, Int> = Companion.damageOnUnit(attacker, attackerTile, attackerHealth, defender, defenderTile, defenderHealth, ignoreFlanking)
 
     /** CvTacticalAI GetSimulatedDamageFromAttackOnCity: (damage the city takes, damage the attacker takes) */
     fun damageOnCity(attacker: MapUnit, attackerTile: Tile, attackerHealth: Int, city: City): Pair<Int, Int> {
@@ -774,6 +762,25 @@ class SimWorld(
     companion object {
         const val MAX_TACT_PLOTS = 255
         const val EXPECTED_RANDOMNESS = TacticalTargets.EXPECTED_RANDOMNESS
+
+        /**
+         *  TacticalAIHelpers::GetSimulatedDamageFromAttackOnUnit: (damage the defender takes, damage the attacker takes) of [attacker] attacking
+         *  from [attackerTile] the [defender] on [defenderTile], each at the health given. Flanking is left to the caller if [ignoreFlanking].
+         */
+        fun damageOnUnit(
+            attacker: MapUnit, attackerTile: Tile, attackerHealth: Int, defender: MapUnit, defenderTile: Tile, defenderHealth: Int,
+            ignoreFlanking: Boolean,
+        ): Pair<Int, Int> {
+            val attackerCombatant = SimCombatant(attacker, attackerTile, attackerHealth.coerceAtLeast(1))
+            val defenderCombatant = SimCombatant(defender, defenderTile, defenderHealth.coerceAtLeast(1))
+            // Naval units cannot fire from cities
+            if (attacker.baseUnit.isRanged() && attacker.baseUnit.isWaterUnit && attackerTile.isCityCenter()) return 0 to 0
+            val dealt = BattleDamage.calculateDamageToDefender(attackerCombatant, defenderCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = ignoreFlanking)
+            val taken = if (attacker.baseUnit.isRanged()) 0
+                else BattleDamage.calculateDamageToAttacker(attackerCombatant, defenderCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = ignoreFlanking)
+            return dealt to taken
+        }
+
         private const val DISTANCE_SEARCH_RADIUS = 14
         private val DEFAULT_LIMITS = intArrayOf(4, 4, 512)
 

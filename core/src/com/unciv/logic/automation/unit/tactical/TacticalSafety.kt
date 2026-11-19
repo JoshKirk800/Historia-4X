@@ -7,6 +7,7 @@ import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
+import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
 
 /**
@@ -20,6 +21,18 @@ object TacticalSafety {
     /** CvUnit::IsCanDefend: a combat unit that is not embarked (a land unit on water cannot defend itself) */
     @Readonly
     fun canDefend(unit: MapUnit): Boolean = unit.baseUnit.strength > 0 && unit.isMilitary() && !unit.isEmbarked()
+
+    /**
+     *  CvUnit::ActualHealRate(tile, checkMovement): what the unit heals in a turn on [tile]: nothing if embarked there or if it heals only by
+     *  pillaging, and - looking at the tile it stands on, [checkMovement] - nothing if it has moved this turn, unless it heals even after acting
+     *  ([UniqueType.HealsEvenAfterAction]). The terrain's damage is not taken off.
+     */
+    @Readonly
+    fun actualHealRate(unit: MapUnit, tile: Tile = unit.getTile(), checkMovement: Boolean = true): Int {
+        if (unit.isDestroyed || unit.isEmbarkedAt(tile) || unit.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true)) return 0
+        if (checkMovement && unit.hasUnitMovedThisTurn() && !unit.hasUnique(UniqueType.HealsEvenAfterAction)) return 0
+        return maxOf(unit.healingAmountForTile(tile, noTerrainDamage = true), 0)
+    }
 
     /**
      *  CvUnit::IsUnderEnemyRangedAttack: a city of a civilization at war with us that can bombard the tile, or enemy units that can shoot it

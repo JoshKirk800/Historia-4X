@@ -386,7 +386,7 @@ class OperationTests {
         teleport(AiOperationLogic.armyUnits(civ, operation.firstArmy!!), HexCoord(6, 0))
         assertTrue(AiOperationLogic.checkOnTarget(civ, operation))
         assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
-        assertTrue(civ.ai.diplomacy.memoryOf(enemy).musteringForAttack)
+        assertFalse("at war the enemy needs no warning of the attack", civ.ai.diplomacy.memoryOf(enemy).musteringForAttack)
         assertEquals(1, civ.ai.tactical.temporaryZones.size)
         // The sweep ends the operation as a success and marks its units as deployed
         val unitIds = AiOperationLogic.armyUnits(civ, operation.firstArmy!!).map { it.second.id }
@@ -470,7 +470,8 @@ class OperationTests {
         fillAttackReserves()
         val operation = attack()
         enemyCity.moveToCiv(civ)
-        AiOperationLogic.checkOnTarget(civ, operation)
+        // CvAIOperationMilitary::VerifyOrAdjustTarget, asked by ShouldAbort: not the enemy's any more
+        assertTrue(AiOperationLogic.shouldAbort(civ, operation))
         assertEquals(OperationState.ABORTED, operation.state)
         assertEquals(OperationAbortReason.TARGET_ALREADY_CAPTURED, operation.abortReason)
     }

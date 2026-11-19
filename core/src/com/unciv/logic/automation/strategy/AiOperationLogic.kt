@@ -59,11 +59,40 @@ object AiOperationLogic {
 
     //region Helpers
 
-    /** CvArmyAI's TurnsToReachTarget: the turns [unit] needs to [tile], [Int.MAX_VALUE] if it cannot get there */
+    /**
+     *  CvUnit::TurnsToReachTarget with the flags every operation caller of the original passes (CvAIOperation::GrabUnitsFromTheReserves,
+     *  CvArmyAI::AddUnit and UpdateCheckpointTurnsAndRemoveBadUnits: MOVEFLAG_APPROX_TARGET_RING2, IGNORE_STACKING_SELF, IGNORE_ZOC): the
+     *  turns [unit] needs to a plot one or two plots from [tile] that it may end its turn on, with no unit of the enemy there and no
+     *  impassable plot in between - the muster point may be occupied by foreign units or besieged, and is never entered itself. 0 if the
+     *  unit stands within two plots of [tile] already; the plot itself if it can be reached and none of those can. [Int.MAX_VALUE] if the
+     *  unit cannot get there.
+     *  Deviation: of the plots that qualify the three nearest to the unit are tried, the fewest turns win; the original's search finds the
+     *  best one. Our units' stacking is no obstacle (the original's flag), the enemy's zones of control are none in Unciv.
+     */
     fun turnsToReach(unit: MapUnit, tile: Tile): Int {
-        if (unit.getTile() == tile) return 0
+        val here = unit.getTile()
+        if (here == tile) return 0
+        val distance = here.aerialDistanceTo(tile)
+        if (distance <= RING_TWO && commonNeighborIsPassable(here, tile)) return 0
+        var best = Int.MAX_VALUE
+        val candidates = tile.getTilesInDistanceRange(1..RING_TWO)
+            .filter { unit.movement.canPassThrough(it) && commonNeighborIsPassable(it, tile) }
+            .sortedBy { it.aerialDistanceTo(here) }
+            .take(RING_CANDIDATES)
+        for (candidate in candidates) {
+            val path = unit.movement.getShortestPath(candidate)
+            if (path.isNotEmpty()) best = minOf(best, path.size.coerceAtLeast(1))
+        }
+        if (best != Int.MAX_VALUE) return best
         if (!unit.movement.canReach(tile)) return Int.MAX_VALUE
         return unit.movement.getShortestPath(tile).size.coerceAtLeast(1)
+    }
+
+    /** CvPathFinder::CommonNeighborIsPassable: next to each other, or a plot next to both that is no mountain or ice (impassable) */
+    private fun commonNeighborIsPassable(from: Tile, to: Tile): Boolean {
+        if (from.aerialDistanceTo(to) <= 1) return true
+        val around = to.neighbors.toSet()
+        return from.neighbors.any { it in around && !it.isImpassible() }
     }
 
     internal fun tileAt(civ: Civilization, coord: HexCoord?): Tile? = coord?.let { civ.gameInfo.tileMap.getOrNull(it.x, it.y) }
@@ -175,11 +204,15 @@ object AiOperationLogic {
 
     /**
      *  CvPlayer::addAIOperation for the operations of the military AI: creates the operation with its army, finds its target and muster,
-     *  recruits what it can from the reserves and sets its state. The operation is returned even when it aborted at once (state ABORTED;
-     *  the original removes it in the next sweep, [doTurn]).
+     *  recruits what it can from the reserves and sets its state. With a [maxMissingUnits] the operation ends at once (AI_ABORT_NO_UNITS)
+     *  when its initialization leaves more units to build. An operation that has ended at once never existed: it is deleted as the
+     *  original does ([AiOperations.discard], no statistic) and returned in its state ABORTED.
      *  @param target the city to attack or defend, [muster] our city it starts from; only [enemy] for the other types
      */
-    fun addOperation(civ: Civilization, type: AiOperationType, enemy: Civilization? = null, target: City? = null, muster: City? = null): AiOperation {
+    fun addOperation(
+        civ: Civilization, type: AiOperationType, enemy: Civilization? = null, target: City? = null, muster: City? = null,
+        maxMissingUnits: Int? = null
+    ): AiOperation {
         val operations = civ.ai.operations
         val operation = operations.newOperation(type, enemy)
         when {
@@ -191,8 +224,13 @@ object AiOperationLogic {
             type == AiOperationType.NUKE_ATTACK -> NavalOperationLogic.initNuke(civ, operation)
             else -> initDefense(civ, operation, target, muster)
         }
-        if (operation.state != OperationState.ABORTED) logStart(civ, operation)
-        else AiDecisionLog.log(civ) { "operation ${operation.type} #${operation.id} aborted at start: ${operation.abortReason}" }
+        // check number of units again
+        if (maxMissingUnits != null && operation.state != OperationState.ABORTED && operation.slotsToBuild.size > maxMissingUnits)
+            abort(operation, OperationAbortReason.NO_UNITS)
+        if (operation.state == OperationState.ABORTED) {
+            AiDecisionLog.log(civ) { "operation ${operation.type} #${operation.id} aborted at start: ${operation.abortReason}" }
+            operations.discard(operation)
+        } else logStart(civ, operation)
         return operation
     }
 
@@ -729,18 +767,22 @@ object AiOperationLogic {
     //region State machine
 
     /**
-     *  CvAIOperation::CheckTransitionToNextStage after the army moved: an army with enough units starts gathering
-     *  ([finishRecruitingIfDone]), armies that have gathered move out, those at the target hand over ([DEPLOY_RANGE] plots from it, the
-     *  furthest unit within twice that). The defense operations and the pillage raid are [checkTransitionToNextStage]'s. True if the state changed.
+     *  CvAIOperation::CheckTransitionToNextStage after the army moved. The military operations that go by land - the attacks, the pillage
+     *  raid, the land defense operations - and the naval superiority squadron are CvAIOperationMilitary's ([checkTransitionToNextStage]:
+     *  recruiting, gathering, moving, success within [DEPLOY_RANGE] of the target, or discovered at peace); BNW's tests of their own (the
+     *  gathering within the muster's tolerance, the arrival within 5 plots, the abort for a target that changed) are gone. The settlers'
+     *  operations and the other naval ones keep theirs: an
+     *  army with enough units starts gathering ([finishRecruitingIfDone]), the armies that have gathered move out, those at the target
+     *  hand over. True if the state changed.
      */
     fun checkOnTarget(civ: Civilization, operation: AiOperation): Boolean {
-        if (operation.type.isDefense || operation.type == AiOperationType.PILLAGE_ENEMY) return checkTransitionToNextStage(civ, operation)
+        if (operation.type.isDefense || operation.type.moveType == OperationMoveType.EnemyTerritory) return checkTransitionToNextStage(civ, operation)
         val recruited = finishRecruitingIfDone(civ, operation)
         val inPosition = checkInPosition(civ, operation)
         return recruited || inPosition
     }
 
-    /** The gathering and moving cases of [checkOnTarget] */
+    /** The gathering and moving cases of [checkOnTarget] for the civilian and the naval operations */
     private fun checkInPosition(civ: Civilization, operation: AiOperation): Boolean {
         val army = operation.firstArmy ?: return false
         when (operation.type.moveType) {
@@ -759,31 +801,8 @@ object AiOperationLogic {
                     if (civilianTile != null && civilianTile == escortTile) { armyInPosition(civ, operation, army); return true }
                 }
             }
-            OperationMoveType.EnemyTerritory -> for (a in operation.armies.toList()) {
-                if (a.numSlotsFilled() < 1) continue
-                val com = centerOfMass(civ, a) ?: continue
-                when (operation.state) {
-                    OperationState.GATHERING_FORCES -> {
-                        val muster = musterTile(civ, operation) ?: continue
-                        val tolerance = gatherTolerance(civ, a)
-                        if (com.aerialDistanceTo(muster) <= tolerance && furthestUnitDistance(civ, a, muster) <= tolerance * 3 / 2) {
-                            armyInPosition(civ, operation, a)
-                            return true
-                        }
-                    }
-                    OperationState.MOVING_TO_TARGET -> {
-                        val target = targetTile(civ, operation) ?: continue
-                        // CvAIOperationMilitary::CheckTransitionToNextStage: the center within the deploy range, the furthest unit within twice it
-                        if (com.aerialDistanceTo(target) <= DEPLOY_RANGE && furthestUnitDistance(civ, a, target) < 2 * DEPLOY_RANGE) {
-                            armyInPosition(civ, operation, a)
-                            return true
-                        }
-                    }
-                    else -> Unit
-                }
-            }
             OperationMoveType.NavalEscort, OperationMoveType.FreeformNaval, OperationMoveType.NavalFleet -> return NavalOperationLogic.checkOnTarget(civ, operation)
-            OperationMoveType.None -> Unit
+            OperationMoveType.EnemyTerritory, OperationMoveType.None -> Unit
         }
         return false
     }
@@ -845,7 +864,6 @@ object AiOperationLogic {
             type.isNavalInvasion -> NavalOperationLogic.navalInvasionInPosition(civ, operation, army)
             type == AiOperationType.PURE_NAVAL_CITY_ATTACK -> NavalOperationLogic.pureNavalAttackInPosition(civ, operation, army)
             type == AiOperationType.NUKE_ATTACK -> NavalOperationLogic.nukeInPosition(civ, operation, army)
-            type.isCityAttack -> cityAttackInPosition(civ, operation, army)
             type.isEscorted -> escortedInPosition(civ, operation, army)
             else -> baseArmyInPosition(operation, army)
         }
@@ -865,37 +883,6 @@ object AiOperationLogic {
             else -> Unit
         }
         return false
-    }
-
-    /** CvAIOperationBasicCityAttack::ArmyInPosition: at the target when the army's center is within [DEPLOY_RANGE] of it */
-    private fun cityAttackInPosition(civ: Civilization, operation: AiOperation, army: AiArmy): Boolean {
-        val target = targetTile(civ, operation)
-        when (operation.state) {
-            OperationState.GATHERING_FORCES -> {
-                val changed = baseArmyInPosition(operation, army)
-                // Is target still under enemy control?
-                if (target?.getOwner()?.civID != operation.enemyCivId) abort(operation, OperationAbortReason.TARGET_ALREADY_CAPTURED)
-                return changed
-            }
-            OperationState.MOVING_TO_TARGET -> {
-                val com = centerOfMass(civ, army)
-                val enemy = enemy(civ, operation)
-                // Are we within tactical range of our target?
-                var inPlace = com != null && target != null && com.aerialDistanceTo(target) <= DEPLOY_RANGE
-                // Vox Populi (CvAIOperation::CheckOnTarget): at peace, more than two of our units in the enemy's sight - the jig is up
-                if (!inPlace && enemy != null && !civ.isAtWarWith(enemy) &&
-                    armyUnits(civ, army).count { (_, unit) -> unit.getTile() in enemy.viewableTiles } > 2) inPlace = true
-                if (inPlace) {
-                    enemy?.let { civ.ai.diplomacy.memoryOf(it).musteringForAttack = true }
-                    // Notify tactical AI to focus on this area
-                    if (target != null) civ.ai.tactical.addTemporaryZone(target, TacticalTargetType.City)
-                    operation.state = OperationState.SUCCESSFUL_FINISH
-                    onSuccess(civ, operation)
-                }
-                return false
-            }
-            else -> return baseArmyInPosition(operation, army)
-        }
     }
 
     /** CvAIOperationFoundCity::ArmyInPosition: merge settler and escort and move out, found the city on arrival */
@@ -959,9 +946,9 @@ object AiOperationLogic {
     }
 
     /**
-     *  CvAIOperation::ShouldAbort with the subclasses' tests. True when the operation is to be removed (the sweep kills it): it ended, or
-     *  its purpose is gone (target city taken, camp cleared or rescue over, camp stronger than our units). Units of a successful
-     *  operation are marked deployed (CvUnit::SetDeployFromOperationTurn).
+     *  CvAIOperation::ShouldAbort. True when the operation is to be removed (the sweep kills it): it ended, or its purpose is gone
+     *  ([verifyOrAdjustTarget]). An operation with no army is over (AI_ABORT_NO_UNITS, as CvAIOperation::DeleteArmyAI and Move end it).
+     *  Units of a successful operation are marked deployed (CvUnit::SetDeployFromOperationTurn).
      *  Vox Populi's failsafe (CvAIOperation::ShouldAbort, Release-5.4.8; D7): an operation started more than [TIMEOUT_TURNS] turns ago
      *  aborts, TIMED_OUT. BNW has none, and an operation that can no longer finish (an army stuck on the way, one recruiting units that
      *  never come) blocks new ones of its kind for the rest of the game.
@@ -975,23 +962,54 @@ object AiOperationLogic {
             abort(operation, OperationAbortReason.TIMED_OUT)
             return true
         }
+        if (operation.armies.isEmpty()) abort(operation, OperationAbortReason.NO_UNITS)
+        else verifyOrAdjustTarget(civ, operation)
+        // the verification of the target may have ended it (CvAIOperation::ShouldAbort: true for an operation that is aborted)
+        return operation.state == OperationState.ABORTED
+    }
+
+    /**
+     *  What CvAIOperation::Move ends with, after the army moved: [shouldAbort] again, and an operation that ends releases its army's units
+     *  (CvArmyAI::ReleaseAllUnits) before anything else asks for them.
+     *  @return whether the operation goes on to [checkOnTarget] (CvAIOperation::DoTurn: CheckTransitionToNextStage after a Move that did not end it)
+     */
+    fun continueAfterMove(civ: Civilization, operation: AiOperation): Boolean {
+        if (!shouldAbort(civ, operation)) return true
+        civ.ai.operations.releaseAllUnits(operation)
+        return false
+    }
+
+    /**
+     *  CvAIOperation::VerifyOrAdjustTarget of the operation's class, for every army (one): the target a civilian operation
+     *  ([escortedShouldAbort]) or a defense operation ([verifyDefenseTarget], [NavalOperationLogic.verifySuperiorityTarget]) keeps or
+     *  changes, the pillage raid's best target of the moment ([verifyPillageTarget]), and for the rest CvAIOperationMilitary's: a target plot
+     *  owned by anyone but the enemy ends the operation with TARGET_ALREADY_CAPTURED - also by us, the original does not call it a
+     *  success - and war is not asked (that would break sneak attacks). A target plot nobody owns any more (a razed city) does not end it.
+     *  The nuke attack's own rule asks for the enemy as owner.
+     */
+    private fun verifyOrAdjustTarget(civ: Civilization, operation: AiOperation) {
         val type = operation.type
         when {
-            type.isCityAttack -> {
-                // See if our target city is still owned by our enemy: success, the city was captured or destroyed
-                val target = targetTile(civ, operation)
-                if (target == null || target.getCity() == null || target.getOwner()?.civID != operation.enemyCivId) return true
-            }
-            type == AiOperationType.PURE_NAVAL_CITY_ATTACK -> {
-                // See if our target city is still owned by our enemy: success, the city was captured or destroyed
-                if (targetTile(civ, operation)?.getOwner()?.civID != operation.enemyCivId) return true
-            }
             type.isEscorted -> escortedShouldAbort(civ, operation)
             type.isLandDefense -> verifyDefenseTarget(civ, operation)
             type == AiOperationType.NAVAL_SUPERIORITY -> NavalOperationLogic.verifySuperiorityTarget(civ, operation)
+            type == AiOperationType.PILLAGE_ENEMY -> verifyPillageTarget(civ, operation)
+            else -> {
+                val owner = targetTile(civ, operation)?.getOwner()
+                val captured = if (type == AiOperationType.NUKE_ATTACK) owner?.civID != operation.enemyCivId
+                    else owner != null && owner.civID != operation.enemyCivId
+                if (captured) abort(operation, OperationAbortReason.TARGET_ALREADY_CAPTURED)
+            }
         }
-        // the verification of the target may have ended it (CvAIOperation::ShouldAbort: true for an operation that is aborted)
-        return operation.state == OperationState.ABORTED
+    }
+
+    /**
+     *  CvAIOperationPillageEnemy::VerifyOrAdjustTarget: every time the army moves the best target is looked for again ([findPillageTarget]);
+     *  none ends the raid (NO_TARGET), a new one becomes the target and the army's goal.
+     */
+    private fun verifyPillageTarget(civ: Civilization, operation: AiOperation) {
+        val better = enemy(civ, operation)?.let { findPillageTarget(civ, it) }?.first?.getCenterTile()
+        if (better == null) abort(operation, OperationAbortReason.NO_TARGET) else setTarget(operation, better)
     }
 
     /** CvAIOperationFoundCity::ShouldAbort: an escort that does not come: after 15 turns, or off our land, with no city committed, go alone */
@@ -1028,9 +1046,13 @@ object AiOperationLogic {
     }
 
     /**
-     *  CvAIOperation::UnitWasRemoved (and CvAIEscortedOperation's for the found-city operations): recruiting wants the slot again; below half
-     *  strength the operation aborts. The naval invasions use the root rule too: CvAIOperationNavalAttack::UnitWasRemoved calls
-     *  CvAIOperation's, not the CvAINavalEscortedOperation one that aborts on a lost slot 0.
+     *  CvAIOperation::UnitWasRemoved (and CvAIEscortedOperation's for the found-city operations): recruiting wants the slot again; once
+     *  the army is gathering or on its way it aborts (HALF_STRENGTH) with fewer units than half the required slots of the formation (the
+     *  original counts the formation's, as the slots of the army are made not required when cleared; the filled ones include the optional
+     *  units), and with fewer than 2 when 2 are required. The naval invasions use the root rule too: CvAIOperationNavalAttack::UnitWasRemoved
+     *  calls CvAIOperation's, not the CvAINavalEscortedOperation one that aborts on a lost slot 0.
+     *  Departure: an army that has lost every unit is over too (with 1 required slot, as the pillage raid has, the original would keep it
+     *  until the failsafe of [TIMEOUT_TURNS] ends it).
      */
     fun unitWasRemoved(operations: AiOperations, operation: AiOperation, army: AiArmy, slot: Int) {
         if (operation.type.isEscorted) {
@@ -1041,9 +1063,11 @@ object AiOperationLogic {
         when (operation.state) {
             OperationState.RECRUITING_UNITS -> operation.slotsToBuild.add(SlotRef(operation.id, army.id, slot))
             OperationState.GATHERING_FORCES, OperationState.MOVING_TO_TARGET, OperationState.AT_TARGET -> {
-                // the formation's required slots count: the optional ones are extras
                 val required = operations.slotDefs(army).count { it.required }
-                if (army.numSlotsFilled() <= 0 || army.numSlotsFilled() < required / 2) abort(operation, OperationAbortReason.HALF_STRENGTH)
+                val filled = army.numSlotsFilled()
+                if (filled <= 0 || filled < required / 2) abort(operation, OperationAbortReason.HALF_STRENGTH)
+                // special for escorted ops
+                if (filled < 2 && required == 2) abort(operation, OperationAbortReason.HALF_STRENGTH)
             }
             else -> Unit
         }
@@ -1379,13 +1403,16 @@ object AiOperationLogic {
     }
 
     /**
-     *  CvAIOperationMilitary::CheckTransitionToNextStage by the army's state, for the operations Vox Populi's military AI defends and pillages with.
+     *  CvAIOperationMilitary::CheckTransitionToNextStage by the army's state, for the military operations that go by land: the attacks, the
+     *  pillage raid and the defense operations.
      *  Recruiting: an army with enough units ([haveEnoughUnits]) goes to gather; an initial cluster of units owned ground nearer the target
      *  than the muster point (more than 2 plots from it) becomes the muster point. Gathering: units that are within the tolerance of
      *  one another make their own place the muster point, and an army whose furthest unit is within the tolerance of the muster point
      *  moves out. Moving: an army whose center is within [DEPLOY_RANGE] plots of its goal and whose furthest unit is within
-     *  twice that, has arrived: the operation succeeds and the tactical AI takes over ([onSuccess]). The original's tests that the army
-     *  is making progress and that a sneak attack has been discovered only log, or are for operations at peace, and are not here.
+     *  twice that has arrived, as has one at peace with the enemy with more than 2 units in the enemy's sight (the jig is up, and
+     *  the diplomatic AI is told: [MajorCivMemory.musteringForAttack]); the operation succeeds and the tactical AI takes over ([onSuccess]).
+     *  Deviations: the army has no AT_DESTINATION state (the operation's SUCCESSFUL_FINISH ends it in the same sweep, and the movers'
+     *  exhaustive states are another branch's), and the log of the progress over 5 turns is not kept.
      *  @return whether the state changed
      */
     fun checkTransitionToNextStage(civ: Civilization, operation: AiOperation): Boolean {
@@ -1429,9 +1456,19 @@ object AiOperationLogic {
             ArmyState.MOVING_TO_DESTINATION -> {
                 val goal = tileAt(civ, army.goalTile) ?: return false
                 val center = centerOfMass(civ, army, sea) ?: return false
-                if (center.aerialDistanceTo(goal) > DEPLOY_RANGE || furthestUnitDistance(civ, army, goal) >= 2 * DEPLOY_RANGE) return false
+                var inPlace = center.aerialDistanceTo(goal) <= DEPLOY_RANGE && furthestUnitDistance(civ, army, goal) < 2 * DEPLOY_RANGE
+                // check for nearby enemy (for sneak attacks): the jig is up - happens also if we run up against the enemy border
+                val enemy = enemy(civ, operation)
+                val atPeace = enemy != null && !civ.isAtWarWith(enemy)
+                if (!inPlace && enemy != null && atPeace &&
+                    armyUnits(civ, army).count { (_, unit) -> unit.getTile() in enemy.viewableTiles } > UNITS_SEEN_GIVING_AWAY) inPlace = true
+                if (!inPlace) return false
+                // Notify Diplo AI we're in place for attack
+                if (enemy != null && atPeace) civ.ai.diplomacy.memoryOf(enemy).musteringForAttack = true
                 // that's it: the army is disbanded next turn, its units are free for the tactical AI
                 operation.state = OperationState.SUCCESSFUL_FINISH
+                // Retained from BNW's CvAIOperationBasicCityAttack::ArmyInPosition until the tactical map follows the focus areas: the city is a temporary zone
+                if (operation.type.isCityAttack) targetTile(civ, operation)?.let { civ.ai.tactical.addTemporaryZone(it, TacticalTargetType.City) }
                 onSuccess(civ, operation)
                 true
             }
@@ -1462,6 +1499,13 @@ object AiOperationLogic {
 
     /** Vox Populi's TACTICAL_COMBAT_MAX_TARGET_DISTANCE (CvTacticalAI.cpp): units less than this many plots from the target are not recruited */
     private const val MAX_TARGET_DISTANCE = 4
+
+    /** MOVEFLAG_APPROX_TARGET_RING2 ([turnsToReach]): the plots this far from the target count as the target, and the nearest [RING_CANDIDATES] of them are tried */
+    private const val RING_TWO = 2
+    private const val RING_CANDIDATES = 3
+
+    /** CvAIOperationMilitary::CheckTransitionToNextStage: more than this many of our units in sight of an enemy at peace give the army away */
+    private const val UNITS_SEEN_GIVING_AWAY = 2
 
     /**
      *  CvAIOperationMilitary::GetDeployRange (CvAIOperation.h): 3 for every military operation - the attacks, the pillage raid, the rapid

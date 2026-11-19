@@ -599,13 +599,39 @@ class AiOperations : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  The deletion sweeps of CvPlayer::doTurnUnits: operations that are over ([AiOperationLogic.doDelayedDeath]) are killed until none is,
-     *  then armies without units (that are not still waiting for their first ones, CvArmyAI::DoDelayedDeath) are dissolved.
+     *  The deletion sweep of CvPlayer::doTurnUnits: operations that are over ([AiOperationLogic.doDelayedDeath]) are killed until none is.
+     *  Armies with no unit are no longer dissolved on their own (Vox Populi has not BNW's CvArmyAI::DoDelayedDeath): an operation that loses
+     *  its units ends by [AiOperationLogic.unitWasRemoved], one with no army by [AiOperationLogic.shouldAbort].
      */
     fun sweep() {
         do {
             val killed = operations.toList().any { AiOperationLogic.doDelayedDeath(civ, it) }
         } while (killed)
-        for (operation in operations) operation.armies.removeAll { it.numSlotsFilled() == 0 && it.state != ArmyState.WAITING_FOR_UNITS_TO_REINFORCE }
+    }
+
+    /**
+     *  CvArmyAI::ReleaseAllUnits for an operation that ends in the middle of the turn ([AiOperationLogic.continueAfterMove]): its units leave
+     *  the armies and get their own unit AI back, and the operation is not told (it is over, [kill] removes it in the sweep).
+     */
+    fun releaseAllUnits(operation: AiOperation) {
+        for (army in operation.armies) for (slot in army.slots) {
+            if (slot.unitId == -1) continue
+            releaseUnitAi(slot.unitId)
+            slot.unitId = -1
+            slot.checkpointTurns.clear()
+        }
+    }
+
+    /**
+     *  CvPlayer::deleteAIOperation of an operation that ended while it was made (CvPlayer::addAIOperation: aborted, or more units to build
+     *  than allowed): it never was, so it is no statistic. Its units are free again.
+     */
+    internal fun discard(operation: AiOperation) {
+        releaseAllUnits(operation)
+        operation.armies.clear()
+        operation.slotsToBuild.clear()
+        operation.committedCities.clear()
+        operations.remove(operation)
+        statsByType[operation.type]?.let { it[0]-- }
     }
 }

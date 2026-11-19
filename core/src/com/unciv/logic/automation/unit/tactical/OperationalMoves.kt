@@ -83,6 +83,8 @@ object OperationalMoves {
                 com.unciv.logic.automation.unit.NavalOperationMoves.moveOperation(civ, operation, cache)
             OperationMoveType.None -> Unit
         }
+        // CvAIOperation::Move: an operation that ends with the move releases its units, and is not checked on its target
+        if (!AiOperationLogic.continueAfterMove(civ, operation)) return
         operation.lastTurnMoved = turn
         AiOperationLogic.checkOnTarget(civ, operation)
     }

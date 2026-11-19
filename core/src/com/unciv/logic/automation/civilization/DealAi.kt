@@ -1,10 +1,14 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.Constants
+import com.unciv.logic.automation.diplomacy.AiThreat
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.PactPlanningAi
 import com.unciv.logic.automation.diplomacy.PeaceTreatyType
+import com.unciv.logic.automation.diplomacy.WarDamageAi
 import com.unciv.logic.automation.diplomacy.WarProjection
+import com.unciv.logic.automation.strategy.AttackTargetsAi
+import com.unciv.logic.automation.strategy.EconomicMilitaryStrategyTests
 import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.city.City
 import com.unciv.logic.city.GreatWorkFunctions
@@ -28,6 +32,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
+import kotlin.random.Random
 
 /**
  *  The original's CvDealAI (CvDealAI.cpp): what a player thinks a deal is worth, how it balances a deal, and the deals it puts
@@ -98,7 +103,8 @@ object DealAi {
             }
             TradeOfferType.City -> {
                 val city = cityById(if (fromMe) us else them, offer.name)
-                if (city == null) 0 else getCityValue(us, them, city, fromMe, useEvenValue)
+                // The buyer's price whoever asks; a city the buyer will not take at any price spoils the deal for the buyer (INT_MAX)
+                if (city == null) 0 else getCityValueForDeal(city, if (fromMe) them else us) ?: if (fromMe) NEVER else -NEVER
             }
             TradeOfferType.Embassy -> getEmbassyValue(us, them, fromMe, useEvenValue)
             TradeOfferType.Agreement -> if (offer.name == Constants.openBorders) getOpenBordersValue(us, them, fromMe, useEvenValue) else 0
@@ -235,74 +241,113 @@ object DealAi {
     }
 
     /**
-     *  CvPlayer::GetBuyPlotCost: [Civilization.getBuyPlotCost] under plotAcquisitionLikeCivV. Otherwise PLOT_BASE_COST + PLOT_ADDITIONAL_COST_PER_PLOT
-     *  × plots bought, counting the tiles our cities claimed
+     *  CvDealAI::GetCityValueForDeal (Vox Populi, Community Patch part): what [assumedOwner] would pay for [city], from the buyer's side
+     *  only (the original's value is the same whoever asks). Null stands for INT_MAX: the city is not for sale to that buyer.
+     *
+     *  15000, plus a quarter of the city's economic value ([AttackTargetsAi.economicValue] for the buyer) above 1000, doubled when the city
+     *  makes more per citizen than half of the buyer's other cities; plus PLOT_BASE_COST x 10 per tile the city owns beyond its first ring,
+     *  and x 50 per such tile that borders the buyer. A city bordering the buyer's land loses nothing; one that does not loses 5 plot costs
+     *  per tile of distance to the buyer's closest city, at most half. Minus 30 plot costs per unhappy citizen, +20% when the buyer founded
+     *  it and +20% when the buyer owns it, x70% a puppet, x50% a city being razed, +11% per world wonder (national wonders too when the
+     *  buyer owns it). The price is at least 729 per citizen.
+     *
+     *  Never for sale: a capital (unless [forCityComparison]); outside a peace treaty (the buyer at war with the owner) a city the buyer
+     *  does not own or found when the buyer's empire is unhappy; a city the buyer owns when it has fewer than 5 cities, or is an original
+     *  capital or a holy city, or was founded or taken less than 42-46 turns ago; for a city the buyer does not own, when its owner counts
+     *  the buyer's warmonger threat severe or worse (major: x2). A city the buyer does not own and does not border, further from the buyer's
+     *  closest city than 1.5 times from the seller's closest, is refused unless the buyer is about to take it: two or more of its military
+     *  units next to the city and the city below 10% + war score/10 of its hit points. With [onlyCitiesAboutToBeConquered] only such a city
+     *  is priced.
+     *
+     *  Not ported: the city traded-before flag (CvCity::IsTraded: no such record in a city; Unciv's turnAcquired stands in for the
+     *  founding turn, so a city taken or traded in the last 42-46 turns also counts as new); CvDiplomacyAI::IsTryingToLiberate (not in this
+     *  base; it only refuses an AI buying a city it means to liberate, and no AI proposes to buy a city); the founding turn's random 0-4 is
+     *  seeded by the economic value as the original does but with Kotlin's generator.
      */
-    private fun buyPlotCost(civ: Civilization): Int {
-        if (civ.gameInfo.ruleset.modOptions.constants.plotAcquisitionLikeCivV) return civ.getBuyPlotCost()
-        var plotsBought = 0
-        for (city in civ.cities) plotsBought += city.expansion.tilesClaimed()
-        return civ.define(AiDefine.PLOT_BASE_COST) + civ.define(AiDefine.PLOT_ADDITIONAL_COST_PER_PLOT) * plotsBought
-    }
+    fun getCityValueForDeal(city: City, assumedOwner: Civilization, onlyCitiesAboutToBeConquered: Boolean = false, warScore: Int = 0,
+                            forCityComparison: Boolean = false): Int? {
+        if (!forCityComparison && city.isCapital()) return null
+        val seller = city.civ
+        val peaceTreatyTrade = assumedOwner.isAtWarWith(seller)
+        val buyerOwns = seller == assumedOwner
+        val buyerFounded = city.foundingCivObject == assumedOwner
+        if (!peaceTreatyTrade && !buyerOwns && !buyerFounded && EconomicMilitaryStrategyTests.isEmpireUnhappy(assumedOwner)) return null
+        if (!peaceTreatyTrade && buyerOwns) {
+            if (assumedOwner.cities.size < 5) return null
+            if (city.isOriginalCapital || city.isHolyCity()) return null
+        }
 
-    /**
-     *  CvDealAI::GetCityValue: 440 + 200 × population, plus the city's worked-area plots: beyond the first ring a plot's buy cost,
-     *  an improved plot 25% of it, a revealed luxury quantity × happiness × 120 × 2 (×3 more if it is our last copy and we give it),
-     *  a strategic quantity × 60 × 1.5. A city we give: ×2 with a world wonder, × war projection (100-400%), ×2 when not at war.
-     *  A city a human offers outside war is divided by its distance to our nearest city beyond 4. An original major capital ×2.
-     */
-    fun getCityValue(us: Civilization, them: Civilization, city: City, fromMe: Boolean, useEvenValue: Boolean): Int {
-        var value = 440L + city.population.population * 200L
-        val goldPerPlot = buyPlotCost(us)
-        var plotsValue = 0L
-        var improvedValue = 0L
-        var resourceValue = 0L
+        var itemValue = 15000
+        val economicValue = AttackTargetsAi.economicValue(city, assumedOwner)
+        val economicValuePerPop = economicValue / max(1, city.population.population)
+        itemValue += max(1, economicValue - 1000) / 4
+
+        if (!peaceTreatyTrade && city.civ.gameInfo.turns - city.turnAcquired < 42 + Random(economicValue.toLong()).nextInt(5)) return null
+
+        var betterThanCount = 0
+        var minDistance = Int.MAX_VALUE
         val center = city.getCenterTile()
+        for (other in assumedOwner.cities) {
+            if (other == city) continue
+            if (economicValuePerPop > AttackTargetsAi.economicValue(other, assumedOwner) / max(1, other.population.population)) betterThanCount++
+            minDistance = min(minDistance, center.aerialDistanceTo(other.getCenterTile()))
+        }
+        if (betterThanCount > assumedOwner.cities.size / 2) itemValue *= 2
+
+        // The city's tiles beyond the first ring, and the ones next to land of the buyer
+        var newInternalBorderCount = 0
+        var cityTiles = 0
         for (tile in city.getTiles()) {
-            val distance = tile.aerialDistanceTo(center)
-            if (distance > 3) continue
-            if (distance > 1) plotsValue += goldPerPlot
-            if (tile.improvement != null) improvedValue += goldPerPlot * 25L
-            val resource = tile.tileResource ?: continue
-            if (!us.tech.isRevealed(resource)) continue
-            when (resource.resourceType) {
-                ResourceType.Luxury -> {
-                    resourceValue += tile.resourceAmount.toLong() * LUXURY_HAPPINESS * 120 * 2
-                    if (fromMe && numResourceAvailable(us, resource, true) == 1)
-                        resourceValue += tile.resourceAmount.toLong() * LUXURY_HAPPINESS * 120 * 4
-                }
-                ResourceType.Strategic -> resourceValue += tile.resourceAmount.toLong() * 60 * 150 / 100
-                else -> {}
+            if (tile.aerialDistanceTo(center) !in 2..5) continue
+            cityTiles++
+            if (seller != assumedOwner && tile.neighbors.any { it.getOwner() == assumedOwner }) newInternalBorderCount++
+        }
+
+        val goldPerPlot = assumedOwner.define(AiDefine.PLOT_BASE_COST)
+        itemValue += goldPerPlot * 10 * cityTiles
+        if (newInternalBorderCount > 0) itemValue += goldPerPlot * 50 * newInternalBorderCount
+        else if (!buyerOwns) {
+            itemValue -=
+                if (minDistance == Int.MAX_VALUE) itemValue / 2
+                else min(itemValue / 2, goldPerPlot * 5 * minDistance)
+        }
+
+        itemValue -= max(0, city.population.population - city.cityStats.localHappiness.toInt()) * goldPerPlot * 30
+
+        if (buyerFounded) itemValue = itemValue * 120 / 100
+        if (buyerOwns) itemValue = itemValue * 120 / 100
+        else if (!forCityComparison) {
+            // Only a city the buyer borders, or is not much further from than the seller, or is about to take, can be held
+            var minDistanceOldOwner = Int.MAX_VALUE
+            for (other in seller.cities) if (other != city) minDistanceOldOwner = min(minDistanceOldOwner, center.aerialDistanceTo(other.getCenterTile()))
+            var aboutToCapture = false
+            if (peaceTreatyTrade) {
+                val enemiesAdjacent = center.neighbors.sumOf { tile -> tile.getUnits().count { it.civ == assumedOwner && it.isMilitary() } }
+                if (enemiesAdjacent >= 2 && 100 * city.health / city.getMaxHealth() < 10 + warScore / 10) aboutToCapture = true
+            }
+            if (!aboutToCapture) {
+                if (onlyCitiesAboutToBeConquered) return null
+                if (newInternalBorderCount == 0 && minDistanceOldOwner != Int.MAX_VALUE && minDistance > minDistanceOldOwner * 3 / 2) return null
             }
         }
-        improvedValue /= 100
-        value += plotsValue + improvedValue + resourceValue
 
-        if (fromMe) {
-            if (city.cityConstructions.getBuiltBuildings().any { it.isWonder }) value *= 2
-            value *= when (us.ai.diplomacy.warProjection(them) ?: WarProjection.Unknown) {
-                WarProjection.Destruction -> 100
-                WarProjection.Defeat -> 180
-                WarProjection.Stalemate -> 220
-                WarProjection.Unknown -> 250
-                WarProjection.Good, WarProjection.VeryGood -> 400
+        if (city.isPuppet) itemValue = itemValue * 70 / 100
+        if (city.isBeingRazed) itemValue = itemValue * 50 / 100
+
+        val buildings = city.cityConstructions.getBuiltBuildings()
+        var wonders = buildings.count { it.isWonder }
+        if (buyerOwns) wonders += buildings.count { it.isNationalWonder }
+        if (wonders > 0) itemValue = itemValue * (100 + wonders * 11) / 100
+
+        if (!peaceTreatyTrade && !buyerOwns) {
+            // Not to warmongers
+            when (seller.ai.diplomacy.warmongerThreat(assumedOwner)) {
+                AiThreat.None, AiThreat.Minor -> {}
+                AiThreat.Major -> itemValue *= 2
+                AiThreat.Severe, AiThreat.Critical -> return null
             }
-            value /= 100
-            if (!us.isAtWarWith(them)) value *= 2
-        } else if (!us.isAtWarWith(them) && them.isHuman()) {
-            var bestDistance = 99
-            for (ourCity in us.cities) bestDistance = min(bestDistance, ourCity.getCenterTile().aerialDistanceTo(center))
-            if (bestDistance <= 4) bestDistance = 5
-            value /= bestDistance - 4
-            if (value < 100) value = 100
         }
-        if (city.isOriginalCapital && city.foundingCivObject?.isMajorCiv == true) value *= 2
-
-        if (useEvenValue) {
-            value += getCityValue(them, us, city, !fromMe, false)
-            value /= 2
-        }
-        return clamp(value)
+        return max(itemValue, city.population.population * 729)
     }
 
     /**
@@ -1102,125 +1147,163 @@ object DealAi {
                 addItemsToDealForPeaceTreaty(trade, us, them, imWillingToOffer, meSurrendering = true)
             else if (imWillingToOffer < theyreWillingToOffer)
                 addItemsToDealForPeaceTreaty(trade, us, them, theyreWillingToOffer, meSurrendering = false)
+            else {
+                addPeaceTreaty(trade, us)
+                addPlayersAlliesToTreaty(trade, us, them)
+            }
         } else {
             when {
                 imWillingToOffer > PeaceTreatyType.WhitePeace -> addItemsToDealForPeaceTreaty(trade, us, them, imWillingToOffer, meSurrendering = true)
                 imWillingToAccept > PeaceTreatyType.WhitePeace -> addItemsToDealForPeaceTreaty(trade, us, them, imWillingToAccept, meSurrendering = false)
-                else -> addPlayersAlliesToTreaty(trade, us, them)
+                else -> {
+                    addPeaceTreaty(trade, us)
+                    addPlayersAlliesToTreaty(trade, us, them)
+                }
             }
         }
-        val duration = us.gameInfo.speed.peaceDealDuration
-        trade.ourOffers.add(TradeOffer(Constants.peaceTreaty, TradeOfferType.Treaty, 1, duration))
-        trade.theirOffers.add(TradeOffer(Constants.peaceTreaty, TradeOfferType.Treaty, 1, duration))
         return true
     }
 
     /**
-     *  CvDealAI::DoAddItemsToDealForPeaceTreaty: the loser's package by treaty. Armistice: 50% of gold and GPT; Settlement: 100%;
-     *  Backdown: + open borders and strategic resources; Submission: + luxuries; Surrender: one city; Cession: 25% of city value and 50% gold;
-     *  Capitulation: 33% and all gold; Unconditional surrender: every city but the capital and all gold. GPT is the lesser of the loser's
-     *  rate and the winner's rate / ARMISTICE_GPT_DIVISOR; cities go closest to the winner's capital first (the winner's former cities count
-     *  a third of their distance). The allied city-states' peace is always added.
+     *  CvDealAI::DoAddItemsToDealForPeaceTreaty (Vox Populi): the loser's package, by war score rather than by treaty. Nothing below an
+     *  armistice (white peace has no items; callers add the peace themselves). The score is the loser's [WarDamageAi.warScore] against the
+     *  winner as a magnitude, less 10 when the loser has no city in danger (CvPlayer::HasCityInDanger(false, 0) is true for any city,
+     *  the danger being a damage total of at least 0, so this only applies to a loser without cities).
+     *
+     *  Peace between the two and peace with the city-states of each side's ally. Above 25 the loser offers its one most valuable city
+     *  ([getCityValueForDeal] for the winner, only cities about to be conquered, never a capital) when it has more than one, and the score
+     *  falls by 25. Then gold and half as much GPT (a share in percent equal to the score, then half of it, never the last 2 GPT) of its gold
+     *  and rate. Without that city, above 60 and with more than one city, cities worth in total the score/5 percent of all its cities'
+     *  value for comparison, most valuable first while each is worth less than what is left. Above 15 luxuries (one each) worth in total
+     *  the score percent of what the winner values them at, most valuable first, each while it fits; above 35 strategic resources (up to
+     *  3 of each) worth in total score/4 percent of the winner's value, most valuable first, each while it is worth less than what is left.
+     *  A resource the winner values at nothing is left out. The winner's value is its own, not an average ([getResourceValue] for the winner).
+     *
+     *  Not ported: becoming a vassal (and halving the score), revoking vassals: no vassals (roadmap D3).
      */
     fun addItemsToDealForPeaceTreaty(trade: Trade, us: Civilization, them: Civilization, treaty: PeaceTreatyType, meSurrendering: Boolean) {
-        var percentGold = 0
-        var percentGpt = 0
-        var giveOpenBorders = false
-        var giveOnlyOneCity = false
-        var percentCities = 0
-        var giveStrategic = false
-        var giveLuxury = false
-        when (treaty) {
-            PeaceTreatyType.Armistice -> { percentGold = 50; percentGpt = 50 }
-            PeaceTreatyType.Settlement -> { percentGold = 100; percentGpt = 100 }
-            PeaceTreatyType.Backdown -> { percentGold = 100; percentGpt = 100; giveOpenBorders = true; giveStrategic = true }
-            PeaceTreatyType.Submission -> { percentGold = 100; percentGpt = 100; giveOpenBorders = true; giveStrategic = true; giveLuxury = true }
-            PeaceTreatyType.Surrender -> giveOnlyOneCity = true
-            PeaceTreatyType.Cession -> { percentCities = 25; percentGold = 50 }
-            PeaceTreatyType.Capitulation -> { percentCities = 33; percentGold = 100 }
-            PeaceTreatyType.UnconditionalSurrender -> { percentCities = 100; percentGold = 100 }
-            else -> {}
-        }
+        if (treaty < PeaceTreatyType.Armistice) return
         val duration = us.gameInfo.speed.dealDuration
         val loser = if (meSurrendering) us else them
         val winner = if (meSurrendering) them else us
         val loserItems = if (meSurrendering) trade.ourOffers else trade.theirOffers
-        // Peace items first, so that the gold checks see a peace deal (the original sets the treaty type before adding items)
-        val peace = TradeOffer(Constants.peaceTreaty, TradeOfferType.Treaty, 1, us.gameInfo.speed.peaceDealDuration)
-        val hadPeace = trade.isPeaceTreaty()
-        if (!hadPeace) trade.ourOffers.add(peace)
-
-        addPlayersAlliesToTreaty(trade, us, them)
         val available = TradeLogic(loser, winner).ourAvailableOffers
 
-        if (percentGold > 0) {
-            var gold = goldAvailable(trade, loser, meSurrendering)
-            if (gold > 0) {
-                gold = gold * percentGold / 100
-                val offer = TradeOffer(Constants.flatGold, TradeOfferType.Gold, gold, -1)
-                if (gold > 0 && isPossibleToTradeItem(trade, loser, winner, offer, meSurrendering, available)) loserItems.add(offer)
-            }
-        }
-        if (percentGpt > 0) {
-            var gpt = min(goldRate(loser), goldRate(winner) / loser.define(AiDefine.ARMISTICE_GPT_DIVISOR))
-            if (gpt > 0) {
-                gpt = gpt * percentGpt / 100
-                val offer = TradeOffer(Constants.goldPerTurn, TradeOfferType.Gold_Per_Turn, gpt, duration)
-                if (gpt > 0 && isPossibleToTradeItem(trade, loser, winner, offer, meSurrendering, available)) loserItems.add(offer)
-            }
-        }
-        if (giveOpenBorders) {
-            val offer = TradeOffer(Constants.openBorders, TradeOfferType.Agreement, 1, duration)
-            if (isPossibleToTradeItem(trade, loser, winner, offer, meSurrendering, available)) loserItems.add(offer)
-        }
-        for (resource in us.gameInfo.ruleset.tileResources.values) {
-            if (resource.resourceType == ResourceType.Bonus) continue
-            var quantity = numResourceAvailable(loser, resource, false)
-            if (quantity == 0) continue
-            if (resource.resourceType == ResourceType.Luxury && !giveLuxury) continue
-            if (resource.resourceType == ResourceType.Strategic && !giveStrategic) continue
-            if (resource.resourceType == ResourceType.Luxury) quantity = 1
-            val type = if (resource.resourceType == ResourceType.Luxury) TradeOfferType.Luxury_Resource else TradeOfferType.Strategic_Resource
-            val offer = TradeOffer(resource.name, type, quantity, duration)
-            if (isPossibleToTradeItem(trade, loser, winner, offer, meSurrendering, available)) loserItems.add(offer)
-        }
+        var warScore = abs(WarDamageAi.warScore(loser, winner))
+        if (!hasCityInDanger(loser)) warScore = max(0, warScore - 10)
 
-        if (percentCities == 100) {
+        addPeaceTreaty(trade, us)
+        addPlayersAlliesToTreaty(trade, us, them)
+
+        // A city that is about to fall
+        var cityToOffer: City? = null
+        var maxCityValue = 0
+        if (warScore > 25 && loser.cities.size > 1) {
             for (city in loser.cities) {
-                if (city.isCapital()) continue
-                val offer = TradeOffer(city.id, TradeOfferType.City, 1, -1)
-                if (isPossibleToTradeItem(trade, loser, winner, offer, meSurrendering, available)) loserItems.add(offer)
-            }
-        } else if (percentCities > 0 || giveOnlyOneCity && loser.cities.size > 1) {
-            var totalCityValue = 0
-            val winnerCapital = winner.getCapital()
-            val candidates = ArrayList<Pair<City, Int>>()
-            for (city in loser.cities) {
-                totalCityValue += getCityValue(us, them, city, meSurrendering, true)
-                var distance = if (winnerCapital != null) winnerCapital.getCenterTile().aerialDistanceTo(city.getCenterTile()) else 0
-                if (city.foundingCivObject == winner) distance /= 3
-                if (!city.isCapital()) candidates.add(city to distance)
-            }
-            // CvWeightedVector::SortItems sorts by descending weight, and the loop runs from the back: closest first
-            candidates.sortBy { it.second }
-            if (giveOnlyOneCity) {
-                val closest = candidates.firstOrNull()
-                if (closest != null) loserItems.add(TradeOffer(closest.first.id, TradeOfferType.City, 1, -1))
-            } else {
-                var valueToSurrender = totalCityValue * percentCities / 100
-                for ((city, _) in candidates) {
-                    val cityValue = getCityValue(us, them, city, meSurrendering, true)
-                    if (cityValue < valueToSurrender) {
-                        val offer = TradeOffer(city.id, TradeOfferType.City, 1, -1)
-                        if (isPossibleToTradeItem(trade, loser, winner, offer, meSurrendering, available)) {
-                            loserItems.add(offer)
-                            valueToSurrender -= cityValue
-                        }
-                    }
+                val value = getCityValueForDeal(city, winner, onlyCitiesAboutToBeConquered = true, warScore = warScore) ?: continue
+                if (value > maxCityValue) {
+                    maxCityValue = value
+                    cityToOffer = city
                 }
             }
         }
-        if (!hadPeace) trade.ourOffers.remove(peace)
+        if (cityToOffer != null) {
+            warScore -= 25
+            loserItems.add(TradeOffer(cityToOffer.id, TradeOfferType.City, 1, -1))
+        }
+
+        val percentGold = warScore
+        val percentGpt = warScore / 2
+        val giveUpCities = warScore > 60
+        val percentCitiesGiveUp = warScore / 5
+        val giveUpStrategic = warScore > 35
+        val giveUpLuxury = warScore > 15
+        val giveUpLuxuryPercent = warScore
+        val giveUpStrategicPercent = warScore / 4
+
+        if (cityToOffer == null && giveUpCities && percentCitiesGiveUp > 0 && loser.cities.size > 1) {
+            var totalCityValue = 0
+            val values = ArrayList<Pair<City, Int>>()
+            for (city in loser.cities) {
+                val value = getCityValueForDeal(city, winner, false, warScore)
+                val valueForComparison = getCityValueForDeal(city, winner, false, warScore, forCityComparison = true)
+                if (valueForComparison != null) totalCityValue += valueForComparison
+                if (value == null || value <= 0) continue
+                values.add(city to value)
+            }
+            var valueToSurrender = totalCityValue * percentCitiesGiveUp / 100
+            // CvWeightedVector::StableSortItems: highest weight first, equal ones in the order they were added
+            for ((city, value) in values.sortedByDescending { it.second }) {
+                if (value < valueToSurrender) {
+                    loserItems.add(TradeOffer(city.id, TradeOfferType.City, 1, -1))
+                    valueToSurrender -= value
+                }
+            }
+        }
+
+        if (percentGold > 0) {
+            val gold = goldAvailable(trade, loser, meSurrendering) * percentGold / 100
+            if (gold > 0) loserItems.add(TradeOffer(Constants.flatGold, TradeOfferType.Gold, gold, -1))
+        }
+        if (percentGpt > 0) {
+            val rate = goldRate(loser)
+            var gptToGive = rate * percentGpt / 100
+            if (gptToGive >= rate - 2) gptToGive -= 2
+            if (gptToGive > 0) loserItems.add(TradeOffer(Constants.goldPerTurn, TradeOfferType.Gold_Per_Turn, gptToGive, duration))
+        }
+
+        val resources = us.gameInfo.ruleset.tileResources.values
+        if (giveUpLuxury && giveUpLuxuryPercent > 0) {
+            var totalValue = 0
+            val values = ArrayList<Pair<TileResource, Int>>()
+            for (resource in resources) {
+                if (resource.resourceType != ResourceType.Luxury || numResourceAvailable(loser, resource, false) == 0) continue
+                if (!isPossibleToTradeItem(trade, loser, winner, TradeOffer(resource.name, TradeOfferType.Luxury_Resource, 1, duration), meSurrendering, available)) continue
+                val value = getResourceValue(winner, loser, resource, 1, duration, false)
+                if (value >= NEVER || value <= 0) continue
+                totalValue += value
+                values.add(resource to value)
+            }
+            var valueToSurrender = totalValue * giveUpLuxuryPercent / 100
+            for ((resource, value) in values.sortedByDescending { it.second }) {
+                if (value <= valueToSurrender) {
+                    loserItems.add(TradeOffer(resource.name, TradeOfferType.Luxury_Resource, 1, duration))
+                    valueToSurrender -= value
+                }
+            }
+        }
+        if (giveUpStrategic && giveUpStrategicPercent > 0) {
+            var totalValue = 0
+            val values = ArrayList<Triple<TileResource, Int, Int>>()
+            for (resource in resources) {
+                if (resource.resourceType != ResourceType.Strategic) continue
+                val quantity = min(3, numResourceAvailable(loser, resource, false))
+                if (quantity <= 0) continue
+                if (!isPossibleToTradeItem(trade, loser, winner, TradeOffer(resource.name, TradeOfferType.Strategic_Resource, quantity, duration), meSurrendering, available)) continue
+                val value = getResourceValue(winner, loser, resource, quantity, duration, false)
+                if (value >= NEVER || value <= 0) continue
+                totalValue += value
+                values.add(Triple(resource, quantity, value))
+            }
+            var valueToSurrender = totalValue * giveUpStrategicPercent / 100
+            for ((resource, quantity, value) in values.sortedByDescending { it.third }) {
+                if (value < valueToSurrender) {
+                    loserItems.add(TradeOffer(resource.name, TradeOfferType.Strategic_Resource, quantity, duration))
+                    valueToSurrender -= value
+                }
+            }
+        }
+    }
+
+    /** CvPlayer::HasCityInDanger(false, 0): a city whose plot danger (a damage total, never negative) is at least 0, that is, any city */
+    private fun hasCityInDanger(civ: Civilization) = civ.cities.isNotEmpty()
+
+    /** CvDeal::AddPeaceTreaty for both players, unless the deal has them already */
+    private fun addPeaceTreaty(trade: Trade, us: Civilization) {
+        val duration = us.gameInfo.speed.peaceDealDuration
+        for (list in listOf(trade.ourOffers, trade.theirOffers))
+            if (list.none { it.type == TradeOfferType.Treaty && it.name == Constants.peaceTreaty })
+                list.add(TradeOffer(Constants.peaceTreaty, TradeOfferType.Treaty, 1, duration))
     }
 
     /**

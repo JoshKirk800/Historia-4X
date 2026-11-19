@@ -1,6 +1,7 @@
 package com.unciv.logic.civilization.managers
 
 import com.unciv.logic.IsPartOfGameInfoSerialization
+import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.AiOperationType
 import com.unciv.logic.automation.strategy.ArmyType
 import com.unciv.logic.automation.strategy.MilitaryOperations
@@ -110,8 +111,7 @@ object IntrigueFunctions {
             for (target in majors) {
                 if (target == owner) continue
                 val operation = MilitaryOperations.sneakAttackOperation(owner, target) ?: continue
-                val targetCity = if (spyRank >= AGENT_RANK) operation.targetTile
-                    ?.let { gameInfo.tileMap[it] }?.takeIf { it.isCityCenter() }?.getCity() else null
+                val targetCity = if (spyRank >= AGENT_RANK) AiOperationLogic.attackedCity(owner, operation) else null
                 val hidden = spyRank <= RECRUIT_RANK
                 val revealed = if (!hidden && (target == civ || civ.knows(target))) target else null
                 val type = when (operation.type) {

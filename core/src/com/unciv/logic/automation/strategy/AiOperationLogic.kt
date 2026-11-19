@@ -2,6 +2,7 @@ package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.civilization.UseGoldAutomation
+import com.unciv.logic.automation.diplomacy.ApproachWinningAi
 import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -133,6 +134,13 @@ object AiOperationLogic {
     private fun biggerForces(civ: Civilization) =
         EconomicAi.gameHandicapIndex(civ.gameInfo) > 4 && SettleAreas.aiMapHint(civ.gameInfo) and 1 == 0
 
+    /**
+     *  MilitaryAIHelpers::GetCurrentBestFormationTypeForCombinedAttack and ...ForPureNavalAttack: [late] after the Medieval era (the game's
+     *  era, [ApproachWinningAi.gameEra]), else [early]; a ruleset that has no late-game formation keeps [early]
+     */
+    private fun lateGameOr(civ: Civilization, late: String, early: String): String =
+        if (ApproachWinningAi.gameEra(civ) > civ.gameInfo.ruleset.ai.define(AiDefine.MEDIEVAL_ERA) && civ.ai.operations.formationDef(late) != null) late else early
+
     /** CvAIOperation::GetFormation of the operation types (a formation the ruleset lacks is replaced by the basic city attack force) */
     fun formationName(civ: Civilization, type: AiOperationType): String {
         val name = when (type) {
@@ -148,10 +156,12 @@ object AiOperationLogic {
             AiOperationType.PILLAGE_ENEMY -> "MUFORMATION_FAST_PILLAGERS"
             AiOperationType.CITY_CLOSE_DEFENSE -> "MUFORMATION_CLOSE_CITY_DEFENSE"
             AiOperationType.RAPID_RESPONSE -> "MUFORMATION_RAPID_RESPONSE_FORCE"
-            AiOperationType.NAVAL_ATTACK, AiOperationType.NAVAL_SNEAK_ATTACK -> "MUFORMATION_NAVAL_INVASION"
-            AiOperationType.CITY_STATE_NAVAL_ATTACK -> "MUFORMATION_CITY_STATE_INVASION"
+            // MilitaryAIHelpers::GetCurrentBestFormationTypeForCombinedAttack: every combined army, a city-state's too
+            AiOperationType.NAVAL_ATTACK, AiOperationType.NAVAL_SNEAK_ATTACK, AiOperationType.CITY_STATE_NAVAL_ATTACK ->
+                lateGameOr(civ, "MUFORMATION_LATE_GAME_INVASION_FORCE", "MUFORMATION_NAVAL_INVASION")
             AiOperationType.NAVAL_SUPERIORITY -> "MUFORMATION_NAVAL_SQUADRON"
-            AiOperationType.PURE_NAVAL_CITY_ATTACK -> "MUFORMATION_PURE_NAVAL_CITY_ATTACK"
+            // MilitaryAIHelpers::GetCurrentBestFormationTypeForPureNavalAttack
+            AiOperationType.PURE_NAVAL_CITY_ATTACK -> lateGameOr(civ, "MUFORMATION_LATE_GAME_PURE_NAVAL_FORCE", "MUFORMATION_PURE_NAVAL_CITY_ATTACK")
             AiOperationType.NUKE_ATTACK -> "MUFORMATION_NUKE_ATTACK"
         }
         return if (civ.ai.operations.formationDef(name) != null) name else "MUFORMATION_BASIC_CITY_ATTACK_FORCE"
@@ -743,7 +753,7 @@ object AiOperationLogic {
         }
         val checkpoint = checkpointTile(civ, operation, army) ?: return
         val tolerance =
-            if (operation.type.allNaval || operation.type.mixedLandNaval) NavalOperationLogic.gatherTolerance(civ, operation, army)
+            if (operation.type.allNaval || operation.type.mixedLandNaval) gatherToleranceFor(civ, operation, army, checkpoint)
             else gatherTolerance(civ, army)
         val maxTurns = maxRecruitTurns(civ, operation)
         for ((index, unit) in armyUnits(civ, army)) {
@@ -767,11 +777,11 @@ object AiOperationLogic {
     //region State machine
 
     /**
-     *  CvAIOperation::CheckTransitionToNextStage after the army moved. The military operations that go by land - the attacks, the pillage
-     *  raid, the land defense operations - and the naval superiority squadron are CvAIOperationMilitary's ([checkTransitionToNextStage]:
+     *  CvAIOperation::CheckTransitionToNextStage after the army moved. The military operations - the attacks by land and by sea, the pillage
+     *  raid, the defense operations, the naval superiority squadron - are CvAIOperationMilitary's ([checkTransitionToNextStage]:
      *  recruiting, gathering, moving, success within [DEPLOY_RANGE] of the target, or discovered at peace); BNW's tests of their own (the
-     *  gathering within the muster's tolerance, the arrival within 5 plots, the abort for a target that changed) are gone. The settlers'
-     *  operations and the other naval ones keep theirs: an
+     *  gathering within the muster's tolerance, the arrival within 5 plots or, for an invasion, twice the city attack range, the abort for a
+     *  target that changed) are gone. The settlers' operations keep theirs: an
      *  army with enough units starts gathering ([finishRecruitingIfDone]), the armies that have gathered move out, those at the target
      *  hand over. True if the state changed.
      */
@@ -801,8 +811,7 @@ object AiOperationLogic {
                     if (civilianTile != null && civilianTile == escortTile) { armyInPosition(civ, operation, army); return true }
                 }
             }
-            OperationMoveType.NavalEscort, OperationMoveType.FreeformNaval, OperationMoveType.NavalFleet -> return NavalOperationLogic.checkOnTarget(civ, operation)
-            OperationMoveType.EnemyTerritory, OperationMoveType.None -> Unit
+            OperationMoveType.NavalEscort, OperationMoveType.FreeformNaval, OperationMoveType.NavalFleet, OperationMoveType.EnemyTerritory, OperationMoveType.None -> Unit
         }
         return false
     }
@@ -861,8 +870,6 @@ object AiOperationLogic {
     fun armyInPosition(civ: Civilization, operation: AiOperation, army: AiArmy): Boolean {
         val type = operation.type
         return when {
-            type.isNavalInvasion -> NavalOperationLogic.navalInvasionInPosition(civ, operation, army)
-            type == AiOperationType.PURE_NAVAL_CITY_ATTACK -> NavalOperationLogic.pureNavalAttackInPosition(civ, operation, army)
             type == AiOperationType.NUKE_ATTACK -> NavalOperationLogic.nukeInPosition(civ, operation, army)
             type.isEscorted -> escortedInPosition(civ, operation, army)
             else -> baseArmyInPosition(operation, army)
@@ -1467,8 +1474,11 @@ object AiOperationLogic {
                 if (enemy != null && atPeace) civ.ai.diplomacy.memoryOf(enemy).musteringForAttack = true
                 // that's it: the army is disbanded next turn, its units are free for the tactical AI
                 operation.state = OperationState.SUCCESSFUL_FINISH
-                // Retained from BNW's CvAIOperationBasicCityAttack::ArmyInPosition until the tactical map follows the focus areas: the city is a temporary zone
-                if (operation.type.isCityAttack) targetTile(civ, operation)?.let { civ.ai.tactical.addTemporaryZone(it, TacticalTargetType.City) }
+                // Retained from BNW's ArmyInPosition until the tactical map follows the focus areas: the attacked city is a temporary zone
+                // (the naval invasion's one also lets ships and landing units close on it, as BNW's naval attack did)
+                if (operation.type.isCityAttack || operation.type.isNavalInvasion || operation.type == AiOperationType.PURE_NAVAL_CITY_ATTACK)
+                    focusPlot(civ, operation)?.takeIf { it.isCityCenter() }
+                        ?.let { civ.ai.tactical.addTemporaryZone(it, TacticalTargetType.City, navalInvasion = operation.type.isNavalInvasion) }
                 onSuccess(civ, operation)
                 true
             }
@@ -1481,14 +1491,26 @@ object AiOperationLogic {
      *  The nearest city is by plots, the original's by path length.
      */
     internal fun onSuccess(civ: Civilization, operation: AiOperation) {
-        var plot = targetTile(civ, operation) ?: return
+        val plot = focusPlot(civ, operation) ?: return
+        civ.ai.tactical.addFocusArea(plot, FOCUS_AREA_RADIUS, civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_MAP_TEMP_ZONE_TURNS))
+    }
+
+    /**
+     *  The plot [onSuccess] focuses on: the operation's target, or the enemy's city less than [OWN_CITY_FOCUS_DISTANCE] plots from it when the
+     *  target is not a city (the coastal water of a naval attack).
+     */
+    private fun focusPlot(civ: Civilization, operation: AiOperation): Tile? {
+        val plot = targetTile(civ, operation) ?: return null
         val enemy = enemy(civ, operation)
         if (!plot.isCityCenter() && enemy != null) {
             val city = enemy.cities.minByOrNull { it.getCenterTile().aerialDistanceTo(plot) }
-            if (city != null && city.getCenterTile().aerialDistanceTo(plot) < OWN_CITY_FOCUS_DISTANCE) plot = city.getCenterTile()
+            if (city != null && city.getCenterTile().aerialDistanceTo(plot) < OWN_CITY_FOCUS_DISTANCE) return city.getCenterTile()
         }
-        civ.ai.tactical.addFocusArea(plot, FOCUS_AREA_RADIUS, civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_MAP_TEMP_ZONE_TURNS))
+        return plot
     }
+
+    /** The enemy city an attack is going for: the one on its target, or the one near the coastal water that is the target of a naval attack */
+    fun attackedCity(civ: Civilization, operation: AiOperation): City? = focusPlot(civ, operation)?.takeIf { it.isCityCenter() }?.getCity()
     //endregion
 
     /** Turns a FOUND_CITY settler waits for an escort before it goes alone (CvAIOperationFoundCity::ShouldAbort) */

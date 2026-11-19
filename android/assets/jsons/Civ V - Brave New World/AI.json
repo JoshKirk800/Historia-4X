@@ -12551,16 +12551,10 @@
       "name": "MUFORMATION_NAVAL_INVASION",
       "slots": [
         {
-          "primaryUnitAi": "UNITAI_CITY_BOMBARD",
-          "secondaryUnitAi": "UNITAI_RANGED",
+          "primaryUnitAi": "UNITAI_DEFENSE",
+          "secondaryUnitAi": "UNITAI_COUNTER",
           "required": true,
-          "positionType": "MUPOSITION_BOMBARD"
-        },
-        {
-          "primaryUnitAi": "UNITAI_CITY_BOMBARD",
-          "secondaryUnitAi": "UNITAI_DEFENSE",
-          "required": true,
-          "positionType": "MUPOSITION_BOMBARD"
+          "positionType": "MUPOSITION_FRONT_LINE"
         },
         {
           "primaryUnitAi": "UNITAI_ATTACK",
@@ -12569,7 +12563,31 @@
           "positionType": "MUPOSITION_FRONT_LINE"
         },
         {
+          "primaryUnitAi": "UNITAI_ATTACK",
+          "secondaryUnitAi": "UNITAI_DEFENSE",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_CITY_BOMBARD",
+          "secondaryUnitAi": "UNITAI_RANGED",
+          "required": true,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_CITY_BOMBARD",
+          "secondaryUnitAi": "UNITAI_RANGED",
+          "required": true,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
           "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
           "secondaryUnitAi": "UNITAI_RESERVE_SEA",
           "required": true,
           "positionType": "MUPOSITION_NAVAL_ESCORT"
@@ -12578,6 +12596,30 @@
           "primaryUnitAi": "UNITAI_ASSAULT_SEA",
           "secondaryUnitAi": "UNITAI_RESERVE_SEA",
           "required": true,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_CARRIER_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK",
+          "secondaryUnitAi": "UNITAI_DEFENSE",
+          "required": false,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_CITY_BOMBARD",
+          "secondaryUnitAi": "UNITAI_RANGED",
+          "required": false,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
           "positionType": "MUPOSITION_NAVAL_ESCORT"
         },
         {
@@ -12585,18 +12627,24 @@
           "secondaryUnitAi": "UNITAI_ADMIRAL",
           "required": false,
           "positionType": "MUPOSITION_CIVILIAN_SUPPORT"
-        },
-        {
-          "primaryUnitAi": "UNITAI_CARRIER_SEA",
-          "secondaryUnitAi": "UNITAI_CARRIER_SEA",
-          "required": false,
-          "positionType": "MUPOSITION_BOMBARD"
         }
       ]
     },
     {
       "name": "MUFORMATION_CITY_STATE_INVASION",
       "slots": [
+        {
+          "primaryUnitAi": "UNITAI_ATTACK",
+          "secondaryUnitAi": "UNITAI_DEFENSE",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK",
+          "secondaryUnitAi": "UNITAI_FAST_ATTACK",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
         {
           "primaryUnitAi": "UNITAI_CITY_BOMBARD",
           "secondaryUnitAi": "UNITAI_RANGED",
@@ -12605,15 +12653,9 @@
         },
         {
           "primaryUnitAi": "UNITAI_CITY_BOMBARD",
-          "secondaryUnitAi": "UNITAI_DEFENSE",
+          "secondaryUnitAi": "UNITAI_RANGED",
           "required": true,
           "positionType": "MUPOSITION_BOMBARD"
-        },
-        {
-          "primaryUnitAi": "UNITAI_ATTACK",
-          "secondaryUnitAi": "UNITAI_DEFENSE",
-          "required": true,
-          "positionType": "MUPOSITION_FRONT_LINE"
         },
         {
           "primaryUnitAi": "UNITAI_ATTACK_SEA",
@@ -12625,6 +12667,48 @@
           "primaryUnitAi": "UNITAI_ASSAULT_SEA",
           "secondaryUnitAi": "UNITAI_RESERVE_SEA",
           "required": true,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_DEFENSE",
+          "secondaryUnitAi": "UNITAI_FAST_ATTACK",
+          "required": false,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_CITY_BOMBARD",
+          "secondaryUnitAi": "UNITAI_RANGED",
+          "required": false,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
           "positionType": "MUPOSITION_NAVAL_ESCORT"
         },
         {
@@ -12697,27 +12781,116 @@
       "slots": [
         {
           "primaryUnitAi": "UNITAI_ATTACK_SEA",
-          "secondaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
           "required": true,
           "positionType": "MUPOSITION_FRONT_LINE"
         },
         {
           "primaryUnitAi": "UNITAI_ATTACK_SEA",
-          "secondaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
           "required": true,
           "positionType": "MUPOSITION_FRONT_LINE"
         },
         {
           "primaryUnitAi": "UNITAI_ASSAULT_SEA",
-          "secondaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
           "required": true,
           "positionType": "MUPOSITION_BOMBARD"
         },
         {
           "primaryUnitAi": "UNITAI_ASSAULT_SEA",
-          "secondaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_CARRIER_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ADMIRAL",
+          "secondaryUnitAi": "UNITAI_ADMIRAL",
+          "required": false,
+          "positionType": "MUPOSITION_CIVILIAN_SUPPORT"
+        }
+      ]
+    },
+    {
+      "name": "MUFORMATION_LATE_GAME_INVASION_FORCE",
+      "slots": [
+        {
+          "primaryUnitAi": "UNITAI_DEFENSE",
+          "secondaryUnitAi": "UNITAI_COUNTER",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK",
+          "secondaryUnitAi": "UNITAI_DEFENSE",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK",
+          "secondaryUnitAi": "UNITAI_DEFENSE",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_CITY_BOMBARD",
+          "secondaryUnitAi": "UNITAI_RANGED",
           "required": true,
           "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_CITY_BOMBARD",
+          "secondaryUnitAi": "UNITAI_RANGED",
+          "required": true,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
         },
         {
           "primaryUnitAi": "UNITAI_ADMIRAL",
@@ -12726,10 +12899,87 @@
           "positionType": "MUPOSITION_CIVILIAN_SUPPORT"
         },
         {
-          "primaryUnitAi": "UNITAI_CARRIER_SEA",
-          "secondaryUnitAi": "UNITAI_CARRIER_SEA",
+          "primaryUnitAi": "UNITAI_DEFENSE",
+          "secondaryUnitAi": "UNITAI_COUNTER",
+          "required": false,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_NAVAL_ESCORT"
+        }
+      ]
+    },
+    {
+      "name": "MUFORMATION_LATE_GAME_PURE_NAVAL_FORCE",
+      "slots": [
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": true,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
           "required": false,
           "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ATTACK_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_FRONT_LINE"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ASSAULT_SEA",
+          "secondaryUnitAi": "UNITAI_RESERVE_SEA",
+          "required": false,
+          "positionType": "MUPOSITION_BOMBARD"
+        },
+        {
+          "primaryUnitAi": "UNITAI_ADMIRAL",
+          "secondaryUnitAi": "UNITAI_ADMIRAL",
+          "required": false,
+          "positionType": "MUPOSITION_CIVILIAN_SUPPORT"
         }
       ]
     },

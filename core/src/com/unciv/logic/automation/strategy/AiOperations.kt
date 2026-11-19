@@ -15,11 +15,11 @@ import kotlin.math.max
 
 /**
  *  How the tactical AI moves the armies of an operation (AIOperationMovementType); [None] = the original's INVALID / STATIC type: never moved.
- *  [EnemyTerritory] is the land armies of Vox Populi's ARMY_TYPE_LAND (CvTacticalAI::PlotArmyMovesCombat): the attacks on a city, the pillage raids
- *  and the land defense operations. [NavalFleet] is the original's ENEMY_TERRITORY type as the pure naval city attack and the naval superiority
- *  set it: the fleet is moved by the naval formation code ([com.unciv.logic.automation.unit.NavalOperationMoves]), which places ships on water,
- *  instead of the land army's. [FreeformNaval] is BNW's naval superiority movement, which no operation uses any more (Vox Populi's squadron
- *  gathers and sails as a fleet); it stays for the tactical AI's exhaustive handling of the move types.
+ *  [EnemyTerritory] is every army of Vox Populi's military operations (ARMY_TYPE_LAND, ARMY_TYPE_NAVAL and ARMY_TYPE_COMBINED, which
+ *  CvAIOperation::Move gives to CvTacticalAI::PlotArmyMovesCombat): the attacks on a city, the pillage raids, the defense operations, and the
+ *  naval ones, whose ships and embarked land units gather and sail on water ([com.unciv.logic.automation.unit.tactical.OperationalMoves]).
+ *  [NavalEscort], [FreeformNaval] and [NavalFleet] are BNW's PlotNavalEscortOperationMoves, PlotFreeformNavalOperationMoves and
+ *  the fleet moves, which no operation has any more.
  */
 enum class OperationMoveType { None, SingleHex, EnemyTerritory, NavalEscort, FreeformNaval, NavalFleet }
 
@@ -42,11 +42,11 @@ enum class AiOperationType(
     PILLAGE_ENEMY(OperationMoveType.EnemyTerritory),
     CITY_CLOSE_DEFENSE(OperationMoveType.EnemyTerritory),
     RAPID_RESPONSE(OperationMoveType.EnemyTerritory),
-    NAVAL_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
-    NAVAL_SNEAK_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
-    CITY_STATE_NAVAL_ATTACK(OperationMoveType.NavalEscort, mixedLandNaval = true),
-    NAVAL_SUPERIORITY(OperationMoveType.NavalFleet, tacticalMayInterrupt = true, allNaval = true),
-    PURE_NAVAL_CITY_ATTACK(OperationMoveType.NavalFleet, tacticalMayInterrupt = true, allNaval = true),
+    NAVAL_ATTACK(OperationMoveType.EnemyTerritory, mixedLandNaval = true),
+    NAVAL_SNEAK_ATTACK(OperationMoveType.EnemyTerritory, mixedLandNaval = true),
+    CITY_STATE_NAVAL_ATTACK(OperationMoveType.EnemyTerritory, mixedLandNaval = true),
+    NAVAL_SUPERIORITY(OperationMoveType.EnemyTerritory, tacticalMayInterrupt = true, allNaval = true),
+    PURE_NAVAL_CITY_ATTACK(OperationMoveType.EnemyTerritory, tacticalMayInterrupt = true, allNaval = true),
     /** CvAIOperationNukeAttack: the original's STATIC move type, it only works with the nuke already in place */
     NUKE_ATTACK(OperationMoveType.None),
     /**
@@ -86,7 +86,9 @@ enum class OperationAbortReason {
     /** Vox Populi's AI_ABORT_TARGET_NOT_VALID: war on the enemy may no longer be declared ([WarAi.doMakeWarOnPlayer]) */
     TARGET_NOT_VALID,
     /** Vox Populi's AI_ABORT_NO_UNITS: more units to build than the request allows ([MilitaryOperations.requestPillageAttack]) */
-    NO_UNITS
+    NO_UNITS,
+    /** Vox Populi's AI_ABORT_TOO_DANGEROUS: the army's way leads past a city of another enemy ([com.unciv.logic.automation.unit.tactical.OperationalMoves]) */
+    TOO_DANGEROUS
 }
 
 /** ArmyAIState */

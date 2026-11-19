@@ -503,9 +503,11 @@ object TacticalSimulation {
      *  CvTacticalAI::CheckForEnemiesNearArmy: if units of [army] (and those of ours next to them, whatever they are doing) are in contact with the
      *  enemy, they fight: the units that can attack or be attacked, at least half healthy, within 6 tiles of their center of mass, around the nearest
      *  enemy that can attack them, at [AggressionLevel.Medium]; not when it looks like a trap in the enemy's zone.
+     *  @param naval the army is naval or combined (ARMY_TYPE_NAVAL, ARMY_TYPE_COMBINED): the original looks at the water zone of the nearest city
+     *  for it, at the land zone for a land army
      *  @return whether a plan was carried out: the army then stays together, its target is its center of mass
      */
-    fun checkForEnemiesNearArmy(ctx: TacticalContext, armyUnits: List<MapUnit>): Boolean {
+    fun checkForEnemiesNearArmy(ctx: TacticalContext, armyUnits: List<MapUnit>, naval: Boolean = false): Boolean {
         val civ = ctx.civ
         val enemies = ArrayList<MapUnit>()
         for (other in civ.gameInfo.civilizations)
@@ -550,7 +552,7 @@ object TacticalSimulation {
         // We probably did not see all enemy units: do not get drawn into the wrong fight
         val city = civ.gameInfo.civilizations.filter { it.isAlive() }.flatMap { it.cities }
             .minWithOrNull(compareBy<City> { it.getCenterTile().aerialDistanceTo(closest) }.thenBy { it.id })
-        val zone = city?.let { ctx.map.zoneByCity(it, closest.isWater) }
+        val zone = city?.let { ctx.map.zoneByCity(it, naval) }
         if (zone != null && zone.closestCity != null && zone.territory == TacticalTerritory.Enemy && zone.dominance == TacticalDominance.Enemy) return false
 
         return findAndExecuteBestUnitAssignments(ctx, finalUnits, closest, AggressionLevel.Medium)

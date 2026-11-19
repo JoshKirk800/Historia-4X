@@ -93,6 +93,9 @@ object Deployment {
      *  (or in a zone they dominate) stops on land instead if it can. @return whether it was sent
      */
     fun moveToUsingSafeEmbark(ctx: TacticalContext, unit: MapUnit, tile: Tile): Boolean {
+        // the units of a naval or combined army are on water by design
+        val operation = ctx.civ.ai.operations.operationFor(unit)
+        if (operation != null && (operation.type.allNaval || operation.type.mixedLandNaval)) return headTowards(unit, tile)
         if (!unit.baseUnit.isLandUnit || unit.getTile() == tile) return headTowards(unit, tile)
         val path = unit.movement.getShortestPath(tile)
         if (path.isEmpty()) return false
@@ -426,12 +429,12 @@ object Deployment {
         else civ.tech.allUnitsCanEnterOcean || !unit.cache.cannotEnterOceanTiles
     }
 
-    /** Whether the hex is one an army of [operation] may use: land, or water for a mixed land and naval one, not ocean for one that cannot go there */
+    /** Whether the hex is one an army of [operation] may use: land, or water for a naval or mixed land and naval one, not ocean for one that cannot go there */
     private fun isDeployableHex(ctx: TacticalContext, operation: AiOperation, army: AiArmy, tile: Tile, oceanGoing: () -> Boolean): Pair<Boolean, Boolean> {
         val map = ctx.map
         var valid = false
         var forcedToUseWater = false
-        if (operation.type.mixedLandNaval) {
+        if (operation.type.mixedLandNaval || operation.type.allNaval) {
             valid = map.canUseForOperationGatheringCheckWater(tile, true)
             if (!oceanGoing() && map.isOcean(tile)) valid = false
         } else if (map.canUseForOperationGatheringCheckWater(tile, false) || SettleAreas.aiMapHint(ctx.civ.gameInfo) and 1 != 0) {

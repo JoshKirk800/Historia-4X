@@ -38,7 +38,6 @@ enum class AiOperationType(
     QUICK_COLONIZE(OperationMoveType.SingleHex),
     BASIC_CITY_ATTACK(OperationMoveType.EnemyTerritory),
     SNEAK_CITY_ATTACK(OperationMoveType.EnemyTerritory),
-    SMALL_CITY_ATTACK(OperationMoveType.EnemyTerritory),
     CITY_STATE_ATTACK(OperationMoveType.EnemyTerritory),
     PILLAGE_ENEMY(OperationMoveType.EnemyTerritory),
     CITY_CLOSE_DEFENSE(OperationMoveType.EnemyTerritory),
@@ -51,22 +50,24 @@ enum class AiOperationType(
     /** CvAIOperationNukeAttack: the original's STATIC move type, it only works with the nuke already in place */
     NUKE_ATTACK(OperationMoveType.None),
     /**
-     *  Brave New World's barbarian camp and naval bombardment operations, which Vox Populi has not: never started; kept only so that a
+     *  Brave New World's barbarian camp, naval bombardment and small city attack (the show of force) operations, which Vox Populi has not
+     *  (its CvMilitaryAI::RequestBullyingOperation sends the ordinary land or naval city attack): never started; kept only so that a
      *  save holding one loads ([AiOperations.setTransients] drops them)
      */
     DESTROY_BARBARIAN_CAMP(OperationMoveType.None),
-    NAVAL_BOMBARDMENT(OperationMoveType.None);
+    NAVAL_BOMBARDMENT(OperationMoveType.None),
+    SMALL_CITY_ATTACK(OperationMoveType.EnemyTerritory);
 
     /** The operations CvCity-bound settlers run (CvAIEscortedOperation) */
     val isEscorted get() = this == FOUND_CITY || this == QUICK_COLONIZE
     /** CvAIOperationBasicCityAttack and its subclasses: the attacks on a city by land */
-    val isCityAttack get() = this == BASIC_CITY_ATTACK || this == SNEAK_CITY_ATTACK || this == SMALL_CITY_ATTACK || this == CITY_STATE_ATTACK
+    val isCityAttack get() = this == BASIC_CITY_ATTACK || this == SNEAK_CITY_ATTACK || this == CITY_STATE_ATTACK
     /** CvAIOperationDefendCity and CvAIOperationDefenseRapidResponse: the operations that defend by land */
     val isLandDefense get() = this == CITY_CLOSE_DEFENSE || this == RAPID_RESPONSE
     /** The operations that Vox Populi's CheckLandDefenses and CheckSeaDefenses start: the land defense operations and the naval superiority squadron */
     val isDefense get() = isLandDefense || this == NAVAL_SUPERIORITY
-    /** Retired types ([DESTROY_BARBARIAN_CAMP], [NAVAL_BOMBARDMENT]) */
-    val isRetired get() = this == DESTROY_BARBARIAN_CAMP || this == NAVAL_BOMBARDMENT
+    /** Retired types ([DESTROY_BARBARIAN_CAMP], [NAVAL_BOMBARDMENT], [SMALL_CITY_ATTACK]) */
+    val isRetired get() = this == DESTROY_BARBARIAN_CAMP || this == NAVAL_BOMBARDMENT || this == SMALL_CITY_ATTACK
     /** CvAIOperationNavalAttack and its subclasses: land units that embark, with warships, against a coastal city */
     val isNavalInvasion get() = this == NAVAL_ATTACK || this == NAVAL_SNEAK_ATTACK || this == CITY_STATE_NAVAL_ATTACK
     /** CvAINavalOperation and its subclasses: the operations of ships only */
@@ -273,10 +274,13 @@ class AiOperations : IsPartOfGameInfoSerialization {
     fun numOperationsOfType(type: AiOperationType) = operations.count { it.type == type }
 
     /**
-     *  CvPlayer::HasAnyOffensiveOperationsAgainstPlayer (Vox Populi's getFirstOffensiveAIOperation): a military operation still running
-     *  against [enemy] whose target is outside our territory (CvAIOperation::IsOffensive)
+     *  CvPlayer::getFirstOffensiveAIOperation: the first military operation still running against [enemy] whose target is outside our
+     *  territory (CvAIOperation::IsOffensive); the one Vox Populi's demand and show of force look at (it has no GetShowOfForceOperation)
      */
-    fun hasAnyOffensiveOperationsAgainst(enemy: Civilization): Boolean = operations.any { isOffensiveAgainst(it, enemy) }
+    fun firstOffensiveOperationAgainst(enemy: Civilization): AiOperation? = operations.firstOrNull { isOffensiveAgainst(it, enemy) }
+
+    /** CvPlayer::HasAnyOffensiveOperationsAgainstPlayer ([firstOffensiveOperationAgainst] exists) */
+    fun hasAnyOffensiveOperationsAgainst(enemy: Civilization): Boolean = firstOffensiveOperationAgainst(enemy) != null
 
     /** The operations of [hasAnyOffensiveOperationsAgainst] (CvPlayer::StopAllLand/SeaOffensiveOperationsAgainstPlayer stop these) */
     fun offensiveOperationsAgainst(enemy: Civilization): List<AiOperation> = operations.filter { isOffensiveAgainst(it, enemy) }
@@ -340,16 +344,6 @@ class AiOperations : IsPartOfGameInfoSerialization {
         const val NEVER_DEPLOYED = -100
         /** CvPlayer::getFirstAIOperationOfType's iMaxTargetDistance */
         const val TARGET_LOOKUP_DISTANCE = 3
-    }
-
-    /** CvPlayer::IsCityAlreadyTargeted: an operation heading for [city] that is less than [percentToTarget] of the way (for [mixedLandNaval] or land ones) */
-    fun isCityAlreadyTargeted(city: City, naval: Boolean?, percentToTarget: Int, ignoreOperationId: Int = -1): Boolean {
-        for (operation in operations) {
-            if (operation.id == ignoreOperationId || operation.targetTile != city.getCenterTile().position) continue
-            if (AiOperationLogic.percentFromMusterPointToTarget(civ, operation) >= percentToTarget) continue
-            if (naval == null || naval == operation.type.mixedLandNaval) return true
-        }
-        return false
     }
 
     /** The target tiles of the settler operations of this civilization other than [except] */

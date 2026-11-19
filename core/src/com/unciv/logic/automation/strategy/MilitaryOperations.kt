@@ -21,6 +21,8 @@ import com.unciv.logic.automation.unit.tactical.CityThreat
  *  [AiOperationLogic]'s and [NavalOperationLogic]'s, and their armies are moved by the tactical AI as the attacks' are. Not ported: the
  *  carrier group (no such operation), and the city defense that Vox Populi's city-state quests (horde, rebellion) start (Unciv's quests
  *  have no such). The naval and nuke operations are [NavalOperationLogic]'s.
+ *  The show of force and the pillage raid are Vox Populi's RequestBullyingOperation and RequestPillageAttack ([requestShowOfForce],
+ *  [requestPillageAttack]): BNW's show of force by its target scorer is gone.
  *  MakeEmergencyPurchases itself only buys the last unit of operations; the defensive emergency purchases of the original are the tactical
  *  AI's (CvTacticalAI::PlotEmergencyPurchases).
  */
@@ -32,6 +34,9 @@ object MilitaryOperations {
 
     /** CvMilitaryAI::CheckLandDefenses looks for the enemy's units this many plots from the threatened city for the rapid response */
     private const val RAPID_RESPONSE_SEARCH_RANGE = 8
+
+    /** CvMilitaryAI::RequestBullyingOperation does not go for a target further than this many steps from our nearest city */
+    private const val BULLYING_MAX_DISTANCE = 23
 
     //region Slot counting (MilitaryAIHelpers)
 
@@ -156,11 +161,29 @@ object MilitaryOperations {
         return false
     }
 
-    /** CvMilitaryAI::RequestShowOfForce: a smaller strike force (or the naval sneak attack) to force concessions, started without checking the forces */
+    /**
+     *  Vox Populi's CvMilitaryAI::RequestBullyingOperation (Release-5.4.8), BNW's RequestShowOfForce: an army sent to force concessions
+     *  from [enemy] (a demand on a major, the bullying of a city-state), with the units at hand only. Not at a barbarian, and not while an
+     *  offensive operation against [enemy] runs. The target is the city of a major that is nearest to a city of ours by plots
+     *  ([MilitaryTargets.closestCityToUsByPlots]), a city-state's capital; no further than [BULLYING_MAX_DISTANCE] steps from our nearest city
+     *  by path ([MilitaryTargets.closestCityByPathLength], which is the muster city). The operation is the ordinary city attack: by land
+     *  ([AiOperationType.BASIC_CITY_ATTACK]) when the muster city and the target share a landmass ([MilitaryTargets.hasSharedLandArea]),
+     *  else by sea with ships alone ([AiOperationType.PURE_NAVAL_CITY_ATTACK], Vox Populi's CITY_ATTACK_NAVAL), and made only if no unit
+     *  is left to build ([addLimitedOperation]). BNW's small city attack and naval sneak attack, picked by its target scorer, are gone.
+     */
     fun requestShowOfForce(civ: Civilization, enemy: Civilization): Boolean {
-        val (target, _) = MilitaryTargets.findBestAttackTarget(civ, AiOperationType.SNEAK_CITY_ATTACK, enemy) ?: return false
-        val type = if (target.attackBySea) AiOperationType.NAVAL_SNEAK_ATTACK else AiOperationType.SMALL_CITY_ATTACK
-        return isOperationOk(AiOperationLogic.addOperation(civ, type, enemy, target.targetCity, target.musterCity))
+        if (enemy.isBarbarian) return false
+        // If we already have an operation on the way, don't send another one
+        if (civ.ai.operations.hasAnyOffensiveOperationsAgainst(enemy)) return false
+        val targetCity = (if (enemy.isMajorCiv) MilitaryTargets.closestCityToUsByPlots(civ, enemy) else enemy.getCapital(firstCityIfNoCapital = false))
+            ?: return false
+        // don't venture too far
+        val (musterCity, distance) = MilitaryTargets.closestCityByPathLength(civ, enemy, targetCity.getCenterTile(), allowSea = true) ?: return false
+        if (distance > BULLYING_MAX_DISTANCE) return false
+        // if the target is very close assume we can embark or don't even need to
+        val type = if (MilitaryTargets.hasSharedLandArea(musterCity, targetCity)) AiOperationType.BASIC_CITY_ATTACK else AiOperationType.PURE_NAVAL_CITY_ATTACK
+        // don't try to build additional units, only do this if we have enough at hand
+        return addLimitedOperation(civ, type, 0, enemy, targetCity, musterCity) != null
     }
 
     /**
@@ -218,19 +241,14 @@ object MilitaryOperations {
     }
 
     /**
-     *  Vox Populi's CvMilitaryAI::RequestPillageAttack: a pillage raid on [enemy] while none runs, only with the units at hand. As
-     *  addAIOperation with no units to build: the required slots must be fillable before the operation is created
-     *  (PreconditionsAreMet), and one that still has units to build after its Init is ended at once (AI_ABORT_NO_UNITS).
+     *  Vox Populi's CvMilitaryAI::RequestPillageAttack: a pillage raid on [enemy] while none runs, only with the units at hand
+     *  ([addLimitedOperation], no unit may be left to build; its target and muster city are the pillage operation's own
+     *  ([AiOperationLogic.findPillageTarget]), so one without a target is not made).
      */
     fun requestPillageAttack(civ: Civilization, enemy: Civilization): Boolean {
-        val operations = civ.ai.operations
-        if (operations.firstOfType(AiOperationType.PILLAGE_ENEMY) != null) return false
-        val formation = operations.formationDef(AiOperationLogic.formationName(civ, AiOperationType.PILLAGE_ENEMY)) ?: return false
-        val fillable = numberOfFillableSlots(civ, formation, false)
-        if (fillable.filled < fillable.required) return false
-        val operation = AiOperationLogic.addOperation(civ, AiOperationType.PILLAGE_ENEMY, enemy)
-        if (isOperationOk(operation) && operation.slotsToBuild.isNotEmpty()) operations.kill(operation, OperationAbortReason.NO_UNITS)
-        return isOperationOk(operation) && operation in operations.operations
+        // don't try to build additional units, only do this if we have enough at hand
+        if (civ.ai.operations.firstOfType(AiOperationType.PILLAGE_ENEMY) != null) return false
+        return addLimitedOperation(civ, AiOperationType.PILLAGE_ENEMY, 0, enemy) != null
     }
 
     /**
@@ -297,9 +315,6 @@ object MilitaryOperations {
     /** CvMilitaryAI::GetSneakAttackOperation */
     fun sneakAttackOperation(civ: Civilization, enemy: Civilization) =
         operationAgainst(civ, AiOperationType.SNEAK_CITY_ATTACK, AiOperationType.NAVAL_SNEAK_ATTACK, enemy = enemy)
-
-    /** CvMilitaryAI::GetShowOfForceOperation */
-    fun showOfForceOperation(civ: Civilization, enemy: Civilization) = operationAgainst(civ, AiOperationType.SMALL_CITY_ATTACK, enemy = enemy)
 
     /** CvMilitaryAI::GetCityStateAttackOperation */
     fun cityStateAttackOperation(civ: Civilization, enemy: Civilization) =
@@ -384,10 +399,10 @@ object MilitaryOperations {
         // first a quick one if necessary
         val hasOperationUnderway = operations.firstOfType(AiOperationType.RAPID_RESPONSE, target = tile) != null
         val startCity = AiOperationLogic.findEnemiesNearHomelandPlot(civ, enemy, tile, RAPID_RESPONSE_SEARCH_RANGE)?.getCity()
-        if (!hasOperationUnderway && startCity != null) addDefenseOperation(civ, AiOperationType.RAPID_RESPONSE, 1, enemy, startCity)
+        if (!hasOperationUnderway && startCity != null) addLimitedOperation(civ, AiOperationType.RAPID_RESPONSE, 1, enemy, startCity)
         // this may take a bit longer to arrange
         if (civ.ai.tactical.map.isInEnemyDominatedZone(tile) && operations.firstOfType(AiOperationType.CITY_CLOSE_DEFENSE, target = tile) == null)
-            addDefenseOperation(civ, AiOperationType.CITY_CLOSE_DEFENSE, 2, enemy, threatened)
+            addLimitedOperation(civ, AiOperationType.CITY_CLOSE_DEFENSE, 2, enemy, threatened)
     }
 
     /**
@@ -402,7 +417,7 @@ object MilitaryOperations {
         if (NavalOperationLogic.coastalWaterNearPlot(civ, tile) == null) return
         val isEnemyZone = civ.ai.tactical.map.isInEnemyDominatedZone(tile)
         val hasOperationUnderway = civ.ai.operations.firstOfType(AiOperationType.NAVAL_SUPERIORITY, target = tile) != null
-        if (!hasOperationUnderway || isEnemyZone) addDefenseOperation(civ, AiOperationType.NAVAL_SUPERIORITY, 1, enemy, threatened)
+        if (!hasOperationUnderway || isEnemyZone) addLimitedOperation(civ, AiOperationType.NAVAL_SUPERIORITY, 1, enemy, threatened)
     }
 
     /**
@@ -417,23 +432,25 @@ object MilitaryOperations {
         // land response
         val threatened = CityThreat.threatenedCities(civ).firstOrNull()
         if (threatened != null && operations.firstOfType(AiOperationType.RAPID_RESPONSE, target = threatened.getCenterTile()) == null)
-            addDefenseOperation(civ, AiOperationType.RAPID_RESPONSE, 0, enemy, threatened)
+            addLimitedOperation(civ, AiOperationType.RAPID_RESPONSE, 0, enemy, threatened)
         // naval response
         val coastal = CityThreat.threatenedCities(civ, coastalOnly = true).firstOrNull()
         if (coastal != null && operations.firstOfType(AiOperationType.NAVAL_SUPERIORITY, target = coastal.getCenterTile()) == null)
-            addDefenseOperation(civ, AiOperationType.NAVAL_SUPERIORITY, 0, enemy, coastal)
+            addLimitedOperation(civ, AiOperationType.NAVAL_SUPERIORITY, 0, enemy, coastal)
         civ.ai.tactical.invalidateMap()
     }
 
     /**
-     *  CvPlayer::addAIOperation for a defense operation against [enemy] at [target]: it is made only if the units at hand would do but for
-     *  [maxMissingUnits] required ones ([AiOperationLogic.preconditionsAreMet], with no muster city given), and ends at once, as the
-     *  original deletes it, when its initialization fails or leaves more than that many units to build.
+     *  CvPlayer::addAIOperation for an operation against [enemy] at [target] from [muster] (each may be left to the operation to find): it
+     *  is made only if the units at hand would do but for [maxMissingUnits] required ones ([AiOperationLogic.preconditionsAreMet]), and
+     *  ends at once, as the original deletes it, when its initialization fails or leaves more than that many units to build.
      *  @return the operation, null if none was made
      */
-    private fun addDefenseOperation(civ: Civilization, type: AiOperationType, maxMissingUnits: Int, enemy: Civilization, target: City): AiOperation? {
-        if (!AiOperationLogic.preconditionsAreMet(civ, type, target.getCenterTile(), null, maxMissingUnits)) return null
-        val operation = AiOperationLogic.addOperation(civ, type, enemy, target)
+    private fun addLimitedOperation(
+        civ: Civilization, type: AiOperationType, maxMissingUnits: Int, enemy: Civilization, target: City? = null, muster: City? = null
+    ): AiOperation? {
+        if (!AiOperationLogic.preconditionsAreMet(civ, type, target?.getCenterTile(), muster?.getCenterTile(), maxMissingUnits, enemy)) return null
+        val operation = AiOperationLogic.addOperation(civ, type, enemy, target, muster)
         // check number of units again
         if (operation.state != OperationState.ABORTED && operation.slotsToBuild.size > maxMissingUnits)
             AiOperationLogic.abortOperation(operation, OperationAbortReason.NO_UNITS)

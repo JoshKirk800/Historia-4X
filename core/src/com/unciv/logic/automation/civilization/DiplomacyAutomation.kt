@@ -476,7 +476,7 @@ object DiplomacyAutomation {
             ai.demandTarget = target.civID
             // CvDiplomacyAI::DoStartDemandProcess: the show of force that puts units near them
             val memory = ai.memoryOf(target)
-            if (MilitaryOperations.showOfForceOperation(civ, target) == null && !memory.musteringForAttack &&
+            if (!civ.ai.operations.hasAnyOffensiveOperationsAgainst(target) && !memory.musteringForAttack &&
                 !civ.isAtWarWith(target) && civ.getDiplomacyManager(target)?.canDeclareWar() == true) {
                 MilitaryOperations.requestShowOfForce(civ, target)
                 memory.warGoal = WarGoal.Demand
@@ -488,7 +488,7 @@ object DiplomacyAutomation {
             if (ai.memoryOf(target).warGoal == WarGoal.Demand) {
                 ai.memoryOf(target).warGoal = null
                 // Get rid of the operation to put units near them
-                MilitaryOperations.showOfForceOperation(civ, target)?.let {
+                civ.ai.operations.firstOffensiveOperationAgainst(target)?.let {
                     civ.ai.operations.kill(it, OperationAbortReason.DIPLO_OPINION_CHANGE)
                     ai.memoryOf(target).musteringForAttack = false
                 }
@@ -498,7 +498,7 @@ object DiplomacyAutomation {
         }
         // CvDiplomacyAI::DoTestDemandReady: the show of force is 85% of the way, or has mustered
         val current = ai.demandTarget?.let { civ.gameInfo.getCivilizationOrNull(it) } ?: return
-        val operation = MilitaryOperations.showOfForceOperation(civ, current)
+        val operation = civ.ai.operations.firstOffensiveOperationAgainst(current)
         if (ai.memoryOf(current).warGoal == WarGoal.Demand && operation != null && !civ.isAtWarWith(current) &&
             (ai.memoryOf(current).musteringForAttack || AiOperationLogic.percentFromMusterPointToTarget(civ, operation) >= WarAi.PERCENT_TO_DECLARE_WAR)) {
             ai.memoryOf(current).musteringForAttack = false

@@ -5,6 +5,7 @@ import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.automation.diplomacy.WarIntentAi
+import com.unciv.logic.automation.strategy.MilitaryTargets
 import com.unciv.logic.automation.strategy.PurchaseType
 import com.unciv.logic.automation.strategy.EconomicAiRatios
 import com.unciv.logic.automation.strategy.StateAllWars
@@ -77,7 +78,7 @@ object CityStateAi {
         if (human || noCities) return@timeThis
         val ordered = toUpdate.mapNotNull { minor ->
             val capital = minor.getCapital()!!.getCenterTile()
-            val (closest, _) = closestCityByPathLength(civ, minor, capital) ?: return@mapNotNull null
+            val (closest, _) = MilitaryTargets.closestCityByPathLength(civ, minor, capital, allowSea = false) ?: return@mapNotNull null
             minor to 1000 - closest.getCenterTile().aerialDistanceTo(capital)
         }.sortedByDescending { it.second }
         for ((minor, _) in ordered) ai.minorCivApproaches[minor.civID] = selectBestApproach(civ, minor)
@@ -96,20 +97,6 @@ object CityStateAi {
                 else -> Unit
             }
         }
-    }
-
-    /**
-     *  CvPlayer::GetClosestCityByPathLength with GetCityDistancePathLength: our city with the shortest step route to [tile] (the
-     *  step finder's routes, which may enter [owner]'s territory) and that route's length; null if no city of ours reaches it
-     */
-    private fun closestCityByPathLength(civ: Civilization, owner: Civilization, tile: Tile): Pair<City, Int>? {
-        val lengths = civ.ai.military.steps.distances(civ, owner, tile, civ.cities.map { it.getCenterTile() })
-        var best: Pair<City, Int>? = null
-        for ((index, city) in civ.cities.withIndex()) {
-            val length = lengths[index]
-            if (length >= 0 && (best == null || length < best.second)) best = city to length
-        }
-        return best
     }
 
     /** CvMinorCivAI::IsFriends: influence at the friends threshold or more */
@@ -505,7 +492,7 @@ object CityStateAi {
         }
         // TOO FAR TO BULLY
         if (w[hostile] > 0) {
-            val distance = closestCityByPathLength(civ, minor, minor.getCapital()!!.getCenterTile())?.second ?: Int.MAX_VALUE
+            val distance = MilitaryTargets.closestCityByPathLength(civ, minor, minor.getCapital()!!.getCenterTile(), allowSea = false)?.second ?: Int.MAX_VALUE
             if (distance > 23) w[hostile] = 0
         }
         // AGGRESSIVE MODE

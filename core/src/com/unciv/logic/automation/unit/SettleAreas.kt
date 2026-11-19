@@ -102,9 +102,13 @@ object SettleAreas {
 
     /** CvGame::NewCapitalFounded for the first city of [civ], founded on [tile]: its found value (at least 0) joins the reference */
     fun recordCapitalFoundValue(civ: Civilization, tile: Tile) {
+        // Deviation: a civilization whose personality is not drawn yet (a human's, before any AI help; a test's) is left out: the evaluation would draw it here
+        if (!civ.ai.personalityInitialized) return
         val value = CitySiteEvaluator(civ).plotFoundValue(tile)
         civ.gameInfo.cityFoundValueReference += max(0, value)
         civ.gameInfo.numReferenceCities++
+        // The evaluation of the first turn read the water bodies of a map that may still be set up: do not keep them for the turn
+        WaterBodies.forget(civ.gameInfo.tileMap)
     }
 
     /** CvPlayer::GetSettlePlotQualityMeasure: -50 to +50, the found value of [tile] as a percentage of the capitals' reference, 50..150% mapped to -50..+50; null is -50, a map with no reference yet +50 */

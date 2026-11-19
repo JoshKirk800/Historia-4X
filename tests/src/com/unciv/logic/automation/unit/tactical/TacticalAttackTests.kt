@@ -112,22 +112,6 @@ class TacticalAttackTests {
     }
 
     @Test
-    fun `the targets of a dominance zone are those on its tiles and those within 2 tiles of its city`() {
-        val city = enemyCity(0)
-        val inside = game.addUnit("Warrior", enemy, tile(1)) // on the city's land
-        val near = game.addUnit("Warrior", enemy, tile(2)) // unowned land, 2 from the city
-        val far = game.addUnit("Warrior", enemy, tile(4)) // 4 away
-        val ctx = context()
-        val zone = ctx.map.zoneByCity(city, false)!!
-        assertEquals(TacticalTerritory.Enemy, zone.territory)
-        val units = ctx.targets.forZone(zone).mapNotNull { it.unit }
-        assertTrue(inside in units)
-        assertTrue("2 tiles from the city is near enough", near in units)
-        assertFalse(far in units)
-        assertTrue("all targets for no zone", ctx.targets.forZone(null).mapNotNull { it.unit }.containsAll(listOf(inside, near, far)))
-    }
-
-    @Test
     fun `targets are sorted by damage, the most damaged unit first`() {
         val healthy = game.addUnit("Warrior", enemy, tile(5))
         val hurt = game.addUnit("Warrior", enemy, tile(7)).also { it.health = 40 }

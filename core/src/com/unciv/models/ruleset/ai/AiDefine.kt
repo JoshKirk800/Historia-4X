@@ -181,12 +181,6 @@ enum class AiDefine(val default: Float) {
     MILITARY_RATING_MAXIMUM_BONUS(100f),
     MILITARY_RATING_MAXIMUM_PENALTY(-50f),
     MILITARY_RATING_HUMAN_BUFFER_VALUE_PERCENT(80f),
-    // BNW's war states (WarStateAi.updateWarStates): the forces on the home fronts
-    WAR_STATE_CALM_THRESHOLD_FOREIGN_FORCES(25f),
-    WAR_STATE_THRESHOLD_NEARLY_WON(75f),
-    WAR_STATE_THRESHOLD_OFFENSIVE(57f),
-    WAR_STATE_THRESHOLD_STALEMATE(42f),
-    WAR_STATE_THRESHOLD_DEFENSIVE(25f),
 
     // CvWonderProductionAI / CityStrategyAIHelpers::ReweightByTurnsLeft (WonderProductionAi)
     AI_PRODUCTION_WEIGHT_BASE_MOD(0.15f),

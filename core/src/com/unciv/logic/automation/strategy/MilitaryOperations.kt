@@ -254,7 +254,7 @@ object MilitaryOperations {
     /**
      *  Vox Populi's CvMilitaryAI::DoCityAttacks against [enemy], at war with us: when our units outside armies (land and naval) reach the
      *  recommended land army size, or no offensive operation runs, and our war state is troubled or better (against a major; any other
-     *  enemy counts as offensive; VP's troubled is not one of ours: stalemate or better), a careful city attack willing to build two units
+     *  enemy counts as offensive), a careful city attack willing to build two units
      *  ([requestBasicAttack]) and, against a major, a pillage raid ([requestPillageAttack]).
      */
     fun doCityAttacks(civ: Civilization, enemy: Civilization) {
@@ -262,7 +262,7 @@ object MilitaryOperations {
         val reserves = military.numLandUnits + military.numNavalUnits - military.numLandUnitsInArmies - military.numNavalUnitsInArmies
         if (reserves < military.recommendedLandArmySize && civ.ai.operations.numOffensiveOperations() > 0) return
         val warState = if (enemy.isMajorCiv) WarStateAi.warState(civ, enemy) else WarState.Offensive
-        if (warState == null || warState < WarState.Stalemate) return
+        if (warState == null || warState < WarState.Troubled) return
         requestBasicAttack(civ, enemy, 2, careful = true)
         if (enemy.isMajorCiv) requestPillageAttack(civ, enemy)
     }
@@ -277,8 +277,8 @@ object MilitaryOperations {
      *  Vox Populi's CvMilitaryAI::DoNuke (Release-5.4.8; D7, in place of BNW's trigger in UpdateOperations), for an enemy at war with us
      *  while we hold nukes. Launch when we will surely lose anyway (they are Immense compared to us, or our war state is nearly defeated),
      *  or when either of us has nuked the other. Else roll every turn, a launch when 0..9 is at most our use-nuke flavor
-     *  ([useNukeFlavorForDiplomacy]), if they are Powerful compared to us, the war goes badly for us (defensive or worse: VP's
-     *  troubled state, between defensive and stalemate, is not one of ours), we see them as an enemy or worse, we go for or are close
+     *  ([useNukeFlavorForDiplomacy]), if they are Powerful compared to us, the war goes badly for us (troubled or worse),
+     *  we see them as an enemy or worse, we go for or are close
      *  to world conquest, or they are close to a victory.
      *  BNW rolled only when the war was projected to end in destruction or its projection got worse, with two rolls; its AI held up to
      *  23 nukes in a game and set off a handful.
@@ -294,7 +294,7 @@ object MilitaryOperations {
         if (civ.ai.diplomacy.memoryOf(other).numTimesNuked > 0 || other.ai.diplomacy.memoryOf(civ).numTimesNuked > 0) return true
         val rules = civ.gameInfo.ruleset.ai
         val roll = strength == StrengthLevel.Powerful
-            || (warState != null && warState <= WarState.Defensive)
+            || (warState != null && warState <= WarState.Troubled)
             || civ.ai.diplomacy.opinionOf(other) <= MajorCivOpinion.Enemy
             || civ.ai.isGoingForWorldConquest() || VictoryProgressAi.isCloseToWorldConquest(civ, rules)
             || VictoryProgressAi.isCloseToAnyVictoryCondition(other, rules)
@@ -367,8 +367,8 @@ object MilitaryOperations {
     /**
      *  The stops of Vox Populi's CheckLandDefenses and CheckSeaDefenses for [enemy] at war with us, by our war state against them (a
      *  non-major counts as offensive; none yet is worse than any): stalemate or better, nothing more is done; defensive, our offensive
-     *  operations by land (sea) against them; nearly defeated, our offensive operations by land (sea) against anyone. VP's troubled state,
-     *  between defensive and stalemate, is not one of ours.
+     *  operations by land (sea) against them; nearly defeated, our offensive operations by land (sea) against anyone. A troubled war
+     *  (between defensive and stalemate) stops nothing, but the defense is arranged.
      *  @return whether the defense is to be arranged
      */
     private fun stopOffensesWhenLosing(civ: Civilization, enemy: Civilization, naval: Boolean): Boolean {

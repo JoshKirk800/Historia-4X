@@ -293,10 +293,10 @@ object ApproachAi {
         val warState = WarStateAi.warState(civ, other)
         // VP's easy target ([WarStateAi.isEasyTarget]; its set-up check for a target we are not at war with is moot: only enemies are easy)
         val easy = WarStateAi.isEasyTarget(civ, other)
-        stage("Conquest bias (part 1): not at war yet, or the war going better than defensive")
-        // Going for world conquest or close to it (VP: better than troubled, which we lack: better than defensive); more on an easy target
+        stage("Conquest bias (part 1): not at war yet, or the war going better than troubled")
+        // Going for world conquest or close to it (a stalemate or better, or no war yet); more on an easy target
         val closeToConquest = VictoryProgressAi.isCloseToWorldConquest(civ, rules)
-        if ((warState == null || warState > WarState.Defensive) && (civ.ai.isGoingForWorldConquest() || closeToConquest)) {
+        if ((warState == null || warState > WarState.Troubled) && (civ.ai.isGoingForWorldConquest() || closeToConquest)) {
             w[WAR] += bias(MajorCivApproach.War) * (if (closeToConquest) 2 else 1)
             if (easy) w[WAR] += bias(MajorCivApproach.War) * (if (closeToConquest) 4 else 2)
         }

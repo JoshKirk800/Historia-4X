@@ -270,7 +270,8 @@ object DiplomacyTurn {
                 WarState.NearlyWon -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_NEARLY_WON)
                 WarState.Offensive -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_OFFENSIVE)
                 WarState.Stalemate -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_STALEMATE)
-                WarState.Defensive -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_DEFENSIVE)
+                // BNW's military threat has no troubled war (VP's war states, which have it, have no such threat): as defensive
+                WarState.Defensive, WarState.Troubled -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_DEFENSIVE)
                 WarState.NearlyDefeated -> rules.define(AiDefine.MILITARY_THREAT_WAR_STATE_NEARLY_DEFEATED)
                 null -> 0
             }

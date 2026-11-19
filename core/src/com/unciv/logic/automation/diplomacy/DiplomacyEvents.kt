@@ -165,7 +165,7 @@ object DiplomacyEvents {
      *  DIPLO_STATEMENT_END_WORK_WITH_US (Vox Populi): [ender] ends its friendship with [friend] without denouncing them. The coop wars
      *  between them are off (CancelCoopWarsWithPlayer with a penalty: one being prepared - our Soon - is a broken promise worth VP's
      *  -300 assist), the friend resents it (another -300), and each other AI that [ender] may deal with and that does not hate it judges:
-     *  ending it with a backstabber +75, with one it fights +50 (+25 more when that war goes badly: defensive or worse, VP's troubled),
+     *  ending it with a backstabber +75, with one it fights +50 (+25 more when that war goes badly: troubled or worse),
      *  with one who denounced it +50, with its own friend, pact partner or ally -75 (-150 if it hates the ender). Our recent assist value
      *  has the opposite sign of VP's. VP's coop war agreement score has no input.
      */
@@ -198,7 +198,7 @@ object DiplomacyEvents {
                 else if (third.isAtWarWith(friend)) {
                     theirAi.changeRecentAssistValue(ender, -50)
                     val warState = WarStateAi.warState(third, friend)
-                    if (warState != null && warState <= WarState.Defensive) theirAi.changeRecentAssistValue(ender, -25)
+                    if (warState != null && warState <= WarState.Troubled) theirAi.changeRecentAssistValue(ender, -25)
                 }
                 else if (OpinionAi.isDenouncedPlayer(friend, third)) theirAi.changeRecentAssistValue(ender, -50)
                 else if (tiedToFriend) theirAi.changeRecentAssistValue(ender, 75)

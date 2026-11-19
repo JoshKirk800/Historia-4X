@@ -12,8 +12,7 @@ import com.unciv.models.ruleset.ai.TraitCategory
 
 /**
  *  What Vox Populi's AI means to do in a war it is in (CvDiplomacyAI, Release-5.4.8; D7): whether it wants to conquer the enemy
- *  ([wantsToConquer]) and whether the war is a phony one ([isPhonyWar]). Our war states lack VP's TROUBLED, between defensive and
- *  stalemate: defensive or worse stands for it.
+ *  ([wantsToConquer]) and whether the war is a phony one ([isPhonyWar]).
  */
 object WarIntentAi {
 
@@ -61,7 +60,7 @@ object WarIntentAi {
 
     /**
      *  CvDiplomacyAI::IsPhonyWar: a war with [other] that nobody fights. Not when our approach is war (unless [ignoreCurrentApproach]),
-     *  they took cities from us, the war goes offensive or better or defensive or worse, the war score is past our thresholds, we want to
+     *  they took cities from us, the war goes offensive or better or troubled or worse, the war score is past our thresholds, we want to
      *  conquer them, we run an offensive operation against them, cities on either side are threatened, they are our neighbours, or (close)
      *  their posture is medium or more or they are powerful or more, or (farther) their posture is high or they are immense.
      */
@@ -71,7 +70,7 @@ object WarIntentAi {
         if (!ignoreCurrentApproach && memory.approach == MajorCivApproach.War) return false
         if (memory.numCitiesCapturedBy > 0) return false
         val state = WarStateAi.warState(civ, other) ?: WarState.Calm
-        if (state >= WarState.Offensive || state <= WarState.Defensive) return false
+        if (state >= WarState.Offensive || state <= WarState.Troubled) return false
         val score = WarDamageAi.warScore(civ, other)
         if (score <= warScoreThresholdNegative(civ) || score >= warScoreThresholdPositive(civ)) return false
         if (wantsToConquer(civ, other)) return false

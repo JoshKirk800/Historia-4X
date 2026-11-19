@@ -22,8 +22,8 @@ import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.models.ruleset.unique.UniqueType
 import kotlin.math.pow
 
-/** CvDiplomacyAI WarStateTypes, worst to best (the original's order matters: comparisons use it) */
-enum class WarState { NearlyDefeated, Defensive, Stalemate, Calm, Offensive, NearlyWon }
+/** CvDiplomacyAI WarStateTypes, worst to best (the original's order matters: comparisons use it; Vox Populi's TROUBLED sits between) */
+enum class WarState { NearlyDefeated, Defensive, Troubled, Stalemate, Calm, Offensive, NearlyWon }
 
 /** CvDiplomacyAI StateAllWars: the overall assessment of all wars against majors */
 enum class StateAllWars { Neutral, Winning, Losing }
@@ -172,7 +172,10 @@ object WarStateAi {
         other != civ && !other.isBarbarian && !other.isSpectator && other.isAlive() && other.cities.isNotEmpty() && civ.knows(other)
     //endregion
 
-    /** The per-turn update, in CvDiplomacyAI::DoTurn order: turns at war (DoCounters), strength estimates, war states */
+    /**
+     *  The per-turn update, in CvDiplomacyAI::DoTurn order: turns at war (DoCounters), war states, the bad-shape test, strength estimates
+     *  (which read the war states and the bad-shape flags of other players), the bad-shape test again (it reads the estimates), easy targets
+     */
     fun doTurn(civ: Civilization) {
         val memory = civ.ai.warStates
         val rules = civ.gameInfo.ruleset.ai
@@ -181,9 +184,10 @@ object WarStateAi {
             if (civ.isAtWarWith(other)) memory.turnsAtWar[other.civID] = (memory.turnsAtWar[other.civID] ?: 0) + 1
             else memory.turnsAtWar.remove(other.civID)
         }
-        StrengthEstimateAi.update(civ)
-        updateWarStates(civ, memory, rules)
+        WarStateUpdateAi.update(civ, memory)
         updateAverageGoldRate(civ, memory, rules)
+        updateBadShapeForWar(civ, memory, rules)
+        StrengthEstimateAi.update(civ)
         updateBadShapeForWar(civ, memory, rules)
         updateEasyTargets(civ, memory, rules)
     }
@@ -196,7 +200,7 @@ object WarStateAi {
      *  does, only a player we are at war with can be an easy target (without a war its war state is none, which counts as below
      *  stalemate). Nearly won: easy. Below stalemate, or we are in terrible shape, they are far, or 30 turns at war without taking a
      *  city of theirs for 30 turns: not easy. A city-state: easy when a favourable target or better. Not easy either when another war of
-     *  ours (unless this one is phony) goes defensive or worse, or (for a major target) calm or worse against a foe still taking new
+     *  ours (unless this one is phony) goes troubled or worse, or (for a major target) calm or worse against a foe still taking new
      *  wars. Easy when they are in terrible shape. Otherwise deterrents (we are unhappy, they took more of our cities than we of theirs,
      *  their combat rating beats ours, we are less aggressive, we do not want to conquer them, our cities are exposed to them -
      *  [MilitaryAi.isExposedToEnemy]) against aggravators (a coop war against them, they are unhappy and we are not, we took more of their
@@ -238,7 +242,7 @@ object WarStateAi {
         if (!WarIntentAi.isPhonyWar(civ, other)) for (third in valid) {
             if (third == other || !civ.isAtWarWith(third)) continue
             val thirdState = memory.warStates[third.civID] ?: continue
-            if (thirdState <= WarState.Defensive) return false
+            if (thirdState <= WarState.Troubled) return false
             if (!isNoNewWars(third) && thirdState <= WarState.Calm) return false
         }
         if (isInTerribleShapeForWar(other)) return true
@@ -313,8 +317,8 @@ object WarStateAi {
     /**
      *  CvPlayer::DoTestEmpireInBadShapeForWar (Vox Populi, Release-5.4.8; D7), after the war states and strengths as VP's second call:
      *  in terrible shape for war, and taking no new wars, when losing all wars, bankrupt (no gold and no income), without our original
-     *  capital, very unhappy (BNW's rule: excess happiness at or below VERY_UNHAPPY_THRESHOLD), or doing badly (defensive or worse: VP's
-     *  troubled, which we lack) against a powerful major that is close; no new wars either while doing badly against another major,
+     *  capital, very unhappy (BNW's rule: excess happiness at or below VERY_UNHAPPY_THRESHOLD), or doing badly (troubled or worse)
+     *  against a powerful major that is close; no new wars either while doing badly against another major,
      *  or at a stalemate with a neighbour or a close player whose military posture is aggressive, unless that war is phony
      *  ([WarIntentAi.isPhonyWar]) or they are an easy target ([isEasyTarget], last turn's as in VP).
      */
@@ -326,7 +330,7 @@ object WarStateAi {
             val state = memory.warStates[other.civID] ?: return@any false
             val theirProximity = proximityRank(other.getProximity(civ))
             when {
-                state <= WarState.Defensive -> true
+                state <= WarState.Troubled -> true
                 state != WarState.Stalemate || isEasyTarget(civ, other) || WarIntentAi.isPhonyWar(civ, other) -> false
                 theirProximity == proximityRank(Proximity.Neighbors) -> true
                 else -> theirProximity == proximityRank(Proximity.Close) &&
@@ -344,7 +348,7 @@ object WarStateAi {
         if (civ.getHappiness() <= rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) return true
         return civ.gameInfo.civilizations.any { other ->
             other.isMajorCiv && other.isAlive() && civ.isAtWarWith(other) &&
-                (memory.warStates[other.civID] ?: WarState.Calm) <= WarState.Defensive &&
+                (memory.warStates[other.civID] ?: WarState.Calm) <= WarState.Troubled &&
                 (memory.militaryStrengths[other.civID] ?: StrengthLevel.Average) >= StrengthLevel.Powerful &&
                 proximityRank(other.getProximity(civ)) >= proximityRank(Proximity.Close)
         }
@@ -370,80 +374,7 @@ object WarStateAi {
     }
     //endregion
 
-    //region CvDiplomacyAI::DoUpdateWarStates
-
-    private fun updateWarStates(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
-        var stateAllWarsValue = 0
-        var losing = false
-        memory.warStates.clear()
-        val homeFrontRange = rules.define(AiDefine.AI_DIPLO_PLOT_RANGE_FROM_CITY_HOME_FRONT)
-        for (other in civ.gameInfo.civilizations) {
-            if (!isPlayerValid(civ, other) || !civ.isAtWarWith(other)) continue
-
-            var myLocal = 0
-            var enemyInHisLands = 0
-            var myForeign = 0
-            var enemyInMyLands = 0
-            for (unit in civ.units.getCivUnits()) {
-                val tile = unit.getTile()
-                if (isHomeFrontFor(tile, civ, homeFrontRange)) myLocal += unit.getAiPower()
-                if (isHomeFrontFor(tile, other, homeFrontRange)) myForeign += unit.getAiPower()
-            }
-            for (unit in other.units.getCivUnits()) {
-                val tile = unit.getTile()
-                if (isHomeFrontFor(tile, civ, homeFrontRange)) enemyInMyLands += unit.getAiPower()
-                if (isHomeFrontFor(tile, other, homeFrontRange)) enemyInHisLands += unit.getAiPower()
-            }
-            for (city in civ.cities) myLocal += cityPower(city) * healthPercent(city) / 100 / 100
-            for (city in other.cities) enemyInHisLands += cityPower(city) * healthPercent(city) / 100 / 100
-
-            if (myLocal == 0) myLocal = 1
-            val localRatio = myLocal * 100 / (myLocal + enemyInMyLands)
-            if (enemyInHisLands == 0) enemyInHisLands = 1
-            val foreignRatio = myForeign * 100 / (myForeign + enemyInHisLands)
-
-            val calmThreshold = rules.define(AiDefine.WAR_STATE_CALM_THRESHOLD_FOREIGN_FORCES)
-            var warState = if (foreignRatio < calmThreshold && localRatio > 100 - calmThreshold) WarState.Calm
-            else {
-                val warStateValue = (localRatio + foreignRatio) / 2
-                when {
-                    warStateValue >= rules.define(AiDefine.WAR_STATE_THRESHOLD_NEARLY_WON) -> WarState.NearlyWon
-                    warStateValue >= rules.define(AiDefine.WAR_STATE_THRESHOLD_OFFENSIVE) -> WarState.Offensive
-                    warStateValue >= rules.define(AiDefine.WAR_STATE_THRESHOLD_STALEMATE) -> WarState.Stalemate
-                    warStateValue >= rules.define(AiDefine.WAR_STATE_THRESHOLD_DEFENSIVE) -> WarState.Defensive
-                    else -> WarState.NearlyDefeated
-                }
-            }
-
-            // A calm war against an easy target counts as offense
-            if (warState == WarState.Calm) {
-                val target = memory.targetValues[other.civID]
-                if (target != null && target >= TargetValue.Favorable) warState = WarState.Offensive
-            }
-            // A few enemies near us while we vastly outnumber them is no defense
-            if (warState <= WarState.Defensive && myLocal >= enemyInMyLands + enemyInMyLands) warState = WarState.Stalemate
-
-            if (!other.isCityState) {
-                when (warState) {
-                    WarState.NearlyWon -> stateAllWarsValue += 2
-                    WarState.Offensive -> stateAllWarsValue += 1
-                    WarState.Defensive -> {
-                        stateAllWarsValue -= 1
-                        val capital = civ.getCapital(firstCityIfNoCapital = false)
-                        if (capital != null && capital.health < capital.getMaxHealth()) losing = true
-                    }
-                    WarState.NearlyDefeated -> losing = true
-                    else -> {}
-                }
-            }
-            memory.warStates[other.civID] = warState
-        }
-        memory.stateAllWars = when {
-            stateAllWarsValue < 0 || losing -> StateAllWars.Losing
-            stateAllWarsValue > 0 -> StateAllWars.Winning
-            else -> StateAllWars.Neutral
-        }
-    }
+    //region CvPlot::IsHomeFrontForPlayer
 
     /** CvPlot::IsHomeFrontForPlayer: owned by [civ], or closer than [range] to one of its cities */
     fun isHomeFrontFor(tile: Tile, civ: Civilization, range: Int): Boolean {
@@ -455,8 +386,6 @@ object WarStateAi {
     //region Power (CvUnit::GetPower, CvCity::GetPower, CvPlayer::getPower)
 
     fun cityPower(city: City): Int = CityCombatant(city).getCityStrength().toDouble().pow(1.5).toInt()
-
-    private fun healthPercent(city: City): Int = city.health * 100 / city.getMaxHealth()
 
     /** CvPlayer::getPower: military might plus economic might ([economicMight]) */
     fun getPower(civ: Civilization): Int = civ.ai.militaryMight() + economicMight(civ)

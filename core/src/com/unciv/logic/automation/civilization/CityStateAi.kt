@@ -466,9 +466,9 @@ object CityStateAi {
             w[hostile] = 0
             if (!theyCapturedFromUs || WarStateAi.isInTerribleShapeForWar(civ)) w[war] = 0
         }
-        // At war with this city-state and the war goes badly (VP: troubled or worse; ours: defensive or worse)
+        // At war with this city-state and the war goes badly (troubled or worse)
         if (atWar && ((theyCapturedFromUs && WarStateAi.stateAllWars(civ) == StateAllWars.Losing) ||
-                (!theyCapturedFromUs && (WarStateAi.warState(civ, minor) ?: WarState.Calm) <= WarState.Defensive))) {
+                (!theyCapturedFromUs && (WarStateAi.warState(civ, minor) ?: WarState.Calm) <= WarState.Troubled))) {
             w[war] = 0
             w[hostile] = 0
         }

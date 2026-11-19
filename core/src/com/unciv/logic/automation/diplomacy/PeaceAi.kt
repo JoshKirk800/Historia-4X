@@ -172,7 +172,7 @@ object PeaceAi {
         val sinceCapture = if (memory.lastCityCaptureTurn < 0) Int.MAX_VALUE else civ.gameInfo.turns - memory.lastCityCaptureTurn
         val warScore = WarDamageAi.warScore(civ, other)
         val state = WarStateAi.warState(civ, other) ?: WarState.Calm
-        val badWarState = state <= WarState.Defensive
+        val badWarState = state <= WarState.Troubled
         val nearlyWonNeighbour = !terrible && state == WarState.NearlyWon && DiplomacyTurn.proximity(civ, other) >= DiplomacyTurn.PROXIMITY_CLOSE
         val danger = CityDangerAi.comparativeDanger(civ, other, ourAllies, theirAllies)
         val duration = minOf(WarStateAi.turnsAtWar(civ, other), sinceCapture)
@@ -242,7 +242,7 @@ object PeaceAi {
             WarState.NearlyWon -> -10 * ourMultiplier
             WarState.Offensive -> -5 * ourMultiplier
             WarState.Calm -> if (losingOverall) 5 * theirMultiplier else -2 * ourMultiplier
-            WarState.Stalemate -> if (losingOverall) 5 * theirMultiplier else 2 * theirMultiplier
+            WarState.Stalemate, WarState.Troubled -> if (losingOverall) 5 * theirMultiplier else 2 * theirMultiplier
             WarState.Defensive, WarState.NearlyDefeated -> if (losingOverall) 10 * theirMultiplier else 5 * theirMultiplier
         }
         var alliesMod = 0
@@ -251,7 +251,7 @@ object PeaceAi {
                 if (ally == civ || !ally.isMajorCiv || WarStateAi.isInTerribleShapeForWar(ally)) continue
                 if (DiplomacyTurn.proximity(ally, civ) < DiplomacyTurn.PROXIMITY_CLOSE) continue
                 if (DiplomacyTurn.proximity(ally, other) < DiplomacyTurn.PROXIMITY_CLOSE) continue
-                if ((WarStateAi.warState(ally, other) ?: WarState.Calm) <= WarState.Defensive) continue
+                if ((WarStateAi.warState(ally, other) ?: WarState.Calm) <= WarState.Troubled) continue
                 alliesMod -= when (WarStateAi.militaryStrengthComparedToUs(ally, other) ?: StrengthLevel.Average) {
                     StrengthLevel.Average, StrengthLevel.Poor -> 5
                     StrengthLevel.Weak -> 10
@@ -269,7 +269,7 @@ object PeaceAi {
         if (score > 0) {
             if (!terrible) {
                 val target = WarStateAi.rawTargetValue(civ, other) ?: TargetValue.Average
-                if (warScore >= 0 || (warScore > negativeThreshold / 2 && target >= TargetValue.Average && state > WarState.Defensive)) {
+                if (warScore >= 0 || (warScore > negativeThreshold / 2 && target >= TargetValue.Average && state > WarState.Troubled)) {
                     score = when {
                         capturedAnyFromUs -> if (warScore > duration / 2) score / 2 else score * 75 / 100
                         civ.ai.isGoingForWorldConquest() || VictoryProgressAi.isCloseToWorldConquest(civ, rules) -> {

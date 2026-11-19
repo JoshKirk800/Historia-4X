@@ -3,6 +3,7 @@ package com.unciv.logic.automation.unit
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.unit.tactical.TacticalAi
 import com.unciv.logic.automation.unit.tactical.TacticalContext
+import com.unciv.logic.automation.unit.tactical.TacticalDominance
 import com.unciv.logic.automation.unit.tactical.TacticalTargets
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -185,8 +186,11 @@ class AirMovesTests {
     @Test
     fun `a fighter in a city that has a city of the enemy with fighters in range sweeps it`() {
         val fighter = game.addUnit("Fighter", civ, forward.getCenterTile())
+        // the city's garrison, so that we dominate its zone: a lone fighter against one of theirs is only an even match (Vox Populi's 70 percent)
+        for (tile in forward.getCenterTile().neighbors.take(2)) game.addUnit("Swordsman", civ, tile)
         val defender = game.addUnit("Fighter", enemy, enemyEast.getCenterTile())
         val ctx = context()
+        assertEquals(TacticalDominance.Friendly, ctx.map.zoneByCity(forward, false)!!.dominance)
         AirMoves.plotAirSweepMoves(ctx)
         assertTrue(fighter in ctx.cache.processedUnits)
         assertTrue("the sweep counts as an attack", fighter.attacksThisTurn > 0)

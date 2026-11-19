@@ -238,7 +238,7 @@ class TacticalAiTests {
         see()
         val zone = civ.ai.tactical.map.zoneOf(city.getCenterTile())!!
         assertEquals(TacticalDominance.Friendly, zone.dominance)
-        assertEquals(1, zone.enemyUnitCount)
+        assertEquals(1, zone.totalEnemyUnitCount)
         run()
         assertFalse(city.cityConstructions.isBuilt("Walls"))
         assertEquals(0, archers())
@@ -251,6 +251,22 @@ class TacticalAiTests {
         gold(5000)
         run()
         assertFalse(city.cityConstructions.isBuilt("Walls"))
+        assertEquals(5000, civ.gold)
+    }
+
+    @Test
+    fun `a city with only barbarians near buys nothing, they are not what the tactical analysis weighs`() {
+        val city = game.addCity(civ, tile(0))
+        val barbarians = game.addBarbarianCiv()
+        for (tile in city.getCenterTile().getTilesAtDistance(2).take(4)) game.addUnit("Swordsman", barbarians, tile)
+        gold(5000)
+        see()
+        val zone = civ.ai.tactical.map.zoneOf(city.getCenterTile())!!
+        assertEquals(0, zone.totalEnemyUnitCount)
+        assertEquals(TacticalDominance.Friendly, zone.dominance)
+        run()
+        assertFalse(city.cityConstructions.isBuilt("Walls"))
+        assertEquals(0, archers())
         assertEquals(5000, civ.gold)
     }
 
@@ -306,7 +322,7 @@ class TacticalAiTests {
         val ctx = context(unit)
         val zone = civ.ai.tactical.map.zoneOf(threatened.getCenterTile())!!
         assertNotEquals(TacticalDominance.Friendly, zone.dominance)
-        assertTrue(zone.enemyUnitCount > 0)
+        assertTrue(zone.totalEnemyUnitCount > 0)
 
         assertEquals(listOf(unit), TacticalAi.plotDefensiveAirlifts(ctx, zone))
         assertEquals(1, unit.getTile().aerialDistanceTo(threatened.getCenterTile()))
@@ -347,7 +363,7 @@ class TacticalAiTests {
 
         for (enemyUnit in enemy.units.getCivUnits().toList()) enemyUnit.destroy()
         val quietZone = context(unit).map.zoneOf(threatened.getCenterTile())!!
-        assertEquals(0, quietZone.enemyUnitCount)
+        assertEquals(0, quietZone.totalEnemyUnitCount)
         assertTrue("no enemy near", TacticalAi.plotDefensiveAirlifts(context(unit), quietZone).isEmpty())
     }
 
@@ -374,7 +390,7 @@ class TacticalAiTests {
         see()
         val zone = civ.ai.tactical.map.zoneOf(strong.getCenterTile())!!
         assertEquals(TacticalDominance.Friendly, zone.dominance)
-        assertEquals(1, zone.enemyUnitCount)
+        assertEquals(1, zone.totalEnemyUnitCount)
         run()
         assertTrue("it did not go to the city", unit.getTile().aerialDistanceTo(strong.getCenterTile()) > 1)
     }

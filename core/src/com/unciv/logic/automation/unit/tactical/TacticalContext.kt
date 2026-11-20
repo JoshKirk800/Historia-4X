@@ -35,6 +35,9 @@ class TacticalContext(
     /** CvTacticalAI::m_ZoneTargets: the targets the move being run looks at (ExtractTargetsForZone: all of them, or those of one dominance zone) */
     var currentTargets: List<TacticalTarget> = targets.all
 
+    /** CvTacticalAI::m_CurrentAirSweepUnits: the aircraft that can sweep the target of the attack being planned, found with the units that strike it */
+    var airSweepUnits: List<MapUnit> = emptyList()
+
     /** CvTacticalAI::FindPosture: the posture last chosen for [zone] ([TacticalPosture.None] if none) */
     fun postureOf(zone: DominanceZone): TacticalPosture = state.findPosture(zone.owner?.civName, zone.isWater, zone.closestCity?.id)
 

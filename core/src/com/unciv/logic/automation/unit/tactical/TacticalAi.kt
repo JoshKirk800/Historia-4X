@@ -24,7 +24,8 @@ import com.unciv.models.ruleset.unique.UniqueType
  *  rest of the unit AI.
  *
  *  Not ported: naval blockades (PlotBlockadeMoves: its targets are the barbarians' blockade points, which [TacticalTargets] does not make). Kept from
- *  Brave New World, where Vox Populi has nothing: the air sweep, the defensive airlift and parking on trade routes.
+ *  Brave New World, where Vox Populi has nothing: the defensive airlift and parking on trade routes. The fighters sweep as part of the attack plans
+ *  ([TacticalSimulation.executeAttackWithUnits], [AirMoves.executeAirSweep]).
  */
 object TacticalAi {
     /**
@@ -83,7 +84,7 @@ object TacticalAi {
      *  commanding the units it needs. [units] are the civilization's units in the order they would move.
      *
      *  AssignGlobalHighPrioMoves: healing before the attacks (to make space near the front line), the armies of the operations, the garrisons (they
-     *  sometimes make a sortie and have to get back; the sweeps of the aircraft are Brave New World's, Vox Populi sweeps in its attack plans).
+     *  sometimes make a sortie and have to get back).
      *  Then for each dominance zone, the most valuable first: the emergency purchases, and the moves of its posture ([Postures.processZones]).
      *  The second pass brings in the reinforcements ([ReinforcementMoves]; with them Brave New World's defensive airlift). AssignGlobalMidPrioMoves:
      *  air patrols, ruins, capturing civilians, the bastions, moving to safety (the combat units, those not in an army), healing again now that
@@ -107,7 +108,6 @@ object TacticalAi {
         globally("Heal1") { TacticalHealing.plotHealMoves(ctx, true) }
         globally("Operations") { OperationalMoves.plotOperationalArmyMoves(ctx) }
         globally("Garrison2") { GarrisonMoves.plotGarrisonMoves(ctx, 2) }
-        globally("AirSweep") { AirMoves.plotAirSweepMoves(ctx) }
 
         // Then confront the enemy in each tactical zone
         timeThis("AI.Tactical.Zones") {

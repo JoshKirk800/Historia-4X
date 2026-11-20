@@ -1,8 +1,9 @@
 package com.unciv.logic.automation.unit
 
 import com.unciv.logic.automation.AiDecisionLog
+import com.unciv.logic.automation.unit.tactical.TacticalAi
+import com.unciv.logic.automation.unit.tactical.TacticalAttacks
 import com.unciv.logic.automation.unit.tactical.TacticalContext
-import com.unciv.logic.automation.unit.tactical.TacticalDominance
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.battle.AirInterception
@@ -15,7 +16,7 @@ import com.unciv.models.ruleset.unique.UniqueType
 
 /**
  *  The air moves of the original: CvMilitaryAI::WillAirUnitRebase, GetNumEnemyAirUnitsInRange and GetBestAirSweepTarget; the tactical moves
- *  PlotAirSweepMoves / ExecuteAirSweepMoves and PlotAirPatrolMoves; CvHomelandAI::PlotAircraftMoves / ExecuteAircraftMoves (rebasing
+ *  ExecuteAirSweep with FindAirUnitsToAirSweep (the sweep before an attack) and PlotAirPatrolMoves; CvHomelandAI::PlotAircraftMoves / ExecuteAircraftMoves (rebasing
  *  to the base with the highest plot danger, with the carriers' free slots). Aircraft strikes are not here: combat-ready aircraft are strikers of
  *  [com.unciv.logic.automation.unit.tactical.TacticalAttacks] like any shooter, and what the tactical AI leaves of an aircraft is only [plotAircraftMove].
  *
@@ -23,8 +24,7 @@ import com.unciv.models.ruleset.unique.UniqueType
  *  so the patrol move only keeps the fighter where it is, unmoved, for the turn; a carrier's free slot is [MapUnit.canTransport] (the
  *  CarryAirUnits uniques of the ruleset, which carry what the original's SpecialUnit_CarrierUnitAI says), rebasing needs the target within
  *  [MapUnit.getAirUnitMovementRange] and [com.unciv.logic.map.mapunit.movement.UnitMovement.canMoveTo]; CvUnit::canAirSweepAt is the sweep range.
- *  The original's sweep of the combat simulation (ExecuteAirSweep, FindAirUnitsToAirSweep in ExecuteAttackWithUnits) is not ported: the stand-alone
- *  sweep of Brave New World's PlotAirSweepMoves stays in its place.
+ *  Not here: Brave New World's stand-alone PlotAirSweepMoves (Vox Populi has none: its ExecuteAirSweepMoves is never called, fighters sweep in the attack plans).
  */
 object AirMoves {
 
@@ -49,8 +49,9 @@ object AirMoves {
     /** CvUnit::canAirSweep: a sweeper that may still attack */
     fun canAirSweep(unit: MapUnit) = unit.baseUnit.isAirUnit() && isAirSweepCapable(unit) && unit.canAttack()
 
-    /** CvUnit::canAirSweepAt: [tile] is in the fighter's range, and not the one it is on */
-    fun canAirSweepAt(unit: MapUnit, tile: Tile) = tile != unit.getTile() && unit.getTile().aerialDistanceTo(tile) <= unit.getRange()
+    /** CvUnit::canAirSweepAt: a sweeper that may still attack, [tile] is seen, in the fighter's range, and not the one it is on */
+    fun canAirSweepAt(unit: MapUnit, tile: Tile) =
+        canAirSweep(unit) && tile.isVisible(unit.civ) && tile != unit.getTile() && unit.getTile().aerialDistanceTo(tile) <= unit.getRange()
 
     /** The enemy's air units that [civ] counts: at war with it, alive */
     private fun enemyAirUnits(civ: Civilization): Sequence<MapUnit> =
@@ -254,30 +255,69 @@ object AirMoves {
 
     //region Tactical moves
 
-    /** The dominance of the zone of the city the unit is in: null outside a city or in one with no zone (PlotAirSweepMoves / PlotAirInterceptMoves "pZone") */
-    private fun cityZoneDominance(ctx: TacticalContext, unit: MapUnit): TacticalDominance? {
-        val city = unit.getTile().getCity()?.takeIf { unit.getTile().isCityCenter() } ?: return null
-        return ctx.map.zoneByCity(city, false)?.dominance
+    /**
+     *  CvPlot::GetInterceptorCount(civ, no unit, any domain, visible only): the units of players at war with [civ] that [civ] sees and that can
+     *  intercept an air attack on [tile] now. Barbarians never intercept (CvPlot::GetBestInterceptor does not look at them).
+     */
+    fun interceptorCount(civ: Civilization, tile: Tile): Int =
+        civ.gameInfo.civilizations.asSequence().filter { it != civ && !it.isBarbarian && it.isAlive() && civ.isAtWarWith(it) }
+            .flatMap { it.units.getCivUnits() }.count { it.getTile().isVisible(civ) && it.canIntercept(tile) }
+
+    /**
+     *  CvTacticalAI::FindAirUnitsToAirSweep: the units of this turn that can sweep [target], at most as many as there are interceptors (one at
+     *  least, a fighter may be there for recon), the strongest first. The sweep strength is the ranged strength: the original also scales it by
+     *  the sweep modifier of the unit's promotions, which the ruleset does not have.
+     */
+    fun findAirUnitsToAirSweep(ctx: TacticalContext, target: Tile): List<MapUnit> {
+        var interceptions = maxOf(1, interceptorCount(ctx.civ, target))
+        val result = ArrayList<MapUnit>()
+        for (unit in ctx.liveUnits()) {
+            if (interceptions <= 0) break
+            if (!unit.baseUnit.isAirUnit() || !TacticalAi.canUseForTacticalAi(unit, ctx.cache) || !canAirSweepAt(unit, target)) continue
+            result.add(unit)
+            interceptions--
+        }
+        // std::stable_sort: the order we would like them to attack in
+        return result.sortedWith(compareByDescending<MapUnit> { it.baseUnit.rangedStrength }.thenByDescending { it.health })
+    }
+
+    /** CvUnit::airSweep for the unit's mission: the unit sweeps [target] and counts as having attacked */
+    private fun performAirSweep(unit: MapUnit, target: Tile) {
+        unit.action = UnitActionType.AirSweep.value
+        AirInterception.airSweep(MapUnitCombatant(unit), target)
+        if (!unit.isDestroyed && unit.isPreparingAirSweep()) unit.action = null
     }
 
     /**
-     *  CvTacticalAI::PlotAirSweepMoves / ExecuteAirSweepMoves: a fighter with more than half its health that can sweep, will not rebase and has a
-     *  [bestAirSweepTarget], on a carrier or in a city where we dominate (or with no zone), sweeps that city.
+     *  CvTacticalAI::ExecuteAirSweep, before an attack on [target]: if enemy interceptors are to be seen over it, the fighters found for it
+     *  ([TacticalContext.airSweepUnits]) sweep it, each commanded once it is out of attacks. A fighter that is only there for recon (no interceptor)
+     *  is not sent.
      */
-    fun plotAirSweepMoves(ctx: TacticalContext) {
-        for (unit in ctx.liveUnits()) {
-            if (!unit.baseUnit.isAirUnit() || !isCombatReady(unit)) continue
-            if (!canAirSweep(unit) || willAirUnitRebase(unit)) continue
-            val target = bestAirSweepTarget(ctx.civ, unit) ?: continue
-            val inCity = unit.getTile().isCityCenter()
-            val dominance = cityZoneDominance(ctx, unit)
-            if (inCity && dominance != null && dominance != TacticalDominance.Friendly) continue
-            ctx.log { "air sweep by ${unit.name} at ${unit.getTile().position} on ${target.position}" }
-            unit.action = UnitActionType.AirSweep.value
-            AirInterception.airSweep(MapUnitCombatant(unit), target)
-            if (!unit.isDestroyed && unit.isPreparingAirSweep()) unit.action = null
-            ctx.unitProcessed(unit, markTacticalMap = false)
+    fun executeAirSweep(ctx: TacticalContext, target: Tile) {
+        if (interceptorCount(ctx.civ, target) == 0) return
+        for (unit in ctx.airSweepUnits) {
+            if (unit.isDestroyed || !unit.hasMovement() || !canAirSweepAt(unit, target)) continue
+            ctx.log { "starting air sweep with ${unit.name} at ${unit.getTile().position} before the attack on ${target.position}" }
+            performAirSweep(unit, target)
+            if (!unit.isDestroyed && TacticalAttacks.isOutOfAttacks(unit)) ctx.unitProcessed(unit, markTacticalMap = false)
         }
+    }
+
+    /**
+     *  The last resort of CvTacticalAI::ExecuteSpotterMove: when no ground unit can get a view of [target], a fighter sweeps a visible tile next to it
+     *  to see it (recon). The original commands the unit by an index that is a direction number there; this commands the unit that swept.
+     *  @return whether a sweep was made
+     */
+    fun sweepForRecon(ctx: TacticalContext, target: Tile): Boolean {
+        for (unit in ctx.airSweepUnits) {
+            if (unit.isDestroyed || !unit.hasMovement()) continue
+            val adjacent = target.neighbors.firstOrNull { it.isVisible(ctx.civ) && canAirSweepAt(unit, it) } ?: continue
+            ctx.log { "using air sweep for recon: ${unit.name} at ${adjacent.position}" }
+            performAirSweep(unit, adjacent)
+            if (!unit.isDestroyed && TacticalAttacks.isOutOfAttacks(unit)) ctx.unitProcessed(unit, markTacticalMap = false)
+            return true
+        }
+        return false
     }
 
     /**

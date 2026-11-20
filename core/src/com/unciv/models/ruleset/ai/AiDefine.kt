@@ -54,7 +54,7 @@ enum class AiDefine(val default: Float) {
     TECH_WEIGHT_PROPAGATION_PERCENT(50f),
     TECH_WEIGHT_PROPAGATION_LEVELS(3f),
     NUM_OR_TECH_PREREQS(3f),
-    TECH_PRIORITY_UNIQUE_ITEM(5f),
+    TECH_PRIORITY_UNIQUE_ITEM(25f), // Vox Populi's value and meaning: added to the tech weight (BNW: 5, a factor)
     TECH_PRIORITY_MAYA_CALENDAR_BONUS(50f),
     AI_RESEARCH_WEIGHT_BASE_MOD(0.15f),
     AI_RESEARCH_WEIGHT_MOD_PER_TURN_LEFT(0.025f),

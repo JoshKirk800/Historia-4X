@@ -51,6 +51,9 @@ object GreatPersonAutomation {
     private const val PUBLIC_OPINION_UNHAPPINESS_LIMIT = 10
     private const val MILITARY_AT_WAR = "MILITARYAISTRATEGY_AT_WAR"
     private const val MILITARY_WAR_MOBILIZATION = "MILITARYAISTRATEGY_WAR_MOBILIZATION"
+    /** The turns GeneratePath of the merchant's target search may take, and the tiles near the capital whose paths are tried */
+    private const val MERCHANT_PATH_MAX_TURNS = 23
+    private const val MAX_MERCHANT_APPROXIMATE_CANDIDATES = 8
 
     //region Inputs
 
@@ -213,7 +216,7 @@ object GreatPersonAutomation {
      */
     fun directiveEngineer(unit: MapUnit): GreatPeopleDirective {
         val civ = unit.civ
-        if (WonderProductionAi.chooseWonder(civ, adjustForOtherPlayers = false).first != null) return GreatPeopleDirective.UsePower
+        if (WonderProductionAi.chooseWonder(civ).first != null) return GreatPeopleDirective.UsePower
         val turn = civ.gameInfo.turns
         if (turn <= estimateEndTurn(civ.gameInfo) * 3 / 4 && civ.ai.isGoingForWorldConquest()) return GreatPeopleDirective.ConstructImprovement
         if (turn - unit.turnCreated >= civ.gameInfo.ruleset.ai.define(AiDefine.AI_HOMELAND_GREAT_PERSON_TURNS_TO_WAIT))
@@ -271,29 +274,53 @@ object GreatPersonAutomation {
     }
 
     /**
-     *  CvPlayerAI::FindBestMerchantTargetPlot: among the city-states we are not at war with, do not approach as Conquest and plan no war
-     *  against (CvDiplomacyAI::GetWarGoal), the revealed tile owned by the city-state next to its capital that [unit] reaches in the fewest turns.
+     *  CvPlayerAI::FindBestMerchantTargetPlotForCash (Vox Populi): the capitals of the city-states we have seen, are not at war with and do
+     *  not approach as conquest or bullying (CvDiplomacyAI::GetCivApproach above CIV_APPROACH_HOSTILE: ignoring or friendly), the nearest to
+     *  [unit] first (ties in tile order), and the first of them [unit] has a path to: the tile the path ends at. The path is
+     *  GeneratePath(MOVEFLAG_NO_ENEMY_TERRITORY | APPROX_TARGET_RING1 | APPROX_TARGET_NATIVE_DOMAIN, 23 turns), read as in
+     *  [com.unciv.logic.automation.unit.tactical.EscortMoves]: the shortest path to one of the eight nearest tiles within one of the capital that
+     *  [unit] can enter, on its own domain, that are the city-state's (where the trade mission can be made), none of its stops in enemy
+     *  territory unless it starts in it. Deviation from the original: that last condition; BNW's refusal of a city-state we plan a war against
+     *  is no longer made (VP has none). The target for a puppet (FindBestMerchantTargetPlotForPuppet, Venice's merchant when it wants
+     *  city-states, GreatMerchantWantsCash) is not ported: the rules have no purchase of a city-state ([performAtTarget]).
      */
     fun findBestMerchantTargetPlot(unit: MapUnit): Tile? {
         val civ = unit.civ
-        var bestTurns = Int.MAX_VALUE
-        var best: Tile? = null
+        val start = unit.currentTile
+        val capitals = ArrayList<Pair<Civilization, Tile>>()
         for (cityState in civ.gameInfo.civilizations) {
             if (!cityState.isCityState || !cityState.isAlive()) continue
             val capitalTile = cityState.getCapital()?.getCenterTile() ?: continue
             if (!capitalTile.isExplored(civ)) continue
-            if (civ.ai.minorCivApproaches[cityState.civID] == MinorCivApproach.Conquest) continue
-            if (civ.isAtWarWith(cityState) || civ.ai.diplomacy.warGoal(cityState) != null) continue
-            for (tile in capitalTile.neighbors) {
-                if (tile.getOwner() != cityState || !tile.isExplored(civ)) continue
-                val turns = turnsToReach(unit, tile)
-                if (turns < bestTurns) {
-                    bestTurns = turns
-                    best = tile
-                }
-            }
+            val approach = civ.ai.minorCivApproaches[cityState.civID]
+            if (approach == MinorCivApproach.Conquest || approach == MinorCivApproach.Bully || civ.isAtWarWith(cityState)) continue
+            capitals.add(cityState to capitalTile)
         }
-        return best
+        capitals.sortWith(compareBy({ start.aerialDistanceTo(it.second) }, { it.second.zeroBasedIndex }))
+        for ((cityState, capitalTile) in capitals)
+            merchantPathEnd(unit, cityState, capitalTile)?.let { return it }
+        return null
+    }
+
+    /** The end of [findBestMerchantTargetPlot]'s path to [capitalTile], null if there is none */
+    private fun merchantPathEnd(unit: MapUnit, cityState: Civilization, capitalTile: Tile): Tile? {
+        val civ = unit.civ
+        val start = unit.currentTile
+        val ring = (sequenceOf(capitalTile) + capitalTile.neighbors).filter { it.getOwner() == cityState && it.isExplored(civ) }.toList()
+        // already there (at least approximately)
+        if (start in ring) return start
+        val candidates = ring.filter { unit.movement.canMoveTo(it) && it.isWater == unit.baseUnit.isWaterUnit }
+            .sortedWith(compareBy({ start.aerialDistanceTo(it) }, { capitalTile.aerialDistanceTo(it) }))
+            .take(MAX_MERCHANT_APPROXIMATE_CANDIDATES)
+        var best: List<Tile>? = null
+        for (candidate in candidates) {
+            val path = unit.movement.getShortestPath(candidate)
+            if (path.isEmpty() || (best != null && path.size >= best.size)) continue
+            best = path
+        }
+        if (best == null || best.size - 1 >= MERCHANT_PATH_MAX_TURNS) return null
+        if (!start.isEnemyTerritory(civ) && best.any { it.isEnemyTerritory(civ) }) return null
+        return best.last()
     }
 
     /**

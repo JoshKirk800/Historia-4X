@@ -28,6 +28,7 @@ import org.jetbrains.annotations.VisibleForTesting
 import yairm210.purity.annotations.Cache
 import yairm210.purity.annotations.Readonly
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 /** How sure a player is of its guess of another player's grand strategy (the original's GuessConfidenceTypes) */
@@ -398,10 +399,16 @@ class CivAi : IsPartOfGameInfoSerialization {
     /** CvGrandStrategyAI::GetGrandStrategyPriority: last computed priority, -1 before the first computation */
     fun grandStrategyPriority(grandStrategy: String): Int = grandStrategyPriorities[grandStrategy] ?: -1
 
-    /** CvGrandStrategyAI::GetPersonalityAndGrandStrategy: personality flavor plus the active grand strategy's FlavorMod, at least 0 */
-    fun personalityAndGrandStrategy(flavor: Flavor): Int {
+    /**
+     *  CvGrandStrategyAI::GetPersonalityAndGrandStrategy: personality flavor plus the active grand strategy's FlavorMod, at least 0. With
+     *  [boostMainFlavor] (the tech weights' bBoostGSMainFlavor) a flavor the grand strategy lists as its own (AIGrandStrategy_Flavors) is
+     *  moved halfway (rounded up) towards that value, at most 10.
+     */
+    fun personalityAndGrandStrategy(flavor: Flavor, boostMainFlavor: Boolean = false): Int {
         val active = grandStrategyDef() ?: return personality(flavor)
-        return max(0, active.flavorModVector[flavor.ordinal] + personality(flavor))
+        val modded = max(0, active.flavorModVector[flavor.ordinal] + personality(flavor))
+        val main = active.flavorVector[flavor.ordinal]
+        return if (boostMainFlavor && main > 0) min(10, (main + modded + 1) / 2) else modded
     }
 
     /** CvGrandStrategyAI::GetGuessOtherPlayerActiveGrandStrategy and its confidence; (null, null) if no guess */

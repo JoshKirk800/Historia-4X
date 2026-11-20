@@ -202,12 +202,12 @@ object BuildingValueAi {
      *  works, free great works, great work and landmark tourism; culture: free policies), each scaled up by the interest of the grand
      *  strategy in it (its priority / 10 percent, the leader's traits multiply the interests). Tourism, diplomacy, science and conquest
      *  count in full when the civilization is going for or close to that victory, else divided by era + 1; culture always in full. 0 for a
-     *  puppet that may be annexed.
+     *  puppet that may be annexed. [city] is null when the value is asked without a city (CvPlayerTechs::SetGSPriorities passes NULL): the
+     *  terms that read the city (the Great Work slots it has, its culture) are then left out and the puppet test passes.
      */
-    fun grandStrategyValue(city: City, building: Building): Int {
-        val civ = city.civ
+    fun grandStrategyValue(civ: Civilization, city: City?, building: Building): Int {
         val ai = civ.ai
-        if (ProductionSanityAi.isPuppetAndAnnexable(city)) return 0
+        if (city != null && ProductionSanityAi.isPuppetAndAnnexable(city)) return 0
 
         var diploInterest = 0
         var conquestInterest = 0
@@ -283,7 +283,7 @@ object BuildingValueAi {
         val greatWorkSlots = building.amount(UniqueType.GreatWorkSlots)
         if (greatWorkSlots > 0) {
             tourismValue += greatWorkSlots * 5
-            if (city.greatWorks.getSlots().size <= greatWorkSlots) tourismValue += greatWorkSlots * 5
+            if (city != null && city.greatWorks.getSlots().size <= greatWorkSlots) tourismValue += greatWorkSlots * 5
         }
 
         val greatWorksTourism = building.amount(UniqueType.GreatWorksTourismPercent) { it.isLocalEffect }
@@ -294,11 +294,11 @@ object BuildingValueAi {
         if (landmarks > 0) tourismValue += landmarks
         if (greatWorksTourismGlobal > 0) tourismValue += greatWorksTourismGlobal * civ.cities.size
         if (landmarksGlobal > 0) tourismValue += landmarksGlobal * civ.cities.size
-        if (landmarks > 0 || landmarksGlobal > 0) {
+        if (city != null && (landmarks > 0 || landmarksGlobal > 0)) {
             val culture = city.cityStats.currentCityStats.culture.toInt()
             tourismValue += culture / max(1, landmarks + landmarksGlobal)
         }
-        if (greatWorksTourism > 0 || greatWorksTourismGlobal > 0) {
+        if (city != null && (greatWorksTourism > 0 || greatWorksTourismGlobal > 0)) {
             val works = max(3, city.greatWorks.getSlots().size)
             //Higher value the higher the number of works.
             tourismValue += works * (greatWorksTourism + greatWorksTourismGlobal)

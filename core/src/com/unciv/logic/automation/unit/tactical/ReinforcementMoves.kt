@@ -57,15 +57,9 @@ object ReinforcementMoves {
         return reached
     }
 
-    /** CvUnit::canUseForTacticalAI for the units reinforcements are made of: a combat unit that can move, was not used and is not an explorer or a carrier */
-    private fun canUse(ctx: TacticalContext, unit: MapUnit): Boolean {
-        if (unit.isDestroyed || unit.civ != ctx.civ || !unit.hasMovement() || unit in ctx.cache.processedUnits) return false
-        if (!unit.isMilitary() || unit.baseUnit.isAirUnit()) return false
-        return when (UnitAiTypes.current(unit)) {
-            UnitAiType.EXPLORE, UnitAiType.EXPLORE_SEA, UnitAiType.CARRIER_SEA, UnitAiType.ICBM, UnitAiType.MISSILE_CARRIER_SEA -> false
-            else -> true
-        }
-    }
+    /** CvUnit::canUseForTacticalAI for the units reinforcements are made of: a military land or sea unit that [TacticalAi.canUseForTacticalAi] */
+    private fun canUse(ctx: TacticalContext, unit: MapUnit): Boolean =
+        unit.civ == ctx.civ && unit.isMilitary() && !unit.baseUnit.isAirUnit() && TacticalAi.canUseForTacticalAi(unit, ctx.cache)
 
     /**
      *  TacticalAIHelpers::GetTargetsInRange (not civilians, kill or not): the enemy units and cities the unit can attack from where it can get

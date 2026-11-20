@@ -37,7 +37,7 @@ object AirMoves {
     /** Half the hit points: an aircraft with this many or fewer is not combat ready (CvUnit::getDamage() * 2 < MAX_HIT_POINTS) */
     private const val HALF_HEALTH = 50
 
-    /** An aircraft with more than half its hit points: the tactical AI commandeers it, uses it for strikes and sweeps, and the homeland AI rebases it */
+    /** An aircraft with more than half its hit points: the tactical AI recruits it, uses it for strikes and sweeps, and the homeland AI rebases it */
     fun isCombatReady(unit: MapUnit) = unit.health > HALF_HEALTH
 
     /** CvUnit::IsAirSweepCapable */
@@ -281,7 +281,7 @@ object AirMoves {
     }
 
     /**
-     *  CvTacticalAI::PlotAirPatrolMoves / ExecuteAirPatrolMoves: a fighter of the tactical AI (they will not rebase, [TacticalAi.commandeerUnits]) that
+     *  CvTacticalAI::PlotAirPatrolMoves / ExecuteAirPatrolMoves: a fighter of the tactical AI (they will not rebase, [TacticalAi.recruitUnits]) that
      *  can intercept (CvUnit::canAirPatrol: an air unit with an intercept chance) goes on air patrol when fewer fighters than wanted already patrol
      *  from its tile this turn: half the enemy bombers in its range (at least one interception if one bomber is there) plus a quarter of their
      *  fighters ([numEnemyAirUnitsInRange] of the unit's own range). Going on patrol is staying where it is: it keeps its movement to intercept,

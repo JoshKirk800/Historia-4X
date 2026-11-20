@@ -12,7 +12,7 @@ import com.unciv.models.ruleset.ai.AiDefine
  *  What the moves of one tactical turn share (the members of CvTacticalAI that are not state across turns): the analysis [map], the
  *  [danger], this turn's [targets], and the [units] the tactical AI still may command (m_CurrentTurnUnits). A routine that commands a unit
  *  calls [unitProcessed] (CvTacticalAI::UnitProcessed): the unit leaves the list, is in [AutomationCache.processedUnits] for the rest of the
- *  unit AI, and its tile is marked as one a unit finished on. [allUnits] are the units the turn was given, commandeered or not: where the original's
+ *  unit AI, and its tile is marked as one a unit finished on. [allUnits] are the units the turn was given, recruited or not: where the original's
  *  reinforcement finds any unit of the player on the plots around a zone's city, here it finds them among these (a player's automated unit asks
  *  for a turn of its own, and must not command the rest of his army).
  */

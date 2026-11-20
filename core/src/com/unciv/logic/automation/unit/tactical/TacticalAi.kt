@@ -14,7 +14,7 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.unique.UniqueType
 
 /**
- *  CvTacticalAI::Update for one civilization's turn: the units under tactical control ([commandeerUnits]), the targets ([TacticalTargets]), then the
+ *  CvTacticalAI::Update for one civilization's turn: the units under tactical control ([recruitUnits]), the targets ([TacticalTargets]), then the
  *  moves in the hardcoded order of Vox Populi's ProcessDominanceZones ([automate]): healing, the armies of the operations ([OperationalMoves]) and the
  *  garrisons ([GarrisonMoves]); for each dominance zone the emergency purchases and the moves of its posture (the attacks on units and cities by
  *  [TacticalSimulation], hedgehog, withdrawing - [Postures], [WithdrawMoves]); the reinforcements ([ReinforcementMoves]); air patrols ([AirMoves]), ruins,
@@ -23,44 +23,44 @@ import com.unciv.models.ruleset.unique.UniqueType
  *  list of Brave New World's AI.json. A unit a move commands is added to [AutomationCache.processedUnits]; the other units, tactical or not, go on to the
  *  rest of the unit AI.
  *
- *  Not ported: naval blockades (PlotBlockadeMoves: its targets are the barbarians' blockade points, which [TacticalTargets] does not make) and Vox Populi's
- *  recruiting of every unit that is not in an army for the turn: Brave New World's [commandeerUnits] stays, the reinforcements look at all the units given
- *  to the turn. Kept from Brave New World, where Vox Populi has nothing: the air sweep, the defensive airlift and parking on trade routes.
+ *  Not ported: naval blockades (PlotBlockadeMoves: its targets are the barbarians' blockade points, which [TacticalTargets] does not make). Kept from
+ *  Brave New World, where Vox Populi has nothing: the air sweep, the defensive airlift and parking on trade routes.
  */
 object TacticalAi {
     /**
-     *  CvTacticalAI::CommandeerUnits: the units that are the tactical AI's this turn. Not units that cannot move, are processed, have the
-     *  unit AI UNKNOWN or EXPLORE (explorers are the homeland AI's, however near the enemy), are not combat units or Great Generals. Of the
-     *  rest: not the ones in an army tactical may not interrupt ([com.unciv.logic.automation.strategy.CivAi.canTacticalAiInterrupt]); the
-     *  ones whose tile has danger, that have a visible enemy unit or city within AI_TACTICAL_RECRUIT_RANGE, or that left an operation within
-     *  AI_TACTICAL_MAP_TEMP_ZONE_TURNS turns; and, danger or not, a unit that [canParadrop]. Air units with more than half their health that
-     *  will not rebase ([AirMoves.willAirUnitRebase]) are all tactical. (Barbarians have their own AI, [com.unciv.logic.automation.civilization.BarbarianAutomation].)
+     *  CvTacticalAI::RecruitUnits: every unit that [canUseForTacticalAi] is the tactical AI's this turn, wherever it stands: not the units in an army
+     *  (the operations move those, [OperationalMoves] hands them over when the enemy is near), not units that cannot move or were commanded already,
+     *  explorers (the homeland AI's), carriers and nukes (operations only), and, of the rest, combat units and Great Generals. Air units are all
+     *  tactical when they will not rebase ([AirMoves.willAirUnitRebase]; the homeland AI rebases them) and have more than half their health.
+     *  (Barbarians have their own AI, [com.unciv.logic.automation.civilization.BarbarianAutomation].)
      */
-    fun commandeerUnits(civ: Civilization, units: List<MapUnit>, cache: AutomationCache): List<MapUnit> {
-        val rules = civ.gameInfo.ruleset.ai
-        val recruitRange = rules.define(AiDefine.AI_TACTICAL_RECRUIT_RANGE)
-        val tempZoneTurns = rules.define(AiDefine.AI_TACTICAL_MAP_TEMP_ZONE_TURNS)
-        val turn = civ.gameInfo.turns
-        val danger = civ.ai.plotDanger
-        val enemyTiles by lazy { visibleEnemyTiles(civ) }
+    fun recruitUnits(civ: Civilization, units: List<MapUnit>, cache: AutomationCache): List<MapUnit> {
         val result = ArrayList<MapUnit>()
         for (unit in units) {
-            if (unit.isDestroyed || unit.civ != civ || unit in cache.processedUnits || !unit.hasMovement()) continue
-            val unitAi = UnitAiTypes.current(unit)
-            if (unitAi == UnitAiType.UNKNOWN || unitAi == UnitAiType.EXPLORE) continue
+            if (unit.civ != civ || !canUseForTacticalAi(unit, cache)) continue
             // CommandeerUnits: air units that are combat ready (more than half health) and not about to rebase
             if (unit.baseUnit.isAirUnit()) {
                 if (AirMoves.isCombatReady(unit) && !AirMoves.willAirUnitRebase(unit)) result.add(unit)
                 continue
             }
             if (!unit.isMilitary() && !unit.isGreatPersonOfType("War")) continue
-            if (!civ.ai.canTacticalAiInterrupt(unit)) continue
-            val tile = unit.getTile()
-            if (danger.get(tile) > 0 || nearAny(tile, enemyTiles, recruitRange) || civ.ai.deployFromOperationTurn(unit) + tempZoneTurns >= turn
-                || canParadrop(unit))
-                result.add(unit)
+            // The units of an army are moved as part of the army moves (setTacticalMove(AI_TACTICAL_OPERATION))
+            if (civ.ai.operations.armyOf(unit) != null) continue
+            result.add(unit)
         }
         return result
+    }
+
+    /**
+     *  CvUnit::canUseForTacticalAI: alive, able to move, not commanded already this turn, not an explorer (the homeland AI's, however near the enemy),
+     *  and not a carrier or a nuclear weapon, which only operations use.
+     */
+    fun canUseForTacticalAi(unit: MapUnit, cache: AutomationCache): Boolean {
+        if (unit.isDestroyed || !unit.hasMovement() || unit in cache.processedUnits) return false
+        return when (UnitAiTypes.current(unit)) {
+            UnitAiType.EXPLORE, UnitAiType.EXPLORE_SEA, UnitAiType.CARRIER_SEA, UnitAiType.ICBM, UnitAiType.MISSILE_CARRIER_SEA -> false
+            else -> true
+        }
     }
 
     /** CvUnit::canParadrop(plot, false): the unit has a paradrop range, has not moved this turn, is not embarked and stands in friendly territory */
@@ -78,11 +78,6 @@ object TacticalAi {
         return tiles
     }
 
-    /** CvTacticalAI::NearVisibleEnemy: a visible enemy unit or city within [range] tiles of the unit */
-    fun nearVisibleEnemy(unit: MapUnit, range: Int): Boolean = nearAny(unit.getTile(), visibleEnemyTiles(unit.civ), range)
-
-    private fun nearAny(tile: Tile, others: List<Tile>, range: Int): Boolean = others.any { it.aerialDistanceTo(tile) <= range }
-
     /**
      *  The tactical turn (CvTacticalAI::Update, ProcessDominanceZones): find the targets, then run the moves in Vox Populi's hardcoded order, each
      *  commanding the units it needs. [units] are the civilization's units in the order they would move.
@@ -97,8 +92,8 @@ object TacticalAi {
      */
     fun automate(civ: Civilization, units: List<MapUnit>, cache: AutomationCache) = timeThis("AI.Tactical") {
         val state = civ.ai.tactical
-        val tacticalUnits = commandeerUnits(civ, units, cache)
-        val commandeered = tacticalUnits.size
+        val tacticalUnits = recruitUnits(civ, units, cache)
+        val recruited = tacticalUnits.size
         val map = state.map
         PostureSelection.updatePostures(civ, state, map)
         val danger = civ.ai.plotDanger
@@ -164,7 +159,7 @@ object TacticalAi {
         // Failsafe
         globally("Review") { reviewUnassignedUnits(ctx) }
         AiDecisionLog.log(civ) {
-            "Tactical: $commandeered units commandeered, ${commandeered - ctx.units.size} commanded, ${ctx.targets.all.size} targets; postures " +
+            "Tactical: $recruited units recruited, ${recruited - ctx.units.size} commanded, ${ctx.targets.all.size} targets; postures " +
                 state.postures.filter { it.posture != TacticalPosture.None }.groupingBy { "${it.posture}${if (it.isWater) " (sea)" else ""}" }.eachCount()
                     .entries.joinToString { if (it.value > 1) "${it.key} x${it.value}" else it.key }.ifEmpty { "-" }
         }

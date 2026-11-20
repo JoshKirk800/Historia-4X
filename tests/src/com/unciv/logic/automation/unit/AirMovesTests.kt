@@ -3,11 +3,12 @@ package com.unciv.logic.automation.unit
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.unit.tactical.TacticalAi
 import com.unciv.logic.automation.unit.tactical.TacticalContext
-import com.unciv.logic.automation.unit.tactical.TacticalDominance
+import com.unciv.logic.automation.unit.tactical.TacticalSimulation
 import com.unciv.logic.automation.unit.tactical.TacticalTargets
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
+import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
@@ -21,7 +22,7 @@ import org.junit.runner.RunWith
 
 /**
  *  The air moves ported from CvMilitaryAI (WillAirUnitRebase, GetNumEnemyAirUnitsInRange, GetBestAirSweepTarget), CvTacticalAI
- *  (PlotAirSweepMoves, PlotAirInterceptMoves, CommandeerUnits for air units) and CvHomelandAI (ExecuteAircraftMoves) with BNW data.
+ *  (ExecuteAirSweep with FindAirUnitsToAirSweep, PlotAirInterceptMoves, RecruitUnits for air units) and CvHomelandAI (ExecuteAircraftMoves) with BNW data.
  *  Cities lie on the x axis: ours at 0 and 6, the enemy's at 14 and -14; a Fighter has range 5 (rebase range 10), a Bomber 10.
  */
 @RunWith(BaseTestRunner::class)
@@ -55,6 +56,7 @@ class AirMovesTests {
     private fun tile(x: Int, y: Int = 0) = game.getTile(HexCoord(x, y))
 
     private fun context(): TacticalContext {
+        civ.viewableTiles = game.tileMap.values.toSet()
         civ.ai.invalidateTurnCaches()
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
@@ -186,32 +188,119 @@ class AirMovesTests {
         val ready = game.addUnit("Fighter", civ, home.getCenterTile())
         val hurt = game.addUnit("Fighter", civ, forward.getCenterTile())
         hurt.health = 40
-        val commandeered = TacticalAi.commandeerUnits(civ, listOf(ready, hurt), AutomationCache())
-        assertEquals(listOf(ready), commandeered)
+        val recruited = TacticalAi.recruitUnits(civ, listOf(ready, hurt), AutomationCache())
+        assertEquals(listOf(ready), recruited)
     }
 
     @Test
-    fun `a fighter in a city that has a city of the enemy with fighters in range sweeps it`() {
-        val fighter = game.addUnit("Fighter", civ, forward.getCenterTile())
-        // the city's garrison, so that we dominate its zone: a lone fighter against one of theirs is only an even match (Vox Populi's 70 percent)
-        for (tile in forward.getCenterTile().neighbors.take(2)) game.addUnit("Swordsman", civ, tile)
-        val defender = game.addUnit("Fighter", enemy, enemyEast.getCenterTile())
-        val ctx = context()
-        assertEquals(TacticalDominance.Friendly, ctx.map.zoneByCity(forward, false)!!.dominance)
-        AirMoves.plotAirSweepMoves(ctx)
-        assertTrue(fighter in ctx.cache.processedUnits)
-        assertTrue("the sweep counts as an attack", fighter.attacksThisTurn > 0)
-        assertTrue(defender.getTile() == enemyEast.getCenterTile())
+    fun `the interceptors over a tile are the visible units of players at war with us that can intercept it`() {
+        game.addUnit("Fighter", enemy, enemyEast.getCenterTile()) // 100 percent, range 8
+        game.addUnit("Triplane", enemy, enemyEast.getCenterTile()) // 50 percent, range 5
+        game.addUnit("Bomber", enemy, enemyEast.getCenterTile()) // cannot intercept
+        game.addUnit("Fighter", enemy, enemyWest.getCenterTile()) // 24 tiles from the city, beyond its range
+        game.addUnit("Fighter", civ, forward.getCenterTile()) // ours do not count
+        civ.viewableTiles = game.tileMap.values.toSet()
+        assertEquals(2, AirMoves.interceptorCount(civ, enemyEast.getCenterTile()))
+        civ.viewableTiles = game.tileMap.values.filter { it != enemyEast.getCenterTile() }.toSet()
+        assertEquals("a tile we do not see hides its interceptors", 0, AirMoves.interceptorCount(civ, enemyEast.getCenterTile()))
     }
 
     @Test
-    fun `a fighter that is hurt or that will rebase does not sweep`() {
+    fun `no more fighters are found to sweep than there are interceptors, one at least, the first of the turn's units, the strongest of them first`() {
+        // FindAirUnitsToAirSweep takes units in the order of the turn while interceptions are left, and sorts what it found
+        val triplane = game.addUnit("Triplane", civ, forward.getCenterTile()) // strength 35
+        val fighter = game.addUnit("Fighter", civ, forward.getCenterTile()) // 45
+        val jet = game.addUnit("Jet Fighter", civ, forward.getCenterTile()) // 75
+        val target = enemyEast.getCenterTile()
+        var ctx = context()
+        assertEquals("nothing intercepts, but a fighter may be there for recon", listOf(triplane), AirMoves.findAirUnitsToAirSweep(ctx, target))
+        game.addUnit("Fighter", enemy, target)
+        ctx = context()
+        assertEquals(listOf(triplane), AirMoves.findAirUnitsToAirSweep(ctx, target))
+        game.addUnit("Fighter", enemy, target)
+        ctx = context()
+        assertEquals(listOf(fighter, triplane), AirMoves.findAirUnitsToAirSweep(ctx, target))
+        game.addUnit("Fighter", enemy, target)
+        ctx = context()
+        assertEquals(listOf(jet, fighter, triplane), AirMoves.findAirUnitsToAirSweep(ctx, target))
+    }
+
+    @Test
+    fun `a fighter that cannot reach the target, has used its attack or is no sweeper is not found`() {
+        val reaching = game.addUnit("Fighter", civ, forward.getCenterTile())
+        val tooFar = game.addUnit("Triplane", civ, home.getCenterTile()) // range 5: 10 tiles from the target
+        val bomber = game.addUnit("Bomber", civ, forward.getCenterTile())
+        val spent = game.addUnit("Fighter", civ, forward.getCenterTile()).also { it.attacksThisTurn = 1 }
+        val target = enemyEast.getCenterTile()
+        for (i in 1..4) game.addUnit("Fighter", enemy, target)
+        val found = AirMoves.findAirUnitsToAirSweep(context(), target)
+        assertEquals(listOf(reaching), found)
+        assertFalse(tooFar in found || bomber in found || spent in found)
+    }
+
+    @Test
+    fun `the sweep before an attack is made when interceptors are over the target, and not made when none is`() {
+        val jet = game.addUnit("Jet Fighter", civ, forward.getCenterTile())
         val fighter = game.addUnit("Fighter", civ, forward.getCenterTile())
-        game.addUnit("Fighter", enemy, enemyEast.getCenterTile())
-        fighter.health = 45
-        val ctx = context()
-        AirMoves.plotAirSweepMoves(ctx)
+        val target = enemyEast.getCenterTile()
+        val bomber = game.addUnit("Bomber", enemy, target)
+        var ctx = context()
+        ctx.airSweepUnits = AirMoves.findAirUnitsToAirSweep(ctx, target)
+        AirMoves.executeAirSweep(ctx, target)
+        assertEquals("a bomber cannot intercept, nothing to sweep", 0, jet.attacksThisTurn)
+        assertTrue(ctx.cache.processedUnits.isEmpty())
+
+        game.addUnit("Fighter", enemy, target)
+        ctx = context()
+        ctx.airSweepUnits = AirMoves.findAirUnitsToAirSweep(ctx, target)
+        assertEquals(listOf(jet), ctx.airSweepUnits)
+        AirMoves.executeAirSweep(ctx, target)
+        assertTrue("the sweep counts as an attack", jet.attacksThisTurn > 0)
+        assertTrue("and commands the sweeper, which is out of attacks", jet in ctx.cache.processedUnits)
+        assertEquals(0, fighter.attacksThisTurn)
         assertFalse(fighter in ctx.cache.processedUnits)
+        assertTrue(bomber.getTile() == target)
+    }
+
+    @Test
+    fun `the units that strike a target give the fighters to sweep it only when aircraft strike`() {
+        val fighter = game.addUnit("Fighter", civ, forward.getCenterTile())
+        game.addUnit("Fighter", enemy, enemyEast.getCenterTile()) // the interceptor, 4 tiles from the target
+        val prey = tile(6, 4)
+        game.addUnit("Warrior", enemy, prey)
+        var ctx = context()
+        TacticalSimulation.findUnitsWithinStrikingDistance(ctx, prey)
+        assertEquals("only a fighter kept for interception: no aircraft strikes", emptyList<MapUnit>(), ctx.airSweepUnits)
+
+        val bomber = game.addUnit("Bomber", civ, forward.getCenterTile())
+        ctx = context()
+        val strikers = TacticalSimulation.findUnitsWithinStrikingDistance(ctx, prey)
+        assertTrue(bomber in strikers)
+        assertEquals(listOf(fighter), ctx.airSweepUnits)
+    }
+
+    @Test
+    fun `with no ground unit to see the target a fighter sweeps a visible tile next to it for recon`() {
+        val fighter = game.addUnit("Fighter", civ, forward.getCenterTile())
+        val other = game.addUnit("Fighter", civ, forward.getCenterTile())
+        val target = tile(8, 2)
+        civ.viewableTiles = game.tileMap.values.filter { it != target }.toSet()
+        civ.ai.invalidateTurnCaches()
+        fun contextWithoutTargets() =
+            TacticalContext(civ, civ.ai.tactical.map, civ.ai.plotDanger, AutomationCache(), civ.units.getCivUnits().toList(), TacticalTargets.none())
+        val ctx = contextWithoutTargets()
+        assertFalse("no sweeper found yet", AirMoves.sweepForRecon(ctx, target))
+        ctx.airSweepUnits = listOf(fighter)
+        assertTrue(AirMoves.sweepForRecon(ctx, target))
+        assertEquals(1, fighter.attacksThisTurn)
+        assertTrue(fighter in ctx.cache.processedUnits)
+
+        // the spotter move of an attack falls back on it when no ground unit can see the target
+        val spotting = contextWithoutTargets()
+        assertFalse(TacticalSimulation.executeSpotterMove(spotting, emptyList(), target))
+        spotting.airSweepUnits = listOf(other)
+        assertTrue(TacticalSimulation.executeSpotterMove(spotting, emptyList(), target))
+        assertEquals(1, other.attacksThisTurn)
     }
 
     @Test

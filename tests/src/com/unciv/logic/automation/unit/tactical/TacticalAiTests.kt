@@ -19,7 +19,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- *  The tactical AI's turn (Brave New World data): which units it commandeers (CvTacticalAI::CommandeerUnits), withdrawing from enemy land
+ *  The tactical AI's turn (Brave New World data): which units it recruits (CvTacticalAI::RecruitUnits), withdrawing from enemy land
  *  (PlotWithdrawMoves), and the emergency purchases of PlotEmergencyPurchases / CvMilitaryAI::BuyEmergencyBuilding.
  */
 @RunWith(BaseTestRunner::class)
@@ -52,32 +52,29 @@ class TacticalAiTests {
         return cache
     }
 
-    // region Commandeering
+    // region Recruiting
 
     @Test
-    fun `a unit is commandeered when its tile has danger, an enemy is within 8 tiles, and not otherwise`() {
+    fun `every unit that can move is recruited wherever it stands, with an enemy near or not`() {
         val quiet = game.addUnit("Warrior", civ, tile(-12))
         val near = game.addUnit("Warrior", civ, tile(12))
         game.addUnit("Warrior", enemy, tile(5)) // 7 from `near`, 17 from `quiet`
         val inDanger = game.addUnit("Warrior", civ, tile(3)) // two tiles from the enemy
         see()
-        val commandeered = TacticalAi.commandeerUnits(civ, listOf(quiet, near, inDanger), AutomationCache())
-        assertEquals(setOf(near, inDanger), commandeered.toSet())
+        assertEquals(listOf(quiet, near, inDanger), TacticalAi.recruitUnits(civ, listOf(quiet, near, inDanger), AutomationCache()))
     }
 
     @Test
-    fun `an enemy city within 8 tiles counts like an enemy unit`() {
+    fun `with no enemy in sight the units are recruited as well`() {
         val unit = game.addUnit("Warrior", civ, tile(0))
-        game.addCity(enemy, tile(8))
-        see()
-        assertEquals(listOf(unit), TacticalAi.commandeerUnits(civ, listOf(unit), AutomationCache()))
-        assertTrue(TacticalAi.nearVisibleEnemy(unit, 8))
-        assertFalse(TacticalAi.nearVisibleEnemy(unit, 7))
+        game.addUnit("Warrior", enemy, tile(6))
+        civ.viewableTiles = emptySet()
+        civ.ai.invalidateTurnCaches()
+        assertEquals(listOf(unit), TacticalAi.recruitUnits(civ, listOf(unit), AutomationCache()))
     }
 
     @Test
-    fun `civilians, units that cannot move and units already moved are not commandeered, a Great General is`() {
-        game.addUnit("Warrior", enemy, tile(4))
+    fun `civilians, units that cannot move and units already moved are not recruited, a Great General is`() {
         val worker = game.addUnit("Worker", civ, tile(2))
         val general = game.addUnit("Great General", civ, tile(1))
         val spent = game.addUnit("Warrior", civ, tile(0)).also { it.currentMovement = 0f }
@@ -85,20 +82,11 @@ class TacticalAiTests {
         val cache = AutomationCache()
         cache.processedUnits.add(processed)
         see()
-        assertEquals(listOf(general), TacticalAi.commandeerUnits(civ, listOf(worker, general, spent, processed), cache))
+        assertEquals(listOf(general), TacticalAi.recruitUnits(civ, listOf(worker, general, spent, processed), cache))
     }
 
     @Test
-    fun `an enemy we cannot see does not pull units in`() {
-        val unit = game.addUnit("Warrior", civ, tile(0))
-        game.addUnit("Warrior", enemy, tile(6))
-        civ.viewableTiles = emptySet()
-        civ.ai.invalidateTurnCaches()
-        assertTrue(TacticalAi.commandeerUnits(civ, listOf(unit), AutomationCache()).isEmpty())
-    }
-
-    @Test
-    fun `a unit with the explore unit AI is never commandeered, however near the enemy, while a unit with another military AI is`() {
+    fun `a unit with the explore unit AI is never recruited, however near the enemy, while a unit with another military AI is`() {
         game.addUnit("Warrior", enemy, tile(3))
         val scout = game.addUnit("Scout", civ, tile(1))
         val explorer = game.addUnit("Warrior", civ, tile(0))
@@ -106,18 +94,18 @@ class TacticalAiTests {
         UnitAiTypes.set(explorer, UnitAiType.EXPLORE)
         assertEquals(UnitAiType.EXPLORE, UnitAiTypes.current(scout))
         see()
-        assertEquals(listOf(soldier), TacticalAi.commandeerUnits(civ, listOf(scout, explorer, soldier), AutomationCache()))
+        assertEquals(listOf(soldier), TacticalAi.recruitUnits(civ, listOf(scout, explorer, soldier), AutomationCache()))
     }
 
     @Test
-    fun `a unit that can paradrop is commandeered with no enemy near, unless it has moved or stands outside friendly territory`() {
-        val home = game.addCity(civ, tile(-12), initialPopulation = 1)
-        val ready = game.addUnit("Paratrooper", civ, home.getCenterTile())
-        val moved = game.addUnit("Paratrooper", civ, home.getCenterTile().neighbors.first()).also { it.currentMovement = 1f }
-        val abroad = game.addUnit("Paratrooper", civ, tile(14))
-        val walker = game.addUnit("Warrior", civ, home.getCenterTile().neighbors.last())
+    fun `carriers and nuclear weapons are for the operations only`() {
+        val carrier = game.addUnit("Warrior", civ, tile(0))
+        val nuke = game.addUnit("Warrior", civ, tile(1))
+        val soldier = game.addUnit("Warrior", civ, tile(2))
+        UnitAiTypes.set(carrier, UnitAiType.CARRIER_SEA)
+        UnitAiTypes.set(nuke, UnitAiType.ICBM)
         see()
-        assertEquals(listOf(ready), TacticalAi.commandeerUnits(civ, listOf(ready, moved, abroad, walker), AutomationCache()))
+        assertEquals(listOf(soldier), TacticalAi.recruitUnits(civ, listOf(carrier, nuke, soldier), AutomationCache()))
     }
 
     // endregion
@@ -139,7 +127,7 @@ class TacticalAiTests {
     fun `a hurt unit that nothing threatens heals where it stands`() {
         val hurt = game.addUnit("Warrior", civ, tile(0))
         hurt.health = 60
-        game.addUnit("Warrior", enemy, tile(7)) // in sight but out of reach, so the unit is commandeered but in no danger
+        game.addUnit("Warrior", enemy, tile(7)) // in sight but out of reach, so the unit is in no danger
         val cache = run()
         assertTrue(hurt in cache.processedUnits)
         assertEquals(tile(0), hurt.getTile())

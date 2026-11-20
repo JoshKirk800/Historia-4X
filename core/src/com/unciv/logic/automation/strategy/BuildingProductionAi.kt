@@ -232,7 +232,7 @@ object BuildingProductionAi {
         private fun valueTerms() {
             bonus += BuildingValueAi.basicValue(city, building)
             //Acts as modifier for value.
-            bonus += BuildingValueAi.grandStrategyValue(city, building) * (civ.getEraNumber() + 1)
+            bonus += BuildingValueAi.grandStrategyValue(civ, city, building) * (civ.getEraNumber() + 1)
             bonus += BuildingValueAi.policyValue(city, building)
         }
 

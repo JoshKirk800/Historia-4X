@@ -1,6 +1,8 @@
 package com.unciv.logic.automation.unit.tactical
 
 import com.unciv.Constants
+import com.unciv.logic.automation.strategy.UnitAiType
+import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.AirMoves
 import com.unciv.logic.battle.AttackableTile
 import com.unciv.logic.battle.Battle
@@ -188,6 +190,61 @@ object TacticalAttacks {
     /** CvTacticalAI::FindCitiesWithinStrikingDistance: our cities that can shoot [tile] this turn */
     fun findCities(ctx: TacticalContext, tile: Tile): List<CityStriker> =
         ctx.civ.cities.filter { canRangeStrikeAt(it, tile) }.map { CityStriker(it) }
+
+    /**
+     *  CvCity::getBestRangedStrikeTarget: the tile of the unit [city] shoots at when it shoots at anything: of the enemy units it sees within its
+     *  bombard range (at most 5 tiles; never a city, as CvCity::canRangeStrikeAt) the one with the best score: the expected damage, 15 more for a kill,
+     *  10 more for a city bombard unit; a civilian is worth 1, a great general or admiral 2 (10 more if killed). The first of the best wins (the
+     *  original walks the rings around the city, this the tiles by index); null if the city cannot shoot or nothing it can shoot would be damaged.
+     */
+    fun bestRangedStrikeTarget(city: City): Tile? {
+        if (!city.canBombard()) return null
+        val cityCombatant = CityCombatant(city)
+        val rules = city.civ.gameInfo.ruleset.ai
+        var bestScore = 0
+        var best: Tile? = null
+        for (tile in TargetHelper.getBombardableTiles(city).sortedBy { it.zeroBasedIndex }) {
+            if (tile.isCityCenter() || city.getCenterTile().aerialDistanceTo(tile) > MAX_STRIKE_RING) continue
+            val target = Battle.getMapCombatantOfTile(tile) as? MapUnitCombatant ?: continue
+            val unit = target.unit
+            var damage = BattleDamage.calculateDamageToDefender(cityCombatant, target, city.getCenterTile(), TacticalTargets.EXPECTED_RANDOMNESS)
+            if (damage <= 0) continue
+            var bonus = 0
+            // It is good to kill units
+            if (damage >= unit.health) bonus += KILL_BONUS
+            // It is good to damage city bombard units
+            if (UnitAiTypes.defaultOf(unit.baseUnit, rules) == UnitAiType.CITY_BOMBARD) bonus += BOMBARD_UNIT_BONUS
+            // It is generally not useful to bombard civilians
+            else if (!unit.isMilitary()) {
+                if (TacticalTargets.isVeryHighPriorityCivilian(unit)) {
+                    // Killing great generals and admirals is good though
+                    if (damage >= unit.health) bonus = GREAT_PERSON_KILL_BONUS else damage = GREAT_PERSON_DAMAGE
+                } else damage = CIVILIAN_DAMAGE
+            }
+            if (damage + bonus > bestScore) { bestScore = damage + bonus; best = tile }
+        }
+        return best
+    }
+
+    /**
+     *  The fallback of CvTacticalAI::ReviewUnassignedUnits: a city that can still shoot at a unit - whose target the tactical targets suppressed - does
+     *  now, at the [bestRangedStrikeTarget].
+     */
+    fun cityFallbackShots(ctx: TacticalContext) {
+        for (city in ctx.civ.cities.toList()) {
+            val tile = bestRangedStrikeTarget(city) ?: continue
+            val defender = Battle.getMapCombatantOfTile(tile) ?: continue
+            ctx.log { "${city.name} shoots at ${tile.position} (fallback)" }
+            Battle.attackOrNuke(CityCombatant(city), AttackableTile(city.getCenterTile(), tile, 0f, defender))
+        }
+    }
+
+    private const val MAX_STRIKE_RING = 5
+    private const val KILL_BONUS = 15
+    private const val BOMBARD_UNIT_BONUS = 10
+    private const val GREAT_PERSON_KILL_BONUS = 10
+    private const val GREAT_PERSON_DAMAGE = 2
+    private const val CIVILIAN_DAMAGE = 1
 
     /**
      *  CvTacticalAI::IsExpectedToDamageWithRangedAttack: [unit] shooting from where it stands is expected (the mean of the randomness) to

@@ -178,7 +178,8 @@ object TacticalAi {
      *  CvTacticalAI::ReviewUnassignedUnits: the units of the tactical AI that nothing moved and that stand where the danger is more than they heal
      *  in a turn go to the safest plot in reach ([SafestPlot.find], embarking allowed), upgrading there if they are not hurt; one that cannot move
      *  on is done. The rest are left to the homeland AI, with their movement.
-     *  Not ported: the cities' fallback shot at a unit in range, whose target the tactical targets suppressed (the cities shoot in the unit AI).
+     *  Then the cities' fallback ([TacticalAttacks.cityFallbackShots]): a city that can still shoot at a unit in range, whose target the tactical
+     *  targets suppressed, does now. Only for the AI and auto play: the cities of a human shoot at the end of his turn.
      */
     fun reviewUnassignedUnits(ctx: TacticalContext) {
         val danger = ctx.civ.ai.unitDanger
@@ -194,6 +195,7 @@ object TacticalAi {
             if (!current.isDestroyed && current.health >= MAX_HEALTH) UseGoldAutomation.upgradeNow(current)?.let { current = it }
             if (!current.isDestroyed && !current.hasMovement()) ctx.unitProcessed(current)
         }
+        if (ctx.civ.isAIOrAutoPlaying()) TacticalAttacks.cityFallbackShots(ctx)
     }
 
     private const val MAX_HEALTH = 100

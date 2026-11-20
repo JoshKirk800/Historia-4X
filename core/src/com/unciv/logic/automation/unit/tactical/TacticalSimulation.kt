@@ -229,6 +229,7 @@ object TacticalSimulation {
         val isCity = tile.isCityCenter()
         val defender = defenderOn(civ, tile)
         val result = ArrayList<MapUnit>()
+        var airUnitsAdded = false
         for (unit in ctx.liveUnits()) {
             if (!unit.hasMovement() || !unit.isMilitary()) continue
             val air = unit.baseUnit.isAirUnit()
@@ -255,9 +256,14 @@ object TacticalSimulation {
                 // Will we do a significant amount of damage?
                 val hitPoints = (defender?.takeIf { !isCity }?.getHealth() ?: 0)
                 val damage = if (defender == null) 0 else BattleDamage.calculateDamageToDefender(MapUnitCombatant(unit), defender, unit.getTile(), EXPECTED_RANDOMNESS, ignoreFlanking = true)
-                if (damage >= min(hitPoints / 20, 3)) result.add(unit)
+                if (damage >= min(hitPoints / 20, 3)) {
+                    result.add(unit)
+                    if (air) airUnitsAdded = true
+                }
             } else if (unit.baseUnit.isMelee()) result.add(unit)
         }
+        // As we have air units on the attack targets we should also check possible air sweeps
+        ctx.airSweepUnits = if (airUnitsAdded) AirMoves.findAirUnitsToAirSweep(ctx, tile) else emptyList()
         return result
     }
 
@@ -296,7 +302,7 @@ object TacticalSimulation {
     //region Attacks
     /**
      *  CvTacticalAI::ExecuteSpotterMove: if the target is not visible, a fast attacker or tank moves to where it sees it, keeping some movement to
-     *  retreat. @return false if nobody can: the attack is called off
+     *  retreat; failing that, a fighter that can sweep a tile next to it does ([AirMoves.sweepForRecon]). @return false if nobody can: the attack is called off
      */
     fun executeSpotterMove(ctx: TacticalContext, units: List<MapUnit>, target: Tile): Boolean {
         if (target in ctx.civ.viewableTiles) return true
@@ -316,7 +322,7 @@ object TacticalSimulation {
                 if (best == null || left > best.third) best = Triple(unit, tile, left)
             }
         }
-        val (unit, tile, _) = best ?: return false
+        val (unit, tile, _) = best ?: return AirMoves.sweepForRecon(ctx, target)
         ctx.log { "${unit.name} moves to ${tile.position} to see ${target.position}" }
         unit.movement.moveToTile(tile)
         return true
@@ -371,6 +377,8 @@ object TacticalSimulation {
     fun executeAttackWithUnits(ctx: TacticalContext, target: Tile, aggression: AggressionLevel, units: List<MapUnit>): Boolean {
         // Try to improve visibility
         if (!executeSpotterMove(ctx, units, target)) return false
+        // First handle the air units (including missiles): the sweeps, then the strikes
+        AirMoves.executeAirSweep(ctx, target)
         executeAirAttack(ctx, target, units.filter { it.baseUnit.isAirUnit() })
         // Did the air attack already kill the enemy?
         if (!target.isCityCenter() && defenderOn(ctx.civ, target) == null) return true

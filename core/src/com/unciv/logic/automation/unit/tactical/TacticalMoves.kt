@@ -12,7 +12,7 @@ import com.unciv.models.ruleset.unique.UniqueType
 /**
  *  The target moves of CvTacticalAI that are still BNW's or shared, run by [TacticalAi] in Vox Populi's order of ProcessDominanceZones: each looks at the targets
  *  of one type and commands the units that fit them. Ported: PlotCivilianAttackMoves, PlotPillageMoves and
- *  the execution helpers they share (ExecuteMoveToTarget, ExecuteMoveToPlot, ExecuteMoveOfBlockingUnit, MoveToEmptySpaceNearTarget, FindNearbyTarget).
+ *  the execution helpers they share (ExecuteMoveToTarget, ExecuteMoveToPlot, ExecuteMoveOfBlockingUnit, MoveToEmptySpaceNearTarget).
  *  The attacks on units and cities are [TacticalSimulation]'s (ExecuteDestroyEnemyUnits, ExecuteCaptureCityMoves): [destroyEnemyUnits] is what the
  *  postures' loops over the unit targets do. Garrisons, bastions, guarded improvements, ruins and camps are [GarrisonMoves] and [GuardMoves]; the units
  *  that are not in a fight come to the zones by [ReinforcementMoves]. Gone with Vox Populi's combat simulation and reinforcement: Brave New World's safe
@@ -102,36 +102,6 @@ object TacticalMoves {
             TacticalAi.canParadrop(it) && UnitActionsFromUniques.canParadropAt(it, tile) && UnitActionsPillage.canPillage(it, tile)
         }.map { Striker(it, TacticalAttacks.maxAttackStrength(it), it.health) }
             .sortedByDescending { it.attackPriority }
-
-    //endregion
-    //region Nearby targets
-
-    /**
-     *  CvTacticalAI::FindNearbyTarget: the target within [range] of the unit on its landmass that it reaches soonest (the tile it stands on first of all);
-     *  tiles for which [excluded] is true (the original's pNoLikeUnit) are left out
-     */
-    fun findNearbyTarget(ctx: TacticalContext, unit: MapUnit, range: Int, targets: List<TacticalTarget>, excluded: ((Tile) -> Boolean)? = null): Tile? {
-        var best: Tile? = null
-        var bestValue = Int.MAX_VALUE
-        val unitTile = unit.getTile()
-        val near = ArrayList<Pair<TacticalTarget, Int>>()
-        for (target in targets) {
-            val distance = unitTile.aerialDistanceTo(target.tile)
-            if (distance == 0) return target.tile
-            if (distance < range && ctx.sameArea(unitTile, target.tile) && excluded?.invoke(target.tile) != true) near.add(target to distance)
-        }
-        // Only the nearest few are measured by path: it would be a path search for every target in range
-        for ((target, _) in near.sortedBy { it.second }.take(MAX_REPOSITION_CANDIDATES)) {
-            val turns = TacticalAttacks.turnsToReach(unit, target.tile)
-            if (turns < bestValue) {
-                best = target.tile
-                bestValue = turns
-            }
-        }
-        return best
-    }
-
-    private const val MAX_REPOSITION_CANDIDATES = 5
 
     //endregion
     //region Finding and moving units for a move

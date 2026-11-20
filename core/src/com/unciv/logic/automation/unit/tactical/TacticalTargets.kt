@@ -46,7 +46,7 @@ class TacticalTarget(
         TacticalTargetType.DefensiveBastion, TacticalTargetType.BarbarianCamp, TacticalTargetType.Improvement,
         TacticalTargetType.ImprovementToDefend, TacticalTargetType.AncientRuins, TacticalTargetType.TradeUnitLand,
         TacticalTargetType.TradeUnitLandPlot, TacticalTargetType.Citadel, TacticalTargetType.ImprovementResource -> !water
-        TacticalTargetType.BlockadeResourcePoint, TacticalTargetType.BombardmentZone, TacticalTargetType.EmbarkedCivilian,
+        TacticalTargetType.BlockadePoint, TacticalTargetType.BombardmentZone, TacticalTargetType.EmbarkedCivilian,
         TacticalTargetType.EmbarkedMilitaryUnit, TacticalTargetType.TradeUnitSea, TacticalTargetType.TradeUnitSeaPlot -> water
         TacticalTargetType.City, TacticalTargetType.CityToDefend, TacticalTargetType.LowPriorityCivilian,
         TacticalTargetType.MediumPriorityCivilian, TacticalTargetType.HighPriorityCivilian, TacticalTargetType.VeryHighPriorityCivilian,
@@ -78,7 +78,7 @@ private class TradeTiles(civ: Civilization) {
  *  Deviations: only tiles we see are looked at, as in the original; a trade route is data in Unciv, not a unit, so its trader is looked
  *  up by where [com.unciv.models.TradeRoute.getCurrentTile] is ([com.unciv.logic.civilization.managers.TradeRouteManager.getEnemyTraderTiles]);
  *  barbarians get IdentifyPriorityBarbarianTargets instead of IdentifyPriorityTargets and no analysis map
- *  (their [map] is null); the barbarian release turn is not applied (Unciv's barbarian spawner has its own start); naval blockade points belong to the homeland AI; improvements that cannot be pillaged are not targets; a unit "reaches" the
+ *  (their [map] is null); the barbarian release turn is not applied (Unciv's barbarian spawner has its own start); the blockade points are [BlockadeMoves]'s; improvements that cannot be pillaged are not targets; a unit "reaches" the
  *  city it threatens if the city is within its base moves on its landmass (a ship needs a coastal city), as in [PlotDanger]; the fire support
  *  of the defending city's units is not subtracted from what an attacker does to it.
  */
@@ -141,6 +141,8 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
                     targets.add(TacticalTarget(TacticalTargetType.BarbarianCamp, tile, zoneId, civ.gameInfo.getBarbarianCivilization()))
             }
             if (civ.isBarbarian) identifyPriorityBarbarianTargets(civ, targets) else identifyPriorityTargets(civ, targets)
+            // Enemy water plots (PrioritizeNavalTargetsAndAddToMainList adds the best of them to the main list); barbarians have no analysis map and no blockade moves
+            if (map != null && !civ.isBarbarian) targets.addAll(BlockadeMoves.findPoints(civ, map, danger))
             identifyPriorityTargetsByType(targets)
             // std::stable_sort by aux data, the highest first
             TacticalTargets(targets.sortedByDescending { it.aux })

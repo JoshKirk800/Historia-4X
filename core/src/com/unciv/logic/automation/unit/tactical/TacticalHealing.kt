@@ -63,7 +63,7 @@ object TacticalHealing {
                 (neighbor.isCityCenter() && neighbor.getOwner()?.let { civ.isAtWarWith(it) } == true)
         }
         // Only run away if strictly necessary
-        if (enemyAdjacent) return unit.isProjectedToDieNextTurn() && civ.ai.unitDanger.get(unit) > unit.health + TacticalSafety.actualHealRate(unit)
+        if (enemyAdjacent) return unit.isProjectedToDieNextTurn() && civ.ai.plotDanger.get(unit) > unit.health + TacticalSafety.actualHealRate(unit)
         // We might lack a resource for healing
         val capital = civ.getCapital(firstCityIfNoCapital = false)
         val maxHealRate = when {
@@ -86,7 +86,7 @@ object TacticalHealing {
      */
     fun findClosestSafePlotForHealing(ctx: TacticalContext, unit: MapUnit, conservative: Boolean = true): ReachedTile? {
         val civ = ctx.civ
-        val danger = civ.ai.unitDanger
+        val danger = civ.ai.plotDanger
         val current = unit.getTile()
         // What the unit reaches changes as other units move: the cached reach may be stale
         unit.movement.clearPathfindingCache()
@@ -159,7 +159,7 @@ object TacticalHealing {
     private fun executeHeals(ctx: TacticalContext, units: List<MapUnit>, firstPass: Boolean) {
         val civ = ctx.civ
         val operations = civ.ai.operations
-        val danger = civ.ai.unitDanger
+        val danger = civ.ai.plotDanger
         for (unit in units) {
             if (unit.isDestroyed || unit in ctx.cache.processedUnits) continue
             // Need to split from army?

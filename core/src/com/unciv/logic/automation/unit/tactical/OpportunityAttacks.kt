@@ -53,7 +53,7 @@ object OpportunityAttacks {
 
         val civ = ctx.civ
         val origin = unit.getTile()
-        val danger = civ.ai.unitDanger
+        val danger = civ.ai.plotDanger
         // Where can we go: the tiles next to us, or all those we reach this turn and attack from
         val candidates = if (allowMovement) origin.getTilesInDistance(ceil(unit.currentMovement).toInt() + 1).toList() else origin.neighbors.toList()
 

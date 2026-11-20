@@ -205,7 +205,7 @@ object ReinforcementMoves {
 
         // We are not here to fight or flee, let other moves take over; generals and siege should not even be in fog danger
         val dangerLimit = if (TacticalAttacks.canAttack(unit) && UnitAiTypes.current(unit) != UnitAiType.CITY_BOMBARD) unit.health / 2 else 0
-        if (ctx.civ.ai.unitDanger.get(unit, firstStop) > dangerLimit) return
+        if (ctx.civ.ai.plotDanger.get(unit, firstStop) > dangerLimit) return
 
         // Embark only when it is safe, and only with a naval escort
         if (unit.baseUnit.isLandUnit && !unit.isEmbarked() && firstStop.isWater) {

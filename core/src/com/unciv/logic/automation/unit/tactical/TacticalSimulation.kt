@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.unit.tactical
 
+import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.automation.strategy.UnitAiType
@@ -572,7 +573,7 @@ object TacticalSimulation {
         return findAndExecuteBestUnitAssignments(ctx, finalUnits, closest, AggressionLevel.Medium)
     }
 
-    /** Whether [unit] can attack [tile] this coming turn: within its movement and range, on its domain if it does not shoot ([UnitDanger.canThreaten]) */
-    private fun canThreaten(unit: MapUnit, tile: Tile) = UnitDanger.canThreaten(unit, tile)
+    /** Whether [unit] can attack [tile] this coming turn: within its movement and range, on its domain if it does not shoot ([PlotDanger.canThreaten]) */
+    private fun canThreaten(unit: MapUnit, tile: Tile) = PlotDanger.canThreaten(unit, tile)
     //endregion
 }

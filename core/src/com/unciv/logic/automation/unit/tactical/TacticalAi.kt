@@ -56,7 +56,7 @@ object TacticalAi {
             if (!unit.isMilitary() && !unit.isGreatPersonOfType("War")) continue
             if (!civ.ai.canTacticalAiInterrupt(unit)) continue
             val tile = unit.getTile()
-            if (danger.get(tile) > 0 || nearAny(tile, enemyTiles, recruitRange) || civ.ai.deployFromOperationTurn(unit) + tempZoneTurns >= turn
+            if (danger.get(unit) > 0 || nearAny(tile, enemyTiles, recruitRange) || civ.ai.deployFromOperationTurn(unit) + tempZoneTurns >= turn
                 || canParadrop(unit))
                 result.add(unit)
         }
@@ -102,7 +102,7 @@ object TacticalAi {
         val map = state.map
         PostureSelection.updatePostures(civ, state, map)
         val danger = civ.ai.plotDanger
-        val ctx = TacticalContext(civ, map, danger, cache, tacticalUnits, TacticalTargets.find(civ, map, danger), units)
+        val ctx = TacticalContext(civ, map, danger, cache, tacticalUnits, TacticalTargets.find(civ, map), units)
         val highPriority by lazy { ctx.targets.all.filter { it.type == TacticalTargetType.HighPriorityUnit }.mapNotNullTo(HashSet()) { it.unit } }
 
         // CvTacticalAI::ExtractTargetsForZone(NULL) before each of the global groups: all the targets are the current ones
@@ -186,7 +186,7 @@ object TacticalAi {
      *  Not ported: the cities' fallback shot at a unit in range, whose target the tactical targets suppressed (the cities shoot in the unit AI).
      */
     fun reviewUnassignedUnits(ctx: TacticalContext) {
-        val danger = ctx.civ.ai.unitDanger
+        val danger = ctx.civ.ai.plotDanger
         for (unit in ctx.liveUnits()) {
             if (!unit.hasMovement() || unit.baseUnit.isAirUnit()) continue
             // There should not be any danger but just in case

@@ -38,23 +38,18 @@ class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
     val sentryPoints: List<HomelandTarget> get() = if (assignmentOfTurn.isInitialized()) assignment.sentryPoints else emptyList()
 
     /**
-     *  CvHomelandAI::ExecuteWorkerMoves for one builder: on a plot under immediate threat without a defender, move to safety; else carry out the
-     *  directive the assignment gave it ([executeWorkerMove]); with none, go to the city the assignment found for it, else to the safest plot
-     *  nearby (ignoring units).
+     *  CvHomelandAI::ExecuteWorkerMoves for one builder (one in danger has fled before, [CivilianSafety.fleeIfThreatened]): carry out the directive
+     *  the assignment gave it ([executeWorkerMove]); with none, go to the city the assignment found for it, else to the safest plot nearby
+     *  ([CivilianSafety.moveToSafety]).
      */
     fun automateWorkerAction(unitView: MapUnitView): Unit =
         timeThis("AI.WorkerMoves") {
             val unit = unitView.getUnit()
-            val tile = unit.getTile()
-            if (civInfo.ai.plotDanger.isUnderImmediateThreat(tile) && tile.militaryUnit?.civ != civInfo && CivilianSafety.moveToSafety(unit)) {
-                unit.currentMovement = 0f
-                return@timeThis
-            }
             if (executeWorkerMove(unit)) return@timeThis
 
             unitView.tryAddNotification("${unitView.shortDisplayName()} has no work to do.", NotificationCategory.Units, unitView.name, "OtherIcons/Sleep")
             if (assignment.leftoverCity(unit)?.let { moveToCity(unit, it.getCenterTile()) } == true) return@timeThis
-            if (CivilianSafety.moveToSafety(unit, ignoreUnits = true)) unit.currentMovement = 0f
+            if (CivilianSafety.moveToSafety(unit)) unit.currentMovement = 0f
         }
 
     /** CvHomelandAI::ExecuteMoveToTarget for a builder without a directive or outside its region: true when it is on [target] or moved towards it */
@@ -140,9 +135,6 @@ class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
     }
 
     companion object {
-        /** Stands for the original's plot danger, which outweighs the territory bonus but not a city's defense */
-        private const val DANGER_PENALTY = 1000
-
         /** CvUnit::getBuildType != NO_BUILD: the builder stands on a plot with work in progress it can do */
         fun isBuilding(unit: MapUnit): Boolean {
             val tile = unit.getTile()
@@ -154,7 +146,7 @@ class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
         /**
          *  CvUnit::DoFinishBuildIfSafe, at the start of the unit's turn (CvUnit::doTurn): a road or railroad with at most one turn of work left is
          *  finished now, with the builder's moves still unspent, so that it can be used at once. Not for a human's builder that is not automated,
-         *  and only when the builder can move, the plot is not in danger, and the builder's assigned directive ([Civilization.assignedBuilderDirectives],
+         *  and only when the builder can move, its danger there is none ([PlotDanger.get], CvUnit::GetDanger), and the builder's assigned directive ([Civilization.assignedBuilderDirectives],
          *  CvBuilderTaskingAI::GetAssignedDirective: the last turn's, as the original clears them when it plans the new turn) is this plot and this
          *  build.
          */
@@ -164,7 +156,7 @@ class WorkerAutomation(val civInfo: Civilization, val cachedForTurn: Int) {
             if (!isBuilding(unit)) return
             val tile = unit.getTile()
             val build = tile.getTileImprovementInProgress() ?: return
-            if (tile.turnsToImprovement > 1 || !unit.hasMovement() || civ.ai.plotDanger.get(tile) > 0) return
+            if (tile.turnsToImprovement > 1 || !unit.hasMovement() || civ.ai.plotDanger.get(unit) > 0) return
             val assigned = civ.assignedBuilderDirectives[unit.id] ?: return
             if (assigned.position != tile.position || assigned.improvement != build.name || !build.isRoad()) return
             if (tile.doWorkerTurn(unit)) tile.getCity()?.shouldReassignPopulation = true

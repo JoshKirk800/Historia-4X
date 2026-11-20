@@ -16,8 +16,8 @@ class ReachedTile(val tile: Tile, val movesLeft: Float)
 
 /**
  *  Where a combat unit goes to get out of harm's way and what it does on the way: CvTacticalAI::PlotMovesToSafety and ExecuteMovesToSafestPlot,
- *  and TacticalAIHelpers::FindSafestPlotInReach for units that are not civilians (the civilians' is [EscortMoves]'s own copy). Vox Populi 5.4.8 (the
- *  Community Patch and Vox Populi share them: there is no MOD_BALANCE_VP branch). Danger is the expected damage of [UnitDanger] (CvUnit::GetDanger).
+ *  and TacticalAIHelpers::FindSafestPlotInReach (for civilians too: the escorts' and the homeland's). Vox Populi 5.4.8 (the
+ *  Community Patch and Vox Populi share them: there is no MOD_BALANCE_VP branch). Danger is the expected damage of [com.unciv.logic.automation.unit.PlotDanger] (CvUnit::GetDanger).
  *
  *  Deviations: a plot that holds a unit of ours of the same type is taken by swapping places with it ([com.unciv.logic.map.mapunit.movement.UnitMovement.swapMoveToTile], only where [com.unciv.logic.map.mapunit.movement.UnitMovement.canUnitSwapTo] says both units can),
  *  where the original pushes the unit out of the way; "the city distance" is the distance to our nearest city (GetCityDistancePathLength);
@@ -69,7 +69,7 @@ object SafestPlot {
         // Use rebase moves for aircraft!
         if (unit.baseUnit.isAirUnit()) return null
         val civ = ctx.civ
-        val danger = civ.ai.unitDanger
+        val danger = civ.ai.plotDanger
         val current = unit.getTile()
         val moves = unit.currentMovement
         // What the unit reaches changes as other units move: the cached reach may be stale
@@ -192,7 +192,7 @@ object SafestPlot {
      */
     fun plotMovesToSafety(ctx: TacticalContext, combatUnits: Boolean) {
         val civ = ctx.civ
-        val danger = civ.ai.unitDanger
+        val danger = civ.ai.plotDanger
         class Fleeing(val unit: MapUnit, val key: Int)
         val fleeing = ArrayList<Fleeing>()
         for (unit in ctx.liveUnits()) {
@@ -260,7 +260,7 @@ object SafestPlot {
                 }
             }
             ctx.unitProcessed(unit)
-        } else if (civ.ai.unitDanger.get(unit) < min(unit.health + TacticalSafety.actualHealRate(unit, origin), MAX_HEALTH)) {
+        } else if (civ.ai.plotDanger.get(unit) < min(unit.health + TacticalSafety.actualHealRate(unit, origin), MAX_HEALTH)) {
             // Do nothing and hope for the best
             unit.fortifyIfCan()
             ctx.unitProcessed(unit)

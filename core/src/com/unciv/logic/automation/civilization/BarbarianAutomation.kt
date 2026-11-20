@@ -41,7 +41,7 @@ class BarbarianAutomation(val civInfo: Civilization) {
         val alive = civInfo.units.getCivUnits().mapTo(HashSet()) { it.id }
         state.unitDestinations.keys.retainAll(alive)
         if (units.isNotEmpty()) {
-            val ctx = TacticalContext(civInfo, null, danger, cache, units, TacticalTargets.find(civInfo, null, danger))
+            val ctx = TacticalContext(civInfo, null, danger, cache, units, TacticalTargets.find(civInfo, null))
             assignBarbarianMoves(ctx)
             AiDecisionLog.log(civInfo) { "Barbarians: ${units.size} units, ${units.size - ctx.units.size} commanded, ${ctx.targets.all.size} targets" }
         }

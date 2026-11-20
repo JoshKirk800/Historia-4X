@@ -925,19 +925,8 @@ enum class AiDefine(val default: Float) {
     PLOT_INFLUENCE_YIELD_POINT_COST(-1f),
     PLOT_INFLUENCE_NO_ADJACENT_OWNED_COST(1000f),
 
-    // CvDangerPlots (plot danger read by CvTradeAI)
-    AI_DANGER_MAJOR_APPROACH_WAR(1.0f),
-    AI_DANGER_MAJOR_APPROACH_HOSTILE(0.2f),
-    AI_DANGER_MAJOR_APPROACH_DECEPTIVE(0.1f),
-    AI_DANGER_MAJOR_APPROACH_GUARDED(0.5f),
-    AI_DANGER_MAJOR_APPROACH_AFRAID(0.9f),
-    AI_DANGER_MAJOR_APPROACH_FRIENDLY(0.0f),
-    AI_DANGER_MAJOR_APPROACH_NEUTRAL(0.1f),
-    AI_DANGER_MINOR_APPROACH_NEUTRAL(0.1f),
-    AI_DANGER_MINOR_APPROACH_FRIENDLY(0.0f),
-    AI_DANGER_MINOR_APPROACH_BULLY(0.9f),
-    AI_DANGER_MINOR_APPROACH_CONQUEST(1.0f),
-    CITY_ATTACK_RANGE(2f),
+    // CvDangerPlots (plot danger)
+    ENEMY_HEAL_RATE(5f), // Vox Populi's: a citadel's damage must beat it to count (CvDangerPlots::UpdateDangerInternal); BNW: 10
     WOUNDED_DAMAGE_MULTIPLIER(50f),
     // CvTacticalAnalysisMap / CvTacticalAI (dominance zones, temporary zones, emergency purchases); the dominance percentage is Vox Populi's 70 (Brave New World's is 25)
     AI_TACTICAL_MAP_DOMINANCE_PERCENTAGE(70f),

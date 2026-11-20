@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.unit.tactical
 
+import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.CityDangerAi
@@ -28,7 +29,7 @@ import com.unciv.logic.map.mapunit.MapUnit
  *    garrison ([AiOperationLogic.needsGarrison]), [UnitSelection.findUnitForThisMove] picks one within [turnsAway] turns: the present garrison moves out
  *    to a free tile next to the city first if the new unit gets there this turn, then the new unit goes to the city and makes an opportunity attack.
  *
- *  Deviations: the enemies that count when they are two or three tiles away are those whose movement and range reach the city ([UnitDanger.canThreaten]);
+ *  Deviations: the enemies that count when they are two or three tiles away are those whose movement and range reach the city ([PlotDanger.canThreaten]);
  *  the supply check of the upgrades is left out; a unit that goes to the city with turns to spare simply heads for it.
  */
 object GarrisonMoves {
@@ -130,7 +131,7 @@ object GarrisonMoves {
         for (tile in center.getTilesInDistance(ENEMY_RING)) {
             if (tile == center) continue
             val enemy = TacticalTargets.visibleEnemyDefender(civ, tile) ?: continue
-            if (tile.aerialDistanceTo(center) == 1 || UnitDanger.canThreaten(enemy, center)) count++
+            if (tile.aerialDistanceTo(center) == 1 || PlotDanger.canThreaten(enemy, center)) count++
         }
         return count
     }

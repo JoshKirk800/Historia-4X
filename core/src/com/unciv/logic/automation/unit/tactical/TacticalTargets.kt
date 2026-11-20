@@ -1,10 +1,11 @@
 package com.unciv.logic.automation.unit.tactical
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.civilization.PlotShape
+import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.GreatPersonAutomation
-import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.battle.BattleDamage
 import com.unciv.logic.battle.CityCombatant
 import com.unciv.logic.battle.MapUnitCombatant
@@ -103,6 +104,9 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
         /** The mean of the damage roll: expected damage is the original's getCombatDamage without randomness */
         const val EXPECTED_RANDOMNESS = 0.5f
 
+        /** FindTacticalTargets: the defense bonus (percent) from which a plot is worth a bastion */
+        private const val BASTION_MIN_DEFENSE = 30
+
         /** No targets: for moves that look at none */
         fun none() = TacticalTargets(emptyList())
 
@@ -117,10 +121,11 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
         }
 
         /** CvTacticalAI::FindTacticalTargets, then the priority identification */
-        fun find(civ: Civilization, map: TacticalMap?, danger: PlotDanger): TacticalTargets = timeThis("AI.TacticalTargets") {
+        fun find(civ: Civilization, map: TacticalMap?): TacticalTargets = timeThis("AI.TacticalTargets") {
             val targets = ArrayList<TacticalTarget>()
             val visible = civ.viewableTiles
             val trade = TradeTiles(civ)
+            val unfriendly by lazy { AiOperationLogic.unfriendlyMajors(civ) }
             for (tile in civ.gameInfo.tileMap.tileList) {
                 if (tile !in visible) continue
                 val zoneId = map?.zoneOf(tile)?.id ?: -1
@@ -133,7 +138,7 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
                     } else if (civ.isAtWarWith(city.civ)) targets.add(TacticalTarget(TacticalTargetType.City, tile, zoneId, city.civ, city = city))
                     continue
                 }
-                val target = targetOfTile(civ, map, danger, trade, tile, zoneId)
+                val target = targetOfTile(civ, map, unfriendly, trade, tile, zoneId)
                 if (target != null) targets.add(target)
                 // VP FindTacticalTargets also retains an occupied camp as an independent objective.
                 if (target?.unit != null && tile.isBarbarianEncampment() && tile.getOwner() == null &&
@@ -148,7 +153,7 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
 
         /** The branches of FindTacticalTargets for a tile without a city, in the original's order: the first that applies makes the target */
         private fun targetOfTile(
-            civ: Civilization, map: TacticalMap?, danger: PlotDanger, trade: TradeTiles, tile: Tile, zoneId: Int
+            civ: Civilization, map: TacticalMap?, unfriendly: List<Civilization>, trade: TradeTiles, tile: Tile, zoneId: Int
         ): TacticalTarget? {
             val owner = tile.getOwner()
             val ownerAtWar = owner != null && owner != civ && civ.isAtWarWith(owner)
@@ -191,11 +196,12 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
             // ... trade unit
             if (tile in trade.enemyTraders)
                 return TacticalTarget(if (tile.isWater) TacticalTargetType.TradeUnitSea else TacticalTargetType.TradeUnitLand, tile, zoneId)
-            // ... defensive bastion?
-            if (owner == civ && map != null && map.defenseModifier(tile) > 0 && danger.get(tile) > 0) {
-                val defenseCity = tile.neighbors.firstNotNullOfOrNull { n -> if (n.isCityCenter()) n.getCity()?.takeIf { it.civ == civ } else null }
-                if (defenseCity != null)
-                    return TacticalTarget(TacticalTargetType.DefensiveBastion, tile, zoneId, aux = danger.cityThreat(defenseCity) + danger.get(tile))
+            // ... defensive bastion? Our land plot with a strong defense (30%) or a choke point, in the borderland of the majors that are no friends of ours
+            if (owner == civ && map != null && !tile.isWater) {
+                val defense = map.defenseModifier(tile)
+                val chokePoint = PlotShape.isChokePoint(tile)
+                if ((defense >= BASTION_MIN_DEFENSE || chokePoint) && unfriendly.isNotEmpty() && AiOperationLogic.isBorderLand(civ, tile, unfriendly))
+                    return TacticalTarget(TacticalTargetType.DefensiveBastion, tile, zoneId, aux = if (chokePoint) defense * 3 else defense)
             }
             // ... friendly improvement?
             if (owner == civ && improvement != null)

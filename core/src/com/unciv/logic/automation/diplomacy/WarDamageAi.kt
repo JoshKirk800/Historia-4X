@@ -6,10 +6,12 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
+import yairm210.purity.annotations.LocalState
 import yairm210.purity.annotations.Readonly
 import kotlin.math.roundToInt
 
@@ -134,11 +136,12 @@ object WarDamageAi {
 
     /** CvUnit::kill's unit value: its power against the strongest unit of its domain its owner can build (100 = that unit) */
     @Readonly
-    fun unitWarValue(unit: BaseUnit, owner: Civilization): Int {
-        val rules = owner.gameInfo.ruleset.ai
-        val typical = powerOfStrongestBuildableUnit(owner, unit)
-        return if (typical > 0) unit.getAiPower() * 100 / typical else rules.define(AiDefine.DEFAULT_WAR_VALUE_FOR_UNIT)
-    }
+    fun unitWarValue(unit: BaseUnit, owner: Civilization): Int =
+        warValueAgainst(unit, powerOfStrongestBuildableUnit(owner, unit), owner.gameInfo.ruleset.ai)
+
+    @Readonly
+    private fun warValueAgainst(unit: BaseUnit, typical: Int, rules: AiRuleset): Int =
+        if (typical > 0) unit.getAiPower() * 100 / typical else rules.define(AiDefine.DEFAULT_WAR_VALUE_FOR_UNIT)
 
     /** CvMilitaryAI::GetPowerOfStrongestBuildableUnit for the domain of [like] (land, sea or air) */
     @Readonly
@@ -156,13 +159,22 @@ object WarDamageAi {
     private fun sameDomain(a: BaseUnit, b: BaseUnit): Boolean =
         if (b.isAirUnit()) a.isAirUnit() else if (b.isWaterUnit) a.isWaterUnit else a.isLandUnit
 
-    /** The current value of [civ]'s empire as DoUpdateWarDamageAndWeariness counts it: its cities' war values and its units' values */
+    /**
+     *  The current value of [civ]'s empire as DoUpdateWarDamageAndWeariness counts it: its cities' war values and its units' values. The
+     *  strongest buildable unit of a domain is looked for once per domain, not once per unit.
+     */
     @Readonly
-    fun empireWarValue(civ: Civilization): Int =
-        civ.cities.sumOf { cityWarValue(it) } + civ.units.getCivUnits().sumOf { unit ->
-            val power = unit.baseUnit.getAiPower()
-            if (power > 0) unitWarValue(unit.baseUnit, civ) else 0
+    fun empireWarValue(civ: Civilization): Int {
+        @LocalState val typicalByDomain = IntArray(3) { -1 }
+        val rules = civ.gameInfo.ruleset.ai
+        return civ.cities.sumOf { cityWarValue(it) } + civ.units.getCivUnits().sumOf { unit ->
+            val base = unit.baseUnit
+            if (base.getAiPower() <= 0) return@sumOf 0
+            val domain = if (base.isAirUnit()) 2 else if (base.isWaterUnit) 1 else 0
+            if (typicalByDomain[domain] < 0) typicalByDomain[domain] = powerOfStrongestBuildableUnit(civ, base)
+            warValueAgainst(base, typicalByDomain[domain], rules)
         }
+    }
 
     /**
      *  CvPlayer::GetWarDamageValue (set by DoUpdateWarDamageAndWeariness): what [civ] lost to [other], twice over its empire's current

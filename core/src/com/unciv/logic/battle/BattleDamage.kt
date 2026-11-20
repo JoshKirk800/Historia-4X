@@ -8,12 +8,16 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.translations.TranslationCache
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.toPercent
+import yairm210.purity.annotations.Cache
 import yairm210.purity.annotations.LocalState
 import yairm210.purity.annotations.Pure
 import yairm210.purity.annotations.Readonly
 import yairm210.purity.annotations.ReturnsNewInstance
+import java.util.Collections
+import java.util.WeakHashMap
 import kotlin.collections.set
 import kotlin.math.floor
 import kotlin.math.max
@@ -23,8 +27,27 @@ import kotlin.random.Random
 
 object BattleDamage {
 
-    @Readonly
+    /**
+     *  The text of the modifiers of the same unique is the same in one language, and every strength modifier of every battle estimate
+     *  (the AI makes thousands a turn) asks for it: it is translated once per unique and language.
+     */
+    @Cache
+    private val modifierStrings: MutableMap<Unique, String> = Collections.synchronizedMap(WeakHashMap())
+    @Volatile
+    private var modifierStringsLanguage = ""
+
+    @Readonly @Suppress("purity") // fills the cache
     private fun getModifierStringFromUnique(unique: Unique): String {
+        val language = TranslationCache.language
+        if (language != modifierStringsLanguage) {
+            modifierStrings.clear()
+            modifierStringsLanguage = language
+        }
+        return modifierStrings.getOrPut(unique) { modifierStringOf(unique) }
+    }
+
+    @Readonly
+    private fun modifierStringOf(unique: Unique): String {
         val source = when (unique.sourceObjectType) {
             UniqueTarget.Unit -> "Unit ability"
             UniqueTarget.Nation -> "National ability"

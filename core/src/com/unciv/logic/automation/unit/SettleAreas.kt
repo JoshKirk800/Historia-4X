@@ -311,7 +311,8 @@ object SettleAreas {
 
     /** MapToPercent: [value] mapped linearly to 0..100, [zeroAt] being 0 and [hundredAt] 100; outside the thresholds the minimum or maximum */
     fun mapToPercent(value: Int, zeroAt: Int, hundredAt: Int): Int = when {
-        hundredAt != zeroAt -> ((value - zeroAt) * 100 / (hundredAt - zeroAt)).coerceIn(0, 100)
+        // In Long: the distance of a civilization with no city is Int.MAX_VALUE (a city-state without a capital), and the original's int would overflow
+        hundredAt != zeroAt -> ((value.toLong() - zeroAt) * 100 / (hundredAt - zeroAt)).coerceIn(0L, 100L).toInt()
         value > hundredAt -> 100
         value < zeroAt -> 0
         else -> 50

@@ -127,6 +127,8 @@ object CityDistances {
             val index = queue[head++]
             val tile = tiles[index]
             val next = table.distance[index] + 1
+            // A tile this far is "no route" (CvDistanceMapByPathLength::Update stops at iMaxTurns): it keeps the default distance and has no city
+            if (next >= far) continue
             val city = nearest[index]!!
             for (neighbor in tile.neighbors) {
                 if (!passable(neighbor)) continue

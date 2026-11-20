@@ -18,7 +18,7 @@ import kotlin.math.max
  *  with its land, passive and sea moves, trade route gank target and the escort of captured civilians to a camp are gone: Vox Populi's roaming
  *  sends the captured civilians back to a camp itself.
  *
- *  Deviations: a sea move looks at the 5 nearest targets only; the path to a roaming target is not asked to avoid danger (AI_ABORT_IN_DANGER) or
+ *  Deviations: the sea the ships reach is a flood at one movement point a tile that ignores units on the tiles; the path to a roaming target is not asked to avoid danger (AI_ABORT_IN_DANGER) or
  *  the unit's own stack (IGNORE_STACKING_SELF); a camp as a roaming target is an improvement that is entered but cannot be pillaged by its own
  *  owner (the original's PUSH_MISSION(PILLAGE) fails there, as [PillageRules.pillage] does), and a city to defend (the target of a barbarian's own
  *  city) is not an improvement, so nothing moves the unit there, as in the original; barbarians do not upgrade units (the original has no such
@@ -259,53 +259,87 @@ object BarbarianMoves {
     }
 
     /**
-     *  CvTacticalAI::FindBestBarbarianSeaTarget: the enemy unit that a ship reaches soonest within the sea target range; else, to patrol, a water tile
-     *  next to the second nearest barbarian camp that the sea touches (the one it reaches soonest); else a tile to explore ([findExploreTarget]).
+     *  CvTacticalAI::FindBestBarbarianSeaTarget: one flood of the sea the ship reaches within the sea target range in turns ([seaReach], the original's
+     *  GetPlotsInReach), then the enemy unit (of the targets, in their order) whose plot the ship reaches soonest; else, to patrol, the water tile next to
+     *  the second nearest barbarian camp that the sea touches (the nearest by distance is left out) that it reaches soonest; else a tile to explore
+     *  ([findExploreTarget]). A target counts when the ship can get to the tile itself or to a tile next to it (an enemy ship holds its own), the first of
+     *  equals wins.
      */
     fun findBestSeaTarget(ctx: TacticalContext, unit: MapUnit): Tile? {
         val unitTile = unit.getTile()
-        val range = seaRange(ctx.civ)
-        unit.movement.clearPathfindingCache()
+        val reach = seaReach(ctx, unit, seaRange(ctx.civ))
+        var best: Tile? = null
+        var bestTurns = Int.MAX_VALUE
         // Loop through all unit targets to find the closest
-        val nearest = ctx.targets.all.filter { it.isUnitTarget && ctx.sameArea(unitTile, it.tile) }.sortedBy { unitTile.aerialDistanceTo(it.tile) }.take(MAX_SEA_CANDIDATES)
-        bestByTurns(ctx, unit, nearest.map { it.tile }, range)?.let { return it }
+        for (target in ctx.targets.all) {
+            if (!target.isUnitTarget) continue
+            val turns = reach.turnsNextTo(target.tile)
+            if (turns < bestTurns) { bestTurns = turns; best = target.tile }
+        }
+        if (best != null) return best
 
         // No units to pick on, so sail to a tile adjacent to the second closest barbarian camp: this should result in patrolling behavior
         val camps = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp).filter { camp -> camp.tile.neighbors.any { isShallowWater(it) } }
         val nearestCamp = camps.minByOrNull { unitTile.aerialDistanceTo(it.tile) }
-        val waters = ArrayList<Tile>()
         for (camp in camps) {
             if (camp === nearestCamp) continue
-            for (water in camp.tile.neighbors) if (isShallowWater(water) && ctx.sameArea(unitTile, water)) waters.add(water)
+            for (water in camp.tile.neighbors) {
+                if (!isShallowWater(water)) continue
+                val turns = reach.turnsTo(water)
+                if (turns < bestTurns) { bestTurns = turns; best = water }
+            }
         }
-        return bestByTurns(ctx, unit, waters, range) ?: findExploreTarget(ctx, unit)
+        return best ?: findExploreTarget(ctx, unit)
     }
 
+    /** The turns (0: this turn) a ship needs to get to each tile of the sea it can reach within a range, [Int.MAX_VALUE] for the others */
+    private class SeaReach(private val turns: IntArray) {
+        fun turnsTo(tile: Tile): Int = turns[tile.zeroBasedIndex].let { if (it < 0) Int.MAX_VALUE else it }
+
+        /** To the tile or to a tile next to it */
+        fun turnsNextTo(tile: Tile): Int {
+            var best = turnsTo(tile)
+            for (neighbor in tile.neighbors) best = minOf(best, turnsTo(neighbor))
+            return best
+        }
+    }
+
+    private data class SeaReachKey(val unitName: String, val from: Tile, val movement: Int, val range: Int)
+
     /**
-     *  The tile of [candidates] that [unit] gets next to in the fewest turns within [range] (the first of equals in the list's order, none that it cannot
-     *  reach). The result is that of asking [EscortMoves.turnsToApproach] of each in turn; a path search is made only for a candidate that a bound on
-     *  the turns, from the distance and the unit's movement (a ship takes at most two tiles for each of its movement points: roads and rivers do not
-     *  apply, double movement uniques do), leaves a chance to be the best.
+     *  CvTacticalAI's GetPlotsInReach for a ship: a flood over the water tiles the ship may enter (not impassable ones, nor ocean for a ship that cannot
+     *  enter it) at one movement point a tile, as the sea costs; the tiles a ship reaches in [range] turns (its movement a turn) have their turn count.
+     *  Other units on the tiles are not considered. One flood is made for the ships of a kind on one tile for the turn.
      */
-    private fun bestByTurns(ctx: TacticalContext, unit: MapUnit, candidates: List<Tile>, range: Int): Tile? {
-        if (candidates.isEmpty()) return null
-        val here = unit.getTile()
-        val tilesPerTurn = (2 * unit.getMaxMovement()).coerceAtLeast(1)
-        val bounds = IntArray(candidates.size) { index ->
-            val steps = candidates[index].aerialDistanceTo(here) - 1
-            if (steps <= 0) 0 else (steps + tilesPerTurn - 1) / tilesPerTurn - 1
+    private fun seaReach(ctx: TacticalContext, unit: MapUnit, range: Int): SeaReach {
+        val movement = unit.getMaxMovement().coerceAtLeast(1)
+        val key = SeaReachKey(unit.name, unit.getTile(), movement, range)
+        val cached = ctx.tables[key]
+        if (cached is SeaReach) return cached
+        val turns = IntArray(unit.civ.gameInfo.tileMap.tileList.size) { -1 }
+        val steps = IntArray(turns.size) { -1 }
+        val maxSteps = (range.toLong() + 1) * movement
+        val canEnterOcean = !unit.cache.cannotEnterOceanTiles || unit.civ.tech.allUnitsCanEnterOcean
+        val start = unit.getTile()
+        steps[start.zeroBasedIndex] = 0
+        turns[start.zeroBasedIndex] = 0
+        var frontier = arrayListOf(start)
+        var distance = 0
+        while (frontier.isNotEmpty() && distance < maxSteps) {
+            distance++
+            val next = ArrayList<Tile>()
+            for (tile in frontier) for (neighbor in tile.neighbors) {
+                val index = neighbor.zeroBasedIndex
+                if (steps[index] >= 0 || !neighbor.isWater || neighbor.isImpassible() || neighbor.isOcean && !canEnterOcean) continue
+                steps[index] = distance
+                turns[index] = (distance + movement - 1) / movement - 1
+                next.add(neighbor)
+            }
+            frontier = next
         }
-        var best: Tile? = null
-        var bestIndex = Int.MAX_VALUE
-        var bestTurns = Int.MAX_VALUE
-        for (index in candidates.indices.sortedBy { bounds[it] }) {
-            // Nothing from here on can beat the best, a tie only if it comes earlier in the list
-            if (bounds[index] > bestTurns || bounds[index] > range) break
-            val turns = approachTurns(ctx, unit, candidates[index], range)
-            if (turns == Int.MAX_VALUE) continue
-            if (turns < bestTurns || (turns == bestTurns && index < bestIndex)) { bestTurns = turns; best = candidates[index]; bestIndex = index }
-        }
-        return best
+        // Reaching it takes more turns than the range: not a reachable tile
+        for (index in turns.indices) if (turns[index] > range) turns[index] = -1
+        return SeaReach(turns).also { ctx.tables[key] = it }
     }
 
     /** CvPlot::isAdjacentToShallowWater is asked of the camp: a water tile that is not deep ocean */
@@ -347,6 +381,5 @@ object BarbarianMoves {
     private const val CIVILIAN_ROAM_TURNS = 23
     private const val TILES_PER_TURN = 3
     private const val SUICIDE_MARGIN = 3
-    private const val MAX_SEA_CANDIDATES = 5
     //endregion
 }

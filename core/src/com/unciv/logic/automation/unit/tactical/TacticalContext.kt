@@ -38,6 +38,9 @@ class TacticalContext(
     /** What a move works out once for the units of the turn that stand alike, by a key of its own (the barbarians' path lengths) */
     val memo = HashMap<Any, Int>()
 
+    /** Tables a move works out once for the units of the turn that stand alike (the barbarian ships' reach of the sea) */
+    val tables = HashMap<Any, Any>()
+
     /** Lists of the targets of some kinds, in the order of [targets], made once for the turn by a move that looks at them for every unit */
     val targetLists = HashMap<String, List<TacticalTarget>>()
 

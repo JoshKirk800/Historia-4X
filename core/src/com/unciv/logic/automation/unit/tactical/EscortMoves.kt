@@ -59,6 +59,8 @@ object EscortMoves {
     private const val APPROX_RING2 = 4
     private const val ABORT_IN_DANGER = 8
     private const val NATIVE_DOMAIN = 16
+    /** An approximate path is searched for the [FEW_APPROXIMATE_CANDIDATES] nearest tiles only (for the many barbarians' roaming, one search each is costly) */
+    private const val FEW_CANDIDATES = 32
 
     /** CvAStar.cpp PathEndTurnCost: AI_ABORT_IN_DANGER refuses a path that ends one of its first two turns on a plot with more than half the unit's health in danger */
     private const val ABORT_IN_DANGER_TURNS = 2
@@ -72,6 +74,7 @@ object EscortMoves {
 
     /** The plots near a target that approximate paths try: each costs a path search */
     private const val MAX_APPROXIMATE_CANDIDATES = 8
+    private const val FEW_APPROXIMATE_CANDIDATES = 3
 
     /** The tiles where each turn of a path ends; empty for a unit that already is where it wants to be */
     private class EscortPath(val stops: List<Tile>) {
@@ -362,9 +365,10 @@ object EscortMoves {
         target: Tile,
         domainIsWater: Boolean?,
         maxTurns: Int,
+        fewCandidates: Boolean = false,
     ): Boolean {
         if (unit.getTile() == target) return false
-        var flags = 0
+        var flags = if (fewCandidates) FEW_CANDIDATES else 0
         // can we move there directly? if not try to move to an adjacent plot
         if (!unit.movement.canMoveTo(target)) flags = flags or APPROX_RING1
         if (domainIsWater == target.isWater) flags = flags or NATIVE_DOMAIN
@@ -384,8 +388,8 @@ object EscortMoves {
      *  CvUnit::TurnsToReachTarget(target, MOVEFLAG_APPROX_TARGET_RING1, maxTurns): the turns [unit] needs to get next to [target] (0: this turn),
      *  [Int.MAX_VALUE] if there is no such path or it takes more than [maxTurns]. The original's flags for stacking and danger are not applied.
      */
-    fun turnsToApproach(ctx: TacticalContext, unit: MapUnit, target: Tile, maxTurns: Int): Int =
-        generatePath(ctx, unit, target, APPROX_RING1, if (maxTurns == Int.MAX_VALUE) maxTurns else maxTurns + 1)?.turns ?: Int.MAX_VALUE
+    fun turnsToApproach(ctx: TacticalContext, unit: MapUnit, target: Tile, maxTurns: Int, fewCandidates: Boolean = false): Int =
+        generatePath(ctx, unit, target, if (fewCandidates) APPROX_RING1 or FEW_CANDIDATES else APPROX_RING1, if (maxTurns == Int.MAX_VALUE) maxTurns else maxTurns + 1)?.turns ?: Int.MAX_VALUE
 
     /** CvUnit::GeneratePath with [flags] (see the class comment): null if there is no path, or one of more than [maxTurns] turns */
     private fun generatePath(ctx: TacticalContext, unit: MapUnit, target: Tile, flags: Int, maxTurns: Int = Int.MAX_VALUE): EscortPath? {
@@ -399,7 +403,7 @@ object EscortMoves {
         // we're already there (at least approximately)!
         if (start == target || start.aerialDistanceTo(target) <= ring) return EscortPath(emptyList())
 
-        val stops = (if (ring == 0) exactPath(unit, target) else approximatePath(unit, target, ring, flags and NATIVE_DOMAIN != 0)) ?: return null
+        val stops = (if (ring == 0) exactPath(unit, target) else approximatePath(unit, target, ring, flags and NATIVE_DOMAIN != 0, if (flags and FEW_CANDIDATES != 0) FEW_APPROXIMATE_CANDIDATES else MAX_APPROXIMATE_CANDIDATES)) ?: return null
         if (stops.size - 1 >= maxTurns) return null
         if (flags and NO_ENEMY_TERRITORY != 0 && !start.isEnemyTerritory(civ) && stops.any { it.isEnemyTerritory(civ) }) return null
         if (flags and ABORT_IN_DANGER != 0 && unit.isCivilian() && isPathTooDangerous(ctx, unit, EscortPath(stops))) return null
@@ -440,12 +444,12 @@ object EscortMoves {
     }
 
     /** The shortest of the paths to the tiles within [ring] of [target] that the unit can enter, the nearest ones first */
-    private fun approximatePath(unit: MapUnit, target: Tile, ring: Int, nativeDomainOnly: Boolean): List<Tile>? {
+    private fun approximatePath(unit: MapUnit, target: Tile, ring: Int, nativeDomainOnly: Boolean, candidateLimit: Int): List<Tile>? {
         val start = unit.getTile()
         val candidates = target.getTilesInDistance(ring)
             .filter { it != start && unit.movement.canMoveTo(it) && (!nativeDomainOnly || unit.baseUnit.isWaterUnit == it.isWater) }
             .sortedWith(compareBy<Tile>({ start.aerialDistanceTo(it) }, { target.aerialDistanceTo(it) }))
-            .take(MAX_APPROXIMATE_CANDIDATES)
+            .take(candidateLimit)
         var best: List<Tile>? = null
         for (candidate in candidates) {
             val path = unit.movement.getShortestPath(candidate)

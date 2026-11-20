@@ -35,6 +35,12 @@ class TacticalContext(
     /** CvTacticalAI::m_ZoneTargets: the targets the move being run looks at (ExtractTargetsForZone: all of them, or those of one dominance zone) */
     var currentTargets: List<TacticalTarget> = targets.all
 
+    /** What a move works out once for the units of the turn that stand alike, by a key of its own (the barbarians' path lengths) */
+    val memo = HashMap<Any, Int>()
+
+    /** Lists of the targets of some kinds, in the order of [targets], made once for the turn by a move that looks at them for every unit */
+    val targetLists = HashMap<String, List<TacticalTarget>>()
+
     /** CvTacticalAI::m_CurrentAirSweepUnits: the aircraft that can sweep the target of the attack being planned, found with the units that strike it */
     var airSweepUnits: List<MapUnit> = emptyList()
 

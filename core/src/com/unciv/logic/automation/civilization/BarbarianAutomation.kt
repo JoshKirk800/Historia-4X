@@ -37,7 +37,7 @@ class BarbarianAutomation(val civInfo: Civilization) {
         // CommandeerUnits: all the barbarians that can move
         val units = civInfo.units.getCivUnits().filter { it.hasMovement() }.toList()
         if (units.isNotEmpty()) {
-            val ctx = TacticalContext(civInfo, null, danger, cache, units, TacticalTargets.find(civInfo, null))
+            val ctx = TacticalContext(civInfo, null, danger, cache, units, timeThis("AI.Barbarians.Targets") { TacticalTargets.find(civInfo, null) })
             assignBarbarianMoves(ctx)
             AiDecisionLog.log(civInfo) { "Barbarians: ${units.size} units, ${units.size - ctx.units.size} commanded, ${ctx.targets.all.size} targets" }
         }
@@ -49,20 +49,26 @@ class BarbarianAutomation(val civInfo: Civilization) {
     fun assignBarbarianMoves(ctx: TacticalContext) {
         ctx.currentTargets = ctx.targets.all
         // Even barbarians like their camps
-        BarbarianMoves.plotCampDefenseMoves(ctx)
+        timeThis("AI.Barbarians.CampDefense") { BarbarianMoves.plotCampDefenseMoves(ctx) }
         // Barbarians do not have tactical zones, they just attack everything that moves (PlotBarbarianAttacks), after robbing the cities next to them
-        BarbarianTheft.executeTheft(ctx)
-        TacticalMoves.destroyEnemyUnits(ctx, AggressionLevel.Braveheart)
-        TacticalSimulation.executeCaptureCityMoves(ctx)
-        for (type in TacticalAi.civilianTargetTypes) TacticalMoves.plotCivilianAttackMoves(ctx, type)
+        timeThis("AI.Barbarians.Theft") { BarbarianTheft.executeTheft(ctx) }
+        timeThis("AI.Barbarians.Attacks") {
+            TacticalMoves.destroyEnemyUnits(ctx, AggressionLevel.Braveheart)
+            TacticalSimulation.executeCaptureCityMoves(ctx)
+            for (type in TacticalAi.civilianTargetTypes) TacticalMoves.plotCivilianAttackMoves(ctx, type)
+        }
         // Barbarians like to plunder as well
-        TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, true)
-        TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, true)
-        TradeMoves.plotPlunderTradeUnitMoves(ctx)
+        timeThis("AI.Barbarians.Pillage") {
+            TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, true)
+            TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, true)
+            TradeMoves.plotPlunderTradeUnitMoves(ctx)
+        }
         // Normal roaming to find targets
-        BarbarianMoves.plotRoamingMoves(ctx)
+        timeThis("AI.Barbarians.Roaming") { BarbarianMoves.plotRoamingMoves(ctx) }
         // Safety comes last for the barbarians
-        SafestPlot.plotMovesToSafety(ctx, true)
-        SafestPlot.plotMovesToSafety(ctx, false)
+        timeThis("AI.Barbarians.Safety") {
+            SafestPlot.plotMovesToSafety(ctx, true)
+            SafestPlot.plotMovesToSafety(ctx, false)
+        }
     }
 }

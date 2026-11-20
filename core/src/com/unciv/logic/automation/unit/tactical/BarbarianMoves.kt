@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.unit.tactical
 
+import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.battle.BattleDamage
 import com.unciv.logic.battle.CityCombatant
@@ -111,7 +112,7 @@ object BarbarianMoves {
             return
         }
         // Where to?
-        val best = findBestLandTarget(ctx, unit) ?: return
+        val best = timeThis("AI.Barbarians.LandTarget") { findBestLandTarget(ctx, unit) } ?: return
         val isCombat = TacticalTargets.visibleEnemyDefender(ctx.civ, best) != null
         val isCivilian = hasVisibleCivilian(ctx, best)
         val isImprovement = best.improvement != null && !best.improvementIsPillaged
@@ -119,22 +120,23 @@ object BarbarianMoves {
         ctx.log { "roaming: ${unit.name} at ${here.position} towards ${best.position}" }
         // Just move in if we can
         if ((isCivilian || isImprovement) && !isCombat) {
-            Deployment.headTowards(unit, best)
+            timeThis("AI.Barbarians.RoamMove") { Deployment.headTowards(unit, best) }
             if (!unit.isDestroyed && unit.hasMovement() && unit.getTile() == best) PillageRules.pillage(unit)
         }
         // Move towards the target but do not hang around there; since we did not attack this turn, we continue roaming
-        else if (isCombat && best.aerialDistanceTo(here) > 1) EscortMoves.moveToEmptySpaceNearTarget(ctx, unit, best, false, ROAM_TURNS)
+        else if (isCombat && best.aerialDistanceTo(here) > 1)
+            timeThis("AI.Barbarians.RoamMove") { EscortMoves.moveToEmptySpaceNearTarget(ctx, unit, best, false, ROAM_TURNS, fewCandidates = true) }
         // Hit and run, if you can
         if (!unit.isDestroyed && !unit.hasMovement()) ctx.unitProcessed(unit)
     }
 
     private fun roamAtSea(ctx: TacticalContext, unit: MapUnit) {
-        val best = findBestSeaTarget(ctx, unit) ?: return
+        val best = timeThis("AI.Barbarians.SeaTarget") { findBestSeaTarget(ctx, unit) } ?: return
         // No naval pillaging, it is just too annoying; as on land, a ship that is at its target does not end the turn but moves to safety
         val isCombat = TacticalTargets.visibleEnemyDefender(ctx.civ, best) != null
         if (isCombat && best.aerialDistanceTo(unit.getTile()) <= 1) return
         unit.movement.clearPathfindingCache()
-        if (!EscortMoves.moveToEmptySpaceNearTarget(ctx, unit, best, true, ROAM_TURNS)) return
+        if (!timeThis("AI.Barbarians.RoamMove") { EscortMoves.moveToEmptySpaceNearTarget(ctx, unit, best, true, ROAM_TURNS, fewCandidates = true) }) return
         ctx.log { "roaming: ${unit.name} sails towards ${best.position}, now at ${unit.getTile().position}" }
         if (!unit.isDestroyed) OpportunityAttacks.perform(ctx, unit, true)
         if (!unit.isDestroyed) ctx.unitProcessed(unit)
@@ -153,11 +155,11 @@ object BarbarianMoves {
         val canDefend = TacticalSafety.canDefend(unit)
         var best: Tile? = null
         // Combat units look at all offensive targets within x turns
-        if (canDefend) best = findNearbyTarget(ctx, unit, maxTurns, true) ?: findExploreTarget(ctx, unit)
+        if (canDefend) best = timeThis("AI.Barbarians.NearbyTarget") { findNearbyTarget(ctx, unit, maxTurns, true) } ?: timeThis("AI.Barbarians.Explore") { findExploreTarget(ctx, unit) }
         // By default go back to camp or so
         if (best == null) {
             if (!canDefend) maxTurns = CIVILIAN_ROAM_TURNS
-            best = findNearbyTarget(ctx, unit, maxTurns, false)
+            best = timeThis("AI.Barbarians.NearbyTarget") { findNearbyTarget(ctx, unit, maxTurns, false) }
         }
         return best
     }
@@ -172,7 +174,8 @@ object BarbarianMoves {
         val here = unit.getTile()
         val maxDistance = maxTurns.toLong() * TILES_PER_TURN
         val candidates = ArrayList<Candidate>()
-        for (target in ctx.targets.all) {
+        val targets = ctx.targetLists.getOrPut(if (offensive) "roamOffensive" else "roamDefensive") { ctx.targets.all.filter { isRoamTarget(ctx, it, offensive) } }
+        for (target in targets) {
             // Whether the target is of a type that matches, and whether the unit must also not die attacking it: that is worked out only for the
             // targets that pass the cheap tests below, and in the order of the distance, where the answer is needed (same result as testing them all)
             val suicideTest: Boolean
@@ -201,9 +204,35 @@ object BarbarianMoves {
         unit.movement.clearPathfindingCache()
         for (candidate in candidates.sortedBy { it.distance }) {
             if (candidate.suicideTest && isSuicideMeleeAttack(unit, candidate.tile)) continue
-            if (EscortMoves.turnsToApproach(ctx, unit, candidate.tile, maxTurns) < Int.MAX_VALUE) return candidate.tile
+            if (needsAnotherLandmass(unit, candidate.tile)) continue
+            if (approachTurns(ctx, unit, candidate.tile, maxTurns) < Int.MAX_VALUE) return candidate.tile
         }
         return null
+    }
+
+    /** The target types FindNearbyTarget looks at: offensive (enemy units and cities, improvements, trade units and civilians) or defensive (camps of a barbarian, cities to defend) */
+    private fun isRoamTarget(ctx: TacticalContext, target: TacticalTarget, offensive: Boolean) = if (offensive) when (target.type) {
+        TacticalTargetType.LowPriorityUnit, TacticalTargetType.MediumPriorityUnit, TacticalTargetType.HighPriorityUnit, TacticalTargetType.City,
+        TacticalTargetType.Improvement, TacticalTargetType.ImprovementResource, TacticalTargetType.TradeUnitLand,
+        TacticalTargetType.VeryHighPriorityCivilian, TacticalTargetType.HighPriorityCivilian, TacticalTargetType.MediumPriorityCivilian,
+        TacticalTargetType.LowPriorityCivilian -> true
+        else -> false
+    } else target.type == TacticalTargetType.CityToDefend || (ctx.civ.isBarbarian && target.type == TacticalTargetType.BarbarianCamp)
+
+    /** Where [unit] stands, how long the tile takes to get next to, for the units of one type that stand together (they are many in a camp) */
+    private data class ApproachKey(val unitName: String, val from: Tile, val target: Tile, val maxTurns: Int, val movement: Int)
+
+    /** [EscortMoves.turnsToApproach] with few candidate tiles, remembered for the turn for units of one kind on one tile */
+    private fun approachTurns(ctx: TacticalContext, unit: MapUnit, tile: Tile, maxTurns: Int): Int =
+        ctx.memo.getOrPut(ApproachKey(unit.name, unit.getTile(), tile, maxTurns, unit.getMaxMovement())) {
+            EscortMoves.turnsToApproach(ctx, unit, tile, maxTurns, fewCandidates = true)
+        }
+
+    /** A land unit on land cannot get to the land of another continent unless it can cross water: no path search needed */
+    private fun needsAnotherLandmass(unit: MapUnit, tile: Tile): Boolean {
+        val here = unit.getTile()
+        return unit.baseUnit.isLandUnit && here.isLand && tile.isLand && here.getContinent() != tile.getContinent() &&
+            !unit.civ.tech.unitsCanEmbark && !unit.cache.canMoveOnWater
     }
 
     private class Candidate(val tile: Tile, val distance: Int, val suicideTest: Boolean)
@@ -214,6 +243,10 @@ object BarbarianMoves {
      */
     private fun isSuicideMeleeAttack(unit: MapUnit, tile: Tile): Boolean {
         if (unit.baseUnit.isRanged() || unit.baseUnit.isAirUnit()) return false
+        return timeThis("AI.Barbarians.Suicide") { wouldDieAttacking(unit, tile) }
+    }
+
+    private fun wouldDieAttacking(unit: MapUnit, tile: Tile): Boolean {
         val received = if (tile.isCityCenter()) {
             val city = tile.getCity() ?: return false
             BattleDamage.calculateDamageToAttacker(MapUnitCombatant(unit), CityCombatant(city), unit.getTile(), TacticalTargets.EXPECTED_RANDOMNESS, ignoreFlanking = true)
@@ -268,7 +301,7 @@ object BarbarianMoves {
         for (index in candidates.indices.sortedBy { bounds[it] }) {
             // Nothing from here on can beat the best, a tie only if it comes earlier in the list
             if (bounds[index] > bestTurns || bounds[index] > range) break
-            val turns = EscortMoves.turnsToApproach(ctx, unit, candidates[index], range)
+            val turns = approachTurns(ctx, unit, candidates[index], range)
             if (turns == Int.MAX_VALUE) continue
             if (turns < bestTurns || (turns == bestTurns && index < bestIndex)) { bestTurns = turns; best = candidates[index]; bestIndex = index }
         }

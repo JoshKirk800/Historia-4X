@@ -14,15 +14,16 @@ import com.unciv.logic.map.tile.Tile
  *  Bringing units to the zones that need them, the second pass of CvTacticalAI::ProcessDominanceZones: PlotReinforcementMoves (also the early one a
  *  hedgehog zone asks for) and PositionUnitsAroundTarget, which places the units it finds around the city of the zone: first with the combat
  *  simulation at [AggressionLevel.Low] ([TacticalSimulation.planAndExecute], after the spotter move), then the units that are still far from
- *  the target, by their own path - a land unit embarks only if we have a warship among them and the zone it ends the turn in is ours.
+ *  the target, by their own path - a land unit embarks only if we have a warship among them and the zone it ends the turn in is ours - and last
+ *  the units of an army that nothing moved: in danger they go to a safe plot, and they are done for the turn.
  *
  *  Deviations: the units the original finds on the plots of the step finder around the city (PT_ARMY_MIXED, no player: any terrain, foreign land
- *  too, up to [recruitRange]) are found on the plots within [recruitRange] steps of the city that are not impassable; units of an army are left
- *  to the army (the original's armies have moved by now and are processed), as are great generals and admirals;
+ *  too, up to [recruitRange]) are found on the plots within [recruitRange] steps of the city that are not impassable, among the units the turn
+ *  was given ([TacticalContext.allUnits]), great generals and admirals are left out as in the original;
  *  a far-out unit's path is the one to the nearest of three plots within two of the target (MOVEFLAG_APPROX_TARGET_RING2, as
  *  [AiOperationLogic.turnsToReach]) at most [recruitRange] turns long, and the first plot of it is what the danger and embarkation tests look at; the
- *  original asks the zone's neighbors of the zone owner's map, here it is ours; the third round of PositionUnitsAroundTarget, which flees with the units
- *  of an army that did not move, has no units here.
+ *  original asks the zone's neighbors of the zone owner's map, here it is ours; the third round has only military units (the original's
+ *  "not a combat unit and without a defender" test is for combat support units, which this does not find).
  */
 object ReinforcementMoves {
 
@@ -111,7 +112,7 @@ object ReinforcementMoves {
         var alreadyInZone = 0
         val inReach = ctx.allUnits.filter { !it.isDestroyed && it.civ == civ && it.getTile() in plots }.sortedWith(compareBy({ it.getTile().zeroBasedIndex }, { it.id }))
         for (unit in inReach) {
-            if (!canUse(ctx, unit) || ctx.civ.ai.operations.armyOf(unit) != null) continue
+            if (!canUse(ctx, unit)) continue
             val tile = unit.getTile()
             val unitZone = ctx.map.zoneOf(tile)
             if (unitZone != null && unitZone != zone) {
@@ -186,7 +187,33 @@ object ReinforcementMoves {
             if (unit.isDestroyed || unit in ctx.cache.processedUnits) continue
             moveFarUnit(ctx, unit, target, haveNavalEscort)
         }
+
+        // Third round: a unit in an army (no tactical moves) that did not move yet is moved to safety now, and is done
+        for (unit in units) {
+            if (unit.isDestroyed || unit in ctx.cache.processedUnits || ctx.civ.ai.operations.armyOf(unit) == null) continue
+            moveArmyUnitToSafety(ctx, unit)
+        }
+
         return outcome.success
+    }
+
+    /**
+     *  The third round of CvTacticalAI::PositionUnitsAroundTarget for one unit of an army: only if it is in more danger than it heals it goes, to the
+     *  closest safe plot for healing, else the safest plot in reach; its turn is over (the original skips the rest of its movement).
+     */
+    private fun moveArmyUnitToSafety(ctx: TacticalContext, unit: MapUnit) {
+        if (ctx.civ.ai.unitDanger.get(unit) > TacticalSafety.actualHealRate(unit)) {
+            // Units are not typically hurt, but this is a convenient function to move out of danger; the second chance is for emergencies
+            unit.movement.clearPathfindingCache()
+            val safe = (TacticalHealing.findClosestSafePlotForHealing(ctx, unit, false) ?: SafestPlot.find(ctx, unit, allowEmbark = false))?.tile
+            if (safe != null && safe != unit.getTile()) {
+                unit.movement.clearPathfindingCache()
+                TacticalMoves.moveSwapping(unit, safe)
+            }
+        }
+        if (unit.isDestroyed) return
+        unit.currentMovement = 0f
+        ctx.unitProcessed(unit)
     }
 
     /** One unit of the second round of [positionUnitsAroundTarget]: along its path toward [target] if the first plot of it is safe enough */

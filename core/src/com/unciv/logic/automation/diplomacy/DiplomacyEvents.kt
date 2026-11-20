@@ -197,9 +197,9 @@ object DiplomacyEvents {
             val tiedToFriend = OpinionAi.isDoFAccepted(third, friend) || theirAi.opinionOf(friend) == MajorCivOpinion.Ally ||
                 third.getDiplomacyManager(friend)?.diplomaticStatus == DiplomaticStatus.DefensivePact
             val hatesUs = third.isAtWarWith(ender) || OpinionAi.isDenouncedPlayer(ender, third) || OpinionAi.isDenouncedPlayer(third, ender) ||
-                OpinionAi.isUntrustworthyFriend(ender) || theirAi.opinionOf(ender) == MajorCivOpinion.Unforgivable
+                OpinionAi.isUntrustworthyFriend(third, ender) || theirAi.opinionOf(ender) == MajorCivOpinion.Unforgivable
             if (!hatesUs) {
-                if (OpinionAi.isUntrustworthyFriend(friend)) theirAi.changeRecentAssistValue(ender, -75)
+                if (OpinionAi.isUntrustworthyFriend(third, friend)) theirAi.changeRecentAssistValue(ender, -75)
                 else if (third.isAtWarWith(friend)) {
                     theirAi.changeRecentAssistValue(ender, -50)
                     val warState = WarStateAi.warState(third, friend)

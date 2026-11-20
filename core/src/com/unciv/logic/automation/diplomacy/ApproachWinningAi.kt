@@ -14,8 +14,7 @@ import com.unciv.models.ruleset.ai.TraitCategory
 /**
  *  Part 6 of Vox Populi's SelectBestApproachTowardsMajorCiv (Release-5.4.8; D7): THEY'RE CLOSE TO WINNING and the dogpile (is this
  *  player already in a war with someone who isn't us?). On our scale: VP's personality bias is ours x 100.
- *  As none (no input): an active unique unit, the league's prime competitor, the victory dispute and block levels
- *  (not ported: BNW reads them nowhere else).
+ *  As none (no input): an active unique unit, the league's prime competitor.
  */
 object ApproachWinningAi {
     private val WAR = MajorCivApproach.War.ordinal
@@ -80,7 +79,7 @@ object ApproachWinningAi {
      *  unless they are powerful); a competitor of ours under their attack makes us friendlier towards them by our victory
      *  competitiveness (in full when it is our biggest competitor or one we are endgame-aggressive to, half and a quarter when we like
      *  them less than [other]), unless they are untrustworthy, denounced us, took our cities or the war goes well for us. A powerful
-     *  close attacker that is no friend stops the dogpile. Each reason adds the larger victory concern (none here) plus the attacker's
+     *  close attacker that is no friend stops the dogpile. Each reason adds the larger victory dispute or block level against them (0 to 3) plus the attacker's
      *  war state against them on VP's scale, our own war state when we fight them (less 4): doubled for close attackers of an early
      *  or capital competitor (x 2.5 when all three are before the Renaissance), halved (or nothing before our Renaissance) when the
      *  attacker is not close. A competitor under attack with no friend under attack stops the dogpile too. The bonus adds war and
@@ -118,7 +117,7 @@ object ApproachWinningAi {
                 !strategic && !endgameAggressive && attackerDamage >= 40 && attackerDamage > theirDamage -> {
                     val keyPartner = ai.mostValuableFriend == attacker.civID || ai.mostValuableAlly == attacker.civID
                     val befriended = (isFriendOrAlly(civ, attacker) || keyPartner || WarSanityAi.isLiberator(civ, attacker, onlyMajorCities = false)) &&
-                        !OpinionAi.isUntrustworthyFriend(attacker) &&
+                        !OpinionAi.isUntrustworthyFriend(civ, attacker) &&
                         ApproachAi.VP_ORDER.indexOf(ai.approachTowards(attacker)) > ApproachAi.VP_ORDER.indexOf(MajorCivApproach.Guarded)
                     if (befriended) {
                         friendUnderAttack = true
@@ -129,7 +128,7 @@ object ApproachWinningAi {
                             w[HOSTILE] += bias(MajorCivApproach.Hostile) * loyalty / 2
                             thinking = true
                         }
-                    } else if (!OpinionAi.isUntrustworthyFriend(other) && !OpinionAi.isDenouncedPlayer(other, civ) &&
+                    } else if (!OpinionAi.isUntrustworthyFriend(civ, other) && !OpinionAi.isDenouncedPlayer(other, civ) &&
                         ai.memoryOf(other).numCitiesCapturedBy <= 0 && WarDamageAi.warScore(civ, other) < WarIntentAi.warScoreThresholdPositive(civ) &&
                         (!civ.isAtWarWith(other) || WarIntentAi.isPhonyWar(civ, other, ignoreCurrentApproach = true) ||
                             WarDamageAi.warScore(civ, other) > WarIntentAi.warScoreThresholdNegative(civ) / 2)) {
@@ -151,7 +150,7 @@ object ApproachWinningAi {
             if (thinking && attackerClose && (WarStateAi.militaryStrengthComparedToUs(civ, attacker) ?: StrengthLevel.Average) >= StrengthLevel.Powerful &&
                 !isFriendOrAlly(civ, attacker)) return
             if (!thinking) continue
-            var bonusMod = vpWarState(WarStateAi.warState(attacker, other))
+            var bonusMod = ApproachCompetitionAi.maxVictoryDispute(ai.memoryOf(other)) + vpWarState(WarStateAi.warState(attacker, other))
             if (civ.isAtWarWith(other)) bonusMod += vpWarState(WarStateAi.warState(civ, other)) - 4
             if (bonusMod > 0) {
                 if (attackerClose && (earlyGameCompetitor || danger > 0)) {

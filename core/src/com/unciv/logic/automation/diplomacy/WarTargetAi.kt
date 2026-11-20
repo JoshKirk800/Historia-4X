@@ -172,7 +172,7 @@ object WarTargetAi {
             if (WarStateAi.militaryStrengthComparedToUs(civ, other) == StrengthLevel.Immense && !easyWithTarget) continue
             if (!civ.ai.military.havePossibleAttackTarget(other)) continue
             if (isRecentPeaceTreaty(civ, other, rules)) continue
-            if (!OpinionAi.isUntrustworthyFriend(other)) {
+            if (!OpinionAi.isUntrustworthyFriend(civ, other)) {
                 if (ai.mostValuableFriend == other.civID || ai.mostValuableAlly == other.civID) continue
                 if (OpinionAi.isDoFAccepted(civ, other) && era <= 1 && !WarSanityAi.isBackstabber(civ)) continue
                 if (ai.approachTowards(other) == MajorCivApproach.Friendly) continue
@@ -228,7 +228,7 @@ object WarTargetAi {
                 best = MajorCivApproach.Guarded
         }
         if ((best == MajorCivApproach.Friendly || best == MajorCivApproach.Deceptive) &&
-            (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ) || OpinionAi.isUntrustworthyFriend(other) ||
+            (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ) || OpinionAi.isUntrustworthyFriend(civ, other) ||
                 isRecentDemandAccepted(other, civ)))
             best = if (memory.opinion <= MajorCivOpinion.Enemy) MajorCivApproach.Guarded else MajorCivApproach.Neutral
         return best

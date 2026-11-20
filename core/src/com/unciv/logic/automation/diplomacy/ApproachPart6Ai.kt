@@ -51,7 +51,7 @@ object ApproachPart6Ai {
             return
         }
         val everCapturedKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) || CompetitorAi.isHolyCityCapturedBy(civ, other)
-        if (everCapturedKeyCity || OpinionAi.isUntrustworthyFriend(other)) return
+        if (everCapturedKeyCity || OpinionAi.isUntrustworthyFriend(civ, other)) return
         val memory = civ.ai.diplomacy.memoryOf(other)
         fun friendlier(times: Int) {
             w[FRIENDLY] += bias(MajorCivApproach.Friendly) * times
@@ -173,7 +173,7 @@ object ApproachPart6Ai {
         if (WarAlliesAi.avoidExchangesWithPlayer(civ, other, warOnly = true, ignoreSelfApproach = true)) return true
         if (!stronger && military < StrengthLevel.Poor) return false
         for (player in WarAlliesAi.warAllies(civ, other, includeMinors = false, reverse = true) + other) {
-            if (player == other && OpinionAi.isUntrustworthyFriend(other)) return true
+            if (player == other && OpinionAi.isUntrustworthyFriend(civ, other)) return true
             val ours = civ.ai.diplomacy.memoryOf(player)
             if (player.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact) {
                 if (WarAlliesAi.avoidExchangesWithPlayer(civ, player, warOnly = true, ignoreSelfApproach = true)) return true
@@ -185,7 +185,7 @@ object ApproachPart6Ai {
             if (!friends && ours.numWarsDeclaredOnUs > 0) return true
             if (player.ai.diplomacy.memoryOf(civ).numCitiesCapturedBy > 0) return true
             if (OpinionAi.isCapitalCapturedBy(player, civ) || CompetitorAi.isHolyCityCapturedBy(player, civ)) return true
-            if (OpinionAi.isUntrustworthyFriend(civ)) return true
+            if (OpinionAi.isUntrustworthyFriend(player, civ)) return true
             if (civ.cities.any { it.foundingCivObject == player }) return true
         }
         return false

@@ -244,7 +244,7 @@ object ApproachAi {
             if (memory.numTimesCultureBombed > 0 || OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)) return true
             if (OpinionAi.isAngryAboutProtectedMinorAttacked(memory, rules)) return true
         }
-        if (OpinionAi.isDenouncedPlayer(other, civ) || OpinionAi.isUntrustworthyFriend(other)) return true
+        if (OpinionAi.isDenouncedPlayer(other, civ) || OpinionAi.isUntrustworthyFriend(civ, other)) return true
         if (OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other) return true
         val close = maxOf(DiplomacyTurn.proximity(civ, other), DiplomacyTurn.proximity(other, civ)) >= DiplomacyTurn.PROXIMITY_CLOSE
         return close && ourCitiesOwnedBy(civ, other) > ourCitiesOwnedBy(other, civ)
@@ -351,7 +351,7 @@ object ApproachAi {
         if (coopWar) zeroBadApproaches(w)
         stage("Liberated cities (part 2)")
         val capturedKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other
-        val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
+        val untrustworthy = OpinionAi.isUntrustworthyFriend(civ, other)
         if (!capturedKeyCity && !untrustworthy && !civ.isAtWarWith(other)) {
             // VP: liberated less the more of the cities of ours they own and the cities they captured from us
             val liberationMod = memory.numCitiesLiberated - maxOf(ourCitiesOwnedBy(civ, other), memory.numCitiesCapturedBy)
@@ -473,6 +473,11 @@ object ApproachAi {
         addStrengthWeights(civ, other, w, rules)
         stage("DoF history (part 5)")
         addDoFHistoryWeights(civ, other, w, rules)
+        stage("Victory issues (part 5)")
+        val provoked = provokedUs(civ, other)
+        ApproachCompetitionAi.addVictoryIssueWeights(civ, other, provoked, w)
+        stage("Tech and policy block (part 5)")
+        ApproachCompetitionAi.addBlockWeights(civ, other, provoked, appliesDeception(civ, other, rules), w, rules)
         stage("nukes (Vox Populi)")
         addNukeWeights(civ, other, w, rules)
         stage("Bankruptcy and our lost capital (part 6)")
@@ -612,7 +617,7 @@ object ApproachAi {
         if (recentPeace && !strategic) { zero(WAR); zero(HOSTILE) }
         if (!atWar && civ.getDiplomacyManager(other)?.canDeclareWar() != true && (!strategic || !recentPeace)) { zero(WAR); zero(HOSTILE) }
         if (!atWar && other.getDiplomacyManager(civ)?.canDeclareWar() != true) zero(AFRAID)
-        val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
+        val untrustworthy = OpinionAi.isUntrustworthyFriend(civ, other)
         val capturedKeyCity = OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other
         // IsLiberator(ePlayer, false, true) as far as we have it: they resurrected us, captured no more of our cities than they liberated,
         // and took no key city of ours
@@ -946,7 +951,8 @@ object ApproachAi {
      *  percent / 500; twice for one going for or close to world conquest or with the warmonger trait; deceptive left out when close to
      *  it or against an easy target with a preferred attack target (bNoHiding). The bonuses scale by our attack multiplier
      *  ([attackMultipliers]).
-     *  Left out until their inputs exist: temporary attack bonuses, victory dispute levels.
+     *  The larger victory dispute or block level (0 to 3, after turn 150 while competing for victory) adds to boldness, meanness and denounce
+     *  willingness. Left out until its input exists: temporary attack bonuses.
      */
     private fun addWarBonuses(civ: Civilization, other: Civilization, closeToConquest: Boolean, w: IntArray, rules: AiRuleset) {
         fun bias(approach: MajorCivApproach) = civ.ai.majorCivApproachBias(approach)
@@ -1006,9 +1012,11 @@ object ApproachAi {
         }
         if (policies.isAdopted("Autocracy")) add(6, 3)
         val difficulty = maxOf(handicap?.get("VictoryDisputePercent") ?: 100, handicap?.get("VictoryBlockPercent") ?: 100)
-        war = war * civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) * difficulty / 500
-        hostile = hostile * civ.ai.diplomacyValue(DiplomacyPersonality.Meanness) * difficulty / 500
-        deceptive = if (deception) deceptive * civ.ai.diplomacyValue(DiplomacyPersonality.DenounceWillingness) * difficulty / 500 else 0
+        val victoryDispute = if (VictoryProgressAi.isCompetingForVictory(civ) && civ.gameInfo.turns > 150)
+            ApproachCompetitionAi.maxVictoryDispute(civ.ai.diplomacy.memoryOf(other)) else 0
+        war = war * (civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) + victoryDispute) * difficulty / 500
+        hostile = hostile * (civ.ai.diplomacyValue(DiplomacyPersonality.Meanness) + victoryDispute) * difficulty / 500
+        deceptive = if (deception) deceptive * (civ.ai.diplomacyValue(DiplomacyPersonality.DenounceWillingness) + victoryDispute) * difficulty / 500 else 0
         if (war <= 0 && hostile <= 0 && deceptive <= 0) return
         val times = if (warmonger || conquest || closeToConquest) 2 else 1
         w[WAR] += war * times
@@ -1024,13 +1032,13 @@ object ApproachAi {
      *  denounced the other, they are untrustworthy or took a key city of ours (VP also: sanctions).
      */
     private fun appliesDeception(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
-        if (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ) || OpinionAi.isUntrustworthyFriend(other)) return false
+        if (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ) || OpinionAi.isUntrustworthyFriend(civ, other)) return false
         if (OpinionAi.isCapitalCapturedBy(civ, other) || holyCityOf(civ)?.civ == other) return false
         if (VictoryProgressAi.isCloseToWorldConquest(civ, rules) || VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)) return true
         val proximity = DiplomacyTurn.proximity(civ, other)
         val canCrossOcean = civ.tech.embarkedUnitsCanEnterOcean || civ.tech.allUnitsCanEnterOcean
         if (proximity != DiplomacyTurn.PROXIMITY_NEIGHBORS && !(canCrossOcean && proximity >= DiplomacyTurn.PROXIMITY_CLOSE)) return false
-        return OpinionAi.isUntrustworthyFriend(civ) || civ.ai.diplomacyValue(DiplomacyPersonality.DenounceWillingness) > 8 ||
+        return WarSanityAi.isBackstabber(civ) || civ.ai.diplomacyValue(DiplomacyPersonality.DenounceWillingness) > 8 ||
             civ.ai.majorCivApproachBias(MajorCivApproach.Deceptive) > civ.ai.majorCivApproachBias(MajorCivApproach.Friendly) + 1 ||
             civ.ai.isGoingForWorldConquest()
     }
@@ -1157,10 +1165,10 @@ object ApproachAi {
             w[NEUTRAL] += bias(MajorCivApproach.Neutral) * (11 - competitiveness) / 2
             w[DECEPTIVE] -= bias(MajorCivApproach.Deceptive) * competitiveness
         }
-        if (civ.gameInfo.league != null && !OpinionAi.isUntrustworthyFriend(other) && (civ.ai.isGoingForDiploVictory() || !provoked))
+        if (civ.gameInfo.league != null && !OpinionAi.isUntrustworthyFriend(civ, other) && (civ.ai.isGoingForDiploVictory() || !provoked))
             w[FRIENDLY] += bias(MajorCivApproach.Friendly) * 2
 
-        if (OpinionAi.isUntrustworthyFriend(other)) return
+        if (OpinionAi.isUntrustworthyFriend(civ, other)) return
         val friends = OpinionAi.isDoFAccepted(civ, other)
         fun keyPartnerWeights(bound: Boolean) {
             if (bound && !concern && !provoked) {
@@ -1177,18 +1185,23 @@ object ApproachAi {
 
     /**
      *  Part 4, bVictoryConcern (Vox Populi): they are close to world conquest or conquered 3 or more capitals; or, when we compete for
-     *  victory, we are endgame aggressive towards them, or they stand in the way of our victory: a strong land dispute when we go for
-     *  world conquest, a strong city-state dispute for a diplomatic victory, a strong wonder dispute for a culture victory. VP's victory
-     *  dispute and block levels and its tech and policy blocks have no input here.
+     *  victory, a strong victory dispute or block level, a fierce tech or policy block, we are endgame aggressive towards them, or they
+     *  stand in the way of our victory: a strong tech block when we go for the spaceship, a strong land dispute when we go for world
+     *  conquest, a strong city-state dispute for a diplomatic victory, a strong wonder dispute or policy block for a culture victory.
      */
     fun victoryConcern(civ: Civilization, other: Civilization, rules: AiRuleset): Boolean {
         if (VictoryProgressAi.isCloseToWorldConquest(other, rules) || VictoryProgressAi.numMajorsConquered(other) >= 3) return true
         if (!VictoryProgressAi.isCompetingForVictory(civ)) return false
         val memory = civ.ai.diplomacy.memories[other.civID] ?: return VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)
-        return VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)
+        return memory.victoryDisputeLevel >= DisputeLevel.Strong
+            || memory.victoryBlockLevel >= BlockLevel.Strong
+            || memory.techBlockLevel == BlockLevel.Fierce
+            || memory.policyBlockLevel == BlockLevel.Fierce
+            || VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)
+            || (civ.ai.isGoingForSpaceshipVictory() && memory.techBlockLevel >= BlockLevel.Strong)
             || (civ.ai.isGoingForWorldConquest() && memory.landDispute >= DisputeLevel.Strong)
             || (civ.ai.isGoingForDiploVictory() && memory.minorCivDispute >= DisputeLevel.Strong)
-            || (civ.ai.isGoingForCultureVictory() && memory.wonderDispute >= DisputeLevel.Strong)
+            || (civ.ai.isGoingForCultureVictory() && (memory.wonderDispute >= DisputeLevel.Strong || memory.policyBlockLevel >= BlockLevel.Strong))
     }
 
     /**
@@ -1236,7 +1249,7 @@ object ApproachAi {
         val pastFriends = !friendOrAlly && (memory?.doFLevel ?: DoFLevel.New) >= DoFLevel.Friends &&
             !CompetitorAi.isMajorCompetitor(civ, other) && !earlyGameCompetitor &&
             (memory?.opinion ?: MajorCivOpinion.Neutral) >= MajorCivOpinion.Competitor && (!bold || !(easy || goodTarget))
-        val holdBack = proximity <= DiplomacyTurn.PROXIMITY_FAR || (!OpinionAi.isUntrustworthyFriend(other) && !tookKeyCity && !aggressiveMode
+        val holdBack = proximity <= DiplomacyTurn.PROXIMITY_FAR || (!OpinionAi.isUntrustworthyFriend(civ, other) && !tookKeyCity && !aggressiveMode
             && (heldFriend || pastFriends))
         if (holdBack)
             return closeToConquest || provokedUs || tookKeyCity || severeThreat || earlyGameCompetitor

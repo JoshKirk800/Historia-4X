@@ -193,9 +193,9 @@ class CoopWarTests {
 
     @Test
     fun `nothing is wanted with an untrustworthy ally, after a recent peace, or with an ally we are hostile to or hate`() {
-        c.ai.diplomacy.memoryOf(b).friendDeclaredWarOnUs = true // b declared war on a friend of c's
+        a.ai.diplomacy.memoryOf(b).untrustworthy = true // a holds b for a backstabber
         assertEquals("untrustworthy", 0, desire())
-        c.ai.diplomacy.memoryOf(b).friendDeclaredWarOnUs = false
+        a.ai.diplomacy.memoryOf(b).untrustworthy = false
 
         ourMemory(c).numWarsFought = 1
         ourMemory(c).turnMadePeace = game.gameInfo.turns
@@ -328,4 +328,14 @@ class CoopWarTests {
     }
 
     //endregion
+
+    @Test
+    fun `the victory dispute and block levels of the target move the desire by minus 2 for none and plus 2, 5 and 10`() {
+        val base = desire()
+        assertEquals(scaled(raw()), base)
+        ourMemory(c).victoryDisputeLevel = DisputeLevel.Strong
+        assertEquals("-2 becomes +5", scaled(raw() + 7), desire())
+        ourMemory(c).victoryBlockLevel = BlockLevel.Fierce
+        assertEquals("-2 becomes +10", scaled(raw() + 7 + 12), desire())
+    }
 }

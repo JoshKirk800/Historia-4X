@@ -1,8 +1,10 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.logic.automation.diplomacy.BlockLevel
 import com.unciv.logic.automation.diplomacy.CompetitorAi
 import com.unciv.logic.automation.diplomacy.CoopWarAi
 import com.unciv.logic.automation.diplomacy.CoopWarState
+import com.unciv.logic.automation.diplomacy.DisputeLevel
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
@@ -60,20 +62,41 @@ object DealDiplomacyValues {
 
     /**
      *  CvDiplomacyAI::IsWillingToGiveOpenBordersToPlayer, Community Patch: not to an untrustworthy civ, one that culture-bombed us, one
-     *  close to world conquest, one either side denounced; not when we plan war on them; yes for a Declaration of Friendship or Defensive
-     *  Pact, an Afraid, Friendly or Neutral approach, or a military no stronger than average.
+     *  close to world conquest, one either side denounced; not, when we compete for victory, to one that is no pact partner or liberator
+     *  and in a victory dispute or block with us, and that has influence over us VP wants to slow down (familiar and rising, popular
+     *  and not falling or fiercely competitive or our biggest competitor, influential and not rising); not when we plan war on them;
+     *  yes for a Declaration of Friendship or Defensive Pact, an Afraid, Friendly or Neutral approach, or a military no stronger than
+     *  average. VP's artifact and army-in-place checks are not ported.
      */
     fun isWillingToGiveOpenBordersToPlayer(us: Civilization, them: Civilization): Boolean {
-        if (OpinionAi.isUntrustworthyFriend(them)) return false
+        if (OpinionAi.isUntrustworthyFriend(us, them)) return false
         if (us.ai.diplomacy.memoryOf(them).numTimesCultureBombed > 0) return false
         if (VictoryProgressAi.isCloseToWorldConquest(them, rules(us))) return false
         if (isDenouncedEitherWay(us, them)) return false
+        if (isInfluenceRaceAgainst(us, them)) return false
         val approach = us.ai.diplomacy.approachTowards(them, false)
         if (approach == MajorCivApproach.War) return false
         if (isFriendOrAlly(us, them)) return true
         if (approach >= MajorCivApproach.Afraid) return true
         val strength = us.ai.diplomacy.militaryStrength(them)
         return strength == null || strength <= StrengthLevel.Average
+    }
+
+    /** The open borders block of IsWillingToGiveOpenBordersToPlayer for a victory competitor: see [isWillingToGiveOpenBordersToPlayer] */
+    private fun isInfluenceRaceAgainst(us: Civilization, them: Civilization): Boolean {
+        val memory = us.ai.diplomacy.memoryOf(them)
+        if (!VictoryProgressAi.isCompetingForVictory(us) || hasDefensivePact(us, them) || memory.numCitiesLiberated > 0) return false
+        val dispute = memory.victoryDisputeLevel
+        val block = memory.victoryBlockLevel
+        if (dispute == DisputeLevel.None && block == BlockLevel.None) return false
+        val trend = them.culture.getInfluenceTrend(us)
+        return when (them.culture.getInfluenceLevel(us)) {
+            InfluenceLevel.Familiar -> trend == InfluenceTrend.Rising
+            InfluenceLevel.Popular -> trend != InfluenceTrend.Falling || dispute == DisputeLevel.Fierce || block == BlockLevel.Fierce ||
+                CompetitorAi.biggestCompetitor(us) == them.civID
+            InfluenceLevel.Influential -> trend != InfluenceTrend.Rising
+            else -> false
+        }
     }
 
     /**
@@ -83,7 +106,7 @@ object DealDiplomacyValues {
      *  than 1.5 times our cities, when we need to explore (a navy: when they have a coastal city).
      */
     fun isWantsOpenBordersWithPlayer(us: Civilization, them: Civilization): Boolean {
-        if (OpinionAi.isUntrustworthyFriend(them)) return false
+        if (OpinionAi.isUntrustworthyFriend(us, them)) return false
         if (isDenouncedEitherWay(us, them)) return false
         if (us.ai.isGoingForCultureVictory()) {
             val level = us.culture.getInfluenceLevel(them) ?: InfluenceLevel.Unknown
@@ -176,7 +199,7 @@ object DealDiplomacyValues {
             if (ally == them || ally == us) return 0
         }
         if (isDenouncedEitherWay(us, them)) return null
-        if (OpinionAi.isUntrustworthyFriend(them)) return null
+        if (OpinionAi.isUntrustworthyFriend(us, them)) return null
 
         val diplomacy = us.ai.diplomacy
         val era = us.getAiEraNumber()
@@ -271,7 +294,7 @@ object DealDiplomacyValues {
         val declarer = if (fromMe) us else them
         declarer.getCapital() ?: return null
         if (isDenouncedEitherWay(us, them)) return null
-        if (OpinionAi.isUntrustworthyFriend(them)) return null
+        if (OpinionAi.isUntrustworthyFriend(us, them)) return null
 
         val declarerAi = declarer.ai.diplomacy
         val rules = rules(us)

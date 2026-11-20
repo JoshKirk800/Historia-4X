@@ -159,7 +159,7 @@ object WarSanityAi {
         val opinion = ai.opinionOf(other)
         if (approach == MajorCivApproach.Afraid || opinion == MajorCivOpinion.Ally) return false
         val endgameAggressive = VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)
-        val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
+        val untrustworthy = OpinionAi.isUntrustworthyFriend(civ, other)
         if (!impulse && !endgameAggressive && !untrustworthy) {
             if (direct && isLiberator(civ, other, onlyMajorCities = true)) return false
             if (isCityRecentlyLiberatedBy(civ, other) && citiesLost(civ) > 0) return false
@@ -254,7 +254,7 @@ object WarSanityAi {
      *  [victim] is untrustworthy */
     internal fun ignoresBackstabbing(observer: Civilization, victim: Civilization, checkCurrent: Boolean = false): Boolean {
         if (observer.ai.diplomacy.memoryOf(victim).doFBrokenTurn >= 0 || victim.ai.diplomacy.memoryOf(observer).doFBrokenTurn >= 0) return true
-        return checkCurrent && OpinionAi.isUntrustworthyFriend(victim)
+        return checkCurrent && OpinionAi.isUntrustworthyFriend(observer, victim)
     }
 
     /** CvDiplomacyAI::GetGlobalCoopWarWithState: the furthest coop war agreed with [partner], against anyone; null = none */
@@ -269,7 +269,7 @@ object WarSanityAi {
         val memory = civ.ai.diplomacy.memoryOf(other)
         if (OpinionAi.isCapitalCapturedBy(civ, other) || CompetitorAi.isHolyCityCapturedBy(civ, other)) return false
         if (memory.numCitiesCapturedBy > memory.numCitiesLiberated) return false
-        if (civ.isAtWarWith(other) || OpinionAi.isUntrustworthyFriend(other)) return false
+        if (civ.isAtWarWith(other) || OpinionAi.isUntrustworthyFriend(civ, other)) return false
         if (memory.resurrectedUs) return true
         return !onlyMajorCities && memory.numCitiesLiberated > 0 && memory.numCitiesLiberated > memory.numCitiesCapturedBy
     }

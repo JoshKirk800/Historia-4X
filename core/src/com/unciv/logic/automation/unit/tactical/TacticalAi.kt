@@ -23,8 +23,7 @@ import com.unciv.models.ruleset.unique.UniqueType
  *  list of Brave New World's AI.json. A unit a move commands is added to [AutomationCache.processedUnits]; the other units, tactical or not, go on to the
  *  rest of the unit AI.
  *
- *  Not ported: naval blockades (PlotBlockadeMoves: its targets are the barbarians' blockade points, which [TacticalTargets] does not make). Kept from
- *  Brave New World, where Vox Populi has nothing: the defensive airlift and parking on trade routes. The fighters sweep as part of the attack plans
+ *  Kept from Brave New World, where Vox Populi has nothing: the defensive airlift and parking on trade routes. The fighters sweep as part of the attack plans
  *  ([TacticalSimulation.executeAttackWithUnits], [AirMoves.executeAirSweep]).
  */
 object TacticalAi {
@@ -88,7 +87,7 @@ object TacticalAi {
      *  Then for each dominance zone, the most valuable first: the emergency purchases, and the moves of its posture ([Postures.processZones]).
      *  The second pass brings in the reinforcements ([ReinforcementMoves]; with them Brave New World's defensive airlift). AssignGlobalMidPrioMoves:
      *  air patrols, ruins, capturing civilians, the bastions, moving to safety (the combat units, those not in an army), healing again now that
-     *  units have moved out of the way, and harassing the enemy (pillaging and plundering trade routes). AssignGlobalLowPrioMoves: guarding improvements
+     *  units have moved out of the way, and harassing the enemy (pillaging, plundering trade routes, blockading the enemy's water: [BlockadeMoves]). AssignGlobalLowPrioMoves: guarding improvements
      *  for the next turn, escorting embarked units, the civilians out of harm's way last. Then the failsafe, [reviewUnassignedUnits].
      */
     fun automate(civ: Civilization, units: List<MapUnit>, cache: AutomationCache) = timeThis("AI.Tactical") {
@@ -146,6 +145,7 @@ object TacticalAi {
             TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Citadel, false)
             TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, false)
             TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.Improvement, false)
+            BlockadeMoves.plotBlockadeMoves(ctx)
             TradeMoves.plotParkOnTradeRouteMoves(ctx)
         }
 

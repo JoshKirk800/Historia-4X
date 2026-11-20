@@ -6,7 +6,7 @@ enum class TacticalTargetType {
     City,
     BarbarianCamp,
     Improvement,
-    BlockadeResourcePoint,
+    BlockadePoint,
     /** Can't attack one of our cities */
     LowPriorityUnit,
     /** Can damage one of our cities */

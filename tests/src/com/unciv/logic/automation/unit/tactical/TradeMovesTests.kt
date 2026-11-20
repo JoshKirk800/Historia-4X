@@ -13,7 +13,6 @@ import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -21,7 +20,7 @@ import org.junit.runner.RunWith
 
 /**
  *  The AI's plunder of trade routes (CvTacticalAI::FindTacticalTargets' trade branches, PlotPlunderTradeUnitMoves, ExecutePlunderTradeUnit,
- *  PlotPlunderTradePlotMoves, the barbarians' PlotBarbarianPlunderTradeUnitMove and FindBarbarianGankTradeRouteTarget) with Brave New World data.
+ *  PlotPlunderTradePlotMoves and the barbarians' PlotBarbarianPlunderTradeUnitMove) with Brave New World data.
  *  A route of [victim] to [partner] runs along x = 0; [civ] is at war with [victim] only.
  */
 @RunWith(BaseTestRunner::class)
@@ -177,7 +176,7 @@ class TradeMovesTests {
     }
     // endregion
 
-    // region Parking and ganking
+    // region Parking
 
     @Test
     fun `a free unit goes to the nearest route tile and each tile gets one unit`() {
@@ -189,25 +188,6 @@ class TradeMovesTests {
         assertTrue(first in ctx.cache.processedUnits)
         assertTrue("the route has one tile between its cities", first.getTile().aerialDistanceTo(route.getTiles()[1]) < 7)
         assertFalse("no other tile to park on", second in ctx.cache.processedUnits)
-    }
-
-    @Test
-    fun `a barbarian looks for the tile of most routes within its movement, none if no route is near`() {
-        val barbarians = game.addBarbarianCiv()
-        barbarians.ai.setTransients(barbarians)
-        game.gameInfo.barbarians.gameInfo = game.gameInfo
-        for (tile in game.tileMap.values) tile.setExplored(barbarians, true)
-        val route = route(distance = 10)
-        val unit = game.addUnit("Warrior", barbarians, tile(5))
-        val ctx = context(barbarians)
-        val found = BarbarianMoves.findGankTradeRouteTarget(ctx, unit)
-        assertNotNull(found)
-        assertTrue(found in route.getTiles())
-        assertTrue(found != unit.getTile())
-        assertEquals("no hunted target within range 5 of the middle", found, BarbarianMoves.findBestLandMove(ctx, unit))
-
-        val far = game.addUnit("Warrior", barbarians, game.tileMap[6, -6])
-        assertNull(BarbarianMoves.findGankTradeRouteTarget(context(barbarians), far))
     }
     // endregion
 

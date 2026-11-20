@@ -24,8 +24,9 @@ import org.junit.runner.RunWith
 
 /**
  *  The barbarian tactical AI (CvTacticalAI as it runs for the barbarian player) with Brave New World data: the target ranges by difficulty
- *  (HandicapInfos.BarbarianLandTargetRange / BarbarianSeaTargetRange), the fixed order of AssignBarbarianMoves, hunting, sea
- *  raids, camp defense, escorting captured civilians, and a whole turn.
+ *  (HandicapInfos.BarbarianLandTargetRange / BarbarianSeaTargetRange), the fixed order of AssignBarbarianMoves, the roaming of
+ *  ExecuteBarbarianRoaming on land and sea (FindBestBarbarianLandTarget, FindBestBarbarianSeaTarget, FindNearbyTarget), camp defense,
+ *  captured civilians, and a whole turn.
  */
 @RunWith(BaseTestRunner::class)
 class BarbarianMovesTests {
@@ -77,6 +78,9 @@ class BarbarianMovesTests {
     /** What [BarbarianAutomation.automate] logged for the barbarians, in order */
     private fun logOfTurn(): List<String> {
         val log = ArrayList<String>()
+        // putting units on the map recomputes what a civilization sees
+        barbarians.viewableTiles = game.tileMap.values.toSet()
+        barbarians.ai.invalidateTurnCaches()
         AiDecisionLog.sink = { civilization, message -> if (civilization == barbarians) log.add(message) }
         try {
             BarbarianAutomation(barbarians).automate()
@@ -90,10 +94,11 @@ class BarbarianMovesTests {
     fun `the moves run in Vox Populi's fixed order, capturing civilians before the roaming of the units that are left`() {
         game.addUnit("Worker", civ, tile(-3))
         game.addUnit("Warrior", barbarians, tile(-2)) // next to the worker
-        game.addUnit("Archer", barbarians, tile(14)) // nothing to do but roam
+        game.addUnit("Archer", barbarians, tile(14)) // nothing to attack: it roams towards the warrior of ours, 10 tiles away
+        game.addUnit("Warrior", civ, tile(4))
         val log = logOfTurn()
         val capture = log.indexOfFirst { it.contains("attacking") && it.contains("Worker") }
-        val roam = log.indexOfFirst { it.contains("no target for Archer") || it.contains("moved to an empty space near target") }
+        val roam = log.indexOfFirst { it.contains("roaming: Archer") }
         assertTrue("the capture logged: $log", capture >= 0)
         assertTrue("the roaming logged: $log", roam >= 0)
         assertTrue("the capture, then the roaming: $log", capture < roam)
@@ -113,47 +118,117 @@ class BarbarianMovesTests {
     }
     // endregion
 
-    // region Hunting on land
+    // region Roaming on land
 
     @Test
-    fun `a barbarian hunts the nearest unit within the land target range and ignores one beyond it`() {
+    fun `a barbarian hunts the nearest target it reaches within its land target range in turns, and ignores one beyond`() {
         val hunter = game.addUnit("Warrior", barbarians, tile(0))
         val near = game.addUnit("Archer", civ, tile(4))
         game.addUnit("Archer", civ, tile(-7))
-        assertEquals(tile(4), BarbarianMoves.findBestLandMove(context(hunter), hunter))
+        assertEquals("the nearest first", tile(4), BarbarianMoves.findBestLandTarget(context(hunter), hunter))
         near.removeFromTile()
-        // no target in range, and on a map all revealed, visible and nobody's there is nothing to explore either
-        assertNull(BarbarianMoves.findBestLandMove(context(hunter), hunter))
+        assertEquals("the one 7 tiles away is 3 turns of 2 moves", tile(-7), BarbarianMoves.findBestLandTarget(context(hunter), hunter))
+    }
+
+    @Test
+    fun `the land target range is in turns, a Warrior of 2 moves gets next to a target 13 tiles away in 5 turns, not one 14 tiles away`() {
+        val hunter = game.addUnit("Warrior", barbarians, tile(0))
+        val prey = game.addUnit("Archer", civ, tile(14)) // 13 steps to the tile next to it: 7 turns of 2, the first ends where it stands
+        assertNull(BarbarianMoves.findBestLandTarget(context(hunter), hunter))
+        prey.removeFromTile()
+        game.addUnit("Archer", civ, tile(13)) // 12 steps: 6 turns, the last one being the sixth: 5 turns after this one
+        assertEquals(tile(13), BarbarianMoves.findBestLandTarget(context(hunter), hunter))
     }
 
     @Test
     fun `how far a barbarian looks depends on the difficulty`() {
         val hunter = game.addUnit("Warrior", barbarians, tile(0))
-        game.addUnit("Archer", civ, tile(4))
-        game.setDifficulty("Warlord") // 4: a target 4 tiles away is not within range
-        assertTrue(BarbarianMoves.findBestLandMove(context(hunter), hunter) != tile(4))
-        game.setDifficulty("Prince") // 5
-        assertEquals(tile(4), BarbarianMoves.findBestLandMove(context(hunter), hunter))
+        game.addUnit("Archer", civ, tile(12)) // 11 steps: 6 turns of 2 moves, 5 after this one
+        game.setDifficulty("Warlord") // 4 turns
+        assertNull(BarbarianMoves.findBestLandTarget(context(hunter), hunter))
+        game.setDifficulty("Prince") // 5 turns
+        assertEquals(tile(12), BarbarianMoves.findBestLandTarget(context(hunter), hunter))
     }
 
     @Test
-    fun `a moving barbarian ends its turn next to its target`() {
-        val hunter = game.addUnit("Warrior", barbarians, tile(0))
-        game.addUnit("Archer", civ, tile(4))
-        val ctx = context(hunter)
-        BarbarianMoves.executeMoves(ctx, aggressive = true)
-        assertFalse(hunter.hasMovement())
-        assertTrue(hunter in ctx.cache.processedUnits)
-        assertTrue("moved towards it", hunter.getTile().aerialDistanceTo(tile(4)) < 4)
-    }
-
-    @Test
-    fun `the passive move heads for the nearest camp`() {
+    fun `a unit that cannot defend itself goes back to the nearest camp, as far as 23 turns away`() {
         tile(9).setImprovementBasic(Constants.barbarianEncampment)
         tile(-3).setImprovementBasic(Constants.barbarianEncampment)
-        val unit = game.addUnit("Warrior", barbarians, tile(0))
-        assertEquals(tile(-3), BarbarianMoves.findPassiveLandMove(context(unit), unit))
+        val captive = game.addUnit("Worker", barbarians, tile(0))
+        game.addUnit("Archer", civ, tile(5)) // an offensive target, which is no business of a worker
+        assertEquals(tile(-3), BarbarianMoves.findBestLandTarget(context(captive), captive))
     }
+
+    @Test
+    fun `a combat unit with no offensive target explores, then goes back to a camp`() {
+        val unit = game.addUnit("Warrior", barbarians, tile(0))
+        tile(6).setImprovementBasic(Constants.barbarianEncampment)
+        // everything is revealed, visible and nobody's: nothing to explore
+        assertEquals(tile(6), BarbarianMoves.findBestLandTarget(context(unit), unit))
+        // a tile nobody has seen is worth exploring: a reachable plot next to it gets 3 for it, and the unseen plot itself is no candidate
+        val unseen = tile(2)
+        barbarians.viewableTiles = game.tileMap.values.toSet()
+        for (tile in game.tileMap.values) tile.setExplored(barbarians, tile.position != unseen.position)
+        val ctx = TacticalContext(barbarians, null, barbarians.ai.plotDanger, AutomationCache(), listOf(unit), TacticalTargets.find(barbarians, null, barbarians.ai.plotDanger))
+        val target = BarbarianMoves.findExploreTarget(ctx, unit)
+        assertNotNull(target)
+        assertEquals(1, target!!.aerialDistanceTo(unseen))
+    }
+
+    @Test
+    fun `a roaming barbarian ends its turn next to a defended target when it has no movement left`() {
+        val hunter = game.addUnit("Warrior", barbarians, tile(0))
+        game.addUnit("Archer", civ, tile(8))
+        val ctx = context(hunter)
+        BarbarianMoves.plotRoamingMoves(ctx)
+        assertFalse(hunter.hasMovement())
+        assertTrue(hunter in ctx.cache.processedUnits)
+        assertEquals("2 moves towards it", 6, hunter.getTile().aerialDistanceTo(tile(8)))
+    }
+
+    @Test
+    fun `a roaming unit that is out of movement is done, one with no target is left alone for the moves to safety`() {
+        val hunter = game.addUnit("Horseman", barbarians, tile(0))
+        game.addUnit("Archer", civ, tile(14))
+        hunter.currentMovement = 1f // it can only step once
+        val ctx = context(hunter)
+        BarbarianMoves.plotRoamingMoves(ctx)
+        assertEquals("one step along the way", 13, hunter.getTile().aerialDistanceTo(tile(14)))
+        assertTrue("out of movement: commanded", hunter in ctx.cache.processedUnits)
+        val standing = game.addUnit("Warrior", barbarians, tile(-10)) // 24 tiles from the archer, beyond the 15 of its range
+        val ctx2 = context(standing)
+        BarbarianMoves.plotRoamingMoves(ctx2)
+        assertFalse("no target, nothing done", standing in ctx2.cache.processedUnits)
+        assertTrue(standing.hasMovement())
+    }
+
+    @Test
+    fun `a barbarian in a camp or a city stays and is done`() {
+        val camp = tile(5)
+        camp.setImprovementBasic(Constants.barbarianEncampment)
+        game.addUnit("Archer", civ, tile(12))
+        val sitting = game.addUnit("Warrior", barbarians, camp)
+        val ctx = context(sitting)
+        BarbarianMoves.plotRoamingMoves(ctx)
+        assertEquals(camp, sitting.getTile())
+        assertTrue(sitting in ctx.cache.processedUnits)
+    }
+
+    @Test
+    fun `an unprotected improvement of the enemy is entered and pillaged when the unit has movement left`() {
+        val owner = game.addCity(civ, tile(8))
+        val farm = tile(2)
+        owner.expansion.takeOwnership(farm)
+        farm.setImprovementBasic("Farm")
+        val raider = game.addUnit("Horseman", barbarians, tile(0))
+        assertEquals(civ, farm.getOwner())
+        val ctx = context(raider)
+        assertEquals(farm, BarbarianMoves.findBestLandTarget(ctx, raider))
+        BarbarianMoves.plotRoamingMoves(ctx)
+        assertEquals(farm, raider.getTile())
+        assertTrue("2 of its 4 moves left for the pillage", farm.isPillaged())
+    }
+
     // endregion
 
     // region Camps
@@ -213,22 +288,12 @@ class BarbarianMovesTests {
     // region Sea raids
 
     @Test
-    fun `a barbarian ship picks the nearest enemy ship within the sea target range`() {
+    fun `a barbarian ship picks the nearest enemy ship it reaches within the sea target range`() {
         makeWater(-18..18, -3..3)
         val raider = game.addUnit("Trireme", barbarians, tile(-9))
         val victim = game.addUnit("Trireme", civ, tile(-2))
-        assertEquals(victim.getTile(), BarbarianMoves.findBestSeaMove(context(raider), raider))
-    }
-
-    @Test
-    fun `the sea target range follows the difficulty`() {
-        makeWater(-18..18, -3..3)
-        val raider = game.addUnit("Trireme", barbarians, tile(-12))
-        game.addUnit("Trireme", civ, tile(-3)) // 9 tiles away
-        game.setDifficulty("Warlord") // 8
-        assertTrue(BarbarianMoves.findBestSeaMove(context(raider), raider) != tile(-3))
-        game.setDifficulty("Prince") // 10
-        assertEquals(tile(-3), BarbarianMoves.findBestSeaMove(context(raider), raider))
+        game.addUnit("Trireme", civ, tile(15))
+        assertEquals(victim.getTile(), BarbarianMoves.findBestSeaTarget(context(raider), raider))
     }
 
     @Test
@@ -237,25 +302,41 @@ class BarbarianMovesTests {
         tile(-9, 4).setImprovementBasic(Constants.barbarianEncampment)
         tile(9, 4).setImprovementBasic(Constants.barbarianEncampment)
         val raider = game.addUnit("Trireme", barbarians, tile(-8))
-        val target = BarbarianMoves.findBestSeaMove(context(raider), raider)
+        val target = BarbarianMoves.findBestSeaTarget(context(raider), raider)
         assertNotNull(target)
         assertTrue("next to the second camp", target!!.aerialDistanceTo(tile(9, 4)) == 1 && target.isWater)
     }
 
     @Test
-    fun `a barbarian ship keeps its destination over the turns, even when the target is gone, until it gets there`() {
+    fun `the patrol target is the water tile next to a camp that the ship reaches in the fewest turns, as asking each in turn gives`() {
+        makeWater(-18..18, -3..3)
+        for (x in listOf(-9, -2, 4, 9, 15)) tile(x, 4).setImprovementBasic(Constants.barbarianEncampment)
+        val raider = game.addUnit("Trireme", barbarians, tile(-6))
+        val ctx = context(raider)
+        val camps = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp)
+        val nearest = camps.minBy { raider.getTile().aerialDistanceTo(it.tile) }
+        val waters = camps.filter { it !== nearest }.flatMap { camp -> camp.tile.neighbors.filter { it.isWater }.toList() }
+        raider.movement.clearPathfindingCache()
+        var expected: Tile? = null
+        var expectedTurns = Int.MAX_VALUE
+        for (water in waters) {
+            val turns = EscortMoves.turnsToApproach(ctx, raider, water, BarbarianMoves.seaRange(barbarians))
+            if (turns < expectedTurns) { expectedTurns = turns; expected = water }
+        }
+        assertNotNull(expected)
+        assertEquals(expected, BarbarianMoves.findBestSeaTarget(ctx, raider))
+    }
+
+    @Test
+    fun `a barbarian ship sails towards its target, attacks what it can reach and is done`() {
         makeWater(-18..18, -3..3)
         val victim = game.addUnit("Trireme", civ, tile(2))
         val raider = game.addUnit("Trireme", barbarians, tile(-6))
-        BarbarianMoves.executeMoves(context(raider), aggressive = true)
-        assertEquals(victim.getTile().position, barbarians.ai.tactical.unitDestinations[raider.id])
-        val afterFirst = raider.getTile()
-        assertTrue(afterFirst != tile(-6))
-        victim.removeFromTile() // the victim is gone: the ship goes on to where it was seen
-        raider.currentMovement = raider.getMaxMovement().toFloat()
-        BarbarianMoves.executeMoves(context(raider), aggressive = true)
-        assertEquals(tile(2).position, barbarians.ai.tactical.unitDestinations[raider.id])
-        assertTrue(raider.getTile().aerialDistanceTo(tile(2)) < afterFirst.aerialDistanceTo(tile(2)))
+        val ctx = context(raider)
+        BarbarianMoves.plotRoamingMoves(ctx)
+        assertTrue(raider.getTile() != tile(-6))
+        assertTrue("closer to the victim", raider.getTile().aerialDistanceTo(victim.getTile()) < 8)
+        assertTrue(raider in ctx.cache.processedUnits)
     }
     // endregion
 
@@ -268,47 +349,16 @@ class BarbarianMovesTests {
     }
 
     @Test
-    fun `a captured civilian goes to the nearest camp with its escort, both ending the turn on the same tile`() {
+    fun `a captured civilian walks to the nearest camp alone, and one already on a camp stays`() {
         tile(8).setImprovementBasic(Constants.barbarianEncampment)
-        val worker = captive(tile(0))
-        val escort = game.addUnit("Warrior", barbarians, tile(0))
-        BarbarianMoves.executeCivilianEscortMoves(context(worker, escort))
-        assertSame(worker.getTile(), escort.getTile())
-        assertTrue(worker.getTile().aerialDistanceTo(tile(8)) < 8)
-    }
-
-    @Test
-    fun `an escort that is stronger than the camp's defender takes over the camp and the old defender steps aside`() {
-        val camp = tile(2)
-        camp.setImprovementBasic(Constants.barbarianEncampment)
-        val defender = game.addUnit("Warrior", barbarians, camp)
-        val worker = captive(tile(0))
-        val escort = game.addUnit("Swordsman", barbarians, tile(0))
-        BarbarianMoves.executeCivilianEscortMoves(context(worker, escort, defender))
-        assertSame(escort, camp.militaryUnit)
-        assertSame(worker, camp.civilianUnit)
-        assertTrue(defender.getTile() != camp)
-    }
-
-    @Test
-    fun `a captured civilian without an escort goes alone, and one already on a camp stays`() {
-        tile(8).setImprovementBasic(Constants.barbarianEncampment)
-        val alone = captive(tile(0))
-        BarbarianMoves.executeCivilianEscortMoves(context(alone))
-        assertTrue(alone.getTile().aerialDistanceTo(tile(8)) < 8)
+        val walking = captive(tile(0))
+        BarbarianMoves.plotRoamingMoves(context(walking))
+        assertTrue("two moves along the way", walking.getTile().aerialDistanceTo(tile(8)) < 8)
         val settled = captive(tile(8))
-        BarbarianMoves.executeCivilianEscortMoves(context(settled))
+        val ctx = context(settled)
+        BarbarianMoves.plotRoamingMoves(ctx)
         assertEquals(tile(8), settled.getTile())
-    }
-
-    @Test
-    fun `a camp that already holds a civilian of the same kind is not the target of another`() {
-        tile(3).setImprovementBasic(Constants.barbarianEncampment)
-        tile(9).setImprovementBasic(Constants.barbarianEncampment)
-        captive(tile(3))
-        val second = captive(tile(0))
-        BarbarianMoves.executeCivilianEscortMoves(context(second))
-        assertTrue("it heads for the far camp", second.getTile().aerialDistanceTo(tile(9)) < 9 && second.getTile() != tile(3))
+        assertTrue(settled in ctx.cache.processedUnits)
     }
     // endregion
 
@@ -325,7 +375,7 @@ class BarbarianMovesTests {
 
     @Test
     fun `a barbarian next to a unit of ours that it can kill attacks it`() {
-        // The attacks on units come before everything but camp defense and the escort of captives (PlotBarbarianAttacks, AL_BRAVEHEART)
+        // The attacks on units come before everything but camp defense and the theft (PlotBarbarianAttacks, AL_BRAVEHEART)
         val raider = game.addUnit("Swordsman", barbarians, tile(0))
         val victim = game.addUnit("Warrior", civ, tile(1))
         victim.health = 30

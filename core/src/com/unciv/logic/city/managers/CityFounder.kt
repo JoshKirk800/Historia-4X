@@ -1,6 +1,7 @@
 package com.unciv.logic.city.managers
 
 import com.unciv.Constants
+import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Proximity
@@ -37,6 +38,8 @@ class CityFounder {
             // if you have some culture before the 1st city is founded, you may want to adopt the 1st policy
             civInfo.policies.shouldOpenPolicyPicker = true
         }
+        // CvPlayer::found: CvGame::NewCapitalFounded, the yardstick of CvPlayer::GetSettlePlotQualityMeasure
+        if (civInfo.isMajorCiv && civInfo.citiesCreated == 0) SettleAreas.recordCapitalFoundValue(civInfo, city.getCenterTile())
         civInfo.citiesCreated++
 
         civInfo.cities = civInfo.cities.withItem(city)

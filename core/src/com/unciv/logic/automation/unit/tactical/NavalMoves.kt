@@ -63,8 +63,8 @@ object NavalMoves {
         for (target in embarked) {
             if (target.isDestroyed || !target.isEmbarked()) continue
             val place = escortPlace(ship, target.getTile()) ?: continue
-            // CvUnit::GetDanger of a unit that cannot defend itself: the most there is where enemies can attack it
-            val level = if (ctx.danger.get(target.getTile()) > 0) Int.MAX_VALUE else 0
+            // CvUnit::GetDanger of the embarked unit: the most there is where enemies can capture it
+            val level = ctx.danger.get(target)
             if (level > highestDanger) { highestDanger = level; best = target to place }
         }
         return best

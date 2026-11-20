@@ -96,6 +96,12 @@ object OpinionAi {
         term(DiplomaticModifiers.RecklessExpander, recklessExpanderScore(civ, other, rules))
         term(DiplomaticModifiers.WonderSpammer, wonderSpammerScore(civ, other, rules))
         term(DiplomaticModifiers.MilitaryPosture, militaryPostureScore(civ, other, rules))
+        val tech = techBlockLevelScore(civ, other, rules)
+        term(if (tech < 0) DiplomaticModifiers.NoTechBlock else DiplomaticModifiers.TechBlock, tech)
+        val policy = policyBlockLevelScore(civ, other, rules)
+        term(if (policy < 0) DiplomaticModifiers.NoPolicyBlock else DiplomaticModifiers.PolicyBlock, policy)
+        term(DiplomaticModifiers.VictoryDispute, victoryDisputeLevelScore(civ, other, rules))
+        term(DiplomaticModifiers.VictoryBlock, victoryBlockLevelScore(civ, other, rules))
         term(DiplomaticModifiers.WarMongerer, warmongerThreatScore(civ, other))
 
         // War deeds (Vox Populi)
@@ -209,7 +215,7 @@ object OpinionAi {
     //region The terms (CvDiplomacyAI::Get*Score)
 
     /** A difficulty column (Vox Populi's HandicapInfos; 100 without the difficulty) */
-    private fun handicapValue(civ: Civilization, column: String, default: Int = 100): Int =
+    internal fun handicapValue(civ: Civilization, column: String, default: Int = 100): Int =
         civ.gameInfo.ruleset.ai.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get(column) ?: default
 
     /** GetBaseOpinionScore: the difficulty's HumanOpinionChange towards a human, its AIOpinionChange towards an AI */
@@ -500,7 +506,7 @@ object OpinionAi {
             val ourMemory = civ.ai.diplomacy.memoryOf(third)
             val approach = ourMemory.approach
             val dontCare = ourMemory.doFBrokenTurn >= 0 || civ.isAtWarWith(third) || isDenouncedPlayer(civ, third) ||
-                isDenouncedPlayer(third, civ) || isUntrustworthyFriend(third) || approach == MajorCivApproach.Afraid ||
+                isDenouncedPlayer(third, civ) || isUntrustworthyFriend(civ, third) || approach == MajorCivApproach.Afraid ||
                 (approach != null && approach <= MajorCivApproach.Deceptive) || ourMemory.opinion <= MajorCivOpinion.Enemy
             if (!dontCare) return rules.define(AiDefine.OPINION_WEIGHT_CIVILIAN_KILLER_WORLD)
         }
@@ -508,11 +514,11 @@ object OpinionAi {
     }
 
     /** IsCapitalCapturedBy (not only currently): they took our original capital, or hold it now */
-    private fun capitalCaptured(civ: Civilization, other: Civilization) =
+    internal fun capitalCaptured(civ: Civilization, other: Civilization) =
         civ.ai.diplomacy.memoryOf(other).capturedCapital || isCapitalCapturedBy(civ, other)
 
     /** IsHolyCityCapturedBy (not only currently): they took our holy city, or hold it now */
-    private fun holyCityCaptured(civ: Civilization, other: Civilization) =
+    internal fun holyCityCaptured(civ: Civilization, other: Civilization) =
         civ.ai.diplomacy.memoryOf(other).capturedHolyCity || CompetitorAi.isHolyCityCapturedBy(civ, other)
 
     /** GetHolyCityCapturedByScore: OPINION_WEIGHT_CAPTURED_HOLY_CITY. Returning it by deal and vassalage have no counterpart: none. */
@@ -721,7 +727,7 @@ object OpinionAi {
         val memory = civ.ai.diplomacy.memoryOf(other)
         if (memory.negativeReligiousConversionPoints > 0 || holyCityCaptured(civ, other)) return false
         if (if (memory.resurrectedUs) memory.capturedCapital else capitalCaptured(civ, other)) return false
-        if (civ.isAtWarWith(other) || isUntrustworthyFriend(other)) return false
+        if (civ.isAtWarWith(other) || isUntrustworthyFriend(civ, other)) return false
         if (civ.getIdeology() != null && civ.getIdeology() == other.getIdeology()) return true
         if (memory.liberatedCapital || memory.liberatedHolyCity || memory.resurrectedUs || memory.doFLevel == DoFLevel.BattleBrothers) return true
         if (WarSanityAi.isCityRecentlyLiberatedBy(civ, other)) return true
@@ -758,7 +764,7 @@ object OpinionAi {
      */
     fun isIgnoreIdeologyDifferences(civ: Civilization, other: Civilization): Boolean {
         if (!civ.isMajorCiv || !other.isMajorCiv) return true
-        if (civ.isAtWarWith(other) || isUntrustworthyFriend(other)) return false
+        if (civ.isAtWarWith(other) || isUntrustworthyFriend(civ, other)) return false
         val memory = civ.ai.diplomacy.memoryOf(other)
         if (if (memory.resurrectedUs) memory.capturedCapital || memory.capturedHolyCity else capitalCaptured(civ, other)) return false
         if (memory.liberatedCapital || memory.resurrectedUs || memory.doFLevel == DoFLevel.BattleBrothers) return true
@@ -867,7 +873,7 @@ object OpinionAi {
             memory.ignoredBullyCityStatePromise)
     }
 
-    private fun hasDefensivePact(civ: Civilization, other: Civilization) =
+    internal fun hasDefensivePact(civ: Civilization, other: Civilization) =
         civ.getDiplomacyManager(other)?.diplomaticStatus == DiplomaticStatus.DefensivePact
 
     /** A living major with a city, by civID, else null (VP's checks on the most valuable friend, ally and biggest competitor) */
@@ -987,6 +993,88 @@ object OpinionAi {
         return adjustConditional(weight, civ.ai.diplomacyValue(DiplomacyPersonality.Neediness))
     }
 
+    //region Tech, policy, victory dispute and block (GetTechBlockLevelScore, GetPolicyBlockLevelScore, GetVictoryDisputeLevelScore, GetVictoryBlockLevelScore)
+
+    /**
+     *  GetTechBlockLevelScore: only for a scientist (primary victory pursuit). By their tech block level (none: OPINION_WEIGHT_TECH_NONE less
+     *  neediness, x our era (at least 1) / 2), x diplomatic balance x the difficulty's TechBlockPercent, / 500, or for a bad level
+     *  / (1000 less 125 per era of the later of us and them past the first, at least 500)
+     */
+    fun techBlockLevelScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (!civ.ai.isScientist()) return 0
+        val weight = when (civ.ai.diplomacy.memoryOf(other).techBlockLevel) {
+            BlockLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_TECH_FIERCE)
+            BlockLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_TECH_STRONG)
+            BlockLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_TECH_WEAK)
+            BlockLevel.None -> (rules.define(AiDefine.OPINION_WEIGHT_TECH_NONE) - civ.ai.diplomacyValue(DiplomacyPersonality.Neediness)) *
+                maxOf(civ.getAiEraNumber(), 1) / 2
+        }
+        return scaleBlock(civ, other, weight, "TechBlockPercent")
+    }
+
+    /** GetPolicyBlockLevelScore: as [techBlockLevelScore] for a cultural leader (primary victory pursuit), by the policy block level and PolicyBlockPercent */
+    fun policyBlockLevelScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (!civ.ai.isCultural()) return 0
+        val weight = when (civ.ai.diplomacy.memoryOf(other).policyBlockLevel) {
+            BlockLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_POLICY_FIERCE)
+            BlockLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_POLICY_STRONG)
+            BlockLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_POLICY_WEAK)
+            BlockLevel.None -> (rules.define(AiDefine.OPINION_WEIGHT_POLICY_NONE) - civ.ai.diplomacyValue(DiplomacyPersonality.Neediness)) *
+                maxOf(civ.getAiEraNumber(), 1) / 2
+        }
+        return scaleBlock(civ, other, weight, "PolicyBlockPercent")
+    }
+
+    /** The scaling of the tech and policy block scores: x diplomatic balance x the difficulty's [percentColumn]; / 500, or a bad one by the later era */
+    private fun scaleBlock(civ: Civilization, other: Civilization, weight: Int, percentColumn: String): Int {
+        if (weight == 0) return 0
+        val blockEra = maxOf(0, maxOf(civ.getAiEraNumber(), other.getAiEraNumber()) - 1)
+        val scaled = weight * civ.ai.diplomacyValue(DiplomacyPersonality.DiploBalance) * handicapValue(civ, percentColumn)
+        return if (scaled > 0) scaled / maxOf(500, 1000 - blockEra * 125) else scaled / 500
+    }
+
+    /**
+     *  GetVictoryDisputeLevelScore: 0 unless we compete for victory, and when their victory block level is above the dispute level (no
+     *  stacking). By the dispute level, none 0 for a major competitor, else OPINION_WEIGHT_VICTORY_NONE; a bad one plus their era x
+     *  OPINION_WEIGHT_VICTORY_PER_ERA (none: x _NONE_PER_ERA, for a player who is no major competitor), x our victory competitiveness
+     *  x the difficulty's VictoryDisputePercent / 500
+     */
+    fun victoryDisputeLevelScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (!VictoryProgressAi.isCompetingForVictory(civ)) return 0
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        if (memory.victoryBlockLevel > memory.victoryDisputeLevel) return 0
+        val competitor = memory.majorCompetitor
+        var weight = when (memory.victoryDisputeLevel) {
+            DisputeLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_VICTORY_FIERCE)
+            DisputeLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_VICTORY_STRONG)
+            DisputeLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_VICTORY_WEAK)
+            DisputeLevel.None -> if (competitor) 0 else rules.define(AiDefine.OPINION_WEIGHT_VICTORY_NONE)
+        }
+        if (weight > 0) weight += other.getAiEraNumber() * rules.define(AiDefine.OPINION_WEIGHT_VICTORY_PER_ERA)
+        else if (!competitor) weight += other.getAiEraNumber() * rules.define(AiDefine.OPINION_WEIGHT_VICTORY_NONE_PER_ERA)
+        else return weight
+        return weight * civ.ai.diplomacyValue(DiplomacyPersonality.VictoryCompetitiveness) * handicapValue(civ, "VictoryDisputePercent") / 500
+    }
+
+    /**
+     *  GetVictoryBlockLevelScore: 0 unless we compete for victory, and when their victory dispute level is at or above the block level
+     *  (no stacking). By the block level, plus their era x OPINION_WEIGHT_VICTORY_BLOCK_PER_ERA, x our victory competitiveness x the
+     *  difficulty's VictoryBlockPercent / 500
+     */
+    fun victoryBlockLevelScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
+        if (!VictoryProgressAi.isCompetingForVictory(civ)) return 0
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        if (memory.victoryDisputeLevel >= memory.victoryBlockLevel) return 0
+        val weight = when (memory.victoryBlockLevel) {
+            BlockLevel.Fierce -> rules.define(AiDefine.OPINION_WEIGHT_VICTORY_BLOCK_FIERCE)
+            BlockLevel.Strong -> rules.define(AiDefine.OPINION_WEIGHT_VICTORY_BLOCK_STRONG)
+            BlockLevel.Weak -> rules.define(AiDefine.OPINION_WEIGHT_VICTORY_BLOCK_WEAK)
+            BlockLevel.None -> return 0
+        } + other.getAiEraNumber() * rules.define(AiDefine.OPINION_WEIGHT_VICTORY_BLOCK_PER_ERA)
+        return weight * civ.ai.diplomacyValue(DiplomacyPersonality.VictoryCompetitiveness) * handicapValue(civ, "VictoryBlockPercent") / 500
+    }
+    //endregion
+
     /** GetOpenBordersScore: OPINION_WEIGHT_OPEN_BORDERS_MUTUAL both ways, _US when only they let us in, _THEM when only we let them in */
     fun openBordersScore(civ: Civilization, other: Civilization, rules: AiRuleset): Int {
         val theyAllow = civ.getDiplomacyManager(other)?.hasOpenBorders == true
@@ -1026,9 +1114,11 @@ object OpinionAi {
     fun isPlayerDenouncedFriend(civ: Civilization, other: Civilization): Boolean =
         civ.diplomacy.values.any { it.otherCiv != other && it.hasFlag(DiplomacyFlags.DeclarationOfFriendship) && isDenouncedPlayer(other, it.otherCiv) }
 
-    /** IsUntrustworthyFriend: declared war on a friend, or denounced at least 2 friends */
-    fun isUntrustworthyFriend(civ: Civilization): Boolean =
-        weDeclaredWarOnFriendCount(civ) > 0 || weDenouncedFriendCount(civ) >= 2
+    /**
+     *  IsUntrustworthyFriend (IsUntrustworthy without teams): [civ] holds [other] for a backstabber, as of [UntrustworthyAi.testUntrustworthyFriends]
+     *  this turn. BNW's test, which every player shared (a war on a friend of anybody, two friends denounced), is gone.
+     */
+    fun isUntrustworthyFriend(civ: Civilization, other: Civilization): Boolean = civ.ai.diplomacy.memories[other.civID]?.untrustworthy == true
 
     /** GetWeDenouncedFriendCount: how many players remember [civ] denouncing them while friends */
     fun weDenouncedFriendCount(civ: Civilization): Int =
@@ -1055,7 +1145,17 @@ object OpinionAi {
                 if (memory.resurrectorAttackedUs) rules.define(AiDefine.OPINION_WEIGHT_RESURRECTOR_ATTACKED_US) else 0))
     }
 
-    private fun isFriendOrAlly(civ: Civilization, other: Civilization) = isDoFAccepted(civ, other) || hasDefensivePact(civ, other)
+    /**
+     *  IsFriendOrAlly: a friendship or a defensive pact, an ally opinion, three DoFs or more with them, a resurrection by either of us (the
+     *  original's quick check for good things only; living players)
+     */
+    internal fun isFriendOrAlly(civ: Civilization, other: Civilization): Boolean {
+        if (!other.isAlive() || other.isBarbarian) return false
+        if (isDoFAccepted(civ, other) || hasDefensivePact(civ, other)) return true
+        val memory = civ.ai.diplomacy.memoryOf(other)
+        return memory.opinion == MajorCivOpinion.Ally || memory.doFLevel >= DoFLevel.Allies || memory.resurrectedUs ||
+            other.ai.diplomacy.memories[civ.civID]?.resurrectedUs == true
+    }
 
     /** The majors other than us and them we have met */
     private fun metThirds(civ: Civilization, other: Civilization) =
@@ -1068,7 +1168,7 @@ object OpinionAi {
      */
     private fun betrayalOfOthersScore(civ: Civilization, other: Civilization, rules: AiRuleset, weight: AiDefine,
                                       betrayed: (MajorCivMemory) -> Boolean): Int {
-        if (!isUntrustworthyFriend(other)) return 0
+        if (!isUntrustworthyFriend(civ, other)) return 0
         var score = 0
         for (third in metThirds(civ, other)) {
             val theirMemory = third.ai.diplomacy.memories[other.civID] ?: continue
@@ -1105,7 +1205,7 @@ object OpinionAi {
      *  TestBackstabbingPenalties: a denouncement by a friend is forgiven after FRIEND_DENOUNCED_US_TURNS_UNTIL_FORGIVEN, a war declared
      *  by a friend after FRIEND_DECLARED_WAR_ON_US_TURNS_UNTIL_FORGIVEN (x the game speed's OpinionDurationPercent, at least 1)
      */
-    private fun testBackstabbingPenalties(civ: Civilization, memory: MajorCivMemory, rules: AiRuleset) {
+    internal fun testBackstabbingPenalties(civ: Civilization, memory: MajorCivMemory, rules: AiRuleset) {
         val turn = turn(civ)
         val percent = DiplomacyTurn.opinionDurationPercent(civ)
         fun expired(stamp: Int, base: AiDefine) = stamp >= 0 && turn - stamp >= maxOf(1, rules.define(base) * percent / 100)

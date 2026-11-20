@@ -55,7 +55,7 @@ class BarbarianMovesTests {
         civ.viewableTiles = game.tileMap.values.toSet()
         barbarians.ai.invalidateTurnCaches()
         val danger = barbarians.ai.plotDanger
-        return TacticalContext(barbarians, null, danger, AutomationCache(), units.toList(), TacticalTargets.find(barbarians, null, danger))
+        return TacticalContext(barbarians, null, danger, AutomationCache(), units.toList(), TacticalTargets.find(barbarians, null))
     }
 
     private fun makeWater(xRange: IntRange, yRange: IntRange) {
@@ -169,7 +169,7 @@ class BarbarianMovesTests {
         val unseen = tile(2)
         barbarians.viewableTiles = game.tileMap.values.toSet()
         for (tile in game.tileMap.values) tile.setExplored(barbarians, tile.position != unseen.position)
-        val ctx = TacticalContext(barbarians, null, barbarians.ai.plotDanger, AutomationCache(), listOf(unit), TacticalTargets.find(barbarians, null, barbarians.ai.plotDanger))
+        val ctx = TacticalContext(barbarians, null, barbarians.ai.plotDanger, AutomationCache(), listOf(unit), TacticalTargets.find(barbarians, null))
         val target = BarbarianMoves.findExploreTarget(ctx, unit)
         assertNotNull(target)
         assertEquals(1, target!!.aerialDistanceTo(unseen))
@@ -305,26 +305,6 @@ class BarbarianMovesTests {
         val target = BarbarianMoves.findBestSeaTarget(context(raider), raider)
         assertNotNull(target)
         assertTrue("next to the second camp", target!!.aerialDistanceTo(tile(9, 4)) == 1 && target.isWater)
-    }
-
-    @Test
-    fun `the patrol target is the water tile next to a camp that the ship reaches in the fewest turns, as asking each in turn gives`() {
-        makeWater(-18..18, -3..3)
-        for (x in listOf(-9, -2, 4, 9, 15)) tile(x, 4).setImprovementBasic(Constants.barbarianEncampment)
-        val raider = game.addUnit("Trireme", barbarians, tile(-6))
-        val ctx = context(raider)
-        val camps = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp)
-        val nearest = camps.minBy { raider.getTile().aerialDistanceTo(it.tile) }
-        val waters = camps.filter { it !== nearest }.flatMap { camp -> camp.tile.neighbors.filter { it.isWater }.toList() }
-        raider.movement.clearPathfindingCache()
-        var expected: Tile? = null
-        var expectedTurns = Int.MAX_VALUE
-        for (water in waters) {
-            val turns = EscortMoves.turnsToApproach(ctx, raider, water, BarbarianMoves.seaRange(barbarians))
-            if (turns < expectedTurns) { expectedTurns = turns; expected = water }
-        }
-        assertNotNull(expected)
-        assertEquals(expected, BarbarianMoves.findBestSeaTarget(ctx, raider))
     }
 
     @Test

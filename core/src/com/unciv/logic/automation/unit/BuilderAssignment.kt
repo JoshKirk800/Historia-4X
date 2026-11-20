@@ -31,8 +31,6 @@ import kotlin.math.max
  *    a directive from before the pass (set by the human UI: none).
  *  - The distance is the original's reach of the builder: [ExplorerAi.Reach] with the flags AI_ABORT_IN_DANGER and VISIBLE_ONLY, 7 turns
  *    (the original counts turns from 0, [ExplorerAi.ReachablePlot.pathLength] from 1), a turn more when the builder ends up without moves.
- *  - The danger of a plot to a builder is Unciv's plot danger ([PlotDanger.get]), the same for every unit (the original's is the unit's own, with its
- *    promotions and health); the defender's too.
  *  - The pass re-scores what [SBuilderState] holds and what Unciv's rules read from it: the planned improvements (adjacency of the Moai, the defense
  *    and the combat bonus of [PlotDefense], the combat bonus) and the extra resources. mChangedPlotFeatures and the re-scoring for it are none (only the
  *    vanilla Celts and Vox Populi's adjacent feature yields read it), so are the plots next to a planned no-two-adjacent improvement (none in the rules),
@@ -45,7 +43,7 @@ import kotlin.math.max
  *  - None: the plots of builders that were assigned
  *    before the pass (the human's UI sets them), builders that are not automated (a human's: only automated builders take part, and the original's
  *    recommendation for the others is UI), the naval sentry points (nothing reads them), CvHomelandAI::MoveCivilianToGarrison (the fallback of
- *    [WorkerAutomation] is [CivilianSafety.moveToSafety], which prefers cities).
+ *    [WorkerAutomation] is [CivilianSafety.moveToSafety], the safest plot, cities included).
  */
 class BuilderAssignment(private val civ: Civilization, private val ai: BuilderTaskingAi, directives: List<BuilderDirective> = ai.directives) {
     /** A builder's pick: [weight], [buildTurns] and [moveTurns] are the ones [weigh] found for it */
@@ -208,14 +206,14 @@ class BuilderAssignment(private val civ: Civilization, private val ai: BuilderTa
     private fun builds(unit: MapUnit) = builds.getOrPut(unit) { ai.BuilderBuilds(unit) }
 
     /**
-     *  CvHomelandAI::GetWeightedDirectives' danger rule: a plot whose danger is above the builder's health is for it only when our best defender
-     *  there is safe (its danger at most half its health).
+     *  CvHomelandAI::GetWeightedDirectives' danger rule: a plot where the builder's danger ([PlotDanger.get], CvUnit::GetDanger) is above its health is
+     *  for it only when our best defender there is safe (its danger at most half its health).
      */
     private fun isTooDangerous(unit: MapUnit, tile: Tile): Boolean {
-        val danger = civ.ai.plotDanger.get(tile)
-        if (danger <= unit.health) return false
+        val danger = civ.ai.plotDanger
+        if (danger.get(unit, tile) <= unit.health) return false
         val defender = tile.militaryUnit?.takeIf { it.civ == civ } ?: return true
-        return danger > defender.health / 2
+        return danger.get(defender, tile) > defender.health / 2
     }
 
     /** CvHomelandAI::GetBuilderNumTurnsAway: 0 on the plot, else the turns of the path in the builder's reach, plus one when it ends with no moves; null if out of reach */

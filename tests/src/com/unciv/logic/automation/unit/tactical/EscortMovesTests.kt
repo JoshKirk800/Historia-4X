@@ -16,6 +16,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.SettleTestLand
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -50,7 +51,7 @@ class EscortMovesTests {
         civ.diplomacyFunctions.makeCivilizationsMeet(enemy)
         civ.getDiplomacyManager(enemy)!!.declareWar()
         for (tile in game.gameInfo.tileMap.tileList) { tile.setExplored(civ, true); tile.setExplored(enemy, true) }
-        for (tile in game.tileMap.values) game.setTileTerrain(tile.position, "Grassland")
+        SettleTestLand.plainsWithResources(game)
         game.tileMap.assignContinents(TileMap.AssignContinentsMode.Reassign)
         civ.ai.setPersonalityFlavor(Flavor.Growth, 5)
         civ.ai.setPersonalityFlavor(Flavor.Expansion, 3)
@@ -72,7 +73,7 @@ class EscortMovesTests {
     private fun escortedSettler(): Triple<AiOperation, MapUnit, MapUnit> {
         val warrior = unit("Warrior", 1, 0)
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler)
         assertEquals(OperationState.GATHERING_FORCES, operation.state)
         assertEquals(warrior, AiOperationLogic.armyUnits(civ, operation.firstArmy!!)[1].second)
         return Triple(operation, settler, warrior)
@@ -97,7 +98,7 @@ class EscortMovesTests {
         val (operation, settler, warrior) = escortedSettler()
         unit("Warrior", -3, 0, enemy) // two hexes from the settler: it can walk up and capture it
         civ.ai.invalidateTurnCaches()
-        assertTrue(civ.ai.plotDanger.isUnderImmediateThreat(settler.getTile()))
+        assertEquals(Int.MAX_VALUE, civ.ai.plotDanger.get(settler))
 
         val cache = AutomationCache()
         OperationalMoves.moveOperation(civ, operation, cache)
@@ -145,7 +146,7 @@ class EscortMovesTests {
     @Test
     fun `a lone civilian walks to the end of its first turn on its path`() {
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler)
         assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
         val target = AiOperationLogic.targetTile(civ, operation)!!
         val expected = settler.movement.getShortestPath(target).first()
@@ -161,7 +162,7 @@ class EscortMovesTests {
     @Test
     fun `a lone civilian does not end its turn where an enemy can reach it`() {
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler)
         val target = AiOperationLogic.targetTile(civ, operation)!!
         val start = settler.getTile()
         val endOfTurn = settler.movement.getShortestPath(target).first()
@@ -170,20 +171,45 @@ class EscortMovesTests {
         game.addUnit("Warrior", enemy, enemyTile)
         civ.viewableTiles = game.tileMap.values.toSet() // adding units narrowed our view to what our units see
         civ.ai.invalidateTurnCaches()
-        assertTrue("stop ${endOfTurn.position}, enemy ${enemyTile.position}, start ${start.position}, danger ${civ.ai.plotDanger.get(endOfTurn)}",
-            civ.ai.plotDanger.isUnderImmediateThreat(endOfTurn))
-        assertFalse("start danger ${civ.ai.plotDanger.get(start)}", civ.ai.plotDanger.isUnderImmediateThreat(start))
+        assertEquals("stop ${endOfTurn.position}, enemy ${enemyTile.position}, start ${start.position}",
+            Int.MAX_VALUE, civ.ai.plotDanger.get(settler, endOfTurn))
+        assertTrue("start danger ${civ.ai.plotDanger.get(settler, start)}", civ.ai.plotDanger.get(settler, start) <= settler.health / 2)
 
         OperationalMoves.moveOperation(civ, operation, AutomationCache())
 
         assertNotEquals(endOfTurn, settler.getTile())
-        assertFalse("wherever it is, nobody can capture it there", civ.ai.plotDanger.isUnderImmediateThreat(settler.getTile()))
+        assertNotEquals("wherever it is, nobody can capture it there", Int.MAX_VALUE, civ.ai.plotDanger.get(settler))
+    }
+
+    @Test
+    fun `a lone civilian whose way is hit by several enemies keeps its operation and waits or goes round`() {
+        val settler = unit("Settler", -1, 0)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler)
+        val target = AiOperationLogic.targetTile(civ, operation)!!
+        val start = settler.getTile()
+        val endOfTurn = settler.movement.getShortestPath(target).first()
+        // two Archers that can shoot the stop (three to four hexes, their move of 2 plus range of 2) but not walk into it: 80 damage, no capture
+        val shooters = endOfTurn.getTilesAtDistance(4).filter {
+            it.aerialDistanceTo(start) >= 5 && it.militaryUnit == null && !it.isCityCenter() && it.aerialDistanceTo(tile(8, 0)) > 3
+        }.take(2).toList()
+        assertEquals(2, shooters.size)
+        for (shooter in shooters) game.addUnit("Archer", enemy, shooter)
+        civ.viewableTiles = game.tileMap.values.toSet()
+        enemy.viewableTiles = game.tileMap.values.toSet()
+        civ.ai.invalidateTurnCaches()
+        val danger = civ.ai.plotDanger.get(settler, endOfTurn)
+        assertEquals("two shots, no capture: $danger", 2 * com.unciv.logic.battle.BattleConstants.DAMAGE_TO_CIVILIAN_UNIT, danger)
+
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+
+        assertNotEquals("a path the enemy hits is no lost path: ${operation.abortReason}", OperationState.ABORTED, operation.state)
+        assertTrue("it is not left where more than half its health is in danger", civ.ai.plotDanger.get(settler) <= settler.health / 2)
     }
 
     @Test
     fun `a lone civilian takes a free defender of ours standing where it stops as its escort`() {
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler)
         val army = operation.firstArmy!!
         // no escort was to be had: the operation goes alone
         operation.escorted = false
@@ -212,7 +238,7 @@ class EscortMovesTests {
     @Test
     fun `a lone civilian with no way to its target aborts the operation`() {
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler)
         val island = tile(-9, 0)
         surround(island)
         operation.targetTile = island.position

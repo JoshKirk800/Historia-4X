@@ -62,7 +62,7 @@ object PillageRules {
 
         val heal = pillageHealAmount(unit, tile)
         // Be careful "wasting" movement for slow units
-        if (!ignoreMovement && civ.ai.unitDanger.get(unit) > unit.health + heal && unit.currentMovement < SLOW_UNIT_MOVES && !free) return false
+        if (!ignoreMovement && civ.ai.plotDanger.get(unit) > unit.health + heal && unit.currentMovement < SLOW_UNIT_MOVES && !free) return false
 
         val city = tile.getCity()
         if (city != null && owner != null && !owner.isBarbarian) {

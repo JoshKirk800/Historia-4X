@@ -32,6 +32,14 @@ object SpaceshipProductionAi {
 
     private fun producingPart(city: City) = isPart(city.cityConstructions.getCurrentConstruction())
 
+    /**
+     *  CvTeam::GetSSProjectCount(true): the spaceship parts added to the capital or being built in a city, and the Apollo Program once built
+     *  (the original counts a project once built or while in production; here a part counts when added or when a city builds it now)
+     */
+    fun projectCount(civ: Civilization): Int =
+        civ.victoryManager.currentsSpaceshipParts.values.sum() + civ.cities.count { producingPart(it) } +
+            (if (GrandStrategyAi.hasApolloProgram(civ)) 1 else 0)
+
     /** RESOURCE_ALUMINUM, the resource Vox Populi keeps for the spaceship */
     const val ALUMINUM = "Aluminum"
 

@@ -61,7 +61,7 @@ class TradeMovesTests {
         see(c)
         val map = if (c.isBarbarian) null else c.ai.tactical.map
         val danger = c.ai.plotDanger
-        return TacticalContext(c, map, danger, AutomationCache(), c.units.getCivUnits().toList(), TacticalTargets.find(c, map, danger))
+        return TacticalContext(c, map, danger, AutomationCache(), c.units.getCivUnits().toList(), TacticalTargets.find(c, map))
     }
 
     /** A tile next to the trader that the route does not cross */

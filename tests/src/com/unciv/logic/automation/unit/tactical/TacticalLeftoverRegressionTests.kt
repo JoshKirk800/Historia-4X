@@ -60,7 +60,7 @@ class TacticalLeftoverRegressionTests {
         see(civ)
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
-        return TacticalContext(civ, map, danger, AutomationCache(), units.toList(), TacticalTargets.find(civ, map, danger))
+        return TacticalContext(civ, map, danger, AutomationCache(), units.toList(), TacticalTargets.find(civ, map))
     }
 
     // region RecruitUnits
@@ -118,7 +118,7 @@ class TacticalLeftoverRegressionTests {
         // an archer of the enemy, 3 tiles from the unit: within its move and its shot
         game.addUnit("Archer", enemy, start.getTilesAtDistance(3).first { it.militaryUnit == null && it.aerialDistanceTo(tile(0, 0)) > 3 })
         val ctx = context(civ, unit)
-        val danger = civ.ai.unitDanger
+        val danger = civ.ai.plotDanger
         assertTrue("the scenario puts the unit in danger", danger.get(unit) > TacticalSafety.actualHealRate(unit))
         val before = danger.get(unit)
         ReinforcementMoves.positionUnitsAroundTarget(ctx, listOf(unit), target)

@@ -54,7 +54,7 @@ enum class AiDefine(val default: Float) {
     TECH_WEIGHT_PROPAGATION_PERCENT(50f),
     TECH_WEIGHT_PROPAGATION_LEVELS(3f),
     NUM_OR_TECH_PREREQS(3f),
-    TECH_PRIORITY_UNIQUE_ITEM(5f),
+    TECH_PRIORITY_UNIQUE_ITEM(25f), // Vox Populi's value and meaning: added to the tech weight (BNW: 5, a factor)
     TECH_PRIORITY_MAYA_CALENDAR_BONUS(50f),
     AI_RESEARCH_WEIGHT_BASE_MOD(0.15f),
     AI_RESEARCH_WEIGHT_MOD_PER_TURN_LEFT(0.025f),
@@ -63,28 +63,33 @@ enum class AiDefine(val default: Float) {
     CRAMPED_RANGE_FROM_CITY(5f),
     CRAMPED_USABLE_PLOT_PERCENT(25f),
 
-    // CvCitySiteEvaluator, CvPlayerAI::AI_updateFoundValues, CvPlayer::GetBestSettleAreas / GetBestSettlePlot
+    // CvSiteEvaluatorForSettler::PlotFoundValue, CvPlayer::updatePlotFoundValues / GetBestSettlePlot. Vox Populi's values (D7), the
+    // formulas being its own (BNW: ring multipliers 6/3/2/1/1, settler multipliers food 15, production 3, gold 3, science 1, faith 1,
+    // strategic 1, chokepoint 3, river 50, evaluation distance 24 and dropoff 67; BUILD_ON_RESOURCE_PERCENT -50 and
+    // AI_STRATEGY_MINIMUM_SETTLE_FERTILITY 20000 are no longer read)
     CITY_RING_1_MULTIPLIER(6f),
-    CITY_RING_2_MULTIPLIER(3f),
-    CITY_RING_3_MULTIPLIER(2f),
+    CITY_RING_2_MULTIPLIER(6f),
+    CITY_RING_3_MULTIPLIER(3f),
     CITY_RING_4_MULTIPLIER(1f),
     CITY_RING_5_MULTIPLIER(1f),
-    SETTLER_FOOD_MULTIPLIER(15f),
-    SETTLER_PRODUCTION_MULTIPLIER(3f),
-    SETTLER_GOLD_MULTIPLIER(3f),
-    SETTLER_SCIENCE_MULTIPLIER(1f),
-    SETTLER_FAITH_MULTIPLIER(1f),
+    SETTLER_FOOD_MULTIPLIER(12f),
+    SETTLER_PRODUCTION_MULTIPLIER(8f),
+    SETTLER_GOLD_MULTIPLIER(8f),
+    SETTLER_SCIENCE_MULTIPLIER(5f),
+    SETTLER_FAITH_MULTIPLIER(4f),
     SETTLER_HAPPINESS_MULTIPLIER(8f),
     SETTLER_RESOURCE_MULTIPLIER(3f),
-    SETTLER_STRATEGIC_MULTIPLIER(1f),
-    CHOKEPOINT_STRATEGIC_VALUE(3f),
+    SETTLER_STRATEGIC_MULTIPLIER(3f),
+    CHOKEPOINT_STRATEGIC_VALUE(10f),
     HILL_STRATEGIC_VALUE(2f),
-    BUILD_ON_RESOURCE_PERCENT(-50f),
-    BUILD_ON_RIVER_PERCENT(50f),
+    BALANCE_BAD_TILES_STRATEGIC_VALUE(-34f),
+    BALANCE_FRESH_WATER_STRATEGIC_VALUE(5f),
+    BALANCE_COAST_STRATEGIC_VALUE(3f),
+    BALANCE_EMPIRE_BORDERLAND_STRATEGIC_VALUE(30f),
+    BUILD_ON_RIVER_PERCENT(35f),
     SETTLER_BUILD_ON_COAST_PERCENT(40f),
-    AI_STRATEGY_MINIMUM_SETTLE_FERTILITY(5000f),
-    SETTLER_EVALUATION_DISTANCE(24f),
-    SETTLER_DISTANCE_DROPOFF_MODIFIER(67f),
+    SETTLER_EVALUATION_DISTANCE(10f),
+    SETTLER_DISTANCE_DROPOFF_MODIFIER(5f),
 
     // CvPolicyAI / CvPlayerPolicies
     POLICY_WEIGHT_PROPAGATION_PERCENT(25f),
@@ -699,6 +704,9 @@ enum class AiDefine(val default: Float) {
     WAR_MAJOR_MINIMUM_TURNS(5f),
     // CanBackstab and IsWillingToAttackFriend (Vox Populi): turns after we broke a DoF with someone in which attacking them is backstabbing
     DOF_BROKEN_BACKSTAB_TIMER(10f),
+    // CvDiplomacyAI::TestBackstabbingPenalties (Vox Populi): a broken DoF counts as a betrayal for this many turns (x the game speed's opinion duration), or this many once we are friends again
+    DOF_BROKEN_TURNS_UNTIL_FORGIVEN(50f),
+    DOF_BROKEN_TURNS_UNTIL_FORGIVEN_FRIENDS(10f),
     TURNS_SINCE_PEACE_WEIGHT_DAMPENER(25f),
     // CvDiplomacyAIHelpers::GetWarmongerTriggerPenalty, GetCityWarmongerValue and GetCityLiberationValue, CvDiplomacyAI::DoUpdateWarmongerThreats
     // (WarmongerAi; Vox Populi's values: the amounts are in hundredths, the thresholds apply to amount x warmonger hate / 20; BNW: 40, 250, 50, 125, 50, 20, 10, -5, 25, 100)
@@ -925,19 +933,8 @@ enum class AiDefine(val default: Float) {
     PLOT_INFLUENCE_YIELD_POINT_COST(-1f),
     PLOT_INFLUENCE_NO_ADJACENT_OWNED_COST(1000f),
 
-    // CvDangerPlots (plot danger read by CvTradeAI)
-    AI_DANGER_MAJOR_APPROACH_WAR(1.0f),
-    AI_DANGER_MAJOR_APPROACH_HOSTILE(0.2f),
-    AI_DANGER_MAJOR_APPROACH_DECEPTIVE(0.1f),
-    AI_DANGER_MAJOR_APPROACH_GUARDED(0.5f),
-    AI_DANGER_MAJOR_APPROACH_AFRAID(0.9f),
-    AI_DANGER_MAJOR_APPROACH_FRIENDLY(0.0f),
-    AI_DANGER_MAJOR_APPROACH_NEUTRAL(0.1f),
-    AI_DANGER_MINOR_APPROACH_NEUTRAL(0.1f),
-    AI_DANGER_MINOR_APPROACH_FRIENDLY(0.0f),
-    AI_DANGER_MINOR_APPROACH_BULLY(0.9f),
-    AI_DANGER_MINOR_APPROACH_CONQUEST(1.0f),
-    CITY_ATTACK_RANGE(2f),
+    // CvDangerPlots (plot danger)
+    ENEMY_HEAL_RATE(5f), // Vox Populi's: a citadel's damage must beat it to count (CvDangerPlots::UpdateDangerInternal); BNW: 10
     WOUNDED_DAMAGE_MULTIPLIER(50f),
     // CvTacticalAnalysisMap / CvTacticalAI (dominance zones, temporary zones, emergency purchases); the dominance percentage is Vox Populi's 70 (Brave New World's is 25)
     AI_TACTICAL_MAP_DOMINANCE_PERCENTAGE(70f),
@@ -1048,6 +1045,46 @@ enum class AiDefine(val default: Float) {
     VICTORY_PURSUIT_FEW_CITY_STATES_PENALTY(-20f),
     VICTORY_PURSUIT_MAX_RANDOMNESS(18f),
     VICTORY_PURSUIT_DIFFERENTIAL_DIVISOR(200f),
+    // CvDiplomacyAI::DoUpdateVictoryDisputeLevels / DoUpdateVictoryBlockLevels / DoUpdateTechBlockLevels / DoUpdatePolicyBlockLevels (VictoryLevelsAi;
+    // BNW: the dispute match weights 14, 10, 6; the others do not exist there)
+    VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_POSITIVE(25f),
+    VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_LIKELY(15f),
+    VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_UNSURE(5f),
+    VICTORY_DISPUTE_FIERCE_THRESHOLD(80f),
+    VICTORY_DISPUTE_STRONG_THRESHOLD(50f),
+    VICTORY_DISPUTE_WEAK_THRESHOLD(30f),
+    VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_POSITIVE(20f),
+    VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_LIKELY(15f),
+    VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_UNSURE(5f),
+    VICTORY_BLOCK_FIERCE_THRESHOLD(40f),
+    VICTORY_BLOCK_STRONG_THRESHOLD(30f),
+    VICTORY_BLOCK_WEAK_THRESHOLD(20f),
+    TECH_BLOCK_FIERCE_THRESHOLD(30f),
+    TECH_BLOCK_STRONG_THRESHOLD(20f),
+    TECH_BLOCK_WEAK_THRESHOLD(10f),
+    POLICY_BLOCK_FIERCE_THRESHOLD(24f),
+    POLICY_BLOCK_STRONG_THRESHOLD(16f),
+    POLICY_BLOCK_WEAK_THRESHOLD(8f),
+    // CvDiplomacyAI::GetTechBlockLevelScore, GetPolicyBlockLevelScore, GetVictoryDisputeLevelScore, GetVictoryBlockLevelScore (OpinionAi;
+    // VP database values; BNW's victory weights are 30, 20, 10 and -6 for none, and it has no tech or policy weights)
+    OPINION_WEIGHT_TECH_FIERCE(30f),
+    OPINION_WEIGHT_TECH_STRONG(20f),
+    OPINION_WEIGHT_TECH_WEAK(10f),
+    OPINION_WEIGHT_TECH_NONE(-5f),
+    OPINION_WEIGHT_POLICY_FIERCE(30f),
+    OPINION_WEIGHT_POLICY_STRONG(20f),
+    OPINION_WEIGHT_POLICY_WEAK(10f),
+    OPINION_WEIGHT_POLICY_NONE(-5f),
+    OPINION_WEIGHT_VICTORY_FIERCE(40f),
+    OPINION_WEIGHT_VICTORY_STRONG(30f),
+    OPINION_WEIGHT_VICTORY_WEAK(20f),
+    OPINION_WEIGHT_VICTORY_NONE(0f),
+    OPINION_WEIGHT_VICTORY_PER_ERA(4f),
+    OPINION_WEIGHT_VICTORY_NONE_PER_ERA(0f),
+    OPINION_WEIGHT_VICTORY_BLOCK_FIERCE(40f),
+    OPINION_WEIGHT_VICTORY_BLOCK_STRONG(30f),
+    OPINION_WEIGHT_VICTORY_BLOCK_WEAK(20f),
+    OPINION_WEIGHT_VICTORY_BLOCK_PER_ERA(4f),
     // Vox Populi's opinion deeds (OpinionAi, phaseE/vp-opinion-plan.md O2; VP database values)
     OPINION_WEIGHT_RETURNED_CIVILIAN_SUBSEQUENT(-5f),
     RETURNED_CIVILIAN_TURNS_UNTIL_FORGOTTEN(50f),

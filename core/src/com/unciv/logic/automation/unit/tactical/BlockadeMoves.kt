@@ -104,7 +104,7 @@ object BlockadeMoves {
      *  than it has health goes; one is enough.
      */
     private fun executeNavalBlockadeMove(ctx: TacticalContext, target: Tile, units: List<MapUnit>) {
-        val danger = ctx.civ.ai.unitDanger
+        val danger = ctx.civ.ai.plotDanger
         for (unit in units) {
             if (unit.isDestroyed || unit in ctx.cache.processedUnits || !unit.hasMovement()) continue
             // See if we can harass the enemy first

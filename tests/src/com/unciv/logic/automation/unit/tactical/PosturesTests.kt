@@ -46,7 +46,7 @@ class PosturesTests {
         civ.ai.invalidateTurnCaches()
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
-        return TacticalContext(civ, map, danger, AutomationCache(), civ.units.getCivUnits().toList(), TacticalTargets.find(civ, map, danger))
+        return TacticalContext(civ, map, danger, AutomationCache(), civ.units.getCivUnits().toList(), TacticalTargets.find(civ, map))
     }
 
     /** The posture of the zone around [city] (the owner's land, on water or not) */

@@ -52,7 +52,7 @@ class BlockadeMovesTests {
         civ.ai.invalidateTurnCaches()
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
-        return TacticalContext(civ, map, danger, AutomationCache(), civ.units.getCivUnits().toList(), TacticalTargets.find(civ, map, danger))
+        return TacticalContext(civ, map, danger, AutomationCache(), civ.units.getCivUnits().toList(), TacticalTargets.find(civ, map))
     }
 
     private fun points(ctx: TacticalContext = context()) = ctx.targets.all.filter { it.type == TacticalTargetType.BlockadePoint }

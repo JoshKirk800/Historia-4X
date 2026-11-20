@@ -286,7 +286,7 @@ object BarbarianMoves {
      */
     fun findExploreTarget(ctx: TacticalContext, unit: MapUnit): Tile? {
         val civ = ctx.civ
-        val danger = civ.ai.unitDanger
+        val danger = civ.ai.plotDanger
         val unitTile = unit.getTile()
         var best: Tile? = null
         var bestValue = 0

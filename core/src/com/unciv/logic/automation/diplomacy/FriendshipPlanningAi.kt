@@ -20,7 +20,7 @@ import com.unciv.models.ruleset.ai.TraitCategory
  *  Each turn an AI decides with whom it wants a friendship ([MajorCivMemory.wantsDoF]), which friendships it wants to end
  *  ([MajorCivMemory.wantsToEndDoF]) and its most valuable friend ([DiplomacyAi.mostValuableFriend]); its statements act on these.
  *
- *  As none (no input yet): vassals, the league's prime competitor and ally, sanctions, victory dispute and block levels, plots and coups
+ *  As none (no input yet): vassals, the league's prime competitor and ally, sanctions, plots and coups
  *  against us, the coop war agreement score, liberated or returned capitals and holy cities, strategic trade partners, DoF-to-votes
  *  policies, teams. VP's defensive pact half follows
  *  ([PactPlanningAi.updatePacts]).
@@ -144,6 +144,7 @@ object FriendshipPlanningAi {
             if (OpinionAi.isPlayerDenouncedFriend(civ, other) || isPlayerDoFWithAnyEnemy(civ, other) || isPlayerDPWithAnyEnemy(civ, other) ||
                 isDenouncedByOurFriend(civ, other)) return false
             if (approach == MajorCivApproach.War || approach == MajorCivApproach.Hostile || approach == MajorCivApproach.Guarded ||
+                memory.victoryDisputeLevel >= DisputeLevel.Strong || memory.victoryBlockLevel == BlockLevel.Fierce ||
                 ai.warmongerThreat(other) >= AiThreat.Severe || VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)) return false
             // Our recent assist value has the opposite sign of VP's (ours: negative = they helped us)
             if (memory.recentAssistValue < -75 || memory.numTimesCultureBombed > 0) return false
@@ -165,7 +166,7 @@ object FriendshipPlanningAi {
     fun isGoodChoiceForDoF(civ: Civilization, other: Civilization): Boolean {
         if (WarAlliesAi.avoidExchangesWithPlayer(civ, other, warOnly = true)) return false
         if (isTooEarlyForDoF(civ, other)) return false
-        if (OpinionAi.isUntrustworthyFriend(other)) return false
+        if (OpinionAi.isUntrustworthyFriend(civ, other)) return false
         if (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ)) return false
         val ai = civ.ai.diplomacy
         val strategic = ai.memoryOf(other).strategicApproach ?: MajorCivApproach.Neutral
@@ -206,7 +207,7 @@ object FriendshipPlanningAi {
         if (civ.isAtWarWith(other)) return false
         if (isDoFBrokenByUs(civ, other, 30)) return false
         val ai = civ.ai.diplomacy
-        if (ai.approachTowards(other) == MajorCivApproach.Afraid && !OpinionAi.isUntrustworthyFriend(other)) return true
+        if (ai.approachTowards(other) == MajorCivApproach.Afraid && !OpinionAi.isUntrustworthyFriend(civ, other)) return true
         if (hasEndedFriendshipThisTurn(other)) return false
         return ai.memoryOf(other).wantsDoF
     }
@@ -224,7 +225,7 @@ object FriendshipPlanningAi {
      */
     fun isEndDoFAcceptable(civ: Civilization, other: Civilization, ignoreCurrentDoF: Boolean = false): Boolean {
         if (!ignoreCurrentDoF && !OpinionAi.isDoFAccepted(civ, other)) return false
-        if (OpinionAi.isUntrustworthyFriend(other)) return true
+        if (OpinionAi.isUntrustworthyFriend(civ, other)) return true
         if (WarAlliesAi.avoidExchangesWithPlayer(civ, other) && (ignoreCurrentDoF || !WarSanityAi.isWarSane(civ, other))) return true
         val ai = civ.ai.diplomacy
         val memory = ai.memoryOf(other)
@@ -272,7 +273,11 @@ object FriendshipPlanningAi {
         penalty(state(memory.brokenNoConvertPromise, memory.ignoredNoConvertPromise), if (religious) 20 else 10, if (religious) 10 else 5)
         penalty(state(memory.brokenNoDiggingPromise, memory.ignoredNoDiggingPromise), if (cultural) 20 else 10, if (cultural) 10 else 5)
 
-        if (competing && VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)) chance -= personality(DiplomacyPersonality.VictoryCompetitiveness)
+        if (competing) {
+            if (VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)) chance -= personality(DiplomacyPersonality.VictoryCompetitiveness)
+            if (memory.victoryDisputeLevel >= DisputeLevel.Strong) chance -= personality(DiplomacyPersonality.VictoryCompetitiveness)
+            if (memory.victoryBlockLevel >= BlockLevel.Strong) chance -= personality(DiplomacyPersonality.VictoryCompetitiveness)
+        }
         if (ai.landDisputeLevel(other) >= DisputeLevel.Strong) chance -= personality(DiplomacyPersonality.Boldness)
         if (memory.wonderDispute >= DisputeLevel.Strong) chance -= personality(DiplomacyPersonality.WonderCompetitiveness)
         if (memory.minorCivDispute >= DisputeLevel.Strong) chance -= personality(DiplomacyPersonality.MinorCivCompetitiveness)
@@ -321,7 +326,7 @@ object FriendshipPlanningAi {
         val ai = civ.ai.diplomacy
         val memory = ai.memoryOf(other)
         fun personality(value: DiplomacyPersonality) = civ.ai.diplomacyValue(value)
-        val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
+        val untrustworthy = OpinionAi.isUntrustworthyFriend(civ, other)
         val backstabbed = wasEverBackstabbedBy(civ, other)
         if (!WarSanityAi.isBackstabber(civ) && !untrustworthy && !backstabbed && personality(DiplomacyPersonality.DenounceWillingness) < 8 &&
             personality(DiplomacyPersonality.Loyalty) > 3) return false
@@ -336,7 +341,7 @@ object FriendshipPlanningAi {
         val dangerous = majorsAlive <= majorsEver / 2 || VictoryProgressAi.numMajorsConquered(civ) >= majorsEver / 3
         for (third in civ.gameInfo.civilizations) {
             if (!third.isMajorCiv || !third.isAlive() || third.cities.isEmpty() || third == other || third == civ) continue
-            if (OpinionAi.isUntrustworthyFriend(civ)) continue
+            if (OpinionAi.isUntrustworthyFriend(third, civ)) continue
             if (third.isAtWarWith(civ) || OpinionAi.isDenouncedPlayer(civ, third) || OpinionAi.isDenouncedPlayer(third, civ)) continue
             var deterrent = ai.memories[third.civID]?.wantsDoF == true || isFriendOrAlly(civ, third)
             if (!deterrent) {
@@ -394,6 +399,8 @@ object FriendshipPlanningAi {
         if (ai.warmongerThreat(other) >= AiThreat.Severe) chance -= personality(DiplomacyPersonality.WarmongerHate)
         if (VictoryProgressAi.isCompetingForVictory(civ)) {
             if (VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules)) chance -= personality(DiplomacyPersonality.VictoryCompetitiveness)
+            if (memory.victoryBlockLevel >= BlockLevel.Strong) chance -= personality(DiplomacyPersonality.VictoryCompetitiveness)
+            if (memory.victoryDisputeLevel >= DisputeLevel.Strong) chance -= personality(DiplomacyPersonality.VictoryCompetitiveness)
             if (civ.ai.isGoingForWorldConquest() && DiplomacyTurn.proximity(civ, other) >= DiplomacyTurn.PROXIMITY_CLOSE) {
                 val strength = WarStateAi.militaryStrengthComparedToUs(civ, other)
                 val target = WarStateAi.targetValue(civ, other)

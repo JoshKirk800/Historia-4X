@@ -8,7 +8,6 @@ import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.VictoryPursuitAi
 import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.automation.unit.tactical.TacticalState
-import com.unciv.logic.automation.unit.tactical.UnitDanger
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.ai.AiDefine
@@ -28,6 +27,7 @@ import org.jetbrains.annotations.VisibleForTesting
 import yairm210.purity.annotations.Cache
 import yairm210.purity.annotations.Readonly
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 /** How sure a player is of its guess of another player's grand strategy (the original's GuessConfidenceTypes) */
@@ -108,6 +108,8 @@ class CivAi : IsPartOfGameInfoSerialization {
 
     /** CvPlayer::m_bCramped, updated each turn by [updateCramped] */
     var isCramped = false
+    /** CvPlayer::m_iPreviousBestSettlePlot: the [com.unciv.logic.map.tile.Tile.zeroBasedIndex] of the best settle plot of the last time [com.unciv.logic.automation.unit.SettleAreas.playerWhoStoleMyFavoriteCitySite] looked, -1 = none */
+    var previousBestSettlePlot = -1
     /**
      *  CvPlayer::m_iCitiesNeedingTerrainImprovements: the cities whose [CityAi.terrainImprovementNeed] was above 0 at the start of this turn
      *  (CvPlayer::UpdateNumCitiesNeedingTerrainImprovements, run first in [doTurn] from the needs the cities computed last turn)
@@ -164,8 +166,10 @@ class CivAi : IsPartOfGameInfoSerialization {
     @Transient private var tourismCache = 0
     @Transient private var plotDangerTurn = -1
     @Transient private var plotDangerCache: PlotDanger? = null
-    @Transient private var unitDangerTurn = -1
-    @Transient private var unitDangerCache: UnitDanger? = null
+    /** The units the last danger map saw (CvDangerPlots::m_knownUnits), by turn of that map: the next turn's map adds those that have moved out of sight */
+    @Transient private var knownDangerUnits: Set<Int> = emptySet()
+    @Transient private var knownDangerUnitsTurn = -1
+    @Transient private var previousKnownDangerUnits: Set<Int> = emptySet()
     //endregion
 
     fun clone(): CivAi {
@@ -186,6 +190,7 @@ class CivAi : IsPartOfGameInfoSerialization {
         toReturn.economicStrategies.putAll(economicStrategies)
         toReturn.militaryStrategies.putAll(militaryStrategies)
         toReturn.isCramped = isCramped
+        toReturn.previousBestSettlePlot = previousBestSettlePlot
         toReturn.citiesNeedingTerrainImprovements = citiesNeedingTerrainImprovements
         for ((civId, memory) in aggressionMemory) toReturn.aggressionMemory[civId] = memory.clone()
         toReturn.citySpecialization = citySpecialization.clone()
@@ -212,7 +217,6 @@ class CivAi : IsPartOfGameInfoSerialization {
         operations.setTransients(civ)
         tactical.setTransients(civ)
         plotDangerCache = null
-        unitDangerCache = null
         // BNW's protective approach, which Vox Populi's city-state approach does not have: friendly takes its place
         minorCivApproaches.replaceAll { _, approach -> if (approach == MinorCivApproach.Protective) MinorCivApproach.Friendly else approach }
         personalityVector = null
@@ -224,30 +228,22 @@ class CivAi : IsPartOfGameInfoSerialization {
 
     /**
      *  The danger this civilization sees on the map (CvPlayer's CvDangerPlots) for the current turn, built on first use and shared by
-     *  everything that reads it: city threat for operations and purchases, safety moves, workers. Code that changed units since (tests)
-     *  calls [invalidateTurnCaches].
+     *  everything that reads it: the damage a unit or a city would take, safety moves, workers, the escorts. Code that changed units
+     *  since (tests) calls [invalidateTurnCaches]. A map made again within a turn keeps the units the turn's first map saw as the ones
+     *  that may have vanished (CvDangerPlots::UpdateDanger with a war change: m_vanishedUnits are kept).
      */
     val plotDanger: PlotDanger
         get() {
             val turn = civ.gameInfo.turns
             plotDangerCache?.let { if (plotDangerTurn == turn) return it }
-            return PlotDanger(civ).also {
+            if (knownDangerUnitsTurn != turn) {
+                previousKnownDangerUnits = knownDangerUnits
+                knownDangerUnitsTurn = turn
+            }
+            return PlotDanger(civ, previousKnownDangerUnits).also {
                 plotDangerCache = it
                 plotDangerTurn = turn
-            }
-        }
-
-    /**
-     *  What the enemies can do to one of our units on a tile (CvUnit::GetDanger, CvPlayer::GetPossibleAttackers) for the current turn, built on
-     *  first use like [plotDanger] and forgotten with it by [invalidateTurnCaches].
-     */
-    val unitDanger: UnitDanger
-        get() {
-            val turn = civ.gameInfo.turns
-            unitDangerCache?.let { if (unitDangerTurn == turn) return it }
-            return UnitDanger(civ).also {
-                unitDangerCache = it
-                unitDangerTurn = turn
+                knownDangerUnits = it.knownUnits
             }
         }
 
@@ -255,7 +251,6 @@ class CivAi : IsPartOfGameInfoSerialization {
     fun invalidateTurnCaches() {
         plotDangerCache = null
         tactical.invalidateMap()
-        unitDangerCache = null
     }
 
     /**
@@ -398,10 +393,16 @@ class CivAi : IsPartOfGameInfoSerialization {
     /** CvGrandStrategyAI::GetGrandStrategyPriority: last computed priority, -1 before the first computation */
     fun grandStrategyPriority(grandStrategy: String): Int = grandStrategyPriorities[grandStrategy] ?: -1
 
-    /** CvGrandStrategyAI::GetPersonalityAndGrandStrategy: personality flavor plus the active grand strategy's FlavorMod, at least 0 */
-    fun personalityAndGrandStrategy(flavor: Flavor): Int {
+    /**
+     *  CvGrandStrategyAI::GetPersonalityAndGrandStrategy: personality flavor plus the active grand strategy's FlavorMod, at least 0. With
+     *  [boostMainFlavor] (the tech weights' bBoostGSMainFlavor) a flavor the grand strategy lists as its own (AIGrandStrategy_Flavors) is
+     *  moved halfway (rounded up) towards that value, at most 10.
+     */
+    fun personalityAndGrandStrategy(flavor: Flavor, boostMainFlavor: Boolean = false): Int {
         val active = grandStrategyDef() ?: return personality(flavor)
-        return max(0, active.flavorModVector[flavor.ordinal] + personality(flavor))
+        val modded = max(0, active.flavorModVector[flavor.ordinal] + personality(flavor))
+        val main = active.flavorVector[flavor.ordinal]
+        return if (boostMainFlavor && main > 0) min(10, (main + modded + 1) / 2) else modded
     }
 
     /** CvGrandStrategyAI::GetGuessOtherPlayerActiveGrandStrategy and its confidence; (null, null) if no guess */

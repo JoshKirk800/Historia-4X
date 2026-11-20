@@ -158,8 +158,8 @@ class LeagueAutomationTests {
         b.getDiplomacyManager(a)!!.removeFlag(DiplomacyFlags.Denunciation)
 
         assertEquals(LeagueAlignment.FRIEND, alignment(history = 4))
-        c.ai.diplomacy.memoryOf(b).friendDeclaredWarOnUs = true // b declared war on a friend of c
-        assertTrue(OpinionAi.isUntrustworthyFriend(b))
+        a.ai.diplomacy.memoryOf(b).untrustworthy = true // a holds b for a backstabber (UntrustworthyAi.testUntrustworthyFriends)
+        assertTrue(OpinionAi.isUntrustworthyFriend(a, b))
         assertEquals("4 - 4", LeagueAlignment.NEUTRAL, alignment(history = 4))
         assertEquals("-4", LeagueAlignment.RIVAL, alignment(history = 0))
     }

@@ -66,8 +66,8 @@ object CivilianUnitAutomation {
         if (hasSettlerUnique && !(unit.civ().isCityState && unit.isMilitary()))
             return SettlerAutomation.automateSettler(unit, cache)
 
-        // CvHomelandAI::PlotMovesToSafety: a civilian that cannot defend itself flees from a plot with danger
-        if (CivilianSafety.fleeIfThreatened(mapUnit)) return
+        // CvHomelandAI::PlotMovesToSafety: a civilian in danger flees to the safest plot it reaches
+        if (CivilianSafety.fleeIfThreatened(mapUnit, cache)) return
 
         if (shouldClearTileForAddInCapitalUnits(unit, unit.getTile())) {
             // First off get out of the way, then decide if you actually want to do something else

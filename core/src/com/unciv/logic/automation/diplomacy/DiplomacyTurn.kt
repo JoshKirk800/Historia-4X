@@ -47,6 +47,11 @@ object DiplomacyTurn {
         DisputeAi.updatePlotBuyingPostures(civ, others, rules)
         ExpanderAi.updateRecklessExpanders(civ, others, rules)  // Vox Populi's DoUpdateRecklessExpanders and DoUpdateWonderSpammers
         ExpanderAi.updateWonderSpammers(civ, others, rules)
+        VictoryLevelsAi.updateTechBlockLevels(civ, rules)  // Vox Populi's DoUpdateTechBlockLevels ... DoUpdateVictoryBlockLevels, after the wonder spammers
+        VictoryLevelsAi.updatePolicyBlockLevels(civ, rules)
+        VictoryLevelsAi.updateVictoryDisputeLevels(civ, rules)
+        VictoryLevelsAi.updateVictoryBlockLevels(civ, rules)
+        UntrustworthyAi.testUntrustworthyFriends(civ, rules)  // Vox Populi's TestUntrustworthyFriends, before its sane targets
         WarSanityAi.updateSaneTargets(civ, rules)  // Vox Populi's DoUpdateSaneDiplomaticTargets, before its opinions
         OpinionAi.testOpinionModifiers(civ, others, rules)  // Vox Populi's TestOpinionModifiers, before its opinions
         OpinionAi.updateOpinions(civ, others, rules)

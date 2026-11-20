@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.strategy
 
+import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.automation.civilization.BeliefAiProfile
 import com.unciv.logic.automation.civilization.DealAi
@@ -77,10 +78,12 @@ object UnitProductionAi {
      *    (defense, counter units); trade units: SR_USELESS in a city of at most 4 citizens, -100 at war, +700 (+750 for a diplomat leader);
      *    +100 each (+100 for the matching leader traits) for units that start a golden age, hurry research, hurry culture, trade with
      *    city-states, buy city-states, hurry production and generals and admirals;
-     *  - settlers: refused in a city that grows next turn or starves (CvCity::getFoodTurnsLeft at most 1), under ENOUGH_EXPANSION, with a
-     *    settler in the city; else (EXPANSION of personality and grand strategy + 100 in the early expansion phase - 10 in an unhappy
-     *    empire; a capital of a civilization with more than 2 cities - 25 + its settler production modifier) times 23, +10 per time settlers
-     *    were skipped over ([MilitaryAi.numberOfTimesSettlerBuildSkippedOver]); at most 0 is SR_STRATEGY;
+     *  - settlers: refused in a city that grows next turn or starves (CvCity::getFoodTurnsLeft at most 1), under ENOUGH_EXPANSION (SR_STRATEGY),
+     *    in a city under the city strategy ENOUGH_SETTLERS (SR_BALANCE), with a settler in the city; else (EXPANSION of personality and grand
+     *    strategy + the quality of the best settle plot when above 0 ([SettleAreas.settlePlotQualityMeasure]) + 100 in the early expansion
+     *    phase + 50 for a NEW_CONTINENT_FEEDER city - 10 in an unhappy empire; a capital of a civilization with more than 2 cities - 25 +
+     *    its settler production modifier) times 23, +10 per time settlers were skipped over ([MilitaryAi.numberOfTimesSettlerBuildSkippedOver]);
+     *    at most 0 is SR_STRATEGY (VP's expansionist-trait WLTKD bonus has no counterpart);
      *  - archaeologists: SR_BALANCE without NEED_ARCHAEOLOGISTS; +5000 with none, +5000 going for a culture victory;
      *  - work boats: SR_STRATEGY unless our naval tactical zone is friendly; the boats needed (resources in our water tiles that need a boat,
      *    within 12 steps by water of the city, less the boats there and those other cities train) x (population + era) x 1000, SR_USELESS
@@ -297,9 +300,15 @@ object UnitProductionAi {
         if (unitAi == UnitAiType.SETTLE) {
             if (foodTurnsLeft(city) <= 1) return ProductionSanityAi.SR_STRATEGY
             if (civ.ai.isEconomicStrategyActive("ECONOMICAISTRATEGY_ENOUGH_EXPANSION")) return ProductionSanityAi.SR_STRATEGY
+            if (city.ai.isCityStrategyActive(CityStrategyAi.ENOUGH_SETTLERS)) return ProductionSanityAi.SR_BALANCE
             if (city.getCenterTile().getUnits().any { it.civ == civ && UnitAiTypes.current(it) == UnitAiType.SETTLE }) return ProductionSanityAi.SR_USELESS
             var flavorExpansion = civ.ai.personalityAndGrandStrategy(Flavor.Expansion)
+            // We already checked ENOUGH_EXPANSION, so we know we have a good settle plot, but let's bump the priority by the quality of the plot
+            val quality = SettleAreas.settlePlotQualityMeasure(civ, SettleAreas.bestSettlePlot(civ, null, null))
+            if (quality > 0) flavorExpansion += quality
+            // Strategies affect unit flavors but unfortunately we largely ignore the "pre" score from the flavor system
             if (civ.ai.isEconomicStrategyActive(EconomicMilitaryStrategyTests.EARLY_EXPANSION)) flavorExpansion += 100
+            if (city.ai.isCityStrategyActive(CityStrategyAi.NEW_CONTINENT_FEEDER)) flavorExpansion += 50
             if (EconomicMilitaryStrategyTests.isEmpireUnhappy(civ)) flavorExpansion -= 10
             if (city.isCapital() && civ.cities.size > 2) {
                 flavorExpansion -= 25

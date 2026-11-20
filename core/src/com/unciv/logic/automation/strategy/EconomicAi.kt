@@ -5,6 +5,7 @@ import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.diplomacy.WarIntentAi
+import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
@@ -73,6 +74,7 @@ class EconomicAi : IsPartOfGameInfoSerialization {
         UseGoldAutomation.doHurry(civ)
         UseGoldAutomation.doPlotPurchases(civ)
         disbandExtraWorkers(civ)
+        disbandUselessSettlers(civ)
         disbandExtraWorkboats(civ)
     }
 
@@ -290,6 +292,32 @@ class EconomicAi : IsPartOfGameInfoSerialization {
      *  civilization's unit list.
      */
     private fun findWorkerToScrap(workers: List<MapUnit>): MapUnit? = workers.firstOrNull()
+
+    /**
+     *  CvEconomicAI::DisbandUselessSettlers (Vox Populi), every turn of an AI player: scraps one settler when ENOUGH_EXPANSION is active, there
+     *  are more than 2 settlers (those our cities are training included), the civilization has a capital, has founded 5 cities or it is turn 151,
+     *  and there is no good settle plot anywhere ([SettleAreas.haveGoodSettlePlot]); the settler is [findSettlerToScrap].
+     */
+    fun disbandUselessSettlers(civ: Civilization) {
+        // If we want settlers, don't disband
+        if (!civ.ai.isEconomicStrategyActive("ECONOMICAISTRATEGY_ENOUGH_EXPANSION")) return
+        // Two settlers are ok
+        if (UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.SETTLE, includeBeingTrained = true) <= 2) return
+        if (civ.getCapital(firstCityIfNoCapital = false) == null) return
+        // Don't disband during the early game
+        if (civ.citiesCreated <= 4 && civ.gameInfo.turns <= 150) return
+        if (SettleAreas.haveGoodSettlePlot(civ, -1)) return
+        findSettlerToScrap(civ)?.disband()
+    }
+
+    /**
+     *  CvEconomicAI::FindSettlerToScrap(bMayBeInOperation = false): the first land settler that is no combat unit, no great person and does not
+     *  found abroad, in the civilization's unit list. Deviation: the original keeps the ones that are in an army (`bMayBeInOperation ||
+     *  getArmyID() != -1`, which reads like the opposite of what the parameter says); here it is a settler in none.
+     */
+    private fun findSettlerToScrap(civ: Civilization): MapUnit? = civ.units.getCivUnits().firstOrNull {
+        it.hasUnique(UniqueType.FoundCity) && it.baseUnit.isLandUnit && it.isCivilian() && !it.isGreatPerson() && civ.ai.operations.armyOf(it) == null
+    }
 
     /**
      *  CvEconomicAI::DisbandExtraWorkboats (Vox Populi), every turn of an AI player: scraps one work boat when

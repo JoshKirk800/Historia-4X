@@ -347,7 +347,7 @@ object LeagueAutomation {
             sum += congress.votingHistoryScore / max(rules.define(AiDefine.VOTING_HISTORY_SCORE_MAX) / rules.define(AiDefine.VOTING_HISTORY_SCORE_LEAGUE_ALIGNMENT_SCALER), 1)
         }
 
-        val untrustworthy = OpinionAi.isUntrustworthyFriend(other)
+        val untrustworthy = OpinionAi.isUntrustworthyFriend(civ, other)
         if (OpinionAi.isDenouncedPlayer(other, civ)) sum -= 2
         else if (!untrustworthy && !memory.wantsToEndDoF && (OpinionAi.isDoFAccepted(civ, other) || memory.wantsDoF)) {
             sum += when (memory.doFLevel) {
@@ -715,7 +715,7 @@ enum class DiplomatUsefulness { NONE, LOW, MEDIUM, HIGH }
  * - Resolutions are found by effect (uniques and typed fields), except Nuclear Non-Proliferation, which has no effect field, and the projects: by name.
  *
  * ## Gaps
- * Teams and vassals, the prime league ally and competitor, the victory dispute and block levels, the coop war agreement score, the value of our deals with
+ * Teams and vassals, the prime league ally and competitor, the coop war agreement score, the value of our deals with
  * a civilization (embargo), the raw target value, monopolies, Nuclear Gandhi, the policies that give influence from trade routes with city-states,
  * the league bonus for civilizations behind in score (Arts and Sciences Funding), what Vox Populi does with the halved score of last session's proposals.
  */
@@ -885,9 +885,10 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
     /**
      * "How much will friends/enemies care about this?" (CvVotingClasses.cpp:13813-13896): for every other living major with cities that can vote, its good
      * and bad diplomacy score (800 per opinion step above or below neutral, 800 more for our most valuable friend or ally, 600 less for our biggest
-     * competitor, and by its alignment +-800 / 1600 / 2400, a teammate, liberator or leader 10000 and no weighing) weighted by our work-with and
-     * work-against willingness (/ 2000) times its own score of the same choice (/ 100). The prime league ally and competitor, the victory dispute
-     * and block levels have no counterpart.
+     * competitor, 200 per level of the larger of our victory dispute and block levels with it, and by its alignment +-800 / 1600 / 2400, a
+     * teammate, liberator or leader 10000 and no weighing) weighted by our work-with and
+     * work-against willingness (/ 2000) times its own score of the same choice (/ 100). The prime league ally and competitor
+     * have no counterpart.
      */
     private fun globalScore(resolution: Resolution, target: String?, proposerId: String?, choice: String, enact: Boolean): Int {
         val workWith = civ.ai.diplomacyValue(DiplomacyPersonality.WorkWithWillingness)
@@ -901,6 +902,8 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
             var good = if (steps > 0) steps else 0
             if (civ.ai.diplomacy.mostValuableFriend == other.civID || civ.ai.diplomacy.mostValuableAlly == other.civID) good += 800
             if (civ.ai.diplomacy.biggestCompetitor == other.civID) bad -= 600
+            val memory = civ.ai.diplomacy.memoryOf(other)
+            bad -= max(memory.victoryDisputeLevel.ordinal, memory.victoryBlockLevel.ordinal) * 200
             var maxCooperation = false
             when (LeagueAutomation.evaluateAlignment(civ, other)) {
                 LeagueAlignment.LIBERATOR, LeagueAlignment.LEADER -> { good = 10000; maxCooperation = true }

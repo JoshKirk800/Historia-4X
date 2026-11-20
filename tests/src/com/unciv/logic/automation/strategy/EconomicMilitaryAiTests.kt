@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.Constants
+import com.unciv.logic.automation.unit.SettlerAutomation
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.diplomacy.PactPlanningAi
 import com.unciv.logic.automation.diplomacy.WarGoal
@@ -17,6 +18,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.PlayerStrategyDef
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.SettleTestLand
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -357,18 +359,6 @@ class EconomicMilitaryAiTests {
     }
 
     @Test
-    fun `early expansion wants cities by the expansion to growth ratio scaled by map size`() {
-        val civ = neutralCiv()
-        civ.ai.setPersonalityFlavor(Flavor.Expansion, 20)
-        civ.ai.setPersonalityFlavor(Flavor.Growth, 1)
-        val tiles = game.tileMap.values.size
-        // 8 x 20 / 1 + max(0, Prince 3 - 3), x tiles / (80 x 52)
-        assertEquals(160 * tiles / 4160, EconomicMilitaryStrategyTests.desiredEarlyCities(civ))
-        civ.ai.setPersonalityFlavor(Flavor.Growth, 4)
-        assertEquals(40 * tiles / 4160, EconomicMilitaryStrategyTests.desiredEarlyCities(civ))
-    }
-
-    @Test
     fun `with nothing to explore one explorer stays and the others retire one a turn`() {
         val civ = neutralCiv()
         game.makeHexagonalMap(2, Constants.grassland)
@@ -423,8 +413,9 @@ class EconomicMilitaryAiTests {
     //region Strategy tests
 
     @Test
-    fun `found city counts only loose settlers, not those an operation already moves`() {
+    fun `a loose settler gets a found-city operation, one an operation already moves does not`() {
         game.makeHexagonalMap(12, Constants.grassland)
+        SettleTestLand.plainsWithResources(game)
         val civ = neutralCiv()
         game.tileMap.assignContinents(TileMap.AssignContinentsMode.Reassign)
         civ.ai.setPersonalityFlavor(Flavor.Growth, 5)
@@ -432,13 +423,12 @@ class EconomicMilitaryAiTests {
         civ.viewableTiles = game.tileMap.values.toSet()
         for (tile in game.tileMap.values) tile.setExplored(civ, true)
         game.addCity(civ, tile(0, 0))
-        assertFalse(EconomicMilitaryStrategyTests.foundCity(civ))
         val settler = game.addUnit("Settler", civ, tile(2, 0))
-        assertTrue(EconomicMilitaryStrategyTests.foundCity(civ))
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
+        assertTrue(SettlerAutomation.isLooseSettler(settler))
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler)
         assertNotNull(civ.ai.operations.armyOf(settler))
         assertFalse("aborted: ${operation.abortReason}", operation.state == OperationState.ABORTED)
-        assertFalse(EconomicMilitaryStrategyTests.foundCity(civ))
+        assertFalse(SettlerAutomation.isLooseSettler(settler))
     }
     //endregion
 }

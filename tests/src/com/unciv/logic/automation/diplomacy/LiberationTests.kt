@@ -114,7 +114,7 @@ class LiberationTests {
         assertFalse("a deceptive one", wants())
         feel(MajorCivOpinion.Ally, MajorCivApproach.Friendly)
         assertTrue(wants())
-        c.ai.diplomacy.memoryOf(b).friendDeclaredWarOnUs = true // b declared war on a friend of c's: untrustworthy
+        a.ai.diplomacy.memoryOf(b).untrustworthy = true // a holds b for a backstabber
         assertFalse("an untrustworthy founder", wants())
     }
 

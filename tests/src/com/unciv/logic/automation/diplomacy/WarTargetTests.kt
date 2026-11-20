@@ -162,7 +162,7 @@ class WarTargetTests {
         assertTrue(potential(b))
 
         memory.opinion = MajorCivOpinion.Friend
-        c.ai.diplomacy.memoryOf(b).friendDeclaredWarOnUs = true // b declared war on a friend of c's: untrustworthy
+        a.ai.diplomacy.memoryOf(b).untrustworthy = true // a holds b for a backstabber
         update()
         assertTrue("an untrustworthy friend is spared by no one", potential(b))
     }

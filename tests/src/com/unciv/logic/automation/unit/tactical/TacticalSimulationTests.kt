@@ -48,7 +48,7 @@ class TacticalSimulationTests {
         civ.ai.invalidateTurnCaches()
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
-        return TacticalContext(civ, map, danger, AutomationCache(), units.toList().ifEmpty { civ.units.getCivUnits().toList() }, TacticalTargets.find(civ, map, danger))
+        return TacticalContext(civ, map, danger, AutomationCache(), units.toList().ifEmpty { civ.units.getCivUnits().toList() }, TacticalTargets.find(civ, map))
     }
 
     private fun meanDamage(attacker: MapUnit, defender: MapUnit) =
@@ -195,6 +195,8 @@ class TacticalSimulationTests {
         val (city, units) = besiegedCity("Swordsman", 4)
         city.health = 2
         city.damageTakenLastTurn = 0
+        // a city taken fewer than two turns ago is judged by the danger around it instead (CvCity::isInDangerOfFalling)
+        city.turnAcquired = game.gameInfo.turns - 5
         TacticalSimulation.executeCaptureCityMoves(siegeContext(city, TacticalDominance.Enemy))
         assertTrue("not hurt lately: left alone", units.all { it.attacksThisTurn == 0 })
         assertEquals(enemy, city.civ)

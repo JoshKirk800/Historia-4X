@@ -7,16 +7,20 @@ import com.unciv.models.ruleset.unique.UniqueType
 
 /**
  *  Vox Populi's tests of a city's danger (CvCity.cpp, Release-5.4.8; D7), on the damage it took ([City.damageTakenThisTurn],
- *  [City.damageTakenLastTurn]) and the units around it. Our plot danger ([com.unciv.logic.automation.unit.PlotDanger]) is BNW's form
- *  (strength over turns away), not VP's expected damage: it serves only VP's "no danger at all" filter, and isInDangerOfFalling's clause
- *  for a city taken within two turns (twice the danger above its hit points) waits for VP's CvDangerPlots.
+ *  [City.damageTakenLastTurn]), the expected damage of the attackers that can reach it ([com.unciv.logic.automation.unit.PlotDanger.get] for a
+ *  city, CvPlayer::GetPlotDanger(city)) and the units around it.
  */
 object CityDangerAi {
+
+    /** CvCity::isInDangerOfFalling: a city acquired fewer turns ago is judged by the danger around it */
+    private const val JUST_ACQUIRED_TURNS = 2
 
     /** CvCity::isInDangerOfFalling: last turn's damage (and a third more if [extraCareful]) is more than the hit points left */
     fun isInDangerOfFalling(city: City, extraCareful: Boolean): Boolean {
         val extra = if (extraCareful) city.damageTakenLastTurn / 3 else 0
-        return city.damageTakenLastTurn + extra > city.health
+        if (city.damageTakenLastTurn + extra > city.health) return true
+        // Just conquered (or founded): it is vulnerable but last turn's damage is zero
+        return city.civ.gameInfo.turns - city.turnAcquired < JUST_ACQUIRED_TURNS && city.civ.ai.plotDanger.get(city) * 2 > city.health
     }
 
     /**
@@ -29,7 +33,7 @@ object CityDangerAi {
         if (enemies.isEmpty()) return false
         if (isInDangerOfFalling(city, extraCareful = true)) return true
         val owner = city.civ
-        if (city.damageTakenThisTurn == 0 && city.damageTakenLastTurn == 0 && owner.ai.plotDanger.get(city.getCenterTile()) == 0)
+        if (city.damageTakenThisTurn == 0 && city.damageTakenLastTurn == 0 && owner.ai.plotDanger.get(city) == 0)
             return false
         var ownLand = WarStateAi.cityPower(city)
         var ownSea = 0

@@ -63,17 +63,6 @@
     "AI_CITY_SPECIALIZATION_YIELD_WEIGHT_THIRD_RING": 2,
     "AI_CITY_VALUE_MULTIPLIER": 100,
     "AI_CONFIG_MILITARY_TILES_PER_SHIP": 6,
-    "AI_DANGER_MAJOR_APPROACH_AFRAID": 0.9,
-    "AI_DANGER_MAJOR_APPROACH_DECEPTIVE": 0.1,
-    "AI_DANGER_MAJOR_APPROACH_FRIENDLY": 0.0,
-    "AI_DANGER_MAJOR_APPROACH_GUARDED": 0.5,
-    "AI_DANGER_MAJOR_APPROACH_HOSTILE": 0.2,
-    "AI_DANGER_MAJOR_APPROACH_NEUTRAL": 0.1,
-    "AI_DANGER_MAJOR_APPROACH_WAR": 1.0,
-    "AI_DANGER_MINOR_APPROACH_BULLY": 0.9,
-    "AI_DANGER_MINOR_APPROACH_CONQUEST": 1.0,
-    "AI_DANGER_MINOR_APPROACH_FRIENDLY": 0.0,
-    "AI_DANGER_MINOR_APPROACH_NEUTRAL": 0.1,
     "AI_DEFENSIVE_PACT_LIMIT_BASE": 2,
     "AI_DEFENSIVE_PACT_LIMIT_SCALER": 10,
     "AI_DIPLO_LAND_DISPUTE_WEIGHT_FIERCE": 5,
@@ -183,17 +172,13 @@
     "AI_RESEARCH_WEIGHT_BASE_MOD": 0.15,
     "AI_RESEARCH_WEIGHT_MOD_PER_TURN_LEFT": 0.025,
     "AI_SHOULDNT_MANAGE_PLOT_ASSIGNMENT": 0,
-    "AI_STRATEGY_AREA_IS_FULL_PERCENT": 50,
     "AI_STRATEGY_DEFEND_MY_LANDS_BASE_UNITS": 3,
     "AI_STRATEGY_DEFEND_MY_LANDS_UNITS_PER_CITY": 1.0,
-    "AI_STRATEGY_EARLY_EXPANSION_NUM_CITIES_LIMIT": 8,
-    "AI_STRATEGY_EARLY_EXPANSION_NUM_UNOWNED_TILES_REQUIRED": 25,
     "AI_STRATEGY_EARLY_EXPLORATION_EXPLORERS_WEIGHT_DIVISOR": 1,
     "AI_STRATEGY_EARLY_EXPLORATION_STARTING_WEIGHT": 100,
     "AI_STRATEGY_EARLY_EXPLORATION_WEIGHT_PER_FLAVOR": 10,
     "AI_STRATEGY_ISLAND_START_COAST_REVEAL_PERCENT": 80,
     "AI_STRATEGY_MILITARY_RESERVE_PERCENTAGE": 35,
-    "AI_STRATEGY_MINIMUM_SETTLE_FERTILITY": 20000,
     "AI_STRATEGY_NAVAL_UNITS_PER_CITY": 1.0,
     "AI_STRATEGY_NEED_IMPROVEMENT_CITY_RATIO": 0.34,
     "AI_TACTICAL_BARBARIAN_RELEASE_VARIATION": 15,
@@ -365,7 +350,11 @@
     "ARMISTICE_GPT_DIVISOR": 3,
     "ASSIST_VALUE_PER_OPINION_WEIGHT": 5,
     "ASSIST_VALUE_PER_TURN_DECAY": 3,
+    "BALANCE_BAD_TILES_STRATEGIC_VALUE": -34,
     "BALANCE_BASIC_ATTACK_ARMY_SIZE": 6,
+    "BALANCE_COAST_STRATEGIC_VALUE": 3,
+    "BALANCE_EMPIRE_BORDERLAND_STRATEGIC_VALUE": 30,
+    "BALANCE_FRESH_WATER_STRATEGIC_VALUE": 5,
     "BEATEN_TO_WONDER_TURNS_UNTIL_FORGIVEN": 60,
     "BORDER_PROMISE_BROKEN_PER_TURN_DECAY": 40,
     "BORDER_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN": 50,
@@ -382,15 +371,13 @@
     "BUILDER_TASKING_BASELINE_ADDS_SCIENCE": 240,
     "BUILDER_TASKING_BASELINE_SCRUB_FALLOUT": 20000,
     "BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_LUXURY_RESOURCE": 750,
-    "BUILD_ON_RESOURCE_PERCENT": -50,
-    "BUILD_ON_RIVER_PERCENT": 50,
+    "BUILD_ON_RIVER_PERCENT": 35,
     "BUILT_LANDMARK_TURNS_UNTIL_FORGOTTEN": 50,
-    "CHOKEPOINT_STRATEGIC_VALUE": 3,
-    "CITY_ATTACK_RANGE": 2,
+    "CHOKEPOINT_STRATEGIC_VALUE": 10,
     "CITY_CONNECTIONS_CONNECT_TO_CAPITAL": 1,
     "CITY_RING_1_MULTIPLIER": 6,
-    "CITY_RING_2_MULTIPLIER": 3,
-    "CITY_RING_3_MULTIPLIER": 2,
+    "CITY_RING_2_MULTIPLIER": 6,
+    "CITY_RING_3_MULTIPLIER": 3,
     "CITY_RING_4_MULTIPLIER": 1,
     "CITY_RING_5_MULTIPLIER": 1,
     "CIVILIAN_KILLER_VALUE_PER_OPINION_WEIGHT": 100,
@@ -435,6 +422,8 @@
     "DIGGING_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN": 50,
     "DIGGING_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN": 30,
     "DOF_BROKEN_BACKSTAB_TIMER": 10,
+    "DOF_BROKEN_TURNS_UNTIL_FORGIVEN": 50,
+    "DOF_BROKEN_TURNS_UNTIL_FORGIVEN_FRIENDS": 10,
     "DOF_THRESHOLD": 12,
     "DOF_TURN_BUFFER": 50,
     "DOF_TURN_BUFFER_REDUCTION_PER_ERA": -5,
@@ -463,6 +452,7 @@
     "ECONOMIC_STRENGTH_RATIO_MULTIPLIER": 100,
     "ECONOMIC_STRENGTH_STRONG_THRESHOLD": 126,
     "ECONOMIC_STRENGTH_WEAK_THRESHOLD": 33,
+    "ENEMY_HEAL_RATE": 5,
     "ESPIONAGE_COUP_MULTIPLY_CONSTANT": 3.0,
     "ESPIONAGE_COUP_NOBODY_BONUS": 0.5,
     "ESPIONAGE_COUP_OTHER_PLAYERS_INFLUENCE_DROP": 20,
@@ -967,6 +957,10 @@
     "OPINION_WEIGHT_PAID_TRIBUTE": 30,
     "OPINION_WEIGHT_PER_NEGATIVE_CONVERSION": 1,
     "OPINION_WEIGHT_PER_VOTE_PERCENT": 2,
+    "OPINION_WEIGHT_POLICY_FIERCE": 30,
+    "OPINION_WEIGHT_POLICY_NONE": -5,
+    "OPINION_WEIGHT_POLICY_STRONG": 20,
+    "OPINION_WEIGHT_POLICY_WEAK": 10,
     "OPINION_WEIGHT_PTP_SAME_MINOR_DIPLOMAT_MULTIPLIER": 200,
     "OPINION_WEIGHT_PTP_SAME_MINOR_EACH": -3,
     "OPINION_WEIGHT_PTP_SAME_MINOR_MIN": -12,
@@ -986,6 +980,10 @@
     "OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR": 10,
     "OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR_AGGRESSIVE_MOD": 10,
     "OPINION_WEIGHT_SIDED_WITH_THEIR_MINOR_NUM_TURNS_UNTIL_FORGIVEN": 10,
+    "OPINION_WEIGHT_TECH_FIERCE": 30,
+    "OPINION_WEIGHT_TECH_NONE": -5,
+    "OPINION_WEIGHT_TECH_STRONG": 20,
+    "OPINION_WEIGHT_TECH_WEAK": 10,
     "OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL": 10,
     "OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_DIPLOMAT_MULTIPLIER": 167,
     "OPINION_WEIGHT_THEY_FOILED_OUR_PROPOSAL_MAX": 60,
@@ -1005,10 +1003,16 @@
     "OPINION_WEIGHT_THEY_UNSANCTIONED_US_DIPLOMAT_MULTIPLIER": 200,
     "OPINION_WEIGHT_THEY_UNSANCTIONED_US_FAILURE_DIVISOR": 200,
     "OPINION_WEIGHT_TRADE_MAX": -40,
-    "OPINION_WEIGHT_VICTORY_FIERCE": 30,
-    "OPINION_WEIGHT_VICTORY_NONE": -6,
-    "OPINION_WEIGHT_VICTORY_STRONG": 20,
-    "OPINION_WEIGHT_VICTORY_WEAK": 10,
+    "OPINION_WEIGHT_VICTORY_BLOCK_FIERCE": 40,
+    "OPINION_WEIGHT_VICTORY_BLOCK_PER_ERA": 4,
+    "OPINION_WEIGHT_VICTORY_BLOCK_STRONG": 30,
+    "OPINION_WEIGHT_VICTORY_BLOCK_WEAK": 20,
+    "OPINION_WEIGHT_VICTORY_FIERCE": 40,
+    "OPINION_WEIGHT_VICTORY_NONE": 0,
+    "OPINION_WEIGHT_VICTORY_NONE_PER_ERA": 0,
+    "OPINION_WEIGHT_VICTORY_PER_ERA": 4,
+    "OPINION_WEIGHT_VICTORY_STRONG": 30,
+    "OPINION_WEIGHT_VICTORY_WEAK": 20,
     "OPINION_WEIGHT_VOTING_HISTORY_DIPLOMAT_MULTIPLIER": 200,
     "OPINION_WEIGHT_VOTING_HISTORY_MAX": 60,
     "OPINION_WEIGHT_WAR_FRIEND_EACH": 75,
@@ -1098,6 +1102,9 @@
     "PLOT_BUYING_POSTURE_MEDIUM_THRESHOLD": 5,
     "PLOT_UNIT_LIMIT": 1,
     "PLOT_VISIBILITY_RANGE": 1,
+    "POLICY_BLOCK_FIERCE_THRESHOLD": 24,
+    "POLICY_BLOCK_STRONG_THRESHOLD": 16,
+    "POLICY_BLOCK_WEAK_THRESHOLD": 8,
     "POLICY_WEIGHT_PERCENT_DROP_NEW_BRANCH": 78,
     "POLICY_WEIGHT_PROPAGATION_LEVELS": 2,
     "POLICY_WEIGHT_PROPAGATION_PERCENT": 25,
@@ -1153,16 +1160,16 @@
     "ROBBED_US_TURNS_UNTIL_FORGIVEN": 50,
     "SANCTIONED_US_TURNS_UNTIL_FORGIVEN": 50,
     "SETTLER_BUILD_ON_COAST_PERCENT": 40,
-    "SETTLER_DISTANCE_DROPOFF_MODIFIER": 67,
-    "SETTLER_EVALUATION_DISTANCE": 24,
-    "SETTLER_FAITH_MULTIPLIER": 1,
-    "SETTLER_FOOD_MULTIPLIER": 15,
-    "SETTLER_GOLD_MULTIPLIER": 3,
+    "SETTLER_DISTANCE_DROPOFF_MODIFIER": 5,
+    "SETTLER_EVALUATION_DISTANCE": 10,
+    "SETTLER_FAITH_MULTIPLIER": 4,
+    "SETTLER_FOOD_MULTIPLIER": 12,
+    "SETTLER_GOLD_MULTIPLIER": 8,
     "SETTLER_HAPPINESS_MULTIPLIER": 8,
-    "SETTLER_PRODUCTION_MULTIPLIER": 3,
+    "SETTLER_PRODUCTION_MULTIPLIER": 8,
     "SETTLER_RESOURCE_MULTIPLIER": 3,
-    "SETTLER_SCIENCE_MULTIPLIER": 1,
-    "SETTLER_STRATEGIC_MULTIPLIER": 1,
+    "SETTLER_SCIENCE_MULTIPLIER": 5,
+    "SETTLER_STRATEGIC_MULTIPLIER": 3,
     "SHARED_INTRIGUE_TURNS_UNTIL_FORGOTTEN": 50,
     "SPY_PROMISE_BROKEN_TURNS_UNTIL_FORGIVEN": 50,
     "SPY_PROMISE_IGNORED_TURNS_UNTIL_FORGIVEN": 30,
@@ -1215,8 +1222,11 @@
     "TARGET_NEIGHBORS_DIVISOR": 4,
     "TARGET_SOFT_THRESHOLD": 33,
     "TARGET_VALUE_REDUCTION_PER_BOLDNESS": -3,
+    "TECH_BLOCK_FIERCE_THRESHOLD": 30,
+    "TECH_BLOCK_STRONG_THRESHOLD": 20,
+    "TECH_BLOCK_WEAK_THRESHOLD": 10,
     "TECH_PRIORITY_MAYA_CALENDAR_BONUS": 50,
-    "TECH_PRIORITY_UNIQUE_ITEM": 5,
+    "TECH_PRIORITY_UNIQUE_ITEM": 25,
     "TECH_WEIGHT_PROPAGATION_LEVELS": 3,
     "TECH_WEIGHT_PROPAGATION_PERCENT": 50,
     "TURNS_SINCE_PEACE_WEIGHT_DAMPENER": 25,
@@ -1224,10 +1234,16 @@
     "UNKNOWN_EXPLORE_TILE_VALUE": 25,
     "UNSANCTIONED_US_TURNS_UNTIL_FORGOTTEN": 50,
     "VERY_UNHAPPY_THRESHOLD": -10,
+    "VICTORY_BLOCK_FIERCE_THRESHOLD": 40,
+    "VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_LIKELY": 15,
+    "VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_POSITIVE": 20,
+    "VICTORY_BLOCK_GRAND_STRATEGY_DIFFERENCE_UNSURE": 5,
+    "VICTORY_BLOCK_STRONG_THRESHOLD": 30,
+    "VICTORY_BLOCK_WEAK_THRESHOLD": 20,
     "VICTORY_DISPUTE_FIERCE_THRESHOLD": 80,
-    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_LIKELY": 10,
-    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_POSITIVE": 14,
-    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_UNSURE": 6,
+    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_LIKELY": 15,
+    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_POSITIVE": 25,
+    "VICTORY_DISPUTE_GRAND_STRATEGY_MATCH_UNSURE": 5,
     "VICTORY_DISPUTE_OTHER_PLAYER_FIERCE_THRESHOLD": 70,
     "VICTORY_DISPUTE_OTHER_PLAYER_GRAND_STRATEGY_MATCH_LIKELY": 5,
     "VICTORY_DISPUTE_OTHER_PLAYER_GRAND_STRATEGY_MATCH_POSITIVE": 7,
@@ -1520,8 +1536,8 @@
     {
       "name": "ECONOMICAISTRATEGY_EARLY_EXPANSION",
       "noMinorCivs": true,
-      "checkTriggerTurnCount": 5,
-      "minimumNumTurnsExecuted": 10,
+      "checkTriggerTurnCount": 1,
+      "minimumNumTurnsExecuted": 1,
       "weightThreshold": 3,
       "advisor": "ECONOMIC",
       "advisorCounsel": "TXT_KEY_ECONOMICAISTRATEGY_EARLY_EXPANSION",
@@ -1803,18 +1819,6 @@
         "NavalRecon": 5,
         "NavalGrowth": 5,
         "NavalTileImprovement": 10,
-        "Expansion": 50,
-        "WaterConnection": 10
-      }
-    },
-    {
-      "name": "ECONOMICAISTRATEGY_REALLY_EXPAND_TO_OTHER_CONTINENTS",
-      "noMinorCivs": true,
-      "checkTriggerTurnCount": 10,
-      "minimumNumTurnsExecuted": 25,
-      "weightThreshold": 100,
-      "techPrereq": "Optics",
-      "playerFlavors": {
         "Expansion": 50,
         "WaterConnection": 10
       }
@@ -3044,6 +3048,42 @@
       "techPrereq": "Radar",
       "flavors": {
         "Airlift": 80
+      }
+    },
+    {
+      "name": "AICITYSTRATEGY_NEW_CONTINENT_FEEDER",
+      "noMinorCivs": true,
+      "checkTriggerTurnCount": 50,
+      "minimumNumTurnsExecuted": 100,
+      "advisorCounselImportance": 1,
+      "flavors": {
+        "Defense": 50,
+        "Recon": 50,
+        "NavalRecon": 100,
+        "Expansion": 100
+      }
+    },
+    {
+      "name": "AICITYSTRATEGY_POCKET_CITY",
+      "noMinorCivs": true,
+      "checkTriggerTurnCount": 50,
+      "minimumNumTurnsExecuted": 50,
+      "advisorCounselImportance": 1,
+      "flavors": {
+        "Defense": 100,
+        "Expansion": -100
+      }
+    },
+    {
+      "name": "AICITYSTRATEGY_ENOUGH_SETTLERS",
+      "noMinorCivs": true,
+      "checkTriggerTurnCount": 5,
+      "minimumNumTurnsExecuted": 20,
+      "advisorCounselImportance": 1,
+      "flavors": {
+        "Offense": 30,
+        "Defense": 30,
+        "Expansion": -100
       }
     }
   ],
@@ -9755,7 +9795,13 @@
         "HumanOpinionChange": -10,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 1,
+        "VictoryBlockMod": 2,
+        "TechBlockPercent": 50,
+        "TechBlockMod": 2,
+        "PolicyBlockPercent": 50,
+        "PolicyBlockMod": 1
       }
     },
     {
@@ -9803,7 +9849,13 @@
         "HumanOpinionChange": -5,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 1,
+        "VictoryBlockMod": 2,
+        "TechBlockPercent": 60,
+        "TechBlockMod": 2,
+        "PolicyBlockPercent": 60,
+        "PolicyBlockMod": 1
       }
     },
     {
@@ -9851,7 +9903,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 2,
+        "VictoryBlockMod": 2,
+        "TechBlockPercent": 80,
+        "TechBlockMod": 2,
+        "PolicyBlockPercent": 80,
+        "PolicyBlockMod": 2
       }
     },
     {
@@ -9899,7 +9957,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 2,
+        "VictoryBlockMod": 3,
+        "TechBlockPercent": 90,
+        "TechBlockMod": 3,
+        "PolicyBlockPercent": 90,
+        "PolicyBlockMod": 2
       }
     },
     {
@@ -9947,7 +10011,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 2,
+        "VictoryBlockMod": 3,
+        "TechBlockPercent": 110,
+        "TechBlockMod": 3,
+        "PolicyBlockPercent": 110,
+        "PolicyBlockMod": 2
       }
     },
     {
@@ -9995,7 +10065,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 2,
+        "VictoryBlockMod": 4,
+        "TechBlockPercent": 125,
+        "TechBlockMod": 4,
+        "PolicyBlockPercent": 125,
+        "PolicyBlockMod": 2
       }
     },
     {
@@ -10043,7 +10119,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 3,
+        "VictoryBlockMod": 4,
+        "TechBlockPercent": 134,
+        "TechBlockMod": 4,
+        "PolicyBlockPercent": 134,
+        "PolicyBlockMod": 3
       }
     },
     {
@@ -10091,7 +10173,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 3,
+        "VictoryBlockMod": 5,
+        "TechBlockPercent": 150,
+        "TechBlockMod": 5,
+        "PolicyBlockPercent": 150,
+        "PolicyBlockMod": 3
       }
     },
     {
@@ -10139,7 +10227,13 @@
         "HumanOpinionChange": 0,
         "AIOpinionChange": 0,
         "PolicyChoiceCutoffThreshold": 90,
-        "CityProductionChoiceCutoffThreshold": 90
+        "CityProductionChoiceCutoffThreshold": 90,
+        "VictoryDisputeMod": 0,
+        "VictoryBlockMod": 0,
+        "TechBlockPercent": 100,
+        "TechBlockMod": 0,
+        "PolicyBlockPercent": 100,
+        "PolicyBlockMod": 0
       }
     }
   ],

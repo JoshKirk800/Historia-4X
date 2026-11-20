@@ -492,7 +492,7 @@ object Deployment {
      *  CvTacticalAI::ScoreGreatGeneralPlot: 0 for a city or a unit that is not ours, or a civilian of ours that is done. Else the strength of the
      *  city of ours, or 250 times that of the unit of ours (a fifth of it if the unit has moves left, 5 times if it is in the same army; a
      *  third for a melee unit about to attack), else 10, plus 5,000,000 within 3 of the army's center of mass or 250,000 per hex short of 20
-     *  from it, if the hex is not dangerous, divided by 1 to 5 when the danger is high compared to the strength there (1000 for an empty hex).
+     *  from it, if the hex is not dangerous, divided by 1 to 5 when the damage expected there ([PlotDanger.get]) is high compared to the health of the city or defender (1000 for an empty hex; BNW compared strengths, a measure the danger no longer has).
      */
     fun scoreGreatGeneralPlot(ctx: TacticalContext, general: MapUnit, tile: Tile, army: AiArmy?): Int {
         val civ = ctx.civ
@@ -516,10 +516,10 @@ object Deployment {
             val city = tile.getCity()!!
             val maxHitPoints = ctx.rules.define(AiDefine.MAX_CITY_HIT_POINTS)
             friendlyCityStrength = CityCombatant(city).getCityStrength() * 100 * city.health / maxHitPoints
-            dangerDivisor = dangerDivisorFor(danger, friendlyCityStrength)
+            dangerDivisor = dangerDivisorFor(ctx.danger.get(city), city.health)
         } else if (bestDefender != null && bestDefender != general) {
             val basePower = PlotDanger.strengthConsideringDamage(bestDefender, ctx.rules) * 250
-            dangerDivisor = dangerDivisorFor(danger, basePower)
+            dangerDivisor = dangerDivisorFor(ctx.danger.get(bestDefender, tile), bestDefender.health)
             friendlyUnitFinalPower = basePower
             // Deemphasize if hasn't finished moves yet
             if (bestDefender.hasMovement()) friendlyUnitFinalPower /= 25 // could move anywhere, not a good place to go
@@ -547,11 +547,11 @@ object Deployment {
         return score
     }
 
-    /** 5 if the danger is more than twice [strength], 3 if more than [strength], 2 if more than half of it, else 1 */
-    private fun dangerDivisorFor(danger: Int, strength: Int) = when {
-        danger > strength * 2 -> 5
-        danger > strength -> 3
-        danger > strength / 2 -> 2
+    /** 5 if the damage expected is more than twice the [health] there (of the city or the defender), 3 if more than it, 2 if more than half of it, else 1 */
+    private fun dangerDivisorFor(damage: Int, health: Int) = when {
+        damage > health * 2 -> 5
+        damage > health -> 3
+        damage > health / 2 -> 2
         else -> 1
     }
 

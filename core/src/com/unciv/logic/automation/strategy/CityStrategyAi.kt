@@ -11,11 +11,15 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
+import com.unciv.models.ruleset.ai.CityStrategyDef
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
+import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.automation.unit.tactical.CityThreat
+import com.unciv.logic.automation.unit.tactical.TacticalTerritory
 import java.util.WeakHashMap
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -37,6 +41,8 @@ object CityStrategyAi {
     private const val NEED_TILE_IMPROVERS = "AICITYSTRATEGY_NEED_TILE_IMPROVERS"
     private const val NEED_NAVAL_TILE_IMPROVEMENT = "AICITYSTRATEGY_NEED_NAVAL_TILE_IMPROVEMENT"
     private const val CAPITAL_UNDER_THREAT = "AICITYSTRATEGY_CAPITAL_UNDER_THREAT"
+    const val ENOUGH_SETTLERS = "AICITYSTRATEGY_ENOUGH_SETTLERS"
+    const val NEW_CONTINENT_FEEDER = "AICITYSTRATEGY_NEW_CONTINENT_FEEDER"
 
     //region Helpers
 
@@ -329,6 +335,56 @@ object CityStrategyAi {
     }
 
     /**
+     *  IsTestCityStrategy_EnoughSettlers (Vox Populi): never for a city-state; more than one settler (those our cities train included, less the
+     *  one this city is training) are enough, one settler is when no found-city operation exists for it to be on.
+     */
+    fun isEnoughSettlers(city: City): Boolean {
+        val civ = city.civ
+        if (civ.isCityState) return true
+        var settlers = numSettlers(civ)
+        val training = city.cityConstructions.getCurrentConstruction() as? BaseUnit
+        if (training != null && UnitAiTypes.defaultOf(training, civ.gameInfo.ruleset.ai) == UnitAiType.SETTLE) settlers--
+        if (settlers > 1) return true
+        // Settler is idle?
+        return settlers > 0 && civ.ai.operations.operations.none { it.type == AiOperationType.FOUND_CITY }
+    }
+
+    /**
+     *  IsTestCityStrategy_NewContinentFeeder (Vox Populi): a city of more than 6 citizens of a major civilization with a capital that does not
+     *  share its landmass with the capital, on a landmass that has a good settle plot ([SettleAreas.haveGoodSettlePlot]): "a new city on a
+     *  bigger continent? Let's spread our legs!"
+     */
+    fun isNewContinentFeeder(city: City, def: CityStrategyDef): Boolean {
+        if (city.population.population <= 6) return false
+        val civ = city.civ
+        val capital = civ.getCapital(firstCityIfNoCapital = false) ?: return false
+        if (!civ.isMajorCiv || def.noMinorCivs) return false
+        if (MilitaryTargets.hasSharedLandArea(city, capital)) return false
+        return SettleAreas.haveGoodSettlePlot(civ, city.getCenterTile().getContinent())
+    }
+
+    /**
+     *  IsTestCityStrategy_PocketCity (Vox Populi): a city that is not the capital, on the capital's landmass, with no road or railroad
+     *  connection to it, whose tactical zone has no friendly neighbor zone, and that no route could reach from the capital.
+     *  Deviation: "no route could be built" is no land route of [StepFinder] (our land, friendly land, city-state land and that of civilizations
+     *  we are at war with) from the capital to the city.
+     */
+    fun isPocketCity(city: City): Boolean {
+        if (city.isCapital()) return false
+        val civ = city.civ
+        val capital = civ.getCapital(firstCityIfNoCapital = false) ?: return false
+        // Do we already have a connection to the capital?
+        if (city.isConnectedToCapital()) return false
+        // Check if we are on a different continent: a colony is not a pocket city
+        if (city.getCenterTile().getContinent() != capital.getCenterTile().getContinent()) return false
+        // Check the tactical map whether we are neighbors with one of our other cities (for new cities the zone may not exist)
+        val zone = civ.ai.tactical.lastMap?.zoneByCity(city, false)
+        if (zone != null && zone.neighbors.any { it.territory == TacticalTerritory.Friendly }) return false
+        // Could we build a route?
+        return civ.ai.military.steps.distance(civ, null, capital.getCenterTile(), city.getCenterTile()) < 0
+    }
+
+    /**
      *  CvCity::GetJONSCulturePerTurnFromBuildings and GetFaithPerTurnFromBuildings: what the city's buildings give by themselves, with their
      *  unconditional stats (the tech-enhanced yields). Beliefs and policies that add culture or faith per building are separate sums
      *  there (FromReligion, FromPolicies), so the stat tree's "Buildings" branch, which holds them, is not read.
@@ -480,5 +536,8 @@ object CityStrategyAi {
         tests.registerCity("AICITYSTRATEGY_NEED_TOURISM_BUILDING") { city, _ -> needTourismBuilding(city) }
         tests.registerCity("AICITYSTRATEGY_GOOD_AIRLIFT_CITY") { city, _ -> isGoodAirliftCity(city) }
         tests.registerCity(CAPITAL_UNDER_THREAT) { city, _ -> CityThreat.isCapitalUnderThreat(city) }
+        tests.registerCity(ENOUGH_SETTLERS) { city, _ -> isEnoughSettlers(city) }
+        tests.registerCity(NEW_CONTINENT_FEEDER) { city, def -> isNewContinentFeeder(city, def) }
+        tests.registerCity("AICITYSTRATEGY_POCKET_CITY") { city, _ -> isPocketCity(city) }
     }
 }

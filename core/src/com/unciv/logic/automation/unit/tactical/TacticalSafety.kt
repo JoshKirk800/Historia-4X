@@ -1,7 +1,6 @@
 package com.unciv.logic.automation.unit.tactical
 
 import com.unciv.logic.automation.AiDecisionLog
-import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.battle.BattleDamage
 import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.civilization.Civilization
@@ -12,10 +11,9 @@ import yairm210.purity.annotations.Readonly
 
 /**
  *  The checks the safety and heal moves share (CvUnit::IsCanDefend, ActualHealRate, IsUnderEnemyRangedAttack, IsKnownVisibleToEnemy, IsCoveringFriendlyCivilian)
- *  and the simple form of CvTacticalAI::PlotMovesToSafety / ExecuteMovesToSafestPlot (combat units) and PlotHealMoves / ExecuteHeals
- *  ([wantsToFlee], [safestPlot], [moveToSafety], [heal]) that CvHomelandAI's own versions of these moves still use ([com.unciv.logic.automation.unit.HomelandAi],
- *  [com.unciv.logic.automation.unit.CivilianUnitAutomation]). The tactical AI's are [SafestPlot] and [TacticalHealing]. Civilians' counterpart
- *  is [com.unciv.logic.automation.unit.CivilianSafety].
+ *  and the simple form of CvTacticalAI::PlotHealMoves / ExecuteHeals ([heal]) that CvHomelandAI's own version of the move still uses
+ *  ([com.unciv.logic.automation.unit.HomelandAi], [com.unciv.logic.automation.unit.CivilianUnitAutomation]); the tactical AI's is [TacticalHealing].
+ *  The moves to safety are [SafestPlot]'s, for the homeland AI too ([com.unciv.logic.automation.unit.CivilianSafety]).
  *
  *  Deviation: [isUnderEnemyRangedAttack] only counts what we can see (the original reads every enemy unit) and takes no line of sight into account.
  */
@@ -42,14 +40,14 @@ object TacticalSafety {
 
     /**
      *  CvUnit::IsCoveringFriendlyCivilian: the unit protects a unit of ours that cannot defend itself and has finished its turn, outside a city,
-     *  on a tile enemies can attack ([UnitDanger.possibleAttackers]).
+     *  on a tile enemies can attack ([com.unciv.logic.automation.unit.PlotDanger.possibleAttackers]).
      */
     fun isCoveringFriendlyCivilian(ctx: TacticalContext, unit: MapUnit): Boolean {
         val tile = unit.getTile()
         if (tile.isCityCenter()) return false
         for (other in tile.getUnits()) {
             if (other == unit || other.civ != unit.civ) continue
-            if (!canDefend(other) && other in ctx.cache.processedUnits) return unit.civ.ai.unitDanger.possibleAttackers(tile).isNotEmpty()
+            if (!canDefend(other) && other in ctx.cache.processedUnits) return unit.civ.ai.plotDanger.possibleAttackers(tile).isNotEmpty()
         }
         return false
     }
@@ -76,74 +74,6 @@ object TacticalSafety {
             }
         }
         return false
-    }
-
-    /**
-     *  CvTacticalAI::PlotMovesToSafety for one combat unit: does it flee? Only from a tile with danger. A hurt unit flees if it is under
-     *  enemy ranged attack or at half strength or less (a hurt barbarian only if it is a ship); a healthy one (never a barbarian) if the
-     *  danger of its tile is above its strength x100. Embarked units (which cannot defend) always flee.
-     */
-    fun wantsToFlee(unit: MapUnit, danger: PlotDanger): Boolean {
-        val tile = unit.getTile()
-        val level = danger.get(tile)
-        if (level <= 0) return false
-        val civ = unit.civ
-        if (!canDefend(unit)) return true
-        val strength = PlotDanger.strengthConsideringDamage(unit, civ.gameInfo.ruleset.ai)
-        if (unit.health < MAX_HEALTH) {
-            if (civ.isBarbarian) return unit.baseUnit.isWaterUnit
-            return isUnderEnemyRangedAttack(unit) || strength * 2 <= unit.baseUnit.strength
-        }
-        return !civ.isBarbarian && level > strength * 100
-    }
-
-    /**
-     *  CvTacticalAI::ExecuteMovesToSafestPlot's choice for a combat unit: among the tiles it can reach this turn (not the one it stands on) that
-     *  hold no foreign unit and no unit of ours of its type, the best of the first non-empty class - our cities (lowest danger first),
-     *  tiles without danger (our territory first), tiles where a defender covers a unit that cannot defend itself (lowest danger), any other
-     *  (lowest danger). Ties go to the nearest tile. (The original also has a variant that ranks our territory above covered tiles
-     *  but compiles it out with PATH_PLAN_LAST.)
-     */
-    fun safestPlot(unit: MapUnit, danger: PlotDanger): Tile? {
-        val civ = unit.civ
-        val canDefend = canDefend(unit)
-        var bestClass = Int.MAX_VALUE
-        var bestWeight = Int.MAX_VALUE
-        var bestCost = Float.MAX_VALUE
-        var best: Tile? = null
-        val reachable = unit.movement.getDistanceToTiles()
-        for ((tile, move) in reachable) {
-            val cost = move.totalMovement
-            if (tile == unit.getTile() || !unit.movement.canMoveTo(tile)) continue
-            if (unit.baseUnit.isWaterUnit && !tile.isWater) continue
-            val level = danger.get(tile)
-            val inCity = tile.isCityCenter() && tile.getOwner() == civ
-            val tileClass: Int
-            val weight: Int
-            when {
-                inCity -> { tileClass = 0; weight = level }
-                level <= 0 -> { tileClass = 1; weight = if (tile.getOwner() == civ) 0 else 1 }
-                !canDefend && tile.militaryUnit?.civ == civ -> { tileClass = 2; weight = level }
-                else -> { tileClass = 3; weight = level }
-            }
-            if (tileClass < bestClass || (tileClass == bestClass && (weight < bestWeight || (weight == bestWeight && cost < bestCost)))) {
-                bestClass = tileClass
-                bestWeight = weight
-                bestCost = cost
-                best = tile
-            }
-        }
-        return best
-    }
-
-    /** CvTacticalAI::PlotMovesToSafety(true) with ExecuteMovesToSafestPlot: moves the unit if it wants to flee and ends its turn; true if it did */
-    fun moveToSafety(unit: MapUnit, danger: PlotDanger): Boolean {
-        if (!wantsToFlee(unit, danger)) return false
-        val target = safestPlot(unit, danger) ?: return false
-        AiDecisionLog.log(unit.civ) { "Tactical: ${unit.name} flees from ${unit.getTile().position} (danger ${danger.get(unit.getTile())}) to ${target.position} (danger ${danger.get(target)})" }
-        unit.movement.moveToTile(target)
-        unit.currentMovement = 0f
-        return true
     }
 
     /**

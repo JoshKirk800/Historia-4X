@@ -163,7 +163,7 @@ object PactPlanningAi {
         if (!isTradingAllowedWith(civ, other) || !isTradingAllowedWith(other, civ)) return false
         if (FriendshipPlanningAi.isTooEarlyForDoF(civ, other) && !OpinionAi.isDoFAccepted(civ, other)) return false
         if (civ.gameInfo.civilizations.count { it.isMajorCiv && it.isAlive() } <= 2) return false
-        if (OpinionAi.isUntrustworthyFriend(other)) return false
+        if (OpinionAi.isUntrustworthyFriend(civ, other)) return false
         if (OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ)) return false
         val ai = civ.ai.diplomacy
         val strategic = ai.memoryOf(other).strategicApproach ?: MajorCivApproach.Neutral

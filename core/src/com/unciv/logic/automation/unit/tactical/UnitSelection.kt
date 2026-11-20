@@ -109,7 +109,7 @@ object UnitSelection {
         plunder: Boolean = false,
     ): List<MapUnit> {
         val civ = ctx.civ
-        val danger = civ.ai.unitDanger
+        val danger = civ.ai.plotDanger
         val enemyThere = TacticalTargets.visibleEnemyDefender(civ, target) != null
         val result = ArrayList<Pair<MapUnit, Int>>()
         for (unit in ctx.liveUnits()) {

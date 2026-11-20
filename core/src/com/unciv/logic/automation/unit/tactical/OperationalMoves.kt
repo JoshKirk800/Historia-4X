@@ -101,7 +101,7 @@ object OperationalMoves {
 
     /** A context with this turn's targets, for an army that has to attack what is near it */
     private fun fullContext(civ: Civilization, cache: AutomationCache) =
-        civ.ai.tactical.map.let { map -> TacticalContext(civ, map, civ.ai.plotDanger, cache, emptyList(), TacticalTargets.find(civ, map, civ.ai.plotDanger)) }
+        civ.ai.tactical.map.let { map -> TacticalContext(civ, map, civ.ai.plotDanger, cache, emptyList(), TacticalTargets.find(civ, map)) }
 
     private fun tileAt(civ: Civilization, coord: HexCoord?): Tile? = coord?.let { civ.gameInfo.tileMap.getOrNull(it.x, it.y) }
 

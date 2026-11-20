@@ -7,6 +7,7 @@ import com.unciv.logic.automation.strategy.MilitaryOperations
 import com.unciv.logic.automation.strategy.OperationAbortReason
 import com.unciv.logic.automation.diplomacy.AggressivePosture
 import com.unciv.logic.automation.diplomacy.ApproachAi
+import com.unciv.logic.automation.diplomacy.BlockLevel
 import com.unciv.logic.automation.diplomacy.CompetitorAi
 import com.unciv.logic.automation.diplomacy.CoopWarAi
 import com.unciv.logic.automation.diplomacy.CoopWarState
@@ -262,16 +263,16 @@ object DiplomacyAutomation {
     /**
      *  CvDiplomacyAI::GetDenounceWeight (Vox Populi, Release-5.4.8; D7): denounce willingness; by our approach (friendly never;
      *  hostile +6, afraid -10, neutral -8, guarded +1, deceptive -25, war +8 at war, else by its face: hostile +8, neutral -4,
-     *  friendly -25) and opinion (unforgivable +10, enemy +5, competitor +2, neutral -5, favourable or better never); their land
-     *  dispute (strong +2, fierce +5); -2 per defensive pact of theirs; our biggest competitor +10, a major competitor +2;
+     *  friendly -25) and opinion (unforgivable +10, enemy +5, competitor +2, neutral -5, favourable or better never); their strong victory
+     *  dispute +4 and strong block +4; their land dispute (strong +2, fierce +5); -2 per defensive pact of theirs; our biggest competitor +10, a major competitor +2;
      *  untrustworthy +25; endgame aggression + the handicap's larger victory dispute or block percent / 10; resurrection -25 (by
      *  them) or -15 (by us), a defensive pact -10, a liberator -10, cities they liberated -5; each other major tied to them (a
      *  friendship, a pact, a denouncement, a war) that we neither hate nor approach worse than deceptively nor distrust, by
      *  neighbourhood, our opinion of it, its strength and our DoF or pact with it: added when it denounced or fights them, else taken
      *  away; +2 per city-state we do not mean to conquer or bully that asks us to denounce them (unless close to a peaceful victory),
      *  +3 more going for a diplomatic victory or with the diplomat trait, else +2 more with a diplomatic victory pursuit (primary or
-     *  secondary); +3 when a friend asks ([bias]). VP's loop also takes in ourselves; as none: vassals, victory dispute and block levels,
-     *  sanctions.
+     *  secondary); +3 when a friend asks ([bias]). A tied major is not counted when we are endgame-aggressive to them and in a victory
+     *  dispute or block with them (VP: "don't be a pawn"). VP's loop also takes in ourselves; as none: vassals, sanctions.
      */
     fun denounceWeight(civ: Civilization, other: Civilization, bias: Boolean): Int {
         val ai = civ.ai.diplomacy
@@ -298,6 +299,8 @@ object DiplomacyAutomation {
             MajorCivOpinion.Neutral -> -5
             MajorCivOpinion.Favorable, MajorCivOpinion.Friend, MajorCivOpinion.Ally -> return 0
         }
+        if (memory.victoryDisputeLevel >= DisputeLevel.Strong) weight += 4
+        if (memory.victoryBlockLevel >= BlockLevel.Strong) weight += 4
         weight += when (memory.landDispute) {
             DisputeLevel.Strong -> 2
             DisputeLevel.Fierce -> 5
@@ -306,7 +309,7 @@ object DiplomacyAutomation {
         weight -= 2 * other.diplomacy.values.count { it.diplomaticStatus == DiplomaticStatus.DefensivePact }
         if (CompetitorAi.biggestCompetitor(civ) == other.civID) weight += 10
         else if (CompetitorAi.isMajorCompetitor(civ, other)) weight += 2
-        if (OpinionAi.isUntrustworthyFriend(other)) weight += 25
+        if (OpinionAi.isUntrustworthyFriend(civ, other)) weight += 25
         val handicap = rules.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values
         if (VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules))
             weight += maxOf(handicap?.get("VictoryDisputePercent") ?: 100, handicap?.get("VictoryBlockPercent") ?: 100) / 10
@@ -322,7 +325,10 @@ object DiplomacyAutomation {
             if (!againstThem && !OpinionAi.isDoFAccepted(third, other) && tie != DiplomaticStatus.DefensivePact) continue
             if (ai.opinionOf(third) <= MajorCivOpinion.Enemy) continue
             if (ApproachAi.VP_ORDER.indexOf(ai.approachTowards(third)) <= ApproachAi.VP_ORDER.indexOf(MajorCivApproach.Deceptive)) continue
-            if (OpinionAi.isUntrustworthyFriend(third)) continue
+            if (OpinionAi.isUntrustworthyFriend(civ, third)) continue
+            // Third party is close to victory? Don't be a pawn
+            if (VictoryProgressAi.isEndgameAggressiveTo(civ, other, rules) &&
+                (memory.victoryDisputeLevel > DisputeLevel.None || memory.victoryBlockLevel > BlockLevel.None)) continue
             var mod = 0
             if (DiplomacyTurn.proximity(civ, third) == DiplomacyTurn.PROXIMITY_NEIGHBORS) mod++
             mod += ai.opinionOf(third).ordinal - MajorCivOpinion.Neutral.ordinal

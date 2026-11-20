@@ -13,9 +13,9 @@ import yairm210.purity.annotations.Readonly
 /**
  *  Vox Populi's competitor assessments (CvDiplomacyAI, Release-5.4.8; D7): which majors are our major competitors
  *  (DoUpdateMajorCompetitors, stored as [MajorCivMemory.majorCompetitor]) and which are early-game competitors (IsEarlyGameCompetitor,
- *  asked when needed). Inputs we lack count as absent: victory dispute and block levels, tech and policy block levels, wonder
- *  spammers, the World Congress competitor and sanctions, city-state troublemakers, plots against us and coups, easy targets and
- *  preferred attack targets. No vassals (D3). IsUntrustworthy is BNW's form ([OpinionAi.isUntrustworthyFriend]).
+ *  asked when needed). Inputs we lack count as absent: the World Congress competitor and sanctions, city-state troublemakers, plots
+ *  against us and coups, wonder spammers (kept by [ExpanderAi], VP reads them here too: not yet) and the strategic trade partner. No
+ *  vassals (D3). IsUntrustworthy is VP's ([UntrustworthyAi]).
  */
 object CompetitorAi {
 
@@ -24,12 +24,13 @@ object CompetitorAi {
      *  major is a competitor, in VP's order, when: only two majors are alive and we compete for victory; they hold a third of the other
      *  original capitals, or as many as a third of the majors ever; we are endgame-aggressive towards them; they took our capital or holy
      *  city; they nuked us or have nukes. Otherwise not when they lost their own capital; else a competitor when we are close to world
-     *  conquest; they are untrustworthy, of an opposing ideology, a severe warmonger threat, unforgivable, in a strong land dispute or a
-     *  reckless expander; and, competing for victory, by our victory: conquest (from the Medieval era) when they hold a capital, dispute
-     *  land or are neighbours; culture (from the Renaissance, or close to it) on a strong wonder dispute, when they are the major we
-     *  influence least (below influential), when they become popular with us and are not falling (or influential), or when our influence on
-     *  them stays low (Modern era on: familiar or below, or popular and falling; before: exotic or below, or familiar and falling);
-     *  spaceship (from the Renaissance, or close to it) from the Atomic era when they know more techs. Diplomacy has no input we keep.
+     *  conquest; they are untrustworthy, of an opposing ideology, a severe warmonger threat, unforgivable, in a strong victory dispute or
+     *  block, in a strong land dispute or a reckless expander; and, competing for victory, by our victory: conquest (from the Medieval
+     *  era) when they hold a capital, dispute land or are neighbours; culture (from the Renaissance, or close to it) on a strong wonder
+     *  dispute or policy block, when they are the major we influence least (below influential), when they become popular with us and are
+     *  not falling (or influential), or when our influence on them stays low (Modern era on: familiar or below, or popular and falling;
+     *  before: exotic or below, or familiar and falling); spaceship (from the Renaissance, or close to it) on a strong tech block, and from
+     *  the Atomic era when they know more techs. Diplomacy has no input we keep.
      */
     fun updateMajorCompetitors(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
         for (memory in civ.ai.diplomacy.memories.values) memory.majorCompetitor = false
@@ -53,8 +54,9 @@ object CompetitorAi {
      *  approach is not friendly, by priority: the latest that holds our capital; else the first close to world conquest; else, endgame
      *  aggressive towards them with a strategic approach worse than neutral, the closest, then the one we like least; else the first that
      *  holds the holy city of our religion. Failing all, the highest strategic war value among those not friendly, then hostile,
-     *  deceptive, guarded and afraid (a value above 0). VP's priorities for a capital or holy city taken earlier, the victory dispute tie
-     *  and the vassal terms have no input here: we know only who holds them now, keep no victory disputes and have no vassals.
+     *  deceptive, guarded and afraid (a value above 0). Two competitors of the third priority: the one with the higher victory dispute
+     *  level, then the closer, then the one we like less. VP's priorities for a capital or holy city taken earlier and the vassal terms
+     *  have no input here: we know only who holds them now, and have no vassals.
      */
     fun updateBiggestCompetitor(civ: Civilization, others: List<Civilization>, rules: AiRuleset) {
         val diplomacy = civ.ai.diplomacy
@@ -80,9 +82,13 @@ object CompetitorAi {
                 best = other
                 bestPriority = priority
             } else if (priority == 3 && bestPriority == 3) {
+                // We hate the people who are going for the same victory condition as us more; the closer one; the one we like less
+                val dispute = memory(other).victoryDisputeLevel
+                val bestDispute = memory(best!!).victoryDisputeLevel
                 val proximity = DiplomacyTurn.proximity(civ, other)
-                val bestProximity = DiplomacyTurn.proximity(civ, best!!)
-                if (proximity > bestProximity || (proximity == bestProximity && memory(other).opinionWeight > memory(best).opinionWeight))
+                val bestProximity = DiplomacyTurn.proximity(civ, best)
+                if (dispute > bestDispute || (dispute == bestDispute && (proximity > bestProximity ||
+                        (proximity == bestProximity && memory(other).opinionWeight > memory(best).opinionWeight))))
                     best = other
             }
         }
@@ -118,10 +124,11 @@ object CompetitorAi {
         if (memory.numTimesNuked > 0 || other.units.getCivUnits().any { it.isNuclearWeapon() }) return true
         if (VictoryProgressAi.hasLostCapital(other)) return false
         if (VictoryProgressAi.isCloseToWorldConquest(civ, rules)) return true
-        if (OpinionAi.isUntrustworthyFriend(other)) return true
+        if (OpinionAi.isUntrustworthyFriend(civ, other)) return true
         if (isOpposingIdeology(civ, other)) return true
         if (civ.ai.diplomacy.warmongerThreat(other) >= AiThreat.Severe) return true
         if (memory.opinion == MajorCivOpinion.Unforgivable) return true
+        if (memory.victoryDisputeLevel >= DisputeLevel.Strong || memory.victoryBlockLevel >= BlockLevel.Strong) return true
         if (memory.landDispute >= DisputeLevel.Strong) return true
         if (WarStateAi.isPlayerRecklessExpander(civ, other)) return true
         if (!competing) return false
@@ -135,6 +142,7 @@ object CompetitorAi {
         val closeToCulture = VictoryProgressAi.cultureVictoryProgress(civ, rules) >= rules.define(AiDefine.CLOSE_TO_CULTURE_VICTORY_THRESHOLD)
         if ((renaissance && civ.ai.isGoingForCultureVictory()) || closeToCulture) {
             if (memory.wonderDispute >= DisputeLevel.Strong) return true
+            if (memory.policyBlockLevel >= BlockLevel.Strong) return true
             if (civLowestInfluence(civ, rules) == other) return true
             val theirLevel = other.culture.getInfluenceLevel(civ) ?: InfluenceLevel.Unknown
             if (theirLevel >= InfluenceLevel.Popular &&
@@ -147,6 +155,7 @@ object CompetitorAi {
         }
         val closeToScience = VictoryProgressAi.scienceVictoryProgress(civ) >= rules.define(AiDefine.CLOSE_TO_SCIENCE_VICTORY_THRESHOLD)
         if ((renaissance && civ.ai.isGoingForSpaceshipVictory()) || closeToScience) {
+            if (memory.techBlockLevel >= BlockLevel.Strong) return true
             if (era >= rules.define(AiDefine.ATOMIC_ERA) && other.tech.techsResearched.size > civ.tech.techsResearched.size) return true
         }
         return false
@@ -155,7 +164,8 @@ object CompetitorAi {
     /**
      *  CvDiplomacyAI::IsEarlyGameCompetitor: up to the Medieval era (era 2), when our opinion of them is Enemy or worse, they dispute
      *  land more than weakly, beat us to a wonder, made a demand ([MajorCivMemory.numDemandsMade]), converted our cities,
-     *  either of us denounced the other, they robbed us, ignored or broke a promise about bullying city-states, attacked or killed a
+     *  either of us denounced the other, they lead us in techs or policies (a strong block), they robbed us, ignored or broke a promise
+     *  about bullying city-states, attacked or killed a
      *  city-state we protect, or are untrustworthy; or when they are a juicy target (an easy target, [WarStateAi.isEasyTarget], or one
      *  with a preferred attack target, [com.unciv.logic.automation.strategy.MilitaryAi.havePreferredAttackTarget]) that is our
      *  neighbour and expands recklessly or spams wonders, or is close and expands recklessly or spams wonders for a conqueror (primary
@@ -170,10 +180,11 @@ object CompetitorAi {
             || memory.numDemandsMade > 0
             || memory.negativeReligiousConversionPoints > 0
             || OpinionAi.isDenouncedPlayer(civ, other) || OpinionAi.isDenouncedPlayer(other, civ)
+            || memory.policyBlockLevel >= BlockLevel.Strong || memory.techBlockLevel >= BlockLevel.Strong
             || memory.numTimesRobbed > 0
             || memory.ignoredBullyCityStatePromise || memory.brokenBullyCityStatePromise
             || OpinionAi.isAngryAboutProtectedMinorAttacked(memory, rules) || OpinionAi.isAngryAboutProtectedMinorKilled(memory, rules)
-            || OpinionAi.isUntrustworthyFriend(other)) return true
+            || OpinionAi.isUntrustworthyFriend(civ, other)) return true
         if (!(WarStateAi.isEasyTarget(civ, other) || civ.ai.military.havePreferredAttackTarget(other))) return false
         val reckless = WarStateAi.isPlayerRecklessExpander(civ, other)
         val spammer = memory.wonderSpammer

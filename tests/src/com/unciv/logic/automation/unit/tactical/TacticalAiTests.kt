@@ -179,7 +179,7 @@ class TacticalAiTests {
     }
 
     private fun highPriorityTargets() =
-        TacticalTargets.find(civ, civ.ai.tactical.map, civ.ai.plotDanger).all.filter { it.type == TacticalTargetType.HighPriorityUnit }
+        TacticalTargets.find(civ, civ.ai.tactical.map).all.filter { it.type == TacticalTargetType.HighPriorityUnit }
 
     private fun setGold(amount: Int) = civ.addGold(amount - civ.gold)
 
@@ -297,7 +297,7 @@ class TacticalAiTests {
         see()
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
-        return TacticalContext(civ, map, danger, AutomationCache(), units.toList(), TacticalTargets.find(civ, map, danger))
+        return TacticalContext(civ, map, danger, AutomationCache(), units.toList(), TacticalTargets.find(civ, map))
     }
 
     @Test

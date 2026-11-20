@@ -243,7 +243,7 @@ object WorldMapTileUpdater {
             val unit = unitView.getUnit()
             // The sites the AI would pick for this settler (CvPlayer::GetBestSettlePlot scores)
             val scores = HashMap<Tile, Int>()
-            SettleAreas.bestSettlePlot(unit, escorted = false, area = -1, targetedSites = emptyList(), scores = scores)
+            SettleAreas.bestSettlePlot(unit.civ, unit, null, scores)
             if (DebugUtils.SHOW_SETTLER_SCORES)
                 DebugUtils.SETTLER_SCORES = scores.entries.associate { it.key.position to it.value.toFloat() }
             scores.entries.sortedByDescending { it.value }.take(3).forEach {

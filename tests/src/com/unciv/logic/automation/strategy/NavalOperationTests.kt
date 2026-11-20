@@ -486,7 +486,7 @@ class NavalOperationTests {
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
         return com.unciv.logic.automation.unit.tactical.TacticalContext(
-            civ, map, danger, AutomationCache(), ships.toList(), com.unciv.logic.automation.unit.tactical.TacticalTargets.find(civ, map, danger))
+            civ, map, danger, AutomationCache(), ships.toList(), com.unciv.logic.automation.unit.tactical.TacticalTargets.find(civ, map))
     }
 
     @Test

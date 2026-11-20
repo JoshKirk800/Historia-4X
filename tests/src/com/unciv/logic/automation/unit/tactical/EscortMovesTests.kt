@@ -97,7 +97,7 @@ class EscortMovesTests {
         val (operation, settler, warrior) = escortedSettler()
         unit("Warrior", -3, 0, enemy) // two hexes from the settler: it can walk up and capture it
         civ.ai.invalidateTurnCaches()
-        assertTrue(civ.ai.plotDanger.isUnderImmediateThreat(settler.getTile()))
+        assertEquals(Int.MAX_VALUE, civ.ai.plotDanger.get(settler))
 
         val cache = AutomationCache()
         OperationalMoves.moveOperation(civ, operation, cache)
@@ -170,14 +170,14 @@ class EscortMovesTests {
         game.addUnit("Warrior", enemy, enemyTile)
         civ.viewableTiles = game.tileMap.values.toSet() // adding units narrowed our view to what our units see
         civ.ai.invalidateTurnCaches()
-        assertTrue("stop ${endOfTurn.position}, enemy ${enemyTile.position}, start ${start.position}, danger ${civ.ai.plotDanger.get(endOfTurn)}",
-            civ.ai.plotDanger.isUnderImmediateThreat(endOfTurn))
-        assertFalse("start danger ${civ.ai.plotDanger.get(start)}", civ.ai.plotDanger.isUnderImmediateThreat(start))
+        assertEquals("stop ${endOfTurn.position}, enemy ${enemyTile.position}, start ${start.position}",
+            Int.MAX_VALUE, civ.ai.plotDanger.get(settler, endOfTurn))
+        assertTrue("start danger ${civ.ai.plotDanger.get(settler, start)}", civ.ai.plotDanger.get(settler, start) <= settler.health / 2)
 
         OperationalMoves.moveOperation(civ, operation, AutomationCache())
 
         assertNotEquals(endOfTurn, settler.getTile())
-        assertFalse("wherever it is, nobody can capture it there", civ.ai.plotDanger.isUnderImmediateThreat(settler.getTile()))
+        assertNotEquals("wherever it is, nobody can capture it there", Int.MAX_VALUE, civ.ai.plotDanger.get(settler))
     }
 
     @Test

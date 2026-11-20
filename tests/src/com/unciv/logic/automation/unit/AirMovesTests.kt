@@ -58,7 +58,7 @@ class AirMovesTests {
         civ.ai.invalidateTurnCaches()
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
-        return TacticalContext(civ, map, danger, AutomationCache(), civ.units.getCivUnits().toList(), TacticalTargets.find(civ, map, danger))
+        return TacticalContext(civ, map, danger, AutomationCache(), civ.units.getCivUnits().toList(), TacticalTargets.find(civ, map))
     }
 
     // region Counting and sweep targets

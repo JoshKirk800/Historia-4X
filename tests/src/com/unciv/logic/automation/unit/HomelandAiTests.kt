@@ -5,6 +5,7 @@ import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.strategy.ExplorationPlotSets
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
+import com.unciv.logic.battle.BattleConstants
 import com.unciv.logic.automation.unit.tactical.TacticalDominance
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -118,17 +119,20 @@ class HomelandAiTests {
     // region Garrison
 
     @Test
-    fun `the more threatened city is garrisoned first`() {
-        val calm = game.addCity(civ, tile(0))
-        val threatened = game.addCity(civ, tile(10))
-        game.addUnit("Warrior", enemy, tile(12))
+    fun `an exposed city is garrisoned before a sheltered one, which only counts for a policy that rewards garrisons`() {
+        val sheltered = game.addCity(civ, tile(0))
+        val exposed = game.addCity(civ, tile(10))
+        // every plot three tiles from the sheltered city is ours, most of those around the other one are nobody's
+        for (plot in tile(0).getTilesAtDistance(3)) plot.setOwningCity(sheltered)
         val unit = game.addUnit("Archer", civ, tile(5))
-        encourageGarrisons()
         see()
-        assertTrue(civ.ai.plotDanger.cityThreat(threatened) > civ.ai.plotDanger.cityThreat(calm))
-        assertEquals(listOf(threatened, calm), HomelandAi.findTargets(civ, AutomationCache()).cities.map { it.city })
+        assertEquals("without a policy that rewards garrisons only the exposed city is a target", listOf(exposed), HomelandAi.findTargets(civ, AutomationCache()).cities.map { it.city })
+        encourageGarrisons()
+        val targets = HomelandAi.findTargets(civ, AutomationCache()).cities
+        assertEquals(listOf(exposed, sheltered), targets.map { it.city })
+        assertEquals(listOf(70, 30), targets.map { it.weight })
         run(unit)
-        assertTrue("it set out for the threatened city", distance(unit, threatened.getCenterTile()) < 5)
+        assertTrue("it set out for the exposed city", distance(unit, exposed.getCenterTile()) < 5)
         assertTrue(unit.isMoving())
     }
 
@@ -196,66 +200,62 @@ class HomelandAiTests {
 
     @Test
     fun `a city the tactical AI garrisoned this turn gets no unit`() {
-        val guarded = game.addCity(civ, tile(0))
         val open = game.addCity(civ, tile(10))
-        val defender = game.addUnit("Warrior", civ, tile(0))
         val unit = game.addUnit("Archer", civ, tile(5))
         encourageGarrisons()
-        val cache = AutomationCache().also { it.processedUnits.add(defender) }
         see()
-        assertEquals("a city with a defender the tactical AI commands is no target", listOf(open), HomelandAi.findTargets(civ, cache).cities.map { it.city })
         civ.ai.tactical.setLastTurnGarrisonAssigned(open, game.gameInfo.turns)
-        run(unit, cache = cache)
+        run(unit)
         assertFalse("no city was left to garrison", unit.isMoving())
-        assertNotEquals(guarded.getCenterTile(), unit.getTile())
         assertNotEquals(open.getCenterTile(), unit.getTile())
     }
 
     @Test
-    fun `a city-state garrisons by its own move`() {
+    fun `the city of a city-state needs a garrison, which is the tactical AI's, so it is no homeland target`() {
         val cityState = game.addCiv(cityStateType = "Cultured")
-        val city = game.addCity(cityState, tile(0))
-        val unit = game.addUnit("Warrior", cityState, tile(2))
+        game.addCity(cityState, tile(0))
         for (tile in game.tileMap.values) tile.setExplored(cityState, true)
         cityState.viewableTiles = game.tileMap.values.toSet()
         cityState.ai.invalidateTurnCaches()
-        HomelandAi.doTurn(cityState, listOf(unit), AutomationCache())
-        assertEquals(city.getCenterTile(), unit.getTile())
-        assertTrue(unit.isFortified())
+        // CvMilitaryAI::IsExposedToEnemy: city-states assume all, so CvCity::NeedsGarrison is true (it is not the early expansion phase)
+        assertTrue(HomelandAi.findTargets(cityState, AutomationCache()).cities.isEmpty())
     }
 
     // endregion
     // region Sentry points
 
     @Test
-    fun `a sentry point weighs the plots outside, the defense modifier and the danger, doubled on hills and halved on the coast`() {
+    fun `the score of a sentry point is the defense modifier plus 23 for each plot two tiles away that it sees`() {
         see()
         val flat = tile(-9)
         val defense = civ.ai.tactical.map.defenseModifier(flat)
-        assertEquals(3 * 100 + defense, HomelandAi.sentryWeight(civ, flat, 3))
-        val hills = game.setTileTerrain(HexCoord(0, -10), Constants.hill)
+        // grassland all around: the 12 plots at distance 2 are all in sight
+        assertEquals(defense + 12 * 23, HomelandAi.sentryScore(civ, flat))
+        // an ocean plot at distance 2 is passable terrain here, a mountain is not
+        val mountain = game.setTileTerrain(HexCoord(0, -11), Constants.mountain)
         see()
-        assertEquals((2 * 100 + civ.ai.tactical.map.defenseModifier(hills)) * 2, HomelandAi.sentryWeight(civ, hills, 2))
-        val coast = tile(-11)
-        for (neighbor in coast.neighbors.take(1)) game.setTileTerrain(neighbor.position, "Coast")
+        val seesMountain = tile(-9)
+        assertTrue(mountain.aerialDistanceTo(seesMountain) == 2)
+        assertEquals(civ.ai.tactical.map.defenseModifier(seesMountain) + 11 * 23, HomelandAi.sentryScore(civ, seesMountain))
+        val hills = game.setTileTerrain(HexCoord(0, -6), Constants.hill)
         see()
-        assertEquals((100 + civ.ai.tactical.map.defenseModifier(coast)) / 2, HomelandAi.sentryWeight(civ, coast, 1))
+        assertEquals("hills add their defense modifier", civ.ai.tactical.map.defenseModifier(hills) + 12 * 23, HomelandAi.sentryScore(civ, hills))
     }
 
     @Test
-    fun `a sentry point near a threatened city adds its threat times population over 50, the capital's weight more`() {
+    fun `only a point with a score above 30 is a sentry point, in or next to our land and not past an impassable plot`() {
         val city = game.addCity(civ, tile(0))
-        game.addUnit("Warrior", enemy, tile(2))
         see()
-        val threat = civ.ai.plotDanger.cityThreat(city)
-        assertTrue(threat > 0)
-        val point = tile(3)
-        val expected = ((100 + civ.ai.tactical.map.defenseModifier(point) + civ.ai.plotDanger.get(point)) +
-            threat * city.population.population / 50) * 125 / 100
-        assertEquals(expected, HomelandAi.sentryWeight(civ, point, 1))
-        // beyond 5 tiles of the city its threat counts for nothing
-        val far = tile(7)
-        assertEquals(100 + civ.ai.tactical.map.defenseModifier(far) + civ.ai.plotDanger.get(far), HomelandAi.sentryWeight(civ, far, 1))
+        val points = HomelandAi.findTargets(civ, AutomationCache()).sentryPoints
+        assertTrue(points.isNotEmpty())
+        for (point in points) {
+            assertTrue("${point.tile.position}", point.weight > 30)
+            assertEquals(point.weight, HomelandAi.sentryScore(civ, point.tile))
+            val owner = point.tile.getOwner()
+            assertTrue(owner == civ || (owner == null && point.tile.neighbors.any { !it.isWater && it.getOwner() == civ }))
+        }
+        assertTrue("land inside our land that borders nobody is no sentry point", points.none { it.tile.getOwner() == civ && it.tile.neighbors.all { n -> n.getOwner() == civ } })
+        assertTrue(city.getCenterTile() !in points.map { it.tile })
     }
 
     @Test
@@ -326,6 +326,36 @@ class HomelandAiTests {
         assertEquals(hut, ExplorerAi.bestExploreTarget(scout, 3, ExplorerAi.Reach(scout), plots))
         hut.improvement = null
         assertNotEquals(hut, ExplorerAi.bestExploreTarget(scout, 3, ExplorerAi.Reach(scout), plots))
+    }
+
+    @Test
+    fun `a hurt explorer stays to heal, unless the danger on its plot takes the heal away`() {
+        exploreOnlyAround(tile(0), 0)
+        val scout = game.addUnit("Scout", civ, tile(0))
+        scout.health = 60
+        see()
+        assertEquals("it heals 10, which is 7 or more", tile(0), ExplorerAi.bestExploreTarget(scout, 3, ExplorerAi.Reach(scout), ExplorationPlotSets.build(civ)))
+        game.addUnit("Warrior", enemy, tile(3))
+        see()
+        assertTrue("setup: the Warrior hurts it", civ.ai.plotDanger.get(scout) >= 10)
+        assertNotEquals(tile(0), ExplorerAi.bestExploreTarget(scout, 3, ExplorerAi.Reach(scout), ExplorationPlotSets.build(civ)))
+    }
+
+    @Test
+    fun `a builder does not end a turn where more than half its health is in danger, but where less is it does`() {
+        val worker = game.addUnit("Worker", civ, tile(0))
+        val warrior = game.addUnit("Warrior", enemy, tile(5))
+        see()
+        // three tiles from the Warrior it can only be hit: 40 of 100 health, the end of the worker's first turn (two tiles) is fine
+        assertEquals(BattleConstants.DAMAGE_TO_CIVILIAN_UNIT * 80 / 100, civ.ai.plotDanger.get(worker, tile(2)))
+        assertTrue(ExplorerAi.Reach(worker, abortInDanger = true).within(2).any { it.tile == tile(2) && it.pathLength == 1 })
+        warrior.destroy()
+        game.addUnit("Warrior", enemy, tile(4))
+        see()
+        // two tiles from it the Warrior walks in and captures the worker
+        assertEquals(Int.MAX_VALUE, civ.ai.plotDanger.get(worker, tile(2)))
+        assertFalse("no stop at the end of the first turn there", ExplorerAi.Reach(worker, abortInDanger = true).within(2).any { it.tile == tile(2) && it.pathLength == 1 })
+        assertTrue(ExplorerAi.Reach(worker, abortInDanger = true).within(2).any { it.tile == tile(-2) && it.pathLength == 1 })
     }
 
     @Test
@@ -408,6 +438,15 @@ class HomelandAiTests {
 
     private fun airliftDestination(unit: MapUnit, vararg cities: City): Boolean = unit.isMoving() && unit.getMovementDestination() in doorsOf(*cities)
 
+    /** The tiles of the sentry points: a unit may walk to a door of a city for a sentry's sake, which is no airlift */
+    private fun sentryTiles(): Set<Tile> {
+        see()
+        return HomelandAi.findTargets(civ, AutomationCache()).sentryPoints.map { it.tile }.toSet()
+    }
+
+    private fun airliftedTo(unit: MapUnit, sentries: Set<Tile>, vararg cities: City): Boolean =
+        airliftDestination(unit, *cities) && unit.getMovementDestination() !in sentries
+
     @Test
     fun `with two cities that have airports a spare unit walks to a free tile next to one of them`() {
         val a = airportCity(0)
@@ -422,8 +461,9 @@ class HomelandAiTests {
         val a = airportCity(0)
         val b = game.addCity(civ, tile(10))
         val spare = game.addUnit("Warrior", civ, tile(5))
+        val sentries = sentryTiles()
         run(spare)
-        assertFalse(airliftDestination(spare, a, b))
+        assertFalse(airliftedTo(spare, sentries, a, b))
     }
 
     @Test
@@ -432,8 +472,9 @@ class HomelandAiTests {
         val b = airportCity(10)
         civ.playerType = PlayerType.Human
         val spare = game.addUnit("Warrior", civ, tile(5))
+        val sentries = sentryTiles()
         run(spare)
-        assertFalse(airliftDestination(spare, a, b))
+        assertFalse(airliftedTo(spare, sentries, a, b))
     }
 
     @Test

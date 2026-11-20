@@ -209,11 +209,15 @@ class GreatPersonAutomationTests {
     }
 
     @Test
-    fun `merchant skips city-states we approach as conquest or are at war with`() {
+    fun `merchant skips city-states we approach as conquest or as a bully, or are at war with`() {
         val merchant = greatPerson("Great Merchant")
         val cityState = cityState()
         civ.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Conquest
         assertNull(GreatPersonAutomation.findBestMerchantTargetPlot(merchant))
+        civ.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Bully
+        assertNull("CIV_APPROACH_HOSTILE is not above itself", GreatPersonAutomation.findBestMerchantTargetPlot(merchant))
+        civ.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Ignore
+        assertNotNull(GreatPersonAutomation.findBestMerchantTargetPlot(merchant))
         civ.ai.minorCivApproaches[cityState.civID] = MinorCivApproach.Friendly
         assertNotNull(GreatPersonAutomation.findBestMerchantTargetPlot(merchant))
         civ.getDiplomacyManager(cityState)!!.declareWar()
@@ -221,13 +225,29 @@ class GreatPersonAutomationTests {
     }
 
     @Test
-    fun `merchant skips city-states we plan a war against`() {
+    fun `merchant does not mind a war we plan against a city-state, Vox Populi does not look`() {
         val merchant = greatPerson("Great Merchant")
         val cityState = cityState()
         civ.ai.diplomacy.memoryOf(cityState).warGoal = WarGoal.Prepare
-        assertNull(GreatPersonAutomation.findBestMerchantTargetPlot(merchant))
-        civ.ai.diplomacy.memoryOf(cityState).warGoal = null
         assertNotNull(GreatPersonAutomation.findBestMerchantTargetPlot(merchant))
+        assertEquals(cityState, GreatPersonAutomation.findBestMerchantTargetPlot(merchant)!!.getOwner())
+    }
+
+    @Test
+    fun `merchant goes to the nearest friendly capital and, when its path ends nowhere, to the next`() {
+        val merchant = greatPerson("Great Merchant")
+        val near = cityState()   // capital at (4, 0)
+        val far = game.addCiv(cityStateType = "Mercantile")
+        game.addCity(far, tile(-6, 0))
+        civ.diplomacyFunctions.makeCivilizationsMeet(far)
+        var target = GreatPersonAutomation.findBestMerchantTargetPlot(merchant)!!
+        assertEquals(near, target.getOwner())
+        assertEquals(1, target.aerialDistanceTo(near.cities.first().getCenterTile()))
+        // every tile of the near city-state near its capital is a mountain: nothing there to walk to, the far one is next
+        for (neighbor in near.cities.first().getCenterTile().neighbors) game.setTileTerrain(neighbor.position, "Mountain")
+        target = GreatPersonAutomation.findBestMerchantTargetPlot(merchant)!!
+        assertEquals(far, target.getOwner())
+        assertEquals(1, target.aerialDistanceTo(far.cities.first().getCenterTile()))
     }
     //endregion
 

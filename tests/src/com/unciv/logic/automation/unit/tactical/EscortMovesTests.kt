@@ -181,6 +181,31 @@ class EscortMovesTests {
     }
 
     @Test
+    fun `a lone civilian whose way is hit by several enemies keeps its operation and waits or goes round`() {
+        val settler = unit("Settler", -1, 0)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
+        val target = AiOperationLogic.targetTile(civ, operation)!!
+        val start = settler.getTile()
+        val endOfTurn = settler.movement.getShortestPath(target).first()
+        // two Archers that can shoot the stop (three to four hexes, their move of 2 plus range of 2) but not walk into it: 80 damage, no capture
+        val shooters = endOfTurn.getTilesAtDistance(4).filter {
+            it.aerialDistanceTo(start) >= 5 && it.militaryUnit == null && !it.isCityCenter() && it.aerialDistanceTo(tile(8, 0)) > 3
+        }.take(2).toList()
+        assertEquals(2, shooters.size)
+        for (shooter in shooters) game.addUnit("Archer", enemy, shooter)
+        civ.viewableTiles = game.tileMap.values.toSet()
+        enemy.viewableTiles = game.tileMap.values.toSet()
+        civ.ai.invalidateTurnCaches()
+        val danger = civ.ai.plotDanger.get(settler, endOfTurn)
+        assertEquals("two shots, no capture: $danger", 2 * com.unciv.logic.battle.BattleConstants.DAMAGE_TO_CIVILIAN_UNIT, danger)
+
+        OperationalMoves.moveOperation(civ, operation, AutomationCache())
+
+        assertNotEquals("a path the enemy hits is no lost path: ${operation.abortReason}", OperationState.ABORTED, operation.state)
+        assertTrue("it is not left where more than half its health is in danger", civ.ai.plotDanger.get(settler) <= settler.health / 2)
+    }
+
+    @Test
     fun `a lone civilian takes a free defender of ours standing where it stops as its escort`() {
         val settler = unit("Settler", -1, 0)
         val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)

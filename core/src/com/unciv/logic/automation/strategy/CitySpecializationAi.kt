@@ -152,7 +152,7 @@ object CitySpecializationAi {
         // The original has no specialization weights without a capital (and would then fail picking from them)
         if (civ.getCapital() == null) return
 
-        val (wonder, wonderWeight) = WonderProductionAi.chooseWonder(civ, adjustForOtherPlayers = true)
+        val (wonder, wonderWeight) = WonderProductionAi.chooseWonder(civ)
         state.nextWonderDesired = wonder?.name
         state.nextWonderWeight = wonderWeight
         assignSpecializations(civ, weightSpecializations(civ))

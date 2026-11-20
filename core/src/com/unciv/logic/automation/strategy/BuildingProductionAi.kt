@@ -104,7 +104,8 @@ object BuildingProductionAi {
             } == true
         }.toList()
 
-    private fun bestWonderCity(civ: Civilization, wonder: Building): City? {
+    /** The city CvPlayer::SetBestWonderCities picks for [wonder] (see [isBestForWonder]), null if none can build it */
+    internal fun bestWonderCity(civ: Civilization, wonder: Building): City? {
         //is this a unique wonder that we can't build? Ignore it.
         if (wonder.uniqueTo != null && wonder.uniqueTo != civ.civName) return null
         var best: City? = null

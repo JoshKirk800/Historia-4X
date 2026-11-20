@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.strategy
 
+import com.unciv.logic.automation.WeightedChoice
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.Building
@@ -25,9 +26,13 @@ class EngineerWonder(val wonder: Building, val totalWeight: Int, val city: City?
  *  Deviation: the intermediate flavors of a broadcast are [CivAi.flavors] (re-derived from the active strategies, each delta clamped in
  *  definition order rather than adoption order, which only differs at FLAVOR_MIN_VALUE / FLAVOR_MAX_VALUE).
  *
- *  The wonder city is CvCitySpecializationAI::GetWonderBuildCity, stored as [CivAi.wonderCityId] by the city specialization AI.
+ *  The wonder city is CvCitySpecializationAI::GetWonderBuildCity, stored as [CivAi.wonderCityId] by the city specialization AI; ChooseWonder
+ *  (Vox Populi) no longer asks for it, the engineer's wonder ([chooseWonderForGreatEngineer], BNW's) still does.
  */
 object WonderProductionAi {
+    private const val PRODUCTION_CUTOFF = "CityProductionChoiceCutoffThreshold"
+    /** HandicapInfos.CityProductionChoiceCutoffThreshold of Vox Populi (every difficulty), for a ruleset without the column */
+    private const val DEFAULT_PRODUCTION_CUTOFF = 90
 
     /** CvWonderProductionAI::IsWonder: world, team or national wonder */
     fun isWonder(building: Building): Boolean = building.isWonder || building.isNationalWonder
@@ -69,37 +74,43 @@ object WonderProductionAi {
     }
 
     /**
-     *  CvWonderProductionAI::ChooseWonder: among the wonders some city can build, weights by [weight] (×25 if the wonder city has production
-     *  in it already; 0 for a diplomatic-voting wonder unless [isWorthBuildingUnitedNations]), reweighted by the turns the wonder city needs
-     *  ([reweightByTurnsLeft]), divided by 1 + the majors building it if [adjustForOtherPlayers] (world wonders only); then a weighted roll among
-     *  the handicap's CityProductionNumOptionsConsidered best.
+     *  CvWonderProductionAI::ChooseWonder (Vox Populi): every city is asked, for each wonder it is the best city for
+     *  ([BuildingProductionAi.isBestForWonder]; BNW asked the wonder city alone): the weight ([weight], ×25 if the city has production in the
+     *  wonder already; 0 for a diplomatic-voting wonder unless [isWorthBuildingUnitedNations]) reweighted by the turns the city needs at its
+     *  raw production ([reweightByTurnsLeft]), and if it is still positive, run through the building sanity check without the situational terms
+     *  ([BuildingProductionAi.checkBuildingBuildSanity] with ignoreSituational). The wonders with a positive result are sorted by it and one
+     *  is picked among those within HandicapInfos.CityProductionChoiceCutoffThreshold % of the best ([WeightedChoice.chooseAbovePercentThreshold]).
+     *  Deviation: the diplomatic-voting test is BNW's (Vox Populi has none here); the United Nations of the rules is a wonder, and building it
+     *  without a diplomatic victory in reach does nothing.
      *  @return the chosen wonder (null if none has weight) and the total weight of all candidates
      */
-    fun chooseWonder(civ: Civilization, adjustForOtherPlayers: Boolean): Pair<Building?, Int> {
-        val wonderCity = wonderBuildCity(civ) ?: civ.cities.firstOrNull() ?: return Pair(null, 0)
-        val productionPerTurn = max(1, wonderCity.cityStats.currentCityStats.production.toInt())
+    fun chooseWonder(civ: Civilization): Pair<Building?, Int> {
+        val wonders = civ.gameInfo.ruleset.buildings.values.filter { isWonder(it) }
+        // IsBestForWonder is a fact about the civilization's cities: found once per wonder, not once per city and wonder
+        val bestCities = wonders.associateWith { BuildingProductionAi.bestWonderCity(civ, it) }
         val candidates = ArrayList<Pair<Building, Int>>()
-        for (building in civ.gameInfo.ruleset.buildings.values) {
-            if (!isWonder(building) || !haveCityToBuild(civ, building)) continue
-            val turnsRequired = max(1, building.getProductionCost(civ, wonderCity) / productionPerTurn)
-            val alreadyStarted = wonderCity.cityConstructions.getWorkDone(building.name) > 0
-            var weight = weight(civ, building)
-            if (alreadyStarted) weight *= 25
-            if (isDiplomaticVoting(building) && !isWorthBuildingUnitedNations(civ)) weight = 0
-            weight = reweightByTurnsLeft(civ, weight, turnsRequired)
-            if (adjustForOtherPlayers && building.isWonder) {
-                val othersConstructing = civ.gameInfo.civilizations.count { major ->
-                    major.isMajorCiv && major.cities.any { it.cityConstructions.isBeingConstructedOrEnqueued(building.name) }
-                }
-                weight /= 1 + othersConstructing
+        for (city in civ.cities) {
+            val productionPerTurn = max(1, ProductionSanityAi.rawProductionTimes100(city) / 100)
+            for (building in wonders) {
+                if (bestCities[building] != city) continue
+                val turnsRequired = max(1, building.getProductionCost(civ, city) / productionPerTurn)
+                // if we are forced to restart a wonder, give one that has been started already a huge bump
+                val alreadyStarted = city.cityConstructions.getWorkDone(building.name) > 0
+                var weight = weight(civ, building)
+                if (alreadyStarted) weight *= 25
+                if (isDiplomaticVoting(building) && !isWorthBuildingUnitedNations(civ)) weight = 0
+                weight = reweightByTurnsLeft(civ, weight, turnsRequired)
+                if (weight <= 0) continue
+                weight = BuildingProductionAi.checkBuildingBuildSanity(city, building, weight, ignoreSituational = true)
+                if (weight > 0) candidates.add(building to weight)
             }
-            candidates.add(building to weight)
         }
         if (candidates.isEmpty()) return Pair(null, 0)
         candidates.sortByDescending { it.second }
         val totalWeight = candidates.sumOf { it.second }
-        if (totalWeight <= 0) return Pair(null, 0)
-        return Pair(chooseFromTopChoices(civ, candidates, cityProductionNumOptions(civ), "ChooseWonder"), totalWeight)
+        val random = civ.ai.random("ChooseWonder")
+        val index = WeightedChoice.chooseAbovePercentThreshold(candidates.map { it.second }, cityProductionCutoff(civ), random)
+        return Pair(candidates[index].first, totalWeight)
     }
 
     /**
@@ -136,23 +147,9 @@ object WonderProductionAi {
         return (weight.toDouble() / turnsLeft.toDouble().pow(exponent)).toInt()
     }
 
-    /** HandicapInfos.CityProductionNumOptionsConsidered of the game's difficulty (2 if the ruleset has no entry) */
-    fun cityProductionNumOptions(civ: Civilization): Int =
-        civ.gameInfo.ruleset.ai.handicaps.firstOrNull { it.name == civ.gameInfo.difficulty }?.values?.get("CityProductionNumOptionsConsidered") ?: 2
-
-    /** CvWeightedVector::ChooseFromTopChoices on [sorted] (best first): a roll below the summed weight of the first [numChoices] */
-    internal fun <T> chooseFromTopChoices(civ: Civilization, sorted: List<Pair<T, Int>>, numChoices: Int, purpose: String): T {
-        val count = numChoices.coerceIn(1, sorted.size)
-        var total = 0
-        for (i in 0 until count) total += sorted[i].second
-        if (total <= 0) return sorted[0].first
-        var roll = civ.ai.random(purpose).nextInt(total)
-        for (i in 0 until count) {
-            roll -= sorted[i].second
-            if (roll < 0) return sorted[i].first
-        }
-        return sorted[count - 1].first
-    }
+    /** HandicapInfos.CityProductionChoiceCutoffThreshold of the game's difficulty (Vox Populi: 90 at every difficulty, also for a ruleset without the column) */
+    fun cityProductionCutoff(civ: Civilization): Int =
+        civ.gameInfo.ruleset.ai.handicapValue(civ.gameInfo.getDifficulty().name, PRODUCTION_CUTOFF) ?: DEFAULT_PRODUCTION_CUTOFF
 
     /** CvWonderProductionAI::HaveCityToBuild */
     private fun haveCityToBuild(civ: Civilization, building: Building) = civ.cities.any { canConstruct(it, building) }

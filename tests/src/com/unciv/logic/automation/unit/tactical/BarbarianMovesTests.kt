@@ -308,6 +308,38 @@ class BarbarianMovesTests {
     }
 
     @Test
+    fun `the patrol target is the water tile next to a camp that the ship reaches in the fewest turns, as asking each in turn gives`() {
+        makeWater(-18..18, -3..3)
+        for (x in listOf(-9, -2, 4, 9, 15)) tile(x, 4).setImprovementBasic(Constants.barbarianEncampment)
+        val raider = game.addUnit("Trireme", barbarians, tile(-6))
+        val ctx = context(raider)
+        val camps = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp)
+        val nearest = camps.minBy { raider.getTile().aerialDistanceTo(it.tile) }
+        val waters = camps.filter { it !== nearest }.flatMap { camp -> camp.tile.neighbors.filter { it.isWater }.toList() }
+        raider.movement.clearPathfindingCache()
+        var expected: Tile? = null
+        var expectedTurns = Int.MAX_VALUE
+        for (water in waters) {
+            val turns = EscortMoves.turnsToApproach(ctx, raider, water, BarbarianMoves.seaRange(barbarians), fewCandidates = true)
+            if (turns < expectedTurns) { expectedTurns = turns; expected = water }
+        }
+        assertNotNull(expected)
+        assertEquals(expected, BarbarianMoves.findBestSeaTarget(ctx, raider))
+    }
+
+    @Test
+    fun `the path lengths of a land search are remembered for the turn and give the same target when asked again`() {
+        val unit = game.addUnit("Warrior", barbarians, tile(0))
+        game.addUnit("Archer", civ, tile(4))
+        game.addUnit("Archer", civ, tile(-7))
+        val ctx = context(unit)
+        assertTrue(ctx.memo.isEmpty())
+        assertEquals(tile(4), BarbarianMoves.findBestLandTarget(ctx, unit))
+        assertTrue("remembered for the turn", ctx.memo.isNotEmpty())
+        assertEquals(tile(4), BarbarianMoves.findBestLandTarget(ctx, unit))
+    }
+
+    @Test
     fun `a barbarian ship sails towards its target, attacks what it can reach and is done`() {
         makeWater(-18..18, -3..3)
         val victim = game.addUnit("Trireme", civ, tile(2))

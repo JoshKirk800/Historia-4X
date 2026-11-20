@@ -18,10 +18,10 @@ import java.util.PriorityQueue
  *  Vox Populi's explorer targeting (CvHomelandAI::GetBestExploreTarget, IsValidExplorerEndTurnPlot, EconomicAIHelpers::
  *  IsHighValueExploreTarget, ShouldExplorerAvoid, IsUnfriendlyTerritory), read by [HomelandAi]'s ExecuteExplorerMoves.
  *
- *  Inputs that are none here: VP's danger of a plot to a unit (CvDangerPlots, not ported; BNW's plot danger is another measure), so the
- *  heal rate is not lowered by danger and no plot is refused or lowered for it; scouting XP and the RECON_ONLY_ANCIENT_RUINS rule (off
- *  in BNW's rules: every unit can pop a goody hut); units free of city-state anger. The reachable plots are [Reach] (no explore cost on
- *  the paths).
+ *  The danger of a plot to the unit is [PlotDanger.get] (CvUnit::GetDanger): it lowers the heal rate of the unit that stays, refuses an end-turn plot
+ *  with more than half the unit's health in danger and lowers the score of one with any. Inputs that are none here: scouting XP and the
+ *  RECON_ONLY_ANCIENT_RUINS rule (off in BNW's rules: every unit can pop a goody hut); units free of city-state anger. The reachable plots
+ *  are [Reach] (no explore cost on the paths).
  */
 object ExplorerAi {
     /** CvUnit::MOVE_DENOMINATOR (GD MOVE_DENOMINATOR): moves are counted in 60ths */
@@ -29,6 +29,8 @@ object ExplorerAi {
     private const val RECON = "UNITCOMBAT_RECON"
     /** max(1, EMBARKED_VISIBILITY_RANGE (0 in BNW) + embark extra visibility (none in BNW)) */
     private const val EMBARKED_SIGHT = 1
+    /** GetBestExploreTarget: each point of danger on a plot where the unit ends its turn with a move or less left costs this much score */
+    private const val DANGER_SCORE_WEIGHT = 10
 
     /** A plot a unit reaches (ReachablePlot): within [pathLength] turns (1: this turn), with [movesLeft] 60ths of a move left there */
     class ReachablePlot(val tile: Tile, val pathLength: Int, val movesLeft: Int)
@@ -40,8 +42,8 @@ object ExplorerAi {
      *  territory of a civilization at war with it. VP's MAXIMIZE_EXPLORE cost, which prefers paths through unexplored sight, is not ported.
      *  The builders' flags (CvHomelandAI::ExecuteWorkerMoves: MOVEFLAG_AI_ABORT_IN_DANGER | MOVEFLAG_VISIBLE_ONLY):
      *  [visibleOnly] lets the unit enter a plot we do not see only from one we see (CvAStar.cpp: PathValid, "run through one unseen tile at the time");
-     *  [abortInDanger] refuses a plot with danger where the unit ends one of its first two turns (CvAStar.cpp: PathCost: a civilian is not
-     *  exposed to a danger above half its health; Unciv's plot danger [PlotDanger.get] is the one measure, above 0 here).
+     *  [abortInDanger] refuses a plot where the unit ends one of its first two turns and its danger ([PlotDanger.get] for the unit, CvUnit::GetDanger) is more
+     *  than half its health (CvAStar.cpp: PathEndTurnCost, for a civilian, embarked or exploring unit; the costs it adds for lesser danger are not ported).
      */
     class Reach(private val unit: MapUnit, private val abortInDanger: Boolean = false, private val visibleOnly: Boolean = false) {
         private class Node(val tile: Tile, val turns: Int, val moves: Float)
@@ -58,6 +60,8 @@ object ExplorerAi {
         }
 
         init { push(Node(unit.getTile(), 1, unit.currentMovement)) }
+
+        private fun tooDangerous(tile: Tile) = unit.civ.ai.plotDanger.get(unit, tile) > unit.health / 2
 
         fun within(maxTurns: Int): List<ReachablePlot> {
             while (queue.isNotEmpty() && queue.peek().turns <= maxTurns) settle(queue.poll())
@@ -86,11 +90,11 @@ object ExplorerAi {
                 if (node.moves > Constants.minimumMovementEpsilon) {
                     val left = (node.moves - cost).coerceAtLeast(0f)
                     // Ending the turn here, within the first two turns
-                    if (abortInDanger && node.turns <= 2 && left <= Constants.minimumMovementEpsilon && unit.civ.ai.plotDanger.get(neighbor) > 0) continue
+                    if (abortInDanger && node.turns <= 2 && left <= Constants.minimumMovementEpsilon && tooDangerous(neighbor)) continue
                     push(Node(neighbor, node.turns, left))
                 } else if (canStop) {
                     val left = (fullMovement - cost).coerceAtLeast(0f)
-                    if (abortInDanger && node.turns + 1 <= 2 && left <= Constants.minimumMovementEpsilon && unit.civ.ai.plotDanger.get(neighbor) > 0) continue
+                    if (abortInDanger && node.turns + 1 <= 2 && left <= Constants.minimumMovementEpsilon && tooDangerous(neighbor)) continue
                     push(Node(neighbor, node.turns + 1, left))
                 }
             }
@@ -142,6 +146,7 @@ object ExplorerAi {
 
         val reachable = reach.within(maxTurns)
         if (reachable.isEmpty()) return null
+        val danger = civ.ai.plotDanger
         val sight = unit.getVisibilityRange()
         val landSight = if (unit.isEmbarked()) 2 else sight
         val maxMoves = unit.getMaxMovement() * MOVE_DENOMINATOR
@@ -156,7 +161,7 @@ object ExplorerAi {
                 if (isUnfriendlyTerritory(civ, tile)) continue
                 if (unit.currentMovement >= unit.getMaxMovement() && maxTurns <= 3 && !human) {
                     val damage = 100 - unit.health
-                    val healRate = minOf(unit.getHealAmountForCurrentTile(), damage)
+                    val healRate = minOf(unit.getHealAmountForCurrentTile(), damage) - danger.get(unit, tile)
                     if ((healRate >= 7 || healRate > 0 && damage > 30) && healRate * 40 > bestScore) {
                         best = tile
                         bestScore = healRate * 40
@@ -196,6 +201,12 @@ object ExplorerAi {
             plotScore += ExplorationPlotSets.extraExploreValue(civ, tile, plotSight)
 
             var totalScore = plotScore - nearbyPenalty + plot.movesLeft * 2 - plot.pathLength * maxMoves * 2
+            // Careful with plots that are too dangerous
+            if (plot.movesLeft <= MOVE_DENOMINATOR) {
+                val plotDanger = danger.get(unit, tile)
+                if (plotDanger > unit.health / 2) continue
+                if (plotDanger > 0) totalScore -= plotDanger * DANGER_SCORE_WEIGHT
+            }
             if (plot.movesLeft < 2 * MOVE_DENOMINATOR && isUnfriendlyTerritory(civ, tile)) {
                 if (plot.movesLeft == 0) continue
                 totalScore /= 2

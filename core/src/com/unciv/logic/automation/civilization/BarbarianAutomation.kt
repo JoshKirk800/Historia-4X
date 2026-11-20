@@ -4,6 +4,7 @@ import com.unciv.logic.automation.AiDecisionLog
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.unit.tactical.AggressionLevel
 import com.unciv.logic.automation.unit.tactical.BarbarianMoves
+import com.unciv.logic.automation.unit.tactical.BarbarianTheft
 import com.unciv.logic.automation.unit.tactical.SafestPlot
 import com.unciv.logic.automation.unit.tactical.TacticalAi
 import com.unciv.logic.automation.unit.tactical.TacticalContext
@@ -27,8 +28,8 @@ import com.unciv.logic.civilization.Civilization
  *  Deviations: the roaming of the units that are left is Brave New World's PlotBarbarianMove ([BarbarianMoves.executeMoves]: it ends the turn of
  *  every unit it handles, where Vox Populi's ExecuteBarbarianRoaming leaves a unit that still can move), so it comes after the moves to
  *  safety, not before them; the captive civilians' escort to a camp (Brave New World's, Vox Populi's roaming moves them) goes first.
- *  Not here: ExecuteBarbarianTheft (stealing from or taking over a city-state next to a unit: CvBarbarians::DoStealFromCity and DoTakeOverCityState
- *  have no counterpart), the blockade move (also commented out in Brave New World), the barbarian release turn (Unciv's spawner has its own start).
+ *  Theft: ExecuteBarbarianTheft first among the attacks ([BarbarianTheft]: robbing a city without a garrison next to a unit; the take-over of a
+ *  city-state, CvBarbarians::DoTakeOverCityState, is not here: there are no city-state quests). Not here: the blockade move (also commented out in Brave New World), the barbarian release turn (Unciv's spawner has its own start).
  */
 class BarbarianAutomation(val civInfo: Civilization) {
 
@@ -55,7 +56,8 @@ class BarbarianAutomation(val civInfo: Civilization) {
         BarbarianMoves.executeCivilianEscortMoves(ctx)
         // Even barbarians like their camps
         BarbarianMoves.plotCampDefenseMoves(ctx)
-        // Barbarians do not have tactical zones, they just attack everything that moves (PlotBarbarianAttacks)
+        // Barbarians do not have tactical zones, they just attack everything that moves (PlotBarbarianAttacks), after robbing the cities next to them
+        BarbarianTheft.executeTheft(ctx)
         TacticalMoves.destroyEnemyUnits(ctx, AggressionLevel.Braveheart)
         TacticalSimulation.executeCaptureCityMoves(ctx)
         for (type in TacticalAi.civilianTargetTypes) TacticalMoves.plotCivilianAttackMoves(ctx, type)

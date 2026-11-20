@@ -1,41 +1,40 @@
 package com.unciv.logic.automation.unit.tactical
 
 import com.unciv.logic.automation.civilization.UseGoldAutomation
-import com.unciv.logic.automation.strategy.MilitaryAi
+import com.unciv.logic.battle.BattleDamage
+import com.unciv.logic.battle.CityCombatant
+import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import kotlin.math.max
 
 /**
- *  The barbarian-only moves of CvTacticalAI: PlotBarbarianMove / ExecuteBarbarianMoves with FindBestBarbarianLandMove,
- *  FindPassiveBarbarianLandMove, FindBestBarbarianSeaMove and FindBarbarianExploreTarget, PlotCampDefenseMoves, and
- *  PlotBarbarianCivilianEscortMove / ExecuteBarbarianCivilianEscortMove. The attack moves barbarians share with the other players are
- *  [TacticalMoves]; [com.unciv.logic.automation.civilization.BarbarianAutomation] orders them all by AI_TACTICAL_BARBARIAN_PRIORITY_*.
+ *  The barbarian-only moves of CvTacticalAI (Vox Populi, Release-5.4.8): PlotBarbarianCampDefense ([plotCampDefenseMoves]) and PlotBarbarianRoaming /
+ *  ExecuteBarbarianRoaming with FindBestBarbarianLandTarget, FindBestBarbarianSeaTarget, FindNearbyTarget and FindBarbarianExploreTarget
+ *  ([plotRoamingMoves]). The attack moves barbarians share with the other players are [TacticalMoves] and [TacticalSimulation];
+ *  [com.unciv.logic.automation.civilization.BarbarianAutomation] orders them all as AssignBarbarianMoves does. Brave New World's PlotBarbarianMove
+ *  with its land, passive and sea moves, trade route gank target and the escort of captured civilians to a camp are gone: Vox Populi's roaming
+ *  sends the captured civilians back to a camp itself.
  *
- *  Deviations: a sea move looks at the 5 nearest targets only (as [TacticalMoves.findNearbyTarget]);
- *  the camp-adjacent search of FindBestBarbarianSeaMove compares `distance < moves * bestValue` with the best value starting at the largest
- *  Int, which overflows in the original for ships that move more than one tile (it then never finds a plot): here it is the intent, any
- *  such plot within the sea range x 3; barbarians do not upgrade units (the original has no such move for them).
+ *  Deviations: a sea move looks at the 5 nearest targets only; the path to a roaming target is not asked to avoid danger (AI_ABORT_IN_DANGER) or
+ *  the unit's own stack (IGNORE_STACKING_SELF); a camp as a roaming target is an improvement that is entered but cannot be pillaged by its own
+ *  owner (the original's PUSH_MISSION(PILLAGE) fails there, as [PillageRules.pillage] does), and a city to defend (the target of a barbarian's own
+ *  city) is not an improvement, so nothing moves the unit there, as in the original; barbarians do not upgrade units (the original has no such
+ *  move for them).
  */
 object BarbarianMoves {
 
-    /** HandicapInfos.BarbarianLandTargetRange of the game's difficulty (the AI default handicap's 5 for a ruleset without the column) */
+    /** m_iLandBarbarianRange: HandicapInfos.BarbarianLandTargetRange of the game's difficulty (the AI default handicap's 5 for a ruleset without the column), at least 1 */
     fun landRange(civ: Civilization): Int =
-        civ.gameInfo.ruleset.ai.handicapValue(civ.gameInfo.getDifficulty().name, "BarbarianLandTargetRange") ?: DEFAULT_LAND_RANGE
+        max(1, civ.gameInfo.ruleset.ai.handicapValue(civ.gameInfo.getDifficulty().name, "BarbarianLandTargetRange") ?: DEFAULT_LAND_RANGE)
 
-    /** HandicapInfos.BarbarianSeaTargetRange of the game's difficulty (10 by default) */
+    /** m_iSeaBarbarianRange: HandicapInfos.BarbarianSeaTargetRange of the game's difficulty (10 by default), at least 1 */
     fun seaRange(civ: Civilization): Int =
-        civ.gameInfo.ruleset.ai.handicapValue(civ.gameInfo.getDifficulty().name, "BarbarianSeaTargetRange") ?: DEFAULT_SEA_RANGE
+        max(1, civ.gameInfo.ruleset.ai.handicapValue(civ.gameInfo.getDifficulty().name, "BarbarianSeaTargetRange") ?: DEFAULT_SEA_RANGE)
 
     private const val DEFAULT_LAND_RANGE = 5
     private const val DEFAULT_SEA_RANGE = 10
-
-    /** The target types FindNearbyTarget looks at for AI_TACTICAL_TARGET_NONE: units, cities and improvements of the enemy */
-    private val HUNTED = setOf(
-        TacticalTargetType.HighPriorityUnit, TacticalTargetType.MediumPriorityUnit, TacticalTargetType.LowPriorityUnit,
-        TacticalTargetType.City, TacticalTargetType.Improvement
-    )
 
     //region Camps
 
@@ -86,118 +85,178 @@ object BarbarianMoves {
     private const val CAMP_DEFENSE_TURNS = 5
     //endregion
 
-    //region Land and sea moves
+    //region Roaming
 
     /**
-     *  CvTacticalAI::PlotBarbarianMove / ExecuteBarbarianMoves: every unit still free ends its turn here. A land unit heads for the tile
-     *  [findBestLandMove] (aggressive) or [findPassiveLandMove] found, to an empty tile next to it; a ship keeps its destination from the
-     *  turns before while it can still get there, else takes [findBestSeaMove]'s.
+     *  CvTacticalAI::PlotBarbarianRoaming / ExecuteBarbarianRoaming: every barbarian unit that can still move heads for a target far away, after the
+     *  attacks and the pillaging; the captured civilians too (they go back to a camp). A unit that ends its turn here is commanded, one that still
+     *  can move is left to the moves to safety.
+     *
+     *  A land unit in a camp or a city stays. Else it goes for [findBestLandTarget]: a civilian or an improvement that no defender protects is
+     *  entered, and pillaged if the unit has movement left there; towards a defended unit it goes to an empty tile next to it (within 12 turns), unless
+     *  it is next to it already. A ship goes to an empty tile near its [findBestSeaTarget] the same way, attacks what it can reach from there and is
+     *  done; there is no naval pillaging.
      */
-    fun executeMoves(ctx: TacticalContext, aggressive: Boolean) {
-        val state = ctx.state
+    fun plotRoamingMoves(ctx: TacticalContext) {
         for (unit in ctx.liveUnits()) {
-            if (!unit.hasMovement() || unit.baseUnit.isAirUnit()) continue
-            if (!unit.baseUnit.isWaterUnit) {
-                val best = if (aggressive) findBestLandMove(ctx, unit) else findPassiveLandMove(ctx, unit)
-                if (best != null && TacticalMoves.moveToEmptySpaceNearTarget(ctx, unit, best))
-                    ctx.log { "${unit.name} moved to an empty space near target ${best.position}, now at ${unit.getTile().position}" }
-                else ctx.log { "no target for ${unit.name} at ${unit.getTile().position}" }
-            } else {
-                // Do I still have a destination from a previous turn? Compute a new one if not or if I am there
-                val current = state.unitDestinations[unit.id]?.let { ctx.civ.gameInfo.tileMap.getOrNull(it.x, it.y) }
-                val best = if (current != null && current != unit.getTile() && unit.movement.canReach(current)) current else findBestSeaMove(ctx, unit)
-                if (best != null && unit.movement.canReach(best)) {
-                    state.unitDestinations[unit.id] = best.position
-                    if (best != unit.getTile()) unit.movement.tryHeadTowards(best)
-                    ctx.log { "moving ${unit.name} to new position ${best.position}, now at ${unit.getTile().position}" }
-                } else {
-                    state.unitDestinations.remove(unit.id)
-                    ctx.log { "no target for ${unit.name} at ${unit.getTile().position}" }
-                }
-            }
-            unit.currentMovement = 0f
-            ctx.unitProcessed(unit)
+            if (unit.baseUnit.isAirUnit() || !TacticalAi.canUseForTacticalAi(unit, ctx.cache)) continue
+            if (unit.baseUnit.isWaterUnit) roamAtSea(ctx, unit) else roamOnLand(ctx, unit)
         }
     }
 
-    /**
-     *  CvTacticalAI::FindBestBarbarianLandMove: a unit, city or improvement of the enemy within the land target range that it reaches soonest;
-     *  else the trade route to sit on ([findGankTradeRouteTarget]); else the best tile to explore towards.
-     */
-    fun findBestLandMove(ctx: TacticalContext, unit: MapUnit): Tile? =
-        TacticalMoves.findNearbyTarget(ctx, unit, landRange(ctx.civ), ctx.targets.all.filter { it.type in HUNTED })
-            ?: findGankTradeRouteTarget(ctx, unit) ?: findExploreTarget(ctx, unit)
+    private fun roamOnLand(ctx: TacticalContext, unit: MapUnit) {
+        val here = unit.getTile()
+        if (here.isBarbarianEncampment() || here.isCityCenter()) {
+            ctx.unitProcessed(unit)
+            return
+        }
+        // Where to?
+        val best = findBestLandTarget(ctx, unit) ?: return
+        val isCombat = TacticalTargets.visibleEnemyDefender(ctx.civ, best) != null
+        val isCivilian = hasVisibleCivilian(ctx, best)
+        val isImprovement = best.improvement != null && !best.improvementIsPillaged
+        unit.movement.clearPathfindingCache()
+        ctx.log { "roaming: ${unit.name} at ${here.position} towards ${best.position}" }
+        // Just move in if we can
+        if ((isCivilian || isImprovement) && !isCombat) {
+            Deployment.headTowards(unit, best)
+            if (!unit.isDestroyed && unit.hasMovement() && unit.getTile() == best) PillageRules.pillage(unit)
+        }
+        // Move towards the target but do not hang around there; since we did not attack this turn, we continue roaming
+        else if (isCombat && best.aerialDistanceTo(here) > 1) EscortMoves.moveToEmptySpaceNearTarget(ctx, unit, best, false, ROAM_TURNS)
+        // Hit and run, if you can
+        if (!unit.isDestroyed && !unit.hasMovement()) ctx.unitProcessed(unit)
+    }
 
-    /** CvTacticalAI::FindPassiveBarbarianLandMove: the nearest barbarian camp, else the best tile to explore towards */
-    fun findPassiveLandMove(ctx: TacticalContext, unit: MapUnit): Tile? {
-        val camp = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp).minByOrNull { unit.getTile().aerialDistanceTo(it.tile) }
-        return camp?.tile ?: findExploreTarget(ctx, unit)
+    private fun roamAtSea(ctx: TacticalContext, unit: MapUnit) {
+        val best = findBestSeaTarget(ctx, unit) ?: return
+        // No naval pillaging, it is just too annoying; as on land, a ship that is at its target does not end the turn but moves to safety
+        val isCombat = TacticalTargets.visibleEnemyDefender(ctx.civ, best) != null
+        if (isCombat && best.aerialDistanceTo(unit.getTile()) <= 1) return
+        unit.movement.clearPathfindingCache()
+        if (!EscortMoves.moveToEmptySpaceNearTarget(ctx, unit, best, true, ROAM_TURNS)) return
+        ctx.log { "roaming: ${unit.name} sails towards ${best.position}, now at ${unit.getTile().position}" }
+        if (!unit.isDestroyed) OpportunityAttacks.perform(ctx, unit, true)
+        if (!unit.isDestroyed) ctx.unitProcessed(unit)
+    }
+
+    /** CvPlot::isEnemyUnit(barbarians, not combat, visible): a unit of a player at war with us that is seen and cannot defend itself */
+    private fun hasVisibleCivilian(ctx: TacticalContext, tile: Tile): Boolean =
+        tile.getUnits().any { it.civ != ctx.civ && ctx.civ.isAtWarWith(it.civ) && it.isVisibleTo(ctx.civ) && !TacticalSafety.canDefend(it) }
+
+    /**
+     *  CvTacticalAI::FindBestBarbarianLandTarget: a unit that can defend itself looks at the offensive targets within the land target range
+     *  ([findNearbyTarget]) and else explores ([findExploreTarget]); by default, and for the civilians (within 23 turns), it goes back to a camp.
+     */
+    fun findBestLandTarget(ctx: TacticalContext, unit: MapUnit): Tile? {
+        var maxTurns = landRange(ctx.civ)
+        val canDefend = TacticalSafety.canDefend(unit)
+        var best: Tile? = null
+        // Combat units look at all offensive targets within x turns
+        if (canDefend) best = findNearbyTarget(ctx, unit, maxTurns, true) ?: findExploreTarget(ctx, unit)
+        // By default go back to camp or so
+        if (best == null) {
+            if (!canDefend) maxTurns = CIVILIAN_ROAM_TURNS
+            best = findNearbyTarget(ctx, unit, maxTurns, false)
+        }
+        return best
     }
 
     /**
-     *  CvTacticalAI::FindBestBarbarianSeaMove: the enemy unit within the sea target range on the unit's water that it reaches soonest; else
-     *  a water tile next to a barbarian camp other than the nearest one that it reaches soonest; else the best tile to explore towards.
+     *  CvTacticalAI::FindNearbyTarget for a land unit: the target within [maxTurns] x 3 tiles that it gets to next to soonest by path, the nearest first
+     *  (the tile it stands on first of all). Offensive: enemy units and cities (not where the unit would die attacking), improvements, trade units of its
+     *  domain, civilians; else our camps (a barbarian's) and cities to defend. A tile a land unit would have to embark for is not one.
+     *  The path is not asked to avoid danger or its own stack.
      */
-    fun findBestSeaMove(ctx: TacticalContext, unit: MapUnit): Tile? {
+    fun findNearbyTarget(ctx: TacticalContext, unit: MapUnit, maxTurns: Int, offensive: Boolean): Tile? {
+        val here = unit.getTile()
+        val candidates = ArrayList<Pair<Tile, Int>>()
+        for (target in ctx.targets.all) {
+            val matches = if (offensive) when (target.type) {
+                TacticalTargetType.LowPriorityUnit, TacticalTargetType.MediumPriorityUnit, TacticalTargetType.HighPriorityUnit, TacticalTargetType.City ->
+                    !isSuicideMeleeAttack(unit, target.tile)
+                TacticalTargetType.Improvement, TacticalTargetType.ImprovementResource, TacticalTargetType.TradeUnitLand,
+                TacticalTargetType.VeryHighPriorityCivilian, TacticalTargetType.HighPriorityCivilian, TacticalTargetType.MediumPriorityCivilian,
+                TacticalTargetType.LowPriorityCivilian -> true
+                else -> false
+            } else target.type == TacticalTargetType.CityToDefend || (ctx.civ.isBarbarian && target.type == TacticalTargetType.BarbarianCamp)
+            if (!matches) continue
+            val tile = target.tile
+            if (tile.aerialDistanceTo(here) > maxTurns.toLong() * TILES_PER_TURN) continue
+            // Cannot do anything if we would need to embark
+            if (unit.baseUnit.isLandUnit && tile.isWater && !unit.cache.canMoveOnWater) continue
+            // Shortcut, may happen often
+            if (tile == here) return tile
+            candidates.add(tile to tile.aerialDistanceTo(here))
+        }
+        // Second round: the nearest first
+        unit.movement.clearPathfindingCache()
+        for ((tile, _) in candidates.sortedBy { it.second })
+            if (EscortMoves.turnsToApproach(ctx, unit, tile, maxTurns) < Int.MAX_VALUE) return tile
+        return null
+    }
+
+    /**
+     *  TacticalAIHelpers::IsSuicideMeleeAttack: a melee unit (not one that shoots, not an aircraft) that would take at least what it has left, less 3 for
+     *  luck, attacking the city or defender on [tile] from where it stands. No defender: no suicide.
+     */
+    private fun isSuicideMeleeAttack(unit: MapUnit, tile: Tile): Boolean {
+        if (unit.baseUnit.isRanged() || unit.baseUnit.isAirUnit()) return false
+        val received = if (tile.isCityCenter()) {
+            val city = tile.getCity() ?: return false
+            BattleDamage.calculateDamageToAttacker(MapUnitCombatant(unit), CityCombatant(city), unit.getTile(), TacticalTargets.EXPECTED_RANDOMNESS, ignoreFlanking = true)
+        } else {
+            val defender = TacticalTargets.visibleEnemyDefender(unit.civ, tile) ?: return false
+            SimWorld.damageOnUnit(unit, unit.getTile(), unit.health, defender, tile, defender.health, ignoreFlanking = false).second
+        }
+        // Add some margin for randomness
+        return received + SUICIDE_MARGIN >= unit.health
+    }
+
+    /**
+     *  CvTacticalAI::FindBestBarbarianSeaTarget: the enemy unit that a ship reaches soonest within the sea target range; else, to patrol, a water tile
+     *  next to the second nearest barbarian camp that the sea touches (the one it reaches soonest); else a tile to explore ([findExploreTarget]).
+     */
+    fun findBestSeaTarget(ctx: TacticalContext, unit: MapUnit): Tile? {
         val unitTile = unit.getTile()
         val range = seaRange(ctx.civ)
-        TacticalMoves.findNearbyTarget(ctx, unit, range, ctx.targets.all.filter { it.isUnitTarget })?.let { return it }
-        findGankTradeRouteTarget(ctx, unit)?.let { return it }
-
-        // No units to pick on, so sail to a tile adjacent to the second closest barbarian camp
-        val camps = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp)
-        val nearest = camps.minByOrNull { unitTile.aerialDistanceTo(it.tile) }
+        unit.movement.clearPathfindingCache()
         var best: Tile? = null
         var bestTurns = Int.MAX_VALUE
-        val moves = max(1, unit.baseUnit.movement)
+        // Loop through all unit targets to find the closest
+        val nearest = ctx.targets.all.filter { it.isUnitTarget && ctx.sameArea(unitTile, it.tile) }.sortedBy { unitTile.aerialDistanceTo(it.tile) }.take(MAX_SEA_CANDIDATES)
+        for (target in nearest) {
+            val turns = EscortMoves.turnsToApproach(ctx, unit, target.tile, range)
+            if (turns < bestTurns) { bestTurns = turns; best = target.tile }
+        }
+        if (best != null) return best
+
+        // No units to pick on, so sail to a tile adjacent to the second closest barbarian camp: this should result in patrolling behavior
+        val camps = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp).filter { camp -> camp.tile.neighbors.any { isShallowWater(it) } }
+        val nearestCamp = camps.minByOrNull { unitTile.aerialDistanceTo(it.tile) }
         for (camp in camps) {
-            if (camp === nearest) continue
+            if (camp === nearestCamp) continue
             for (water in camp.tile.neighbors) {
-                if (!water.isWater) continue
-                val distance = unitTile.aerialDistanceTo(water)
-                // Drop the plots further than the best found so far could be
-                if (distance.toLong() >= moves.toLong() * bestTurns || distance >= range * 3) continue
-                val turns = TacticalAttacks.turnsToReach(unit, water)
+                if (!isShallowWater(water) || !ctx.sameArea(unitTile, water)) continue
+                val turns = EscortMoves.turnsToApproach(ctx, unit, water, range)
                 if (turns < bestTurns) { bestTurns = turns; best = water }
             }
         }
         return best ?: findExploreTarget(ctx, unit)
     }
 
-    /**
-     *  CvTacticalAI::FindBarbarianGankTradeRouteTarget: of the revealed tiles within the movement the unit has left, on its landmass or sea,
-     *  that it can reach in a turn, the one most trade routes (of any civilization, the unit's own tile left out) cross; the first of
-     *  the best wins, and a tile that no route crosses is not one.
-     */
-    fun findGankTradeRouteTarget(ctx: TacticalContext, unit: MapUnit): Tile? {
-        val range = unit.currentMovement.toInt()
-        if (range <= 0) return null
-        val routesThrough = HashMap<Tile, Int>()
-        for (civ in ctx.civ.gameInfo.civilizations)
-            for (route in civ.tradeRoutes.routes)
-                for (tile in route.getTiles()) routesThrough.merge(tile, 1, Int::plus)
-        if (routesThrough.isEmpty()) return null
-        val unitTile = unit.getTile()
-        var best: Tile? = null
-        var bestValue = 0
-        for (tile in unitTile.getTilesInDistance(range)) {
-            if (tile == unitTile || !ctx.civ.hasExplored(tile) || !ctx.sameArea(unitTile, tile)) continue
-            val value = routesThrough[tile] ?: continue
-            if (value <= bestValue || TacticalAttacks.turnsToReach(unit, tile) > 1) continue
-            best = tile
-            bestValue = value
-        }
-        return best
-    }
+    /** CvPlot::isAdjacentToShallowWater is asked of the camp: a water tile that is not deep ocean */
+    private fun isShallowWater(tile: Tile) = tile.isWater && !tile.isOcean
 
     /**
      *  CvTacticalAI::FindBarbarianExploreTarget (Vox Populi): of the plots the unit reaches this turn without embarking, not its own,
-     *  revealed and without a city, the one with the most around it (the plot and its neighbours): 3 for each not revealed, 2 for each
+     *  revealed and without a city, and not more dangerous than the unit has hit points, the one with the most around it (the plot and its neighbours): 3 for each not revealed, 2 for each
      *  revealed one that is owned and not visible; +100 for a plot of its own domain while embarked. The first best wins; none with
-     *  nothing around it. VP's danger check (a plot more dangerous than the unit's hit points) is not ported.
+     *  nothing around it.
      */
     fun findExploreTarget(ctx: TacticalContext, unit: MapUnit): Tile? {
         val civ = ctx.civ
+        val danger = civ.ai.unitDanger
         val unitTile = unit.getTile()
         var best: Tile? = null
         var bestValue = 0
@@ -205,6 +264,8 @@ object BarbarianMoves {
             if (tile == unitTile || !civ.hasExplored(tile) || tile.isCityCenter()) continue
             val nativeDomain = if (unit.baseUnit.isWaterUnit) tile.isWater else tile.isLand
             if (!nativeDomain && !unit.isEmbarked() || !unit.movement.canMoveTo(tile)) continue
+            // Even barbarians consider danger sometimes
+            if (danger.get(unit, tile) > unit.health) continue
             var value = 0
             for (around in tile.neighbors + tile) {
                 if (!civ.hasExplored(around)) value += 3
@@ -218,106 +279,11 @@ object BarbarianMoves {
         }
         return best
     }
-    //endregion
 
-    //region Captured civilians
-
-    /** The tile has a civilian of ours of the same type as [civilian] (CvPlot::getNumFriendlyUnitsOfType) */
-    private fun hasLikeCivilian(civilian: MapUnit, tile: Tile) = tile.civilianUnit?.let { it != civilian && it.civ == civilian.civ && it.name == civilian.name } == true
-
-    /**
-     *  CvTacticalAI::PlotBarbarianCivilianEscortMove / ExecuteBarbarianCivilianEscortMove: every unit that cannot attack (the civilians the barbarians
-     *  captured) goes to the nearest camp that has no civilian of its type yet, with the military unit of ours standing with it as escort:
-     *  both move to where the civilian's path ends this turn, the escort taking over the camp's defense if it is stronger than the defender
-     *  there (who is moved out of the way), and the pair stays put when the escort cannot keep up, the way is blocked or the path is lost.
-     */
-    fun executeCivilianEscortMoves(ctx: TacticalContext) {
-        val camps = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp)
-        for (civilian in ctx.liveUnits()) {
-            if (TacticalAttacks.canAttack(civilian) || !civilian.hasMovement()) continue
-            val target = TacticalMoves.findNearbyTarget(ctx, civilian, Int.MAX_VALUE, camps) { hasLikeCivilian(civilian, it) } ?: continue
-            escortToCamp(ctx, civilian, target)
-        }
-    }
-
-    /**
-     *  ExecuteMoveToPlot for a unit that may not get there this turn (the original's move mission goes on over turns): it moves there if it
-     *  can this turn, else heads for it, and its turn is over.
-     */
-    private fun moveSafely(ctx: TacticalContext, unit: MapUnit, tile: Tile) {
-        if (unit.getTile() == tile || unit.movement.getDistanceToTiles().containsKey(tile) && unit.movement.canMoveTo(tile)) TacticalMoves.moveToPlot(ctx, unit, tile)
-        else {
-            if (unit.movement.canReach(tile)) unit.movement.tryHeadTowards(tile)
-            unit.currentMovement = 0f
-            ctx.unitProcessed(unit)
-        }
-    }
-
-    private fun finish(ctx: TacticalContext, vararg units: MapUnit?) {
-        for (unit in units) if (unit != null) { unit.currentMovement = 0f; ctx.unitProcessed(unit) }
-    }
-
-    private fun escortToCamp(ctx: TacticalContext, civilian: MapUnit, target: Tile) {
-        val current = civilian.getTile()
-        if (current == target) { finish(ctx, civilian); return }
-        val escort = current.militaryUnit?.takeIf { it.civ == civilian.civ && it != civilian && it.hasMovement() }
-
-        val path = civilian.movement.getShortestPath(target)
-        // Handle case of no path found at all for civilian
-        if (path.isEmpty()) {
-            ctx.log { "retargeting civilian escort (path lost to target), ${target.position}" }
-            finish(ctx, civilian, escort)
-            return
-        }
-        val civilianMove = path.first()
-        fun together(to: Tile, what: String) {
-            if (escort != null) moveSafely(ctx, escort, to)
-            moveSafely(ctx, civilian, to)
-            ctx.log { "$what: ${civilian.name} ${if (escort != null) "with escort ${escort.name} " else ""}to ${to.position}" }
-        }
-
-        if (civilianMove == target) {
-            // Can we reach our target this turn? See which defender is stronger
-            val defender = target.militaryUnit?.takeIf { it.civ == civilian.civ }
-            if (escort != null && (defender == null || escort.getAiPower() > defender.getAiPower())) {
-                if (defender == null || TacticalMoves.executeMoveOfBlockingUnit(ctx, defender)) together(target, "escort takes over camp defense")
-                else { moveSafely(ctx, civilian, target); ctx.log { "moving ${civilian.name} to camp, ${target.position}" } }
-            } else {
-                moveSafely(ctx, civilian, target)
-                ctx.log { "moving ${civilian.name} to camp, ${target.position}" }
-            }
-            return
-        }
-        // Can't reach the target and don't have an escort
-        if (escort == null) {
-            moveSafely(ctx, civilian, civilianMove)
-            ctx.log { "moving ${civilian.name} without escort to target, ${civilian.getTile().position}" }
-            return
-        }
-        // See if the escort can move to the same location in one turn
-        if (TacticalAttacks.turnsToReach(escort, civilianMove) <= 1 && escort.movement.canMoveTo(civilianMove)) { together(civilianMove, "escort keeps up"); return }
-        val blocking = civilianMove.militaryUnit?.takeIf { it.civ == civilian.civ && it != escort }
-        if (blocking == null || !blocking.hasMovement()) {
-            // No blocking unit, or one that ends its turn there (somewhere the civilian can go and the escort cannot): find a path for the escort
-            val escortPath = escort.movement.getShortestPath(target)
-            if (escortPath.isEmpty()) {
-                ctx.log { "retargeting civilian escort (path lost to target), ${target.position}" }
-                finish(ctx, civilian, escort)
-                return
-            }
-            val escortMove = escortPath.first()
-            // See if the civilian can move to the same location in one turn
-            if (TacticalAttacks.turnsToReach(civilian, escortMove) <= 1 && civilian.movement.canMoveTo(escortMove) && escort.movement.canMoveTo(escortMove))
-                together(escortMove, "civilian keeps up with escort")
-            else {
-                ctx.log { "retargeting civilian escort, too many blocking units" }
-                finish(ctx, civilian, escort)
-            }
-        } else if (TacticalMoves.executeMoveOfBlockingUnit(ctx, blocking)) together(civilianMove, "blocking unit made room")
-        else {
-            ctx.log { "retargeting civilian escort, could not move blocking unit" }
-            finish(ctx, civilian, escort)
-        }
-    }
+    private const val ROAM_TURNS = 12
+    private const val CIVILIAN_ROAM_TURNS = 23
+    private const val TILES_PER_TURN = 3
+    private const val SUICIDE_MARGIN = 3
+    private const val MAX_SEA_CANDIDATES = 5
     //endregion
 }

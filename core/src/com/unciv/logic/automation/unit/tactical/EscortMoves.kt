@@ -384,7 +384,7 @@ object EscortMoves {
      *  for (null: any), the target plot's own makes the approximate plot one of the unit's domain.
      *  @return whether the unit went (or is as near as it gets) within [maxTurns]
      */
-    private fun moveToEmptySpaceNearTarget(
+    fun moveToEmptySpaceNearTarget(
         ctx: TacticalContext,
         unit: MapUnit,
         target: Tile,
@@ -409,6 +409,13 @@ object EscortMoves {
         path.firstStop?.let { Deployment.headTowards(unit, it) }
         return true
     }
+
+    /**
+     *  CvUnit::TurnsToReachTarget(target, MOVEFLAG_APPROX_TARGET_RING1, maxTurns): the turns [unit] needs to get next to [target] (0: this turn),
+     *  [Int.MAX_VALUE] if there is no such path or it takes more than [maxTurns]. The original's flags for stacking and danger are not applied.
+     */
+    fun turnsToApproach(ctx: TacticalContext, unit: MapUnit, target: Tile, maxTurns: Int): Int =
+        generatePath(ctx, unit, target, APPROX_RING1, if (maxTurns == Int.MAX_VALUE) maxTurns else maxTurns + 1)?.turns ?: Int.MAX_VALUE
 
     /** CvUnit::GeneratePath with [flags] (see the class comment): null if there is no path, or one of more than [maxTurns] turns */
     private fun generatePath(ctx: TacticalContext, unit: MapUnit, target: Tile, flags: Int, maxTurns: Int = Int.MAX_VALUE): EscortPath? {

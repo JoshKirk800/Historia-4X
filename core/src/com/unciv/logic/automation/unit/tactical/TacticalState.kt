@@ -65,8 +65,6 @@ class TacticalState : IsPartOfGameInfoSerialization {
     var temporaryZones = ArrayList<TemporaryZone>()
     /** CvTacticalAI::m_focusAreas, which Vox Populi's operations register where they deploy ([addFocusArea]) */
     var focusAreas = ArrayList<FocusArea>()
-    /** CvUnit::GetTacticalAIPlot: the destination a barbarian ship keeps heading for over several turns, by [com.unciv.logic.map.mapunit.MapUnit.id] */
-    var unitDestinations = HashMap<Int, HexCoord>()
 
     /** The turn's city threat values ([CityThreat]), made from the [map] they are for */
     @Transient internal var cityThreats: CityThreat.CityThreats? = null
@@ -81,7 +79,6 @@ class TacticalState : IsPartOfGameInfoSerialization {
         for (posture in postures) toReturn.postures.add(posture.clone())
         for (zone in temporaryZones) toReturn.temporaryZones.add(zone.clone())
         for (area in focusAreas) toReturn.focusAreas.add(area.clone())
-        toReturn.unitDestinations.putAll(unitDestinations)
         return toReturn
     }
 

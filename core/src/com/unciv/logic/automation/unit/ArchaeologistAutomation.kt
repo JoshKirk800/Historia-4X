@@ -50,7 +50,7 @@ object ArchaeologistAutomation {
     }
 
     /**
-     * CvHomelandAI::FindArchaeologistTarget: the site without danger that [unit] reaches in the fewest turns, the first in map order on a tie.
+     * CvHomelandAI::FindArchaeologistTarget: the site without danger to [unit] ([PlotDanger.get], CvUnit::GetDanger) that it reaches in the fewest turns by a path that is safe for a civilian, the first in map order on a tie.
      * It is then no longer available to the other archaeologists of the civilization this turn.
      */
     private fun findTarget(unit: MapUnit): Tile? {
@@ -58,9 +58,14 @@ object ArchaeologistAutomation {
         targets.taken[unit.id]?.let { return it }
         var best: Tile? = null
         var bestTurns = Int.MAX_VALUE
+        val danger = unit.civ.ai.plotDanger
         for (site in targets.free) {
-            if (isInDanger(unit.civ, site)) continue
-            val turns = turnsToReach(unit, site)
+            // No danger to the unit there, and not in the land of a civilization we are at war with
+            if (danger.get(unit, site) != 0 || site.getOwner()?.let { unit.civ.isAtWarWith(it) } == true) continue
+            val path = if (unit.getTile() == site) emptyList() else unit.movement.getShortestPath(site)
+            val turns = if (unit.getTile() == site) 0 else if (path.isEmpty()) Int.MAX_VALUE else path.size
+            // CvUnit::CachedPathIsSafeForCivilian: the plot where the first turn of the path ends is no danger of more than the unit's health
+            if (path.firstOrNull()?.let { danger.get(it) >= unit.health } == true) continue
             if (turns < bestTurns) {
                 best = site
                 bestTurns = turns
@@ -91,31 +96,6 @@ object ArchaeologistAutomation {
             free.add(site)
         }
         return TurnTargets(turn, free).also { targetsByCiv[civ] = it }
-    }
-
-    /** CvHomelandAI::TurnsToReachTarget: turns of the shortest path, [Int.MAX_VALUE] if there is none */
-    private fun turnsToReach(unit: MapUnit, target: Tile): Int {
-        if (unit.getTile() == target) return 0
-        val path = unit.movement.getShortestPath(target)
-        return if (path.isEmpty()) Int.MAX_VALUE else path.size
-    }
-
-    /**
-     * CvPlayer::GetPlotDanger > 0: a military unit we can see of a civilization we are at war with could attack the tile next turn
-     * (its movement plus its range, 1 for melee), or the tile is within the range of a city of such a civilization.
-     */
-    private fun isInDanger(civ: Civilization, tile: Tile): Boolean {
-        for (enemy in civ.gameInfo.civilizations) {
-            if (enemy == civ || !civ.isAtWarWith(enemy)) continue
-            for (city in enemy.cities)
-                if (city.getCenterTile().aerialDistanceTo(tile) <= city.getBombardRange()) return true
-            for (enemyUnit in enemy.units.getCivUnits()) {
-                if (enemyUnit.isCivilian() || enemyUnit.getTile() !in civ.viewableTiles) continue
-                val reach = enemyUnit.getMaxMovement() + (if (enemyUnit.baseUnit.isRanged()) enemyUnit.getRange() else 1)
-                if (enemyUnit.getTile().aerialDistanceTo(tile) <= reach) return true
-            }
-        }
-        return false
     }
 
     /**

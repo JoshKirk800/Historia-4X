@@ -37,7 +37,7 @@ class BarbarianAutomation(val civInfo: Civilization) {
         // CommandeerUnits: all the barbarians that can move
         val units = civInfo.units.getCivUnits().filter { it.hasMovement() }.toList()
         if (units.isNotEmpty()) {
-            val ctx = TacticalContext(civInfo, null, danger, cache, units, TacticalTargets.find(civInfo, null, danger))
+            val ctx = TacticalContext(civInfo, null, danger, cache, units, TacticalTargets.find(civInfo, null))
             assignBarbarianMoves(ctx)
             AiDecisionLog.log(civInfo) { "Barbarians: ${units.size} units, ${units.size - ctx.units.size} commanded, ${ctx.targets.all.size} targets" }
         }

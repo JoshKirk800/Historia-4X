@@ -340,8 +340,7 @@ object NavalOperationLogic {
 
     /**
      *  CvAIOperationCarrierGroup::VerifyOrAdjustTarget: nothing while it gathers; then the carrier retreats (HALF_STRENGTH) when it would not
-     *  survive the next turn where it is - the original reads the damage it took last turn, which is not recorded, so the danger of its
-     *  plot ([com.unciv.logic.automation.unit.PlotDanger]) against its health stands in - and the group goes to the possible deployment zone
+     *  survive the next turn where it is (CvUnit::isProjectedToDieNextTurn: the damage it took last turn is more than its health) - and the group goes to the possible deployment zone
      *  nearest to it on its water ([possibleDeploymentZones]), else to the coastal water of our nearest coastal port (NO_TARGET without
      *  one; the original's second try with a port on an ocean-sized water is not ported).
      */
@@ -349,7 +348,7 @@ object NavalOperationLogic {
         if (operation.state == OperationState.RECRUITING_UNITS || operation.state == OperationState.GATHERING_FORCES) return
         val army = operation.firstArmy ?: return
         val carrier = AiOperationLogic.armyUnits(civ, army).firstOrNull()?.second
-        if (carrier != null && civ.ai.plotDanger.get(carrier.getTile()) > carrier.health) {
+        if (carrier != null && carrier.isProjectedToDieNextTurn()) {
             AiOperationLogic.abortOperation(operation, OperationAbortReason.HALF_STRENGTH)
             return
         }

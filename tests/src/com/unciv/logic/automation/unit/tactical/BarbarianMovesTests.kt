@@ -55,7 +55,7 @@ class BarbarianMovesTests {
         civ.viewableTiles = game.tileMap.values.toSet()
         barbarians.ai.invalidateTurnCaches()
         val danger = barbarians.ai.plotDanger
-        return TacticalContext(barbarians, null, danger, AutomationCache(), units.toList(), TacticalTargets.find(barbarians, null, danger))
+        return TacticalContext(barbarians, null, danger, AutomationCache(), units.toList(), TacticalTargets.find(barbarians, null))
     }
 
     private fun makeWater(xRange: IntRange, yRange: IntRange) {

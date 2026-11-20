@@ -43,7 +43,7 @@ class TacticalOpportunityTests {
         civ.ai.invalidateTurnCaches()
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
-        return TacticalContext(civ, map, danger, AutomationCache(), units.toList().ifEmpty { civ.units.getCivUnits().toList() }, TacticalTargets.find(civ, map, danger))
+        return TacticalContext(civ, map, danger, AutomationCache(), units.toList().ifEmpty { civ.units.getCivUnits().toList() }, TacticalTargets.find(civ, map))
     }
 
     // region Damage taken per turn
@@ -167,7 +167,7 @@ class TacticalOpportunityTests {
         val brave = game.addUnit("Swordsman", civ, tile(0))
         game.addUnit("Warrior", enemy, tile(2))
         val ctx = context(brave)
-        assertTrue("a lone warrior does 100 damage to nobody", civ.ai.unitDanger.get(brave) <= 100)
+        assertTrue("a lone warrior does 100 damage to nobody", civ.ai.plotDanger.get(brave) <= 100)
         SafestPlot.plotMovesToSafety(ctx, true)
         assertEquals(tile(0), brave.getTile())
         assertNull(city.getCenterTile().militaryUnit)

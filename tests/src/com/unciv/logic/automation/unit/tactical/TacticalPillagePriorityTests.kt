@@ -38,7 +38,7 @@ class TacticalPillagePriorityTests {
         civ.ai.invalidateTurnCaches()
         val map = civ.ai.tactical.map
         val danger = civ.ai.plotDanger
-        val ctx = TacticalContext(civ, map, danger, AutomationCache(), listOf(raider), TacticalTargets.find(civ, map, danger))
+        val ctx = TacticalContext(civ, map, danger, AutomationCache(), listOf(raider), TacticalTargets.find(civ, map))
 
         TacticalMoves.plotPillageMoves(ctx, TacticalTargetType.ImprovementResource, true)
 

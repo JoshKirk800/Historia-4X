@@ -97,7 +97,7 @@ object TacticalAi {
         val map = state.map
         PostureSelection.updatePostures(civ, state, map)
         val danger = civ.ai.plotDanger
-        val ctx = TacticalContext(civ, map, danger, cache, tacticalUnits, TacticalTargets.find(civ, map, danger), units)
+        val ctx = TacticalContext(civ, map, danger, cache, tacticalUnits, TacticalTargets.find(civ, map), units)
         val highPriority by lazy { ctx.targets.all.filter { it.type == TacticalTargetType.HighPriorityUnit }.mapNotNullTo(HashSet()) { it.unit } }
 
         // CvTacticalAI::ExtractTargetsForZone(NULL) before each of the global groups: all the targets are the current ones
@@ -182,7 +182,7 @@ object TacticalAi {
      *  targets suppressed, does now. Only for the AI and auto play: the cities of a human shoot at the end of his turn.
      */
     fun reviewUnassignedUnits(ctx: TacticalContext) {
-        val danger = ctx.civ.ai.unitDanger
+        val danger = ctx.civ.ai.plotDanger
         for (unit in ctx.liveUnits()) {
             if (!unit.hasMovement() || unit.baseUnit.isAirUnit()) continue
             // There should not be any danger but just in case

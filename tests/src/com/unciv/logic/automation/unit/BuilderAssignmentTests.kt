@@ -138,14 +138,14 @@ class BuilderAssignmentTests {
         worker.health = 1
         civ.viewableTiles = game.tileMap.values.toSet()
         civ.ai.invalidateTurnCaches()
-        val danger = civ.ai.plotDanger.get(tile(1, 0))
+        val danger = civ.ai.plotDanger.get(worker, tile(1, 0))
         assertTrue("setup: the plot is in danger above the builder's health", danger > worker.health)
         assertNull(BuilderTaskingAi(civ).pickFor(worker))
 
         val archer = game.addUnit("Archer", civ, tile(1, 0))
         civ.viewableTiles = game.tileMap.values.toSet()
         civ.ai.invalidateTurnCaches()
-        assertEquals("with a defender the danger decides: $danger", civ.ai.plotDanger.get(tile(1, 0)) <= archer.health / 2, BuilderTaskingAi(civ).pickFor(worker) != null)
+        assertEquals("with a defender the danger to it decides: $danger", civ.ai.plotDanger.get(archer, tile(1, 0)) <= archer.health / 2, BuilderTaskingAi(civ).pickFor(worker) != null)
     }
 
     //endregion

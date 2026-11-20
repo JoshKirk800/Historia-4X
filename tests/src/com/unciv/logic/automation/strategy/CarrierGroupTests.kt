@@ -160,7 +160,9 @@ class CarrierGroupTests {
         operation.firstArmy!!.state = ArmyState.MOVING_TO_DESTINATION
         civ.getDiplomacyManager(enemy)!!.declareWar()
         game.addUnit("Ironclad", enemy, tile(group[0].getTile().position.x + 1, group[0].getTile().position.y))
+        // CvUnit::isProjectedToDieNextTurn: the damage it took last turn is more than the health it has left
         group[0].health = 5
+        group[0].damageTakenLastTurn = 6
         seeAll()
         assertTrue(AiOperationLogic.shouldAbort(civ, operation))
         assertEquals(OperationAbortReason.HALF_STRENGTH, operation.abortReason)

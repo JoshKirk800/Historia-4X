@@ -12,8 +12,11 @@ import com.unciv.logic.automation.strategy.ExplorationPlotSets
 import com.unciv.logic.automation.strategy.ReconState
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
+import com.unciv.logic.automation.unit.tactical.SafestPlot
+import com.unciv.logic.automation.unit.tactical.TacticalContext
 import com.unciv.logic.automation.unit.tactical.TacticalDominance
 import com.unciv.logic.automation.unit.tactical.TacticalSafety
+import com.unciv.logic.automation.unit.tactical.TacticalTargets
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
@@ -61,8 +64,8 @@ class HomelandTargets(
  *  CvHomelandAI, the military moves: the units the tactical AI and the operations did not take ([AutomationCache.processedUnits]) go
  *  through the priority list of [priorities] (EstablishHomelandPriorities), each move taking the units that suit it to the targets of
  *  [findTargets] (FindHomelandTargets): [HomelandMove.Explore]/[HomelandMove.ExploreSea] (PlotExplorerMoves, ExecuteExplorerMoves with
- *  [ExplorerAi]), [HomelandMove.Garrison] and the city-state variant (PlotGarrisonMoves), [HomelandMove.Heal] and [HomelandMove.ToSafety]
- *  (the moves of [TacticalSafety], which the tactical AI shares), [HomelandMove.MobileReserve], [HomelandMove.Sentry],
+ *  [ExplorerAi]), [HomelandMove.Garrison] and the city-state variant (PlotGarrisonMoves), [HomelandMove.Heal] (the move of [TacticalSafety], which the tactical AI shares) and [HomelandMove.ToSafety]
+ *  ([CivilianSafety.shouldFlee], then [SafestPlot]), [HomelandMove.MobileReserve], [HomelandMove.Sentry],
  *  [HomelandMove.AncientRuins], [HomelandMove.Upgrade] (the movement part of PlotUpgradeMoves; the gold part is
  *  [UseGoldAutomation.plotUpgradeMoves]), [HomelandMove.Patrol] and [HomelandMove.Airlift] (PlotAirliftMoves: spare units go to the free
  *  tiles beside the cities that have airports, where the tactical AI's defensive airlifts take them from); units no move took are skipped (ReviewUnassignedUnits).
@@ -85,13 +88,17 @@ class HomelandTargets(
 object HomelandAi {
 
     // The CvHomelandAI.cpp constants
-    private const val SENTRY_CITY_SEARCH_RADIUS = 5
     private const val MAX_FAILED_PATHS = 2
     private const val EARLY_OUT_FAILED_PATH_DISTANCE = 12
     private const val PATROL_RANDOM_RANGE = 10000
     private const val PATROL_OWN_TERRITORY_BONUS = 10000
-    private const val SENTRY_WEIGHT_PER_OUTSIDE_PLOT = 100
-    private const val SENTRY_CITY_THREAT_DIVISOR = 50
+    /** TacticalAIHelpers::SentryScore: what each plot two tiles away that the sentry sees and can be entered adds, and the score a sentry point must beat */
+    private const val SENTRY_SCORE_PER_VISIBLE_PLOT = 23
+    private const val SENTRY_MIN_SCORE = 30
+    /** FindHomelandTargets: a city is exposed when this many of the plots three tiles around it are not ours (an owned one counts as more than all) */
+    private const val EXPOSED_CITY_UNOWNED_PLOTS = 5
+    private const val EXPOSED_CITY_WEIGHT = 70
+    private const val GARRISON_BONUS_CITY_WEIGHT = 30
 
     /**
      *  CvHomelandAI::EstablishHomelandPriorities for the moves this port runs: each move's base priority (AI_HOMELAND_MOVE_PRIORITY_*; the
@@ -188,17 +195,17 @@ object HomelandAi {
     }
 
     /**
-     *  CvHomelandAI::FindHomelandTargets over the tiles [civ] sees, each tile the first of the original's else-if chain that fits: a city
-     *  of ours with no unit under tactical control (target weight: its threat value); a city of another owner or water without an
-     *  improvement (nothing here); a goody hut (not for city-states) or antiquity site or a visible enemy civilian / embarked unit (ruin target);
-     *  a land tile with no unit, or only our defenders, in or next to our land and unowned: a sentry point if land around it is not ours
-     *  ([sentryWeight]); a road in our territory (a mobile reserve muster point; the else-if chain only gets there for tiles with
-     *  units that are not our defenders). Sentry points are sorted by weight and thinned so that no two are adjacent (a stronger one
-     *  first), the roads thinned, the cities sorted by threat.
+     *  CvHomelandAI::FindHomelandTargets over the tiles [civ] sees, each tile the first of the (Brave New World's) else-if chain that fits: a city of
+     *  ours that needs no garrison ([AiOperationLogic.needsGarrison]: the tactical AI sees to those) and is exposed - more than five of the plots three
+     *  tiles around it unowned, or one owned by another - weight 70, or, with a policy that rewards garrisons, 30; a city of another
+     *  owner or water without an improvement (nothing here); a goody hut (not for city-states) or antiquity site or a visible enemy civilian / embarked
+     *  unit (ruin target); a land tile with no unit, or only our defenders, in or next to our land and unowned, or ours next to territory that is
+     *  not (not impassable ones): a sentry point if its [sentryScore] is above 30; a road in our territory (a mobile reserve muster point; the else-if
+     *  chain only gets there for tiles with units that are not our defenders). Sentry points are sorted by score and thinned so that no two are
+     *  adjacent (a stronger one first), the roads thinned, the cities sorted by weight. The border fortifications (FORT) and the naval sentry points are
+     *  not found.
      */
     fun findTargets(civ: Civilization, cache: AutomationCache): HomelandTargets = timeThis("AI.Homeland.targets") {
-        val danger = civ.ai.plotDanger
-        val map = civ.ai.tactical.map
         val ruleset = civ.gameInfo.ruleset
         val constants = ruleset.modOptions.constants
         val cities = ArrayList<HomelandTarget>()
@@ -206,14 +213,14 @@ object HomelandAi {
         val roads = ArrayList<HomelandTarget>()
         val ruins = ArrayList<HomelandTarget>()
         val visible = civ.viewableTiles
+        val encouragesGarrisons by lazy { hasPolicyEncouragingGarrisons(civ) }
         for (tile in civ.gameInfo.tileMap.tileList) {
             if (tile !in visible) continue
             if (tile.isCityCenter()) {
                 val city = tile.getCity() ?: continue
-                if (city.civ == civ) {
-                    val defender = tile.militaryUnit
-                    if (defender == null || defender.civ != civ || defender !in cache.processedUnits)
-                        cities.add(HomelandTarget(HomelandTargetType.City, tile, danger.cityThreat(city), city))
+                if (city.civ == civ && !AiOperationLogic.needsGarrison(civ, city)) {
+                    val weight = if (isExposed(civ, tile)) EXPOSED_CITY_WEIGHT else if (encouragesGarrisons) GARRISON_BONUS_CITY_WEIGHT else 0
+                    if (weight > 0) cities.add(HomelandTarget(HomelandTargetType.City, tile, weight, city))
                 }
             } else if (tile.isWater && tile.improvement == null) {
                 // A naval resource: the work boats' target
@@ -227,9 +234,9 @@ object HomelandAi {
                     ruins.add(HomelandTarget(HomelandTargetType.AncientRuin, tile))
             } else if (!tile.isWater && (!hasUnit(tile) || numDefenders(civ, tile) > 0)) {
                 val owner = tile.getOwner()
-                if (owner == civ || (owner == null && isAdjacentToOurLand(civ, tile))) {
-                    val outsidePlots = outsideLandPlots(civ, tile)
-                    if (outsidePlots > 0) sentries.add(HomelandTarget(HomelandTargetType.SentryPoint, tile, sentryWeight(civ, tile, outsidePlots)))
+                if (!tile.isImpassible() && ((owner == null && isAdjacentToOurLand(civ, tile)) || (owner == civ && isNextToOtherTerritory(civ, tile)))) {
+                    val score = sentryScore(civ, tile)
+                    if (score > SENTRY_MIN_SCORE) sentries.add(HomelandTarget(HomelandTargetType.SentryPoint, tile, score))
                 }
             } else if (tile.getOwner() == civ && tile.getUnpillagedRoad() != RoadStatus.None) {
                 roads.add(HomelandTarget(HomelandTargetType.HomeRoad, tile))
@@ -246,28 +253,31 @@ object HomelandAi {
         )
     }
 
-    /** The weight of a sentry point (the body of FindHomelandTargets): [outsidePlots] x 100 + the plot's defense modifier + its danger, plus the threat of the nearest city of ours within 5 tiles x its population / 50 (x the capital's threat weight), x2 on hills, /2 on the coast */
-    fun sentryWeight(civ: Civilization, tile: Tile, outsidePlots: Int): Int {
-        var weight = outsidePlots * SENTRY_WEIGHT_PER_OUTSIDE_PLOT + civ.ai.tactical.map.defenseModifier(tile) + civ.ai.plotDanger.get(tile)
-        val city = closestFriendlyCity(civ, tile, SENTRY_CITY_SEARCH_RADIUS)
-        if (city != null) {
-            weight += civ.ai.plotDanger.cityThreat(city) * city.population.population / SENTRY_CITY_THREAT_DIVISOR
-            if (city.isCapital()) weight = weight * civ.gameInfo.ruleset.ai.define(AiDefine.AI_MILITARY_CITY_THREAT_WEIGHT_CAPITAL) / 100
-        }
-        if (tile.isHill()) weight *= 2
-        if (tile.isAdjacentToCoast()) weight /= 2
-        return weight
+    /**
+     *  TacticalAIHelpers::SentryScore: the plot's defense modifier plus 23 for each plot two tiles away that it sees (over the terrain) and that is not
+     *  impassable. (The defense modifier is the terrain's, [com.unciv.logic.automation.unit.tactical.TacticalMap.defenseModifier].)
+     */
+    fun sentryScore(civ: Civilization, tile: Tile): Int {
+        val seen = tile.tileMap.getViewableTiles(tile.position, 2, true)
+        var visible = 0
+        tile.forEachTileAtDistance(2) { if (it in seen && !it.isImpassible()) visible++ }
+        return civ.ai.tactical.map.defenseModifier(tile) + SENTRY_SCORE_PER_VISIBLE_PLOT * visible
     }
 
-    /** CvPlayer::GetClosestFriendlyCity: the nearest city of ours within [radius] (the first of equals) */
-    fun closestFriendlyCity(civ: Civilization, tile: Tile, radius: Int): City? {
-        var best: City? = null
-        var bestDistance = Int.MAX_VALUE
-        for (city in civ.cities) {
-            val distance = city.getCenterTile().aerialDistanceTo(tile)
-            if (distance < bestDistance && distance <= radius) { best = city; bestDistance = distance }
+    /**
+     *  FindHomelandTargets' test of a city that needs no garrison for being exposed: of the plots three tiles away, one owned by anyone but us
+     *  counts as more than five unowned ones; unowned ones count one each.
+     */
+    private fun isExposed(civ: Civilization, city: Tile): Boolean {
+        var unowned = 0
+        var exposed = false
+        city.forEachTileAtDistance(3) { nearby ->
+            val owner = nearby.getOwner()
+            if (owner != civ && !exposed) {
+                if (owner != null || ++unowned > EXPOSED_CITY_UNOWNED_PLOTS) exposed = true
+            }
         }
-        return best
+        return exposed
     }
 
     private fun eliminateAdjacent(sorted: List<HomelandTarget>): List<HomelandTarget> {
@@ -302,12 +312,9 @@ object HomelandAi {
         return false
     }
 
-    /** CvPlot::GetNumAdjacentDifferentTeam(team, ignoreWater = true): neighbors on land that are not ours (unowned ones count) */
-    private fun outsideLandPlots(civ: Civilization, tile: Tile): Int {
-        var count = 0
-        for (neighbor in tile.neighbors) if (!neighbor.isWater && neighbor.getOwner() != civ) count++
-        return count
-    }
+    /** CvPlot::IsAdjacentOwnedByTeamOtherThan(team, allowNoTeam, ignoreImpassable): a passable neighbor, land or water, that is not ours (unowned ones count) */
+    private fun isNextToOtherTerritory(civ: Civilization, tile: Tile): Boolean =
+        tile.neighbors.any { !it.isImpassible() && it.getOwner() != civ }
 
     //region Unit properties the homeland moves look at
 
@@ -481,9 +488,17 @@ object HomelandAi {
             for (unit in currentUnits.toList()) if (TacticalSafety.heal(unit)) processed(unit, HomelandMove.Heal)
         }
 
+        /**
+         *  CvHomelandAI::PlotMovesToSafety: the units that [CivilianSafety.shouldFlee] (danger of a fifth of their health or more, a combat unit only in
+         *  mortal danger) go to the safest plot they reach ([SafestPlot.executeMovesToSafestPlot]) and are done for the turn.
+         */
         private fun plotMovesToSafety() {
-            val danger = civ.ai.plotDanger
-            for (unit in currentUnits.toList()) if (unit.hasMovement() && TacticalSafety.moveToSafety(unit, danger)) processed(unit, HomelandMove.ToSafety)
+            val context by lazy { TacticalContext(civ, civ.ai.tactical.map, civ.ai.plotDanger, cache, emptyList(), TacticalTargets.none()) }
+            for (unit in currentUnits.toList()) {
+                if (unit.isDestroyed || !unit.hasMovement() || !CivilianSafety.shouldFlee(unit)) continue
+                SafestPlot.executeMovesToSafestPlot(context, unit)
+                processed(unit, HomelandMove.ToSafety)
+            }
         }
 
         //endregion

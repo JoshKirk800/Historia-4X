@@ -147,7 +147,7 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
             }
             if (civ.isBarbarian) identifyPriorityBarbarianTargets(civ, targets) else identifyPriorityTargets(civ, targets)
             // Enemy water plots (PrioritizeNavalTargetsAndAddToMainList adds the best of them to the main list); barbarians have no analysis map and no blockade moves
-            if (map != null && !civ.isBarbarian) targets.addAll(BlockadeMoves.findPoints(civ, map, danger))
+            if (map != null && !civ.isBarbarian) targets.addAll(BlockadeMoves.findPoints(civ, map, civ.ai.plotDanger))
             identifyPriorityTargetsByType(targets)
             // std::stable_sort by aux data, the highest first
             TacticalTargets(targets.sortedByDescending { it.aux })

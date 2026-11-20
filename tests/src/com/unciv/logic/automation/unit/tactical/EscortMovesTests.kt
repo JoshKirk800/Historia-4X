@@ -184,7 +184,7 @@ class EscortMovesTests {
     @Test
     fun `a lone civilian whose way is hit by several enemies keeps its operation and waits or goes round`() {
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler)
         val target = AiOperationLogic.targetTile(civ, operation)!!
         val start = settler.getTile()
         val endOfTurn = settler.movement.getShortestPath(target).first()

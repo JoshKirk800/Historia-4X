@@ -202,7 +202,7 @@ object ReinforcementMoves {
      *  closest safe plot for healing, else the safest plot in reach; its turn is over (the original skips the rest of its movement).
      */
     private fun moveArmyUnitToSafety(ctx: TacticalContext, unit: MapUnit) {
-        if (ctx.civ.ai.unitDanger.get(unit) > TacticalSafety.actualHealRate(unit)) {
+        if (ctx.civ.ai.plotDanger.get(unit) > TacticalSafety.actualHealRate(unit)) {
             // Units are not typically hurt, but this is a convenient function to move out of danger; the second chance is for emergencies
             unit.movement.clearPathfindingCache()
             val safe = (TacticalHealing.findClosestSafePlotForHealing(ctx, unit, false) ?: SafestPlot.find(ctx, unit, allowEmbark = false))?.tile

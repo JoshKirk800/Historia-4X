@@ -169,7 +169,7 @@ class BarbarianMovesTests {
         val unseen = tile(2)
         barbarians.viewableTiles = game.tileMap.values.toSet()
         for (tile in game.tileMap.values) tile.setExplored(barbarians, tile.position != unseen.position)
-        val ctx = TacticalContext(barbarians, null, barbarians.ai.plotDanger, AutomationCache(), listOf(unit), TacticalTargets.find(barbarians, null, barbarians.ai.plotDanger))
+        val ctx = TacticalContext(barbarians, null, barbarians.ai.plotDanger, AutomationCache(), listOf(unit), TacticalTargets.find(barbarians, null))
         val target = BarbarianMoves.findExploreTarget(ctx, unit)
         assertNotNull(target)
         assertEquals(1, target!!.aerialDistanceTo(unseen))

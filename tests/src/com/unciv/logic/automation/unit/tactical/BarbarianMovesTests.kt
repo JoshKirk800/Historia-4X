@@ -308,23 +308,27 @@ class BarbarianMovesTests {
     }
 
     @Test
-    fun `the patrol target is the water tile next to a camp that the ship reaches in the fewest turns, as asking each in turn gives`() {
+    fun `the patrol target is the water tile next to the second nearest camp that the ship reaches soonest`() {
         makeWater(-18..18, -3..3)
         for (x in listOf(-9, -2, 4, 9, 15)) tile(x, 4).setImprovementBasic(Constants.barbarianEncampment)
         val raider = game.addUnit("Trireme", barbarians, tile(-6))
         val ctx = context(raider)
-        val camps = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp)
-        val nearest = camps.minBy { raider.getTile().aerialDistanceTo(it.tile) }
-        val waters = camps.filter { it !== nearest }.flatMap { camp -> camp.tile.neighbors.filter { it.isWater }.toList() }
-        raider.movement.clearPathfindingCache()
-        var expected: Tile? = null
-        var expectedTurns = Int.MAX_VALUE
-        for (water in waters) {
-            val turns = EscortMoves.turnsToApproach(ctx, raider, water, BarbarianMoves.seaRange(barbarians), fewCandidates = true)
-            if (turns < expectedTurns) { expectedTurns = turns; expected = water }
-        }
-        assertNotNull(expected)
-        assertEquals(expected, BarbarianMoves.findBestSeaTarget(ctx, raider))
+        // the camp at -2 (4 tiles) is the nearest and is left out, the one at -9 (7 tiles) is the next
+        val target = BarbarianMoves.findBestSeaTarget(ctx, raider)
+        assertNotNull(target)
+        assertTrue(target!!.isWater && target.aerialDistanceTo(tile(-9, 4)) == 1)
+        assertTrue("one flood for the ship, remembered for the turn", ctx.tables.isNotEmpty())
+    }
+
+    @Test
+    fun `a ship reaches a target within the sea range in turns of its movement, 36 tiles are 9 turns of 4`() {
+        makeWater(-18..18, -3..3)
+        val raider = game.addUnit("Trireme", barbarians, tile(-18))
+        val victim = game.addUnit("Trireme", civ, tile(18))
+        game.setDifficulty("Settler") // 4 turns
+        assertNull(BarbarianMoves.findBestSeaTarget(context(raider), raider))
+        game.setDifficulty("Warlord") // 8 turns: 35 steps to the tile next to it are 9 turns of 4, the first of them this one
+        assertEquals(victim.getTile(), BarbarianMoves.findBestSeaTarget(context(raider), raider))
     }
 
     @Test

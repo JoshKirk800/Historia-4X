@@ -176,7 +176,9 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
      *  Turns left are those of CvCity::getProductionTurnsLeft ([ProductionAi.turnsLeft]): the production the city would make while building that
      *  very item, with the item's own production modifiers, rounded as the game adds it each turn.
      */
-    fun getBuildables(): List<Buildable> {
+    fun getBuildables(): List<Buildable> = cityConstructions.withProductionCache { collectBuildables() }
+
+    private fun collectBuildables(): List<Buildable> {
         val rules = civInfo.gameInfo.ruleset.ai
         val ruleset = civInfo.gameInfo.ruleset
         val candidates = ArrayList<Buildable>()

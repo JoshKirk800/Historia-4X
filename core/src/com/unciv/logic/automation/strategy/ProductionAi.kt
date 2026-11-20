@@ -74,7 +74,9 @@ object ProductionAi {
      *  CvUnitProductionAI::RecommendUnit: among the units the city can train that may take the unit AI [type] (CvUnitEntry::GetUnitAIType),
      *  the one with the highest [unitWeight] reweighted by its turns left (CityStrategyAIHelpers::ReweightByTurnsLeft); null if none.
      */
-    fun recommendUnit(city: City, type: UnitAiType): BaseUnit? {
+    fun recommendUnit(city: City, type: UnitAiType): BaseUnit? = city.cityConstructions.withProductionCache { bestUnit(city, type) }
+
+    private fun bestUnit(city: City, type: UnitAiType): BaseUnit? {
         val civ = city.civ
         val rules = civ.gameInfo.ruleset.ai
         var best: BaseUnit? = null

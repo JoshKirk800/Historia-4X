@@ -312,16 +312,7 @@ class CityStats(val city: City) {
                 addUniqueStats(unique, Stat.valueOf(unique.params[1]), unique.params[0].toFloat())
         }
 
-        val uniquesToCheck =
-            when {
-                currentConstruction is BaseUnit ->
-                    city.getMatchingUniques(UniqueType.PercentProductionUnits)
-                currentConstruction is Building && currentConstruction.isAnyWonder() ->
-                    city.getMatchingUniques(UniqueType.PercentProductionWonders)
-                currentConstruction is Building && !currentConstruction.isAnyWonder() ->
-                    city.getMatchingUniques(UniqueType.PercentProductionBuildings)
-                else -> emptySequence() // Science/Gold production
-            }
+        val uniquesToCheck = productionUniquesToCheck(currentConstruction)
 
         for (unique in uniquesToCheck) {
             if (constructionMatchesFilter(currentConstruction, unique.params[1])
@@ -348,6 +339,41 @@ class CityStats(val city: City) {
         }
 
         return sourceToStats
+    }
+
+    /** The production bonus uniques that depend on what the city builds: those of units, wonders or other buildings, none for a process */
+    @Readonly
+    private fun productionUniquesToCheck(currentConstruction: IConstruction): Sequence<Unique> =
+        when {
+            currentConstruction is BaseUnit ->
+                city.getMatchingUniques(UniqueType.PercentProductionUnits)
+            currentConstruction is Building && currentConstruction.isAnyWonder() ->
+                city.getMatchingUniques(UniqueType.PercentProductionWonders)
+            currentConstruction is Building && !currentConstruction.isAnyWonder() ->
+                city.getMatchingUniques(UniqueType.PercentProductionBuildings)
+            else -> emptySequence() // Science/Gold production
+        }
+
+    /**
+     *  Everything of [construction] that [update] reads: two constructions with equal signatures give the city the same stats, so the
+     *  production it would make building either is one calculation ([CityConstructions.withProductionCache]). Its kind, whether each
+     *  production bonus unique that applies to its kind matches it in this city, whether the capital has it built (the bonus of
+     *  [UniqueType.PercentProductionBuildingsInCapital]) and whether it converts food to production.
+     */
+    @Readonly
+    fun constructionSignature(construction: IConstruction): List<Any> {
+        val signature = ArrayList<Any>()
+        signature.add(when {
+            construction is BaseUnit -> 0
+            construction is Building && construction.isAnyWonder() -> 1
+            construction is Building -> 2
+            else -> 3
+        })
+        for (unique in productionUniquesToCheck(construction))
+            signature.add(constructionMatchesFilter(construction, unique.params[1]) && city.matchesFilter(unique.params[2]))
+        signature.add(construction is Building && city.civ.getCapital()?.cityConstructions?.isBuilt(construction.name) == true)
+        signature.add(construction is INonPerpetualConstruction && construction.hasUnique(UniqueType.ConvertFoodToProductionWhenConstructed))
+        return signature
     }
 
     @Readonly

@@ -70,6 +70,11 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     @Transient @Cache
     private val containedBuildingFiltersCache = HashMap<String, Boolean>()
 
+    @Transient @Cache
+    private var productionCache: HashMap<List<Any>, Float>? = null
+    @Transient
+    private var productionCacheOwner: Thread? = null
+
     @Transient
     val builtBuildingUniqueMap = UniqueMap()
 
@@ -308,30 +313,50 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     fun productionForConstruction(constructionName: String): Int = productionForConstructionExact(constructionName).roundToInt()
 
     /** What the city would produce per turn while building [constructionName], before the whole-number rounding of what is added each turn */
-    @Readonly
+    @Readonly @Suppress("purity") // reads and fills the scoped cache, which the stats do not depend on
     fun productionForConstructionExact(constructionName: String): Float {
-        val cityStatsForConstruction: Stats
-        if (currentConstructionName() == constructionName) cityStatsForConstruction = city.cityStats.currentCityStats
-        else {
-            /*
-            The ol' Switcharoo - what would our stats be if that was our current construction?
-            Since this is only ever used for UI purposes, I feel fine with having it be a bit inefficient
-            and recalculating the entire city stats
-            We don't want to change our current construction queue - what if we have an empty queue,
-             this can affect the city if we run it on another thread like in ConstructionsTable -
-            So we run the numbers for the other construction
-            ALSO apparently if we run on the actual cityStats from another thread,
-              we get all sorts of fun concurrency problems when accessing various parts of the cityStats.
-            SO, we create an entirely new CityStats and iterate there - problem solve!
-            */
-            @LocalState val cityStats = CityStats(city)
-            cityStats.statsFromTiles = city.cityStats.statsFromTiles // take as-is
-            val construction = city.cityConstructions.getConstruction(constructionName)
-            cityStats.update(construction, updateTileStats = false, updateCivStats = false)
-            cityStatsForConstruction = cityStats.currentCityStats
-        }
+        if (currentConstructionName() == constructionName) return city.cityStats.currentCityStats.production
+        val construction = city.cityConstructions.getConstruction(constructionName)
+        val cache = productionCache
+        if (cache == null || productionCacheOwner !== Thread.currentThread()) return productionWhileBuilding(construction)
+        return cache.getOrPut(city.cityStats.constructionSignature(construction)) { productionWhileBuilding(construction) }
+    }
 
-        return cityStatsForConstruction.production
+    @Readonly
+    private fun productionWhileBuilding(construction: IConstruction): Float {
+        /*
+        The ol' Switcharoo - what would our stats be if that was our current construction?
+        Since this is only ever used for UI purposes, I feel fine with having it be a bit inefficient
+        and recalculating the entire city stats
+        We don't want to change our current construction queue - what if we have an empty queue,
+         this can affect the city if we run it on another thread like in ConstructionsTable -
+        So we run the numbers for the other construction
+        ALSO apparently if we run on the actual cityStats from another thread,
+          we get all sorts of fun concurrency problems when accessing various parts of the cityStats.
+        SO, we create an entirely new CityStats and iterate there - problem solve!
+        */
+        @LocalState val cityStats = CityStats(city)
+        cityStats.statsFromTiles = city.cityStats.statsFromTiles // take as-is
+        cityStats.update(construction, updateTileStats = false, updateCivStats = false)
+        return cityStats.currentCityStats.production
+    }
+
+    /**
+     *  Runs [block] with the production [productionForConstructionExact] gives remembered per [CityStats.constructionSignature], for
+     *  a caller that evaluates many constructions while nothing about the city or its civilization changes (the AI listing what to
+     *  build): most buildings share a signature, so the full stats calculation runs once per signature, not once per construction.
+     *  Only the calling thread uses the memory.
+     */
+    fun <T> withProductionCache(block: () -> T): T {
+        if (productionCache != null) return block()
+        productionCache = HashMap()
+        productionCacheOwner = Thread.currentThread()
+        try {
+            return block()
+        } finally {
+            productionCache = null
+            productionCacheOwner = null
+        }
     }
 
     @Readonly

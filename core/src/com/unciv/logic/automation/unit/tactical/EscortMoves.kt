@@ -24,9 +24,11 @@ import kotlin.math.max
  *  and the flags are checked on it:
  *  - NO_ENEMY_TERRITORY: no step in a tile owned by a civilization at war with us, unless the unit stands in one (the original drops the
  *    flag then, CvAStar's InitializeNextSearch);
- *  - AI_ABORT_IN_DANGER (a civilian travelling alone): none of the first two stops may be a tile where the civilian's danger ([PlotDanger.get] for the
- *    unit: [Int.MAX_VALUE] where it can be captured) is more than half its health, as the original's path finder refuses them (its mission also cancels a
- *    move into danger above its health, which a path that passed this test cannot make);
+ *  - AI_ABORT_IN_DANGER: none of the first two stops may be a tile where the civilian's danger ([PlotDanger.get] for the unit: [Int.MAX_VALUE] where it
+ *    can be captured) is more than half its health, as the original's path finder refuses them. The flag is used where a refused path is a plain
+ *    "no": forcing the stack forward. For a civilian travelling alone it is NOT a reason to abort: the original's path finder goes round such a plot
+ *    (or ends the turn before it), where the one shortest path here has no way round, so the civilian takes the safe plot nearest to its target
+ *    ([detourOrWait]) or waits; only a missing path is LOST_PATH (the study of `parity/vp-danger` lost 84% of the quick colonizers' operations to it);
  *  - APPROX_TARGET_RING1 / RING2: the path ends at the nearest tile within 1 / 2 hexes of the target that the unit can enter (the cheapest of the
  *    eight nearest candidates), APPROX_TARGET_NATIVE_DOMAIN excludes tiles of the other domain;
  *  - DONT_STACK_WITH_NEUTRAL needs nothing: Unciv's units never enter a tile held by a unit of another civilization;
@@ -180,7 +182,6 @@ object EscortMoves {
 
         // avoid plots where our escort cannot follow (DONT_STACK_WITH_NEUTRAL) if necessary and possible: see the class comment
         var flags = NO_ENEMY_TERRITORY
-        if (escort == null) flags = flags or ABORT_IN_DANGER
 
         // the escort leads the way
         var pathFound = false
@@ -255,12 +256,18 @@ object EscortMoves {
             if (civilianPath != null) {
                 val turnTarget = civilianPath.firstStop
                 if (turnTarget != null) {
-                    // maybe we can find ourselves an escort!
-                    grabEscort(ctx, operation, army, civilian, turnTarget)
-                    executeMoveToPlot(ctx, civilian, turnTarget)
-                    log = "${civilian.name} now at ${civilian.getTile().position}. Moving normally towards ${target.position} without escort."
+                    if (isPathTooDangerous(ctx, civilian, civilianPath)) {
+                        // The way the path takes is hit: Vox Populi's path finder (AI_ABORT_IN_DANGER) goes round or stops earlier; the path here is the one
+                        // shortest, so the civilian goes on by the safe plot nearest to its target, or waits. That is no lost path.
+                        log = detourOrWait(ctx, civilian, target)
+                    } else {
+                        // maybe we can find ourselves an escort!
+                        grabEscort(ctx, operation, army, civilian, turnTarget)
+                        executeMoveToPlot(ctx, civilian, turnTarget)
+                        log = "${civilian.name} now at ${civilian.getTile().position}. Moving normally towards ${target.position} without escort."
+                    }
                 }
-            } else if (moveToEmptySpaceNearTarget(ctx, civilian, target, false, Int.MAX_VALUE, true)) {
+            } else if (moveToEmptySpaceNearTarget(ctx, civilian, target, false, Int.MAX_VALUE)) {
                 log = "${civilian.name} now at ${civilian.getTile().position}. Moving to empty space near target ${target.position} without escort."
             } else {
                 civ.ai.operations.abort(operation, OperationAbortReason.LOST_PATH)
@@ -355,14 +362,12 @@ object EscortMoves {
         target: Tile,
         domainIsWater: Boolean?,
         maxTurns: Int,
-        mustBeSafePath: Boolean = false,
     ): Boolean {
         if (unit.getTile() == target) return false
         var flags = 0
         // can we move there directly? if not try to move to an adjacent plot
         if (!unit.movement.canMoveTo(target)) flags = flags or APPROX_RING1
         if (domainIsWater == target.isWater) flags = flags or NATIVE_DOMAIN
-        if (mustBeSafePath) flags = flags or ABORT_IN_DANGER
 
         var path = generatePath(ctx, unit, target, flags)
         // if not possible, try again with more leeway
@@ -390,8 +395,36 @@ object EscortMoves {
         val stops = (if (ring == 0) exactPath(unit, target) else approximatePath(unit, target, ring, flags and NATIVE_DOMAIN != 0)) ?: return null
         if (stops.size - 1 >= maxTurns) return null
         if (flags and NO_ENEMY_TERRITORY != 0 && !start.isEnemyTerritory(civ) && stops.any { it.isEnemyTerritory(civ) }) return null
-        if (flags and ABORT_IN_DANGER != 0 && unit.isCivilian() && stops.take(ABORT_IN_DANGER_TURNS).any { ctx.danger.get(unit, it) > unit.health / 2 }) return null
+        if (flags and ABORT_IN_DANGER != 0 && unit.isCivilian() && isPathTooDangerous(ctx, unit, EscortPath(stops))) return null
         return EscortPath(stops)
+    }
+
+    /** CvAStar.cpp PathEndTurnCost with AI_ABORT_IN_DANGER: one of the first two turns of the path ends where more than half the unit's health is in danger */
+    private fun isPathTooDangerous(ctx: TacticalContext, unit: MapUnit, path: EscortPath) =
+        path.stops.take(ABORT_IN_DANGER_TURNS).any { ctx.danger.get(unit, it) > unit.health / 2 }
+
+    /**
+     *  A civilian travelling alone whose shortest path ends a turn in danger: it goes to the reachable plot, safe (danger at most half its health), that
+     *  is nearest to [target] and nearer than where it stands; with none it stays where it is if that is safe, else it flees ([SafestPlot.find]).
+     *  @return the log line
+     */
+    private fun detourOrWait(ctx: TacticalContext, civilian: MapUnit, target: Tile): String {
+        val here = civilian.getTile()
+        val limit = civilian.health / 2
+        // What the civilian reaches changes as other units move
+        civilian.movement.clearPathfindingCache()
+        val best = civilian.movement.getDistanceToTiles().keys
+            .filter { it != here && it.aerialDistanceTo(target) < here.aerialDistanceTo(target) && civilian.movement.canMoveTo(it) && ctx.danger.get(civilian, it) <= limit }
+            .minWithOrNull(compareBy<Tile>({ it.aerialDistanceTo(target) }, { ctx.danger.get(civilian, it) }, { it.zeroBasedIndex }))
+        if (best != null) {
+            Deployment.headTowards(civilian, best)
+            return "${civilian.name} goes round the danger on its way to ${target.position}, now at ${civilian.getTile().position}."
+        }
+        if (ctx.danger.get(civilian) > limit) {
+            SafestPlot.find(ctx, civilian, allowEmbark = true)?.tile?.takeIf { it != here }?.let { Deployment.headTowards(civilian, it) }
+            return "${civilian.name} flees from the danger on its way to ${target.position}, now at ${civilian.getTile().position}."
+        }
+        return "${civilian.name} waits at ${here.position} for the danger on its way to ${target.position} to pass."
     }
 
     private fun exactPath(unit: MapUnit, target: Tile): List<Tile>? {

@@ -9,6 +9,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.SettleTestLand
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -62,7 +63,7 @@ class RecruitmentTests {
     private fun attack() = AiOperationLogic.addOperation(civ, AiOperationType.BASIC_CITY_ATTACK, enemy, enemyCity, city)
 
     private fun fertileLand() {
-        for (tile in game.tileMap.values) game.setTileTerrain(tile.position, "Grassland")
+        SettleTestLand.plainsWithResources(game)
         game.tileMap.assignContinents(TileMap.AssignContinentsMode.Reassign)
         civ.ai.setPersonalityFlavor(Flavor.Growth, 5)
         civ.ai.setPersonalityFlavor(Flavor.Expansion, 3)
@@ -186,7 +187,7 @@ class RecruitmentTests {
         // 13 plots from the settler: CvUnit::TurnsToReachTarget with MOVEFLAG_APPROX_TARGET_RING2 counts the 11 to a plot 2 from it, 6 turns of two moves
         val warrior = unit("Warrior", -12, 0)
         val settler = unit("Settler", 1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler)
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
         assertEquals(5, AiOperationLogic.maxRecruitTurns(civ, operation))
         assertNull(ops.armyOf(warrior))

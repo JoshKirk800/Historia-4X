@@ -7,7 +7,6 @@ import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
-import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.logic.automation.diplomacy.WarSanityAi
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.models.ruleset.ai.MajorCivApproach
@@ -125,18 +124,17 @@ class CivDecisionTrace(private val game: GameInfo, private val civName: String, 
         writer.appendLine("  $label: " + (added.map { "+$it" } + removed.map { "-$it" }).joinToString(" "))
     }
 
-    /** What CvPlayer::GetBestSettleAreas sees: the landmasses' found value totals against the minimum, and how much of them is explored */
+    /** What CvPlayer::GetBestSettlePlot sees: the sites with a found value, the best one and its quality, and how much of the home landmass is explored */
     private fun settleAreas(civ: Civilization) {
-        val minimum = game.ruleset.ai.define(AiDefine.AI_STRATEGY_MINIMUM_SETTLE_FERTILITY)
         val found = SettleAreas.foundValues(civ)
-        val best = SettleAreas.bestSettleAreas(civ, minimum)
+        val best = SettleAreas.bestSettlePlot(civ, null, null)
         val capitalArea = civ.getCapital()?.getCenterTile()?.getContinent()
         val land = game.tileMap.tileList.filter { it.isLand && it.getContinent() == capitalArea }
-        val sites = game.tileMap.tileList.count { found.values[it.zeroBasedIndex] > 5000 }
-        writer.appendLine("  settle: good areas ${best.count} (best ${best.first}, second ${best.second}), totals " +
-            found.areaTotals.entries.sortedByDescending { it.value }.take(4).joinToString { "area ${it.key}: ${it.value}" } +
-            " (minimum $minimum); sites over 5000: $sites; home landmass $capitalArea explored ${land.count { civ.hasExplored(it) }}/${land.size}, " +
-            "unowned ${land.count { it.getOwner() == null }}")
+        val sites = game.tileMap.tileList.count { found.values[it.zeroBasedIndex] > 0 }
+        writer.appendLine("  settle: best plot ${best?.position} value ${best?.let { found.values[it.zeroBasedIndex] }} quality " +
+            "${SettleAreas.settlePlotQualityMeasure(civ, best)} (minimum ${SettleAreas.minAcceptableSettleQuality(civ)}, reference " +
+            "${SettleAreas.cityQualityReference(game)}); sites with a value: $sites; good plot anywhere ${SettleAreas.haveGoodSettlePlot(civ, -1)}; " +
+            "home landmass $capitalArea explored ${land.count { civ.hasExplored(it) }}/${land.size}, unowned ${land.count { it.getOwner() == null }}")
     }
 
     private fun record(civ: Civilization, unit: MapUnit): UnitRecord {

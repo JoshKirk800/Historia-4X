@@ -64,6 +64,11 @@ class WaterBodies private constructor(val turn: Int, tileCount: Int) {
             return bodies
         }
 
+        /** Drops the bodies kept for [tileMap], for a caller that evaluated the map while it was still being set up */
+        fun forget(tileMap: TileMap) {
+            synchronized(cache) { cache.remove(tileMap) }
+        }
+
         /** CvCity::isCoastal([minWaterSize]): the city's tile is coastal land, see [isCoastalLand] */
         fun isCoastal(city: City, minWaterSize: Int = -1): Boolean = of(city.civ).isCoastalLand(city.getCenterTile(), minWaterSize)
     }

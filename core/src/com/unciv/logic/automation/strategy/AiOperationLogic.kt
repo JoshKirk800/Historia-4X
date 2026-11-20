@@ -351,15 +351,14 @@ object AiOperationLogic {
     }
 
     /**
-     *  CvAIOperationFoundCity::Init and CvAIOperationQuickColonize::Init: the settler [civilian] (a loose settler of ours) goes to the best
-     *  site of [targetArea] (-1 = anywhere), with an escort recruited from the reserves if possible; with none a player with more than one
-     *  city or boldness over 5 sends it alone to the best site found with the safe-path search, else the operation recruits the escort.
+     *  CvAIOperationCivilian::Init for CvAIOperationCivilianFoundCity (and the BNW quick colony, which has no escort): the settler [civilian]
+     *  (a loose settler of ours) goes to the best site [findSettleTarget] finds, with an escort recruited from the reserves if possible; with none a
+     *  player with more than one city or boldness over 5 sends it alone when no enemy unit is in sight of the site, else the operation recruits the escort.
      */
-    fun addSettlerOperation(civ: Civilization, type: AiOperationType, civilian: MapUnit, targetArea: Int): AiOperation {
+    fun addSettlerOperation(civ: Civilization, type: AiOperationType, civilian: MapUnit): AiOperation {
         val operations = civ.ai.operations
         val operation = operations.newOperation(type, null)
-        operation.targetArea = targetArea
-        val target = findSettleTarget(civ, operation, civilian, onlySafePaths = false)
+        val target = findSettleTarget(civ, operation, civilian)
         val army = operations.newArmy(operation, formationName(civ, type))
         if (target == null) { abort(operation, OperationAbortReason.LOST_TARGET); return operation }
         operation.targetTile = target.position
@@ -386,10 +385,8 @@ object AiOperationLogic {
             army.state = ArmyState.WAITING_FOR_UNITS_TO_CATCH_UP
             operation.state = OperationState.GATHERING_FORCES
         } else {
-            var safe: Tile? = null
-            if (civ.cities.size > 1 || civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 5)
-                safe = findSettleTarget(civ, operation, civilian, onlySafePaths = true)
-            if (safe == null) {
+            val alone = (civ.cities.size > 1 || civ.ai.diplomacyValue(DiplomacyPersonality.Boldness) > 5) && !SettleAreas.isVisibleEnemyUnit(civ, target)
+            if (!alone) {
                 // we'll wait it out for an escort
                 operation.slotsToBuild.clear()
                 operation.slotsToBuild.add(SlotRef(operation.id, army.id, 1))
@@ -397,8 +394,6 @@ object AiOperationLogic {
             } else {
                 operation.escorted = false
                 operation.slotsToBuild.clear()
-                army.goalTile = safe.position
-                operation.targetTile = safe.position
                 army.state = ArmyState.MOVING_TO_DESTINATION
                 operation.state = OperationState.MOVING_TO_TARGET
             }
@@ -407,13 +402,14 @@ object AiOperationLogic {
         return operation
     }
 
-    /** CvAIOperationFoundCity::FindBestTarget / CvAIOperationQuickColonize::FindBestTarget: in the operation's area, else anywhere */
-    fun findSettleTarget(civ: Civilization, operation: AiOperation, unit: MapUnit, onlySafePaths: Boolean): Tile? {
-        val targeted = civ.ai.operations.settleTargets(operation)
-        val safe = onlySafePaths && operation.type == AiOperationType.FOUND_CITY
-        SettleAreas.bestSettlePlot(unit, safe, operation.targetArea, targeted)?.let { return it }
-        operation.targetArea = -1
-        return SettleAreas.bestSettlePlot(unit, safe, -1, targeted)
+    /**
+     *  CvAIOperationCivilianFoundCity::FindBestTargetForUnit: the best settle plot for the unit ([SettleAreas.bestSettlePlot], the targets of our
+     *  other found-city operations excluded), unless its quality is under the minimum acceptable one and we have a city already.
+     */
+    fun findSettleTarget(civ: Civilization, operation: AiOperation, unit: MapUnit): Tile? {
+        val best = SettleAreas.bestSettlePlot(civ, unit, operation) ?: return null
+        if (SettleAreas.settlePlotQualityMeasure(civ, best) < SettleAreas.minAcceptableSettleQuality(civ) && civ.cities.isNotEmpty()) return null
+        return best
     }
     //endregion
 
@@ -853,7 +849,7 @@ object AiOperationLogic {
                 if (escort == null) { abort(operation, OperationAbortReason.ESCORT_DIED); return true }
                 if (settler != null && settler.getTile() == escort.getTile()) {
                     // let's see if the target still makes sense (modified from RetargetCivilian)
-                    val better = findSettleTarget(civ, operation, settler, onlySafePaths = true)
+                    val better = findSettleTarget(civ, operation, settler)
                     if (better == null) { abort(operation, OperationAbortReason.NO_TARGET); return false }
                     operation.targetTile = better.position
                     army.goalTile = better.position
@@ -887,9 +883,9 @@ object AiOperationLogic {
         return false
     }
 
-    /** CvAIEscortedOperation::RetargetCivilian: look for another site (with the safe-path search if the settler is escorted) */
+    /** CvAIOperationCivilian::RetargetCivilian: look for another site */
     fun retargetCivilian(civ: Civilization, operation: AiOperation, army: AiArmy, civilian: MapUnit): Boolean {
-        val better = findSettleTarget(civ, operation, civilian, onlySafePaths = operation.escorted)
+        val better = findSettleTarget(civ, operation, civilian)
         if (better == null) { abort(operation, OperationAbortReason.NO_TARGET); return false }
         if (better.position == operation.targetTile) {
             abort(operation, OperationAbortReason.REPEAT_TARGET)

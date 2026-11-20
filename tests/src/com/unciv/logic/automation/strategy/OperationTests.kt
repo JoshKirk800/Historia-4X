@@ -14,6 +14,7 @@ import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.SettleTestLand
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -625,7 +626,7 @@ class OperationTests {
 
     /** Grassland everywhere, so that settle sites exist: the civilization values food and expansion */
     private fun fertileLand() {
-        for (tile in game.tileMap.values) game.setTileTerrain(tile.position, "Grassland")
+        SettleTestLand.plainsWithResources(game)
         game.tileMap.assignContinents(TileMap.AssignContinentsMode.Reassign)
         civ.ai.setPersonalityFlavor(Flavor.Growth, 5)
         civ.ai.setPersonalityFlavor(Flavor.Expansion, 3)
@@ -636,7 +637,7 @@ class OperationTests {
     fun `a settler operation waits for an escort when it must, and a unit that finished building joins it`() {
         fertileLand()
         val settler = unit("Settler")
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler)
         assertFalse("aborted: ${operation.abortReason}", operation.state == OperationState.ABORTED)
         // No escort at hand and a single city: wait for one (boldness 0)
         assertEquals(OperationState.RECRUITING_UNITS, operation.state)
@@ -654,7 +655,7 @@ class OperationTests {
         val warrior = unit("Warrior", HexCoord(1, 0))
         fertileLand()
         val settler = unit("Settler")
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler)
         assertFalse("aborted: ${operation.abortReason}", operation.state == OperationState.ABORTED)
         assertEquals(OperationState.GATHERING_FORCES, operation.state)
         assertEquals(operation.firstArmy, ops.armyOf(warrior))
@@ -669,7 +670,7 @@ class OperationTests {
     fun `a quick colony needs no escort and moves at once`() {
         fertileLand()
         val settler = unit("Settler")
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.QUICK_COLONIZE, settler)
         assertFalse("aborted: ${operation.abortReason}", operation.state == OperationState.ABORTED)
         assertEquals(OperationState.MOVING_TO_TARGET, operation.state)
         assertFalse(operation.escorted)

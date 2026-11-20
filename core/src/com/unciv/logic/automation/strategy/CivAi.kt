@@ -109,6 +109,8 @@ class CivAi : IsPartOfGameInfoSerialization {
 
     /** CvPlayer::m_bCramped, updated each turn by [updateCramped] */
     var isCramped = false
+    /** CvPlayer::m_iPreviousBestSettlePlot: the [com.unciv.logic.map.tile.Tile.zeroBasedIndex] of the best settle plot of the last time [com.unciv.logic.automation.unit.SettleAreas.playerWhoStoleMyFavoriteCitySite] looked, -1 = none */
+    var previousBestSettlePlot = -1
     /**
      *  CvPlayer::m_iCitiesNeedingTerrainImprovements: the cities whose [CityAi.terrainImprovementNeed] was above 0 at the start of this turn
      *  (CvPlayer::UpdateNumCitiesNeedingTerrainImprovements, run first in [doTurn] from the needs the cities computed last turn)
@@ -187,6 +189,7 @@ class CivAi : IsPartOfGameInfoSerialization {
         toReturn.economicStrategies.putAll(economicStrategies)
         toReturn.militaryStrategies.putAll(militaryStrategies)
         toReturn.isCramped = isCramped
+        toReturn.previousBestSettlePlot = previousBestSettlePlot
         toReturn.citiesNeedingTerrainImprovements = citiesNeedingTerrainImprovements
         for ((civId, memory) in aggressionMemory) toReturn.aggressionMemory[civId] = memory.clone()
         toReturn.citySpecialization = citySpecialization.clone()

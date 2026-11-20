@@ -18,6 +18,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.SettleTestLand
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -382,7 +383,7 @@ class OperationalMovesTests {
     // region Settler and escort
 
     private fun fertileLand() {
-        for (tile in game.tileMap.values) game.setTileTerrain(tile.position, "Grassland")
+        SettleTestLand.plainsWithResources(game)
         game.tileMap.assignContinents(TileMap.AssignContinentsMode.Reassign)
         civ.ai.setPersonalityFlavor(Flavor.Growth, 5)
         civ.ai.setPersonalityFlavor(Flavor.Expansion, 3)
@@ -394,7 +395,7 @@ class OperationalMovesTests {
         fertileLand()
         val warrior = unit("Warrior", 1, 0)
         val settler = unit("Settler", -1, 0)
-        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler, -1)
+        val operation = AiOperationLogic.addSettlerOperation(civ, AiOperationType.FOUND_CITY, settler)
         assertEquals(OperationState.GATHERING_FORCES, operation.state)
         val cache = AutomationCache()
         OperationalMoves.moveOperation(civ, operation, cache)

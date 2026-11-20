@@ -170,31 +170,43 @@ object BarbarianMoves {
      */
     fun findNearbyTarget(ctx: TacticalContext, unit: MapUnit, maxTurns: Int, offensive: Boolean): Tile? {
         val here = unit.getTile()
-        val candidates = ArrayList<Pair<Tile, Int>>()
+        val maxDistance = maxTurns.toLong() * TILES_PER_TURN
+        val candidates = ArrayList<Candidate>()
         for (target in ctx.targets.all) {
-            val matches = if (offensive) when (target.type) {
+            // Whether the target is of a type that matches, and whether the unit must also not die attacking it: that is worked out only for the
+            // targets that pass the cheap tests below, and in the order of the distance, where the answer is needed (same result as testing them all)
+            val suicideTest: Boolean
+            if (offensive) when (target.type) {
                 TacticalTargetType.LowPriorityUnit, TacticalTargetType.MediumPriorityUnit, TacticalTargetType.HighPriorityUnit, TacticalTargetType.City ->
-                    !isSuicideMeleeAttack(unit, target.tile)
+                    suicideTest = true
                 TacticalTargetType.Improvement, TacticalTargetType.ImprovementResource, TacticalTargetType.TradeUnitLand,
                 TacticalTargetType.VeryHighPriorityCivilian, TacticalTargetType.HighPriorityCivilian, TacticalTargetType.MediumPriorityCivilian,
-                TacticalTargetType.LowPriorityCivilian -> true
-                else -> false
-            } else target.type == TacticalTargetType.CityToDefend || (ctx.civ.isBarbarian && target.type == TacticalTargetType.BarbarianCamp)
-            if (!matches) continue
+                TacticalTargetType.LowPriorityCivilian -> suicideTest = false
+                else -> continue
+            } else if (target.type == TacticalTargetType.CityToDefend || (ctx.civ.isBarbarian && target.type == TacticalTargetType.BarbarianCamp)) suicideTest = false
+            else continue
             val tile = target.tile
-            if (tile.aerialDistanceTo(here) > maxTurns.toLong() * TILES_PER_TURN) continue
+            val distance = tile.aerialDistanceTo(here)
+            if (distance > maxDistance) continue
             // Cannot do anything if we would need to embark
             if (unit.baseUnit.isLandUnit && tile.isWater && !unit.cache.canMoveOnWater) continue
             // Shortcut, may happen often
-            if (tile == here) return tile
-            candidates.add(tile to tile.aerialDistanceTo(here))
+            if (tile == here) {
+                if (suicideTest && isSuicideMeleeAttack(unit, tile)) continue
+                return tile
+            }
+            candidates.add(Candidate(tile, distance, suicideTest))
         }
-        // Second round: the nearest first
+        // Second round: the nearest first (std::stable_sort, then the original's order for equal distances)
         unit.movement.clearPathfindingCache()
-        for ((tile, _) in candidates.sortedBy { it.second })
-            if (EscortMoves.turnsToApproach(ctx, unit, tile, maxTurns) < Int.MAX_VALUE) return tile
+        for (candidate in candidates.sortedBy { it.distance }) {
+            if (candidate.suicideTest && isSuicideMeleeAttack(unit, candidate.tile)) continue
+            if (EscortMoves.turnsToApproach(ctx, unit, candidate.tile, maxTurns) < Int.MAX_VALUE) return candidate.tile
+        }
         return null
     }
+
+    private class Candidate(val tile: Tile, val distance: Int, val suicideTest: Boolean)
 
     /**
      *  TacticalAIHelpers::IsSuicideMeleeAttack: a melee unit (not one that shoots, not an aircraft) that would take at least what it has left, less 3 for
@@ -221,28 +233,46 @@ object BarbarianMoves {
         val unitTile = unit.getTile()
         val range = seaRange(ctx.civ)
         unit.movement.clearPathfindingCache()
-        var best: Tile? = null
-        var bestTurns = Int.MAX_VALUE
         // Loop through all unit targets to find the closest
         val nearest = ctx.targets.all.filter { it.isUnitTarget && ctx.sameArea(unitTile, it.tile) }.sortedBy { unitTile.aerialDistanceTo(it.tile) }.take(MAX_SEA_CANDIDATES)
-        for (target in nearest) {
-            val turns = EscortMoves.turnsToApproach(ctx, unit, target.tile, range)
-            if (turns < bestTurns) { bestTurns = turns; best = target.tile }
-        }
-        if (best != null) return best
+        bestByTurns(ctx, unit, nearest.map { it.tile }, range)?.let { return it }
 
         // No units to pick on, so sail to a tile adjacent to the second closest barbarian camp: this should result in patrolling behavior
         val camps = TacticalTargets.ofType(ctx.targets.all, TacticalTargetType.BarbarianCamp).filter { camp -> camp.tile.neighbors.any { isShallowWater(it) } }
         val nearestCamp = camps.minByOrNull { unitTile.aerialDistanceTo(it.tile) }
+        val waters = ArrayList<Tile>()
         for (camp in camps) {
             if (camp === nearestCamp) continue
-            for (water in camp.tile.neighbors) {
-                if (!isShallowWater(water) || !ctx.sameArea(unitTile, water)) continue
-                val turns = EscortMoves.turnsToApproach(ctx, unit, water, range)
-                if (turns < bestTurns) { bestTurns = turns; best = water }
-            }
+            for (water in camp.tile.neighbors) if (isShallowWater(water) && ctx.sameArea(unitTile, water)) waters.add(water)
         }
-        return best ?: findExploreTarget(ctx, unit)
+        return bestByTurns(ctx, unit, waters, range) ?: findExploreTarget(ctx, unit)
+    }
+
+    /**
+     *  The tile of [candidates] that [unit] gets next to in the fewest turns within [range] (the first of equals in the list's order, none that it cannot
+     *  reach). The result is that of asking [EscortMoves.turnsToApproach] of each in turn; a path search is made only for a candidate that a bound on
+     *  the turns, from the distance and the unit's movement (a ship takes at most two tiles for each of its movement points: roads and rivers do not
+     *  apply, double movement uniques do), leaves a chance to be the best.
+     */
+    private fun bestByTurns(ctx: TacticalContext, unit: MapUnit, candidates: List<Tile>, range: Int): Tile? {
+        if (candidates.isEmpty()) return null
+        val here = unit.getTile()
+        val tilesPerTurn = (2 * unit.getMaxMovement()).coerceAtLeast(1)
+        val bounds = IntArray(candidates.size) { index ->
+            val steps = candidates[index].aerialDistanceTo(here) - 1
+            if (steps <= 0) 0 else (steps + tilesPerTurn - 1) / tilesPerTurn - 1
+        }
+        var best: Tile? = null
+        var bestIndex = Int.MAX_VALUE
+        var bestTurns = Int.MAX_VALUE
+        for (index in candidates.indices.sortedBy { bounds[it] }) {
+            // Nothing from here on can beat the best, a tie only if it comes earlier in the list
+            if (bounds[index] > bestTurns || bounds[index] > range) break
+            val turns = EscortMoves.turnsToApproach(ctx, unit, candidates[index], range)
+            if (turns == Int.MAX_VALUE) continue
+            if (turns < bestTurns || (turns == bestTurns && index < bestIndex)) { bestTurns = turns; best = candidates[index]; bestIndex = index }
+        }
+        return best
     }
 
     /** CvPlot::isAdjacentToShallowWater is asked of the camp: a water tile that is not deep ocean */
@@ -263,19 +293,19 @@ object BarbarianMoves {
         for (tile in unit.movement.getDistanceToTiles().keys) {
             if (tile == unitTile || !civ.hasExplored(tile) || tile.isCityCenter()) continue
             val nativeDomain = if (unit.baseUnit.isWaterUnit) tile.isWater else tile.isLand
-            if (!nativeDomain && !unit.isEmbarked() || !unit.movement.canMoveTo(tile)) continue
-            // Even barbarians consider danger sometimes
-            if (danger.get(unit, tile) > unit.health) continue
+            if (!nativeDomain && !unit.isEmbarked()) continue
             var value = 0
             for (around in tile.neighbors + tile) {
                 if (!civ.hasExplored(around)) value += 3
                 else if (!around.isVisible(civ) && around.getOwner() != null) value += 2
             }
             if (unit.isEmbarked() && nativeDomain) value += 100
-            if (value > bestValue) {
-                best = tile
-                bestValue = value
-            }
+            // The costly tests (the path, the danger of every enemy) only for a plot that would be the best: they only ever drop a plot
+            if (value <= bestValue || !unit.movement.canMoveTo(tile)) continue
+            // Even barbarians consider danger sometimes
+            if (danger.get(unit, tile) > unit.health) continue
+            best = tile
+            bestValue = value
         }
         return best
     }

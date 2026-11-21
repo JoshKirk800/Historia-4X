@@ -27,33 +27,51 @@ class StartFairness(private val map: TileMap, private val ruleset: Ruleset) {
         val passes get() = failures.isEmpty()
     }
 
-    fun evaluate(): Verdict {
-        val starts = map.startingLocations.mapNotNull { location -> map[location.position]?.let { Pair(it, location.nation) } }
+    /** What the check measures at the start of one civilization. [sites] is counted up to the limit given to [measure]. */
+    class StartMeasure(
+        val nation: String, val tile: Tile,
+        /** The land tiles of the start's landmass */ val landmassTiles: Int,
+        /** The starts, civilizations and city-states, on that landmass */ val startsOnLandmass: Int,
+        val sites: Int,
+        /** The fertility within [FERTILITY_RADIUS], and its share of the median civilization's */ val fertility: Double, val fertilityRatio: Double,
+    ) {
+        val landPerPlayer get() = landmassTiles.toDouble() / startsOnLandmass
+    }
+
+    /** The starts on the map: the tile of each and the nation it is for */
+    private fun starts() = map.startingLocations.mapNotNull { location -> map[location.position]?.let { Pair(it, location.nation) } }
+
+    /** The measures of every civilization (not city-states), empty when there are fewer than two. Sites are counted up to [maxSites]. */
+    fun measure(maxSites: Int = MIN_SITES): List<StartMeasure> {
+        val starts = starts()
         val majors = starts.filter { ruleset.nations[it.second]?.isMajorCiv == true }
-        if (majors.size < 2) return Verdict(emptyList(), 0.0)
+        if (majors.size < 2) return emptyList()
         val startTiles = starts.map { it.first }
         val playersOn = startTiles.groupingBy { it.getContinent() }.eachCount()
-
-        val failures = ArrayList<String>()
-        var deficit = 0.0
-
         val fertilities = majors.map { (tile, _) -> tile.getTilesInDistance(FERTILITY_RADIUS).sumOf { it.getTileFertility(true) } }
         val median = fertilities.sorted().let { (it[(it.size - 1) / 2] + it[it.size / 2]) / 2.0 }
-
-        for ((index, major) in majors.withIndex()) {
-            val (tile, nation) = major
+        return majors.mapIndexed { index, (tile, nation) ->
             val continent = tile.getContinent()
-            val landPerPlayer = (map.continentSizes[continent] ?: 0).toDouble() / (playersOn[continent] ?: 1)
+            StartMeasure(nation, tile, map.continentSizes[continent] ?: 0, playersOn[continent] ?: 1, countSites(tile, startTiles, maxSites),
+                fertilities[index].toDouble(), if (median > 0) fertilities[index] / median else 1.0)
+        }
+    }
+
+    fun evaluate(): Verdict {
+        val failures = ArrayList<String>()
+        var deficit = 0.0
+        for (measure in measure()) {
+            val nation = measure.nation
+            val landPerPlayer = measure.landPerPlayer
             if (landPerPlayer < MIN_LAND_PER_PLAYER) {
                 failures += "$nation: ${"%.1f".format(landPerPlayer)} land tiles per player on its landmass, under ${MIN_LAND_PER_PLAYER.toInt()}"
                 deficit += (MIN_LAND_PER_PLAYER - landPerPlayer) / MIN_LAND_PER_PLAYER
             }
-            val sites = countSites(tile, startTiles)
-            if (sites < MIN_SITES) {
-                failures += "$nation: $sites city sites within $SITE_RADIUS tiles, under $MIN_SITES"
-                deficit += (MIN_SITES - sites).toDouble() / MIN_SITES
+            if (measure.sites < MIN_SITES) {
+                failures += "$nation: ${measure.sites} city sites within $SITE_RADIUS tiles, under $MIN_SITES"
+                deficit += (MIN_SITES - measure.sites).toDouble() / MIN_SITES
             }
-            val ratio = if (median > 0) fertilities[index] / median else 1.0
+            val ratio = measure.fertilityRatio
             if (ratio < FERTILITY_LOW || ratio > FERTILITY_HIGH) {
                 failures += "$nation: fertility ${"%.2f".format(ratio)} times the median, outside $FERTILITY_LOW-$FERTILITY_HIGH"
                 deficit += if (ratio < FERTILITY_LOW) FERTILITY_LOW - ratio else ratio - FERTILITY_HIGH
@@ -62,8 +80,8 @@ class StartFairness(private val map: TileMap, private val ruleset: Ruleset) {
         return Verdict(failures, deficit)
     }
 
-    /** Sites for more cities around [start], at most [MIN_SITES] counted */
-    private fun countSites(start: Tile, startTiles: List<Tile>): Int {
+    /** Sites for more cities around [start], at most [maxSites] counted */
+    private fun countSites(start: Tile, startTiles: List<Tile>, maxSites: Int): Int {
         val minDistance = ruleset.modOptions.constants.minimalCityDistance
         val continent = start.getContinent()
         val blockers = ArrayList(startTiles)
@@ -74,7 +92,7 @@ class StartFairness(private val map: TileMap, private val ruleset: Ruleset) {
         for (candidate in candidates) {
             if (blockers.any { it.aerialDistanceTo(candidate) <= minDistance }) continue
             blockers += candidate
-            if (++sites >= MIN_SITES) break
+            if (++sites >= maxSites) break
         }
         return sites
     }

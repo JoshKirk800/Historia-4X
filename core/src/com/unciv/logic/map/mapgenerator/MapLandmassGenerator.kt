@@ -66,6 +66,10 @@ class MapLandmassGenerator(
             MapType.spiral -> createSpiral()
             MapType.continentsLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.continents)
             MapType.pangaeaLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.pangaea)
+            MapType.smallContinentsLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.smallContinents)
+            MapType.archipelagoLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.archipelago)
+            MapType.tinyIslandsLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.tinyIslands)
+            MapType.fractalLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.fractal)
             MapType.fourCornersLikeCivV, MapType.inlandSeaLikeCivV -> createLayeredLikeCivV()
         }
 

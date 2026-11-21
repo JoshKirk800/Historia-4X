@@ -521,7 +521,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         if (coasts.isNotEmpty()) {
             val dice = ruleset.modOptions.constants.coastExpansionDice
             if (dice.isEmpty()) spreadCoast(map, coasts)
-            else spreadCoastLikeCivV(map, coasts, dice)
+            else spreadCoastLikeCivV(map, coasts, FractalLandRecipes.forType(map.mapParameters.type)?.coastDice ?: dice)
         }
     }
 

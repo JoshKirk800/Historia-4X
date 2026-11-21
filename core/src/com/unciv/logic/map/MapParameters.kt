@@ -47,9 +47,14 @@ object MapType {
     const val inlandSeaLikeCivV = "Inland Sea (Civ V)"
     /** The Pangaea map script of Civ V, see [com.unciv.logic.map.mapgenerator.FractalLandRecipes] */
     const val pangaeaLikeCivV = "Pangaea (Civ V)"
+    /** SmallContinents.lua, Archipelago.lua, TinyIslands.lua and Fractal.lua: more recipes of [com.unciv.logic.map.mapgenerator.FractalLandRecipes] */
+    const val smallContinentsLikeCivV = "Small Continents (Civ V)"
+    const val archipelagoLikeCivV = "Archipelago (Civ V)"
+    const val tinyIslandsLikeCivV = "Tiny Islands (Civ V)"
+    const val fractalLikeCivV = "Fractal (Civ V)"
 
     /** The types that make their own hills and mountains and the world age matters to (the elevation generator does not run for them) */
-    val ownElevation = setOf(continentsLikeCivV, pangaeaLikeCivV, fourCornersLikeCivV, inlandSeaLikeCivV)
+    val ownElevation = setOf(continentsLikeCivV, pangaeaLikeCivV, smallContinentsLikeCivV, archipelagoLikeCivV, tinyIslandsLikeCivV, fractalLikeCivV, fourCornersLikeCivV, inlandSeaLikeCivV)
     
     // ordered based on popularity poll
     val allValues = listOf(
@@ -68,6 +73,10 @@ object MapType {
         boreal,
         continentsLikeCivV,
         pangaeaLikeCivV,
+        smallContinentsLikeCivV,
+        archipelagoLikeCivV,
+        tinyIslandsLikeCivV,
+        fractalLikeCivV,
         fourCornersLikeCivV,
         inlandSeaLikeCivV
     )

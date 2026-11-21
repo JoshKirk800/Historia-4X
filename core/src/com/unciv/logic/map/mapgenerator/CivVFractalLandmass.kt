@@ -110,18 +110,27 @@ class PointyHexGeometry(override val width: Int, override val height: Int, priva
  *  - The start method (Pangaea.lua asks for region method 1, the biggest landmass; Continents.lua 2) is not chosen by the land step: Unciv's
  *    region division takes the continental method of Vox Populi, which falls back to the biggest landmass when the others are under a
  *    quarter of its fertility, as a Pangaea's are.
- *  - `GenerateCoasts` is called without arguments by both scripts, so the ruleset's coast dice are right; the island scripts' own coast
- *    arguments need a place in the recipe when they are ported.
+ *  - `GenerateCoasts` is called without arguments by Continents, Pangaea, Small Continents and Fractal, so the ruleset's coast dice are right;
+ *    Archipelago and Tiny Islands pass `{10, 4, 4}`: [FractalLandRecipe.coastDice], applied by MapGenerator.spawnLakesAndCoasts.
+ *  - What the other scripts of the family do besides the land step is not ported here: region method 3 (rectangular division) of Archipelago and
+ *    Tiny Islands, `ChooseLocations` with `mustBeCoast` and lowered food and production minimums (Small Continents, Archipelago, Tiny Islands),
+ *    the AI map hint 1 + 4 of Tiny Islands, the resources option; Unciv's region division and start finder decide those.
+ *    Small Continents asks for region method 2 like Continents. Fractal.lua has no `StartPlotSystem` (the engine default).
+ *  - The recipes without a criterion (everything but Continents and Pangaea) draw one fractal: their scripts do not retry.
  */
 class CivVFractalLandmass(
     private val geometry: HexGeometry,
     private val wrapX: Boolean,
     private val rng: Random,
     private val recipe: FractalLandRecipe,
-    private val seaLevel: SeaLevel = SeaLevel.Normal,
+    seaLevel: SeaLevel = SeaLevel.Normal,
     /** In billions of years: 3 (young: more hills, more and sharper mountains, more ridges), 4 (normal), 5 (old: fewer, worn down) */
-    private val worldAge: Int = 4
+    worldAge: Int = 4
 ) {
+    /** A script without the options (Fractal.lua) runs with the sea level and the world age they default to */
+    private val seaLevel = if (recipe.offersWorldOptions) seaLevel else SeaLevel.Normal
+    private val worldAge = if (recipe.offersWorldOptions) worldAge else 4
+
     private val width = geometry.width
     private val height = geometry.height
 
@@ -231,8 +240,9 @@ class CivVFractalLandmass(
         attempts = 0
         while (attempts < MAX_ATTEMPTS) {
             attempts++
-            val grain = if (rng.nextInt(7) < 4) recipe.grainOnLowRoll else 3 - recipe.grainOnLowRoll
-            val riftGrain = rng.nextInt(3).let { if (it < 1) -1 else it }
+            val fixedGrain = recipe.fixedGrain
+            val grain = fixedGrain ?: if (rng.nextInt(7) < 4) recipe.grainOnLowRoll else 3 - recipe.grainOnLowRoll
+            val riftGrain = if (fixedGrain != null) -1 else rng.nextInt(3).let { if (it < 1) -1 else it }
             val rifts = if (riftGrain in 1..3) CivVFractal(NODES_X, NODES_Y, riftGrain, false, false, rng) else null
             val fractal = CivVFractal(NODES_X, NODES_Y, grain, false, false, rng, polar = true, rifts = rifts)
             val (nodes, level) = landNodes(fractal)

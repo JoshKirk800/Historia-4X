@@ -87,6 +87,13 @@ class ModConstants {
      *  false: each civ goes to the continent with the best fertility / (1 + civs already there), as Brave New World's script does. */
     var regionAssignmentLikeVoxPopuli = false
 
+    /** Place the city-states as Vox Populi's AssignStartingPlots.lua does (see MinorCivPlacer, VoxPopuliCityStateSites): a site is not on the outermost
+     *  ring of the map, not next to ice and has at most 30 fertility (the yields of the tiles within 2, by distance) around it; the city-states are
+     *  placed in the order of assignment, only on free sites of their region (or of the uninhabited landmasses, those with at least 2 sites); one that
+     *  does not fit is discarded, then a last-chance pass puts the discarded ones on any free site of the map, and what still does not fit is dropped.
+     *  Implies the sites of [cityStateSitesLikeCivV]. false: the forced placements (within the impact of a start, then on top of one) of the other rulesets. */
+    var cityStatePlacementLikeVoxPopuli = false
+
     /** Assign and place the luxuries as AssignStartingPlots.lua does (see CivVLuxuryPlacement). It names the luxuries of Civ V.
      *  false: the generic placement of the resources' `Generated with weight` rules. */
     var luxuryPlacementLikeCivV = false

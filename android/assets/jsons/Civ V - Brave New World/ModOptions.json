@@ -104,6 +104,8 @@
         "startAssignmentLikeCivV": true,
         // Vox Populi's AssignStartingPlots:GenerateRegions (continental method): civs settle a continent in pairs, so both civs of a Duel share one
         "regionAssignmentLikeVoxPopuli": true,
+        // Vox Populi's AssignStartingPlots:CanPlaceCityStateAt, PlaceCityStateInRegion and the last-chance pass of PlaceCityStates: no edge, ice or fertile sites, discard instead of force
+        "cityStatePlacementLikeVoxPopuli": true,
         // AddExtraBonusesToHillsRegions, PlaceSexyBonusAtCivStarts, AddModernMinorStrategicsToCityStates, the strategic top-ups, FixSugarJungles
         "resourceExtrasLikeCivV": true,
         // AssignStartingPlots.lua of Vox Populi 5.4.8: PlaceStrategicAndBonusResources, AddModernMinorStrategicsToCityStates, PlaceSmallQuantitiesOfStrategics, PlaceOilInTheSea.

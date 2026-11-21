@@ -24,6 +24,7 @@ import com.unciv.ui.components.input.onActivation
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.widgets.AutoScrollPane
 import com.unciv.ui.components.widgets.ExpanderTab
+import com.unciv.ui.components.widgets.NeedsRowsTable
 import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
@@ -97,6 +98,7 @@ class CityStatsTable(private val cityScreen: CityScreen) : Table() {
 
         // begin lowerTable
         addCitizenManagement()
+        addNeedsInfo()
         addGreatPersonPointInfo()
         if (!cityView.getMaxSpecialists().isEmpty()) {
             addSpecialistInfo()
@@ -226,6 +228,16 @@ class CityStatsTable(private val cityScreen: CityScreen) : Table() {
     private fun addCitizenManagement() {
         val expanderTab = CitizenManagementTable(cityScreen).asExpander { onContentResize() }
         lowerTable.add(expanderTab).growX().row()
+    }
+
+    /** With Vox Populi's needs: the city's unhappiness by source, its happiness and the empire's approval with this city's share of it */
+    private fun addNeedsInfo() {
+        val rows = cityView.getNeedsRows()
+        if (rows.isEmpty()) return
+        val table = Table()
+        table.add(NeedsRowsTable(rows)).growX().row()
+        table.add(NeedsRowsTable(cityView.getEmpireNeedsRows())).growX().padTop(8f).row()
+        lowerTable.addCategory("Happiness and needs", table, KeyboardBinding.None)
     }
 
     private fun addSpecialistInfo() {
@@ -439,7 +451,11 @@ class CityStatsTable(private val cityScreen: CityScreen) : Table() {
                     }
                 }
                 add(icon).size(27f).padRight(3f)
-                val valueToDisplay = if (stat == Stat.Happiness) cityView.getHappinessList().values.sum() else amount
+                val valueToDisplay = when {
+                    stat != Stat.Happiness -> amount
+                    cityView.usesNeedsModel() -> cityView.getNeedsDelta().toFloat() // happiness less unhappiness, the figure the city's growth and unit production follow
+                    else -> cityView.getHappinessList().values.sum()
+                }
                 add((valueToDisplay.roundToInt()).toLabel()).padRight(5f)
                 if (cityScreen.isCrampedPortrait() && (expanderIsOpen == null || !expanderIsOpen) && stat == Stat.Gold) {
                     row()

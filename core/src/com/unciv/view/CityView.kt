@@ -24,6 +24,8 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
+import com.unciv.ui.screens.NeedsRow
+import com.unciv.ui.screens.NeedsRows
 import com.unciv.logic.map.tile.RoadStatus
 import yairm210.purity.annotations.Readonly
 
@@ -86,6 +88,14 @@ class CityView(city: City,
     @Readonly fun getBaseStatTree(): StatTreeNode = city.cityStats.baseStatTree
     @Readonly fun getStatPercentBonusTree(): StatTreeNode = city.cityStats.statPercentBonusTree
     @Readonly fun getFinalStatList(): Map<String, Stats> = city.cityStats.finalStatList
+    /** Whether the city has Vox Populi's needs ([com.unciv.models.ModConstants.cityNeedsLikeVp]), else the other needs functions have nothing to say */
+    @Readonly fun usesNeedsModel(): Boolean = city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
+    /** The local happiness less the unhappiness of the city (see [com.unciv.logic.city.CityNeeds.delta]), 0 without the needs model */
+    @Readonly fun getNeedsDelta(): Int = if (usesNeedsModel()) city.cityStats.needs.delta else 0
+    /** The unhappiness and happiness breakdown of the city, empty without the needs model */
+    @Readonly fun getNeedsRows(): List<NeedsRow> = NeedsRows.cityRows(city)
+    /** The empire's approval, pool and thresholds with the share of this city, empty without the needs model */
+    @Readonly fun getEmpireNeedsRows(): List<NeedsRow> = NeedsRows.empireRows(city.civ, city)
 
     // Expansion
     @Readonly fun hasChoosableTiles(): Boolean = city.expansion.getChoosableTiles().any()

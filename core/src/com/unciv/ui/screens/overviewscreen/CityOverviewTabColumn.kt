@@ -116,7 +116,27 @@ enum class CityOverviewTabColumn : ISortableGridContentProvider<City, EmpireOver
     Culture,
     Happiness {
         override fun getEntryValue(item: City) =
-            item.cityStats.happinessList.values.sum().roundToInt()
+            if (usesNeedsModel(item)) item.cityStats.needs.localHappiness()
+            else item.cityStats.happinessList.values.sum().roundToInt()
+    },
+
+    Unhappiness {
+        override fun isVisible(viewingPlayer: CivView) = viewingPlayer.usesNeedsModel()
+        override val headerTip = "Local Unhappiness"
+        override fun getHeaderActor(iconSize: Float) = ImageGetter.getStatIcon("Malcontent")
+        override fun getEntryValue(item: City) = item.cityStats.needs.aggregated
+    },
+
+    HappinessDelta {
+        override fun isVisible(viewingPlayer: CivView) = viewingPlayer.usesNeedsModel()
+        override val headerTip = "Happiness less unhappiness"
+        override fun getHeaderActor(iconSize: Float) = getCircledIcon("StatIcons/Happiness", iconSize)
+        override fun getEntryValue(item: City) = item.cityStats.needs.delta
+        override fun getEntryActor(item: City, iconSize: Float, actionContext: EmpireOverviewScreen): Actor {
+            val delta = getEntryValue(item)
+            val color = if (delta < 0) Color.SCARLET else if (delta > 0) Color.GREEN else Color.WHITE
+            return (if (delta > 0) "+$delta" else delta.toString()).toLabel(color, alignment = Align.center)
+        }
     },
     Faith {
         override fun isVisible(viewingPlayer: CivView) =
@@ -221,6 +241,8 @@ enum class CityOverviewTabColumn : ISortableGridContentProvider<City, EmpireOver
             CityOverviewTabColumn.entries.asSequence()
                 .plus(CityWideResourceColumn.getColumns(viewingPlayer))
                 .asIterable()
+
+        private fun usesNeedsModel(city: City) = city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
 
         /** Text shown for a city's current construction, as on the city button. */
         private fun getCityProductionText(item: City): String {

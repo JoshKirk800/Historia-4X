@@ -23,6 +23,7 @@ import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.input.KeyboardBinding
 import com.unciv.ui.components.widgets.IconCircleGroup
+import com.unciv.ui.components.widgets.NeedsRowsTable
 import com.unciv.ui.popups.Popup
 import com.unciv.ui.screens.basescreen.BaseScreen
 import kotlin.math.max
@@ -170,6 +171,16 @@ class DetailedStatsPopup(
                 .minWidth(statColMinWidth).grow()
         }
         totalTable.row()
+
+        // With Vox Populi's needs the happiness of the city is only half of it: the unhappiness by source follows
+        val needsRows = if (onlyWithStat == null || onlyWithStat == Stat.Happiness) cityView.getNeedsRows() else emptyList()
+        if (needsRows.isNotEmpty()) {
+            totalTable.addSeparator(colSpan = columnCount).padBottom(2f)
+            totalTable.add("Happiness and needs".toLabel().apply { setAlignment(Align.center) })
+                .colspan(columnCount).growX().row()
+            totalTable.addSeparator(colSpan = columnCount).padTop(2f)
+            totalTable.add(NeedsRowsTable(needsRows)).colspan(columnCount).growX().row()
+        }
 
         // Mini version of Scene2dExtensions.equalizeColumns - the number columns work thanks to statColMinWidth
         headerTable.packIfNeeded()

@@ -97,6 +97,7 @@ class CityButton(val foreignCityView: ForeignCityView, private val tileGroup: Ti
         val detailedCityView = city.tryGetCityView()
         key = key.mix(detailedCityView != null)
         if (detailedCityView != null) {
+            if (detailedCityView.usesNeedsModel()) key = key.mix(detailedCityView.getNeedsDelta()) // StatusTable
             key = key.mix(detailedCityView.getFoodStored()).mix(detailedCityView.getFoodToNextPopulation())
                 .mix(detailedCityView.foodForNextTurn())
             val constructions = detailedCityView.constructions

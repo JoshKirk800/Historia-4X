@@ -182,6 +182,35 @@ enum class UniqueType(
     // Todo: capitalization of 'happiness' -> 'Happiness'
     ExcessHappinessToGlobalStat("[relativeAmount]% of excess happiness converted to [stat]", UniqueTarget.Global),
 
+    /// Per-city needs, only with the ModConstants `cityNeedsLikeVp`
+    NeedReduction("Reduces [need] by [positiveAmount] [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Takes that many unhappy citizens off the need in the matching cities, which can not fall below 0 (the original's `DistressFlatReduction`, `PovertyFlatReduction`, " +
+            "`IlliteracyFlatReduction`, `BoredomFlatReduction` and `ReligiousUnrestFlatReduction`, with their `Global` variants for `in all cities`). Several add up. " +
+            "Distress is the unhappiness of a city's food and production, Poverty of its gold, Illiteracy of its science, Boredom of its culture, Religious Unrest of its religious minorities. " +
+            "Only with the ModConstants `cityNeedsLikeVp`"),
+    EmpireSizeNeedReduction("Reduces the empire size need modifier by [positiveAmount] [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Takes percent points off the rise of every need of the matching cities that the cities and the citizens of the empire cause. It does not go below 0 " +
+            "or above that rise (the original's `EmpireSizeModifierReduction` and `EmpireSizeModifierReductionGlobal`, which hold negative numbers). Several add up. " +
+            "Only with the ModConstants `cityNeedsLikeVp`"),
+    NoUnhappinessFromSpecialists("The first [positiveAmount] specialists cause no unhappiness [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "In the matching cities that many specialists cost no unhappiness (the original's `NoUnhappfromXSpecialists`, `...Global` and `...Capital`). Several add up. " +
+            "Only with the ModConstants `cityNeedsLikeVp`"),
+    HappinessFromSpecialists("[amount] Happiness from the first [positiveAmount] specialists [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Local happiness of the matching cities: the first number for each of their first specialists, as many as the second number (the original's `HappfromXSpecialists`, one happiness per specialist). " +
+            "Only with the ModConstants `cityNeedsLikeVp`"),
+    HappinessPerCitizens("[amount] Happiness per [positiveAmount] citizens [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Local happiness of the matching cities: amount x citizens / the second number, rounded towards 0 (the original's `HappinessPerXPopulation` and `HappinessPerXPopulationGlobal`). " +
+            "Only with the ModConstants `cityNeedsLikeVp`"),
+    HappinessPerGreatWorks("[amount] Happiness per [positiveAmount] Great Works [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Local happiness of the matching cities: amount for every second-number Great Works in the city (the original's `HappinessPerXGreatWorks`). " +
+            "Only with the ModConstants `cityNeedsLikeVp`"),
+    HappinessPerTradeRoute("[amount] Happiness per active trade route [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Local happiness of the matching cities: amount for each trade route that starts in the city (the original's `HappinessPerActiveTradeRoute`). " +
+            "Only with the ModConstants `cityNeedsLikeVp`"),
+    GoldenAgePointsFromHappinessPercent("[relativeAmount]% golden age points from happiness", UniqueTarget.Global,
+        docDescription = "The golden age points a civilization makes each turn from its cities' happiness over unhappiness (their positive deltas) grow by this percentage " +
+            "(the original's `GAPFromHappinessModifier`). Several add up. Only with the ModConstants `cityNeedsLikeVp`"),
+
     /// Unit Production
     CannotBuildUnits("Cannot build [baseUnitFilter] units", UniqueTarget.Global),
     EnablesConstructionOfSpaceshipParts("Enables construction of Spaceship parts", UniqueTarget.Global),

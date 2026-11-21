@@ -15,6 +15,13 @@ Each difficulty level has the following structure:
 | name                              | String          | Required |                                                                                                                                                                                                                            |
 | baseHappiness                     | Integer         | 0        |                                                                                                                                                                                                                            |
 | extraHappinessPerLuxury           | Float           | 0        |                                                                                                                                                                                                                            |
+| baseHappinessCapital              | Integer         | 0        | Happiness of the capital on top of `baseHappiness` (the original's `HappinessDefaultCapital`). Only with the ModConstants `cityNeedsLikeVp` |
+| aiBaseHappiness                   | Integer         | 0        | Added to `baseHappiness` of an AI civilization, from the game's chosen difficulty (`AIHappinessDefault`). Only with `cityNeedsLikeVp` |
+| aiBaseHappinessCapital            | Integer         | 0        | Added to `baseHappinessCapital` of the capital of an AI civilization, from the chosen difficulty (`AIHappinessDefaultCapital`). Only with `cityNeedsLikeVp` |
+| populationNeedModifier            | Integer         | 0        | Percent points added to every need of every city (`PopulationUnhappinessMod`). Only with `cityNeedsLikeVp` |
+| aiPopulationNeedModifier          | Integer         | 0        | Added to `populationNeedModifier` of an AI civilization, from the chosen difficulty (`AIPopulationUnhappinessMod`). Only with `cityNeedsLikeVp` |
+| empireSizeNeedModifier            | Integer         | 0        | Percent change of the rise of the needs for the size of the empire (`EmpireSizeUnhappinessMod`). Only with `cityNeedsLikeVp` |
+| aiEmpireSizeNeedModifier          | Integer         | 0        | Added to `empireSizeNeedModifier` of an AI civilization, from the chosen difficulty (`AIEmpireSizeUnhappinessMod`). Only with `cityNeedsLikeVp` |
 | researchCostModifier              | Float           | 1        |                                                                                                                                                                                                                            |
 | unitCostModifier                  | Float           | 1        | Applies to the gold maintenance of the units of a human player (the original's UnitCostPercent), not to production |
 | unitSupplyBase                    | Integer         | 5        |                                                                                                                                                                                                                            |
@@ -122,6 +129,7 @@ Each speed can have the following attributes:
 | cityStateTributeScalingInterval | Float (≥0)      | 6.5              | The number of turns it takes for the amount of gold a player demands from city-states to increase by 5 gold |
 | goldenAgeLengthModifier         | Float (≥0)      | `modifier` value | Scales the length of golden ages                                                                            |
 | religiousPressureAdjacentCity   | Integer (≥0)    | 6                | Defines how much religious pressure a city exerts on nearby cities                                          |
+| startingHappiness               | Integer         | 0                | Happiness every civilization starts with on this speed (the original's `StartingHappiness`). Only with the ModConstants `cityNeedsLikeVp` |
 | peaceDealDuration               | Integer (≥0)    | 10               | The number of turns a peace deal lasts                                                                      |
 | dealDuration                    | Integer (≥0)    | 30               | The number of turns a non-peace deal (research agreement, open borders, etc.) lasts                         |
 | startYear                       | Float           | -4000            | The start year of the game (negative is BC/BCE)                                                             |
@@ -284,6 +292,8 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | airInterceptionChanceScalesWithHealth    | Boolean | false                        | [^IntercHealth] |
 | uprisingCounterLikeCivV                  | Boolean | false                        | [^Uprising] |
 | localHappinessCappedByPopulation         | Boolean | false                        | [^LocalHappiness] |
+| cityNeedsLikeVp                          | Boolean | false                        | [^CityNeeds] |
+| needs                                    | Object  | [See below](#needsconstants) | [^CityNeeds] |
 | rangedSupportFireUnitsGetNoFortification | Boolean | false                        | [^SupportFire] |
 | unitHurryLikeCivV                        | Boolean | false                        | [^UnitHurry] |
 | minorDepositsOnFlatLandOnly              | Boolean | false                        | [^MinorDeposits] |
@@ -446,6 +456,7 @@ Legend:
 - [^IntercHealth]: The chance of an air unit (a fighter, a missile) to intercept an air attack. false: the "[relativeAmount]% chance to intercept air attacks" of its uniques, whatever its health. true: as in Civ V (`CvUnit::currInterceptionProbability`) that chance times its health divided by 100, rounded down; the same value picks the best interceptor, and an interceptor left with no chance is not picked. Units that are not air units are not scaled.
 - [^Uprising]: How the countdown to the rebels of a very unhappy empire (the "Rebel units may spawn" unique) runs. false: a countdown of `baseTurnsUntilRevolt` + 0-2 turns (times the game speed, if longer) that starts over whenever the empire is not very unhappy at the start of a turn. true: as in Civ V (`CvPlayer::DoUpdateUprisings`) a counter that winds down one a turn only while the empire is very unhappy and keeps its value otherwise; the first time it is seeded it is half as long, and after an uprising it starts over at full length.
 - [^LocalHappiness]: Whether the happiness a city has from its buildings, from policies and beliefs that give happiness for each building of a kind, from the garrison policy and from beliefs per city or on rivers is limited to the city's population (two thirds of it, rounded, for a civilization with a unique that changes the unhappiness from the number of cities, like India's). Civ V (`CvCity::GetLocalHappiness`) does that; its `UnmoddedHappiness` buildings (Circus Maximus, Notre Dame, Eiffel Tower, Prora) are exempt, which a ruleset marks with the unique "Happiness from this building is not limited by the population of the city". Everything else, like luxuries, trade routes and wonder uniques for the whole civilization, is not limited. The part above the limit shows in the city's happiness as "Population limit on local happiness".
+- [^CityNeeds]: Which happiness model the ruleset plays. false: the original's, one number for the whole civilization (luxuries, the cities' own happiness and the civilization's sources, less the unhappiness of the cities and of public opinion) whose effects are uniques of `GlobalUniques.json`. true: Vox Populi's per-city needs (`CvCity::GetUnhappinessAggregated`, `GetLocalHappiness`, `CvPlayer::DoUpdateTotalHappiness`, `DistributeHappinessToCities`, `CalculateNetHappiness`): every city of a major civilization has needs (Distress, Poverty, Illiteracy and Boredom, each the citizens its food and production, gold, science or culture do not cover at the median of all major civilizations' cities per citizen; religious unrest; occupation, famine, pillaged tiles, isolation, specialists) that are numbers of unhappy citizens, the empire has a pool of happiness (difficulty, game speed, luxuries, religion, natural wonders, city-states, uniques) that it hands out to its cities, and the approval rating (happy citizens against unhappy ones) decides the effects. The stat Happiness then is the approval rating less `needs.unhappyThreshold`, so 0 is the line under which the empire is unhappy. The medians are kept in the saved game and updated once per game turn. The effects on growth, the production and gold and faith price of settlers and combat unit production, and combat strength are in the code; the uniques for needs ([Reduces [need] by ...](../uniques.md#global-uniques) and its siblings) give buildings and policies their effect. The numbers are [NeedsConstants](#needsconstants), the difficulty's `baseHappinessCapital`, `aiBaseHappiness`, `aiBaseHappinessCapital`, `populationNeedModifier`, `aiPopulationNeedModifier`, `empireSizeNeedModifier` and `aiEmpireSizeNeedModifier`, and the speed's `startingHappiness`. The Civ V rulesets of this fork do not set it yet.
 - [^SupportFire]: Whether a unit with the unique "Before engaging in combat performs an extra ranged attack with [amount]% of melee combat strength" (the Zulu Impi) gets no strength bonus for being fortified. false: it gets the normal bonus. true: as in Civ V (`CvUnit::fortifyModifier`, which returns 0 for a unit with ranged support fire).
 - [^UnitHurry]: How much a unit with "Can speed up construction of a building" (the Great Engineer) adds to the city's production. false: (300 + 30 x population) x the production cost modifier of the game speed, at most what is still missing minus 1, and the action is offered even if the city completes the item next turn anyway. true: as in Civ V (`CvUnit::getMaxHurryProduction`, `getHurryProduction`, `canHurry`) the same amount in whole numbers using the speed's percentage, at most everything that is still missing, and the action is not offered when the production would be completed next turn anyway.
 - [^MinorDeposits]: Where the small deposits of strategic resources ("Minor deposits generated with weight [amount]") go, and how many. One deposit for every `minorDepositFrequency` tiles of the list they are drawn from. false: the list holds every land tile that does not block resources, hills, marsh and mountains included. true: as in `AssignStartingPlots:GenerateGlobalResourcePlotLists` and `PlaceSmallQuantitiesOfStrategics`, only flat land that has no feature but forest or jungle, no resource and no start or city-state on it (the original's `land_list`: no hills, mountains, marsh, flood plains, oasis or natural wonders), so the weights of the "minor deposits" uniques for hills and marsh are not used. The Civ V rulesets set true and 23.
@@ -519,6 +530,58 @@ The formula for the gold cost of a unit upgrade is (rounded down to a multiple o
             \* (1 + eraNumber \* `eraMultiplier`) \* `civModifier`
         ) ^ `exponent`
 With `civModifier` being the multiplicative aggregate of ["\[relativeAmount\]% Gold cost of upgrading"](../uniques.md#global-uniques) uniques that apply.
+
+#### NeedsConstants
+
+Only read with `cityNeedsLikeVp`. These values are not merged individually, only the entire sub-structure is. The defaults are Vox Populi 5.4.8's defines (`CoreDefineChanges.sql` of the Community Patch, `DefineChanges.sql` of Vox Populi); percentages of the needs are in percent points, the ones marked "hundredths" or "thousandths" are in that unit.
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| unhappyThreshold | Int | 50 | The empire is unhappy while its approval rating (percent) is below this: growth and settlers suffer, units fight 10% worse |
+| veryUnhappyThreshold | Int | 35 | Very unhappy below this: units fight 20% worse |
+| superUnhappyThreshold | Int | 20 | Super unhappy below this |
+| globalGrowthPenaltyPerPoint | Float | 2.5 | Percent growth lost in every city per approval point under `unhappyThreshold`, at most 100 |
+| globalSettlerPenaltyPerPoint | Float | 2.5 | Percent production of settlers lost in every city per approval point under `unhappyThreshold` |
+| maxUnitProductionPenalty | Int | -75 | The most percent production of a settler or combat unit unhappiness takes, and the most a settler's price rises by |
+| localHappinessGrowthPerPoint | Int | 2 | Percent growth per point of a city's happiness over its unhappiness (the delta) |
+| localUnhappinessGrowthPerPoint | Int | 10 | Percent growth lost per point of a city's unhappiness over its happiness |
+| localUnhappySettlerPenalty | Int | -10 | Percent production of settlers per point of the delta under 0 (the formula multiplies by -1 twice) |
+| localUnhappyCombatUnitPenalty | Int | -10 | The same for combat units |
+| veryUnhappyMaxCombatPenalty | Int | -20 | Percent combat strength lost while very unhappy; half of it while only unhappy |
+| medianPercentile | Int | 50 | The median of the cities' yields per citizen is the element number size x this / 100 of the sorted list |
+| techMedianPercentile | Int | 50 | The same for the technologies the major civilizations know |
+| medianMinPopulation | Int | 3 | A city needs this many citizens to count for the medians |
+| medianRateOfChange | Float | 0.65 | The share of this turn's median in the smoothed one |
+| medianBaseModifier | Int | 100 | Percent of the modified median a citizen has to make |
+| capitalNeedModifier | Int | 25 | Percent points the needs of the capital rise by |
+| citySizeNeedModifier | Int | 0 | Hundredths of a percent point per citizen of the city |
+| techNeedPerTechAboveMedian | Int | 100 | Hundredths of a percent point of every need per technology above the median |
+| techNeedPerTechBelowMedian | Int | -200 | The same per technology below it (negative: the needs fall) |
+| techNeedPercentResearched | Int | 0 | Percent points per percent of the technologies researched (in hundredths) |
+| empireSizeNeedPerCity | Int | 500 | Hundredths of a percent point per city but the capital and the puppets |
+| empireSizeNeedPerPopulation | Int | 125 | Thousandths of a percent point per citizen outside puppets |
+| empireSizeNeedCap | Int | 100000 | The most the two can add |
+| unhappinessPerReligiousMinority | Float | 0.5 | Unhappy citizens per citizen that does not follow the majority religion |
+| unhappinessPerStarvingPop | Float | 1 | Per food a city is short of |
+| unhappinessPerPillagedTile | Float | 0.5 | Per pillaged improvement |
+| unhappinessPerIsolatedPop | Float | 0.34 | Per citizen of a city not connected to the capital |
+| unhappinessPerSpecialist | Int | 100 | Hundredths of an unhappy citizen per specialist |
+| puppetCitizensPerUnhappiness | Int | 4 | Citizens of a puppet per unhappy one |
+| unhappinessPerOccupiedPopulation | Float | 1 | Unhappy citizens per citizen of an occupied city (1.34 in Brave New World) |
+| happinessPerLuxury | Int | 2 | Happiness of each luxury the empire has (Vox Populi: 2) |
+| happinessPerNaturalWonder | Int | 1 | Happiness of each natural wonder |
+| puppetYieldMultiplier | Int | 30 | Percent of the yields of a puppet (read by the conquest rules) |
+| resistanceTurnsPopulationNumerator | Int | 2 | The turns of resistance after a conquest are population x this / the next (read by the conquest rules) |
+| resistanceTurnsPopulationDenominator | Int | 3 | |
+| annexHalvesResistance | Boolean | true | Annexing a city in resistance halves what is left (read by the conquest rules) |
+| revoltCounterMin | Int | 10 | Turns a very unhappy empire waits before a city revolts (read by the revolt rules) |
+| goldenAgeThresholdInitial | Int | 1000 | The first golden age's threshold (read by the golden age rules) |
+| goldenAgeThresholdBase | Int | 400 | The base of the later ones |
+| goldenAgeThresholdPerGoldenAge | Int | 2000 | Added for each golden age had |
+| goldenAgeThresholdPerCityPercent | Int | 5 | Percent more per city |
+| goldenAgeVisibleDivisor | Int | 5 | The shown threshold is rounded to a multiple of this |
+| cityStrengthThresholdForBonuses | Int | 10 | The city strength from which a policy gives happiness per city (read by the military rules) |
+| warWearinessPopulationPercentCap | Int | 34 | The most percent of its population war weariness can cost (read by the military rules) |
 
 ## AI.json
 

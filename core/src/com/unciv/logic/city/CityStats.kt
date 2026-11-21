@@ -95,11 +95,17 @@ class CityStats(val city: City) {
     // Computed from baseStatList and statPercentBonusList - this is so the players can see a breakdown
     var finalStatList = LinkedHashMap<String, Stats>()
 
+    /** With [ModConstants.cityNeedsLikeVp]: the sources of the city's local happiness (without the empire's share, see [CityNeeds.updateLocalHappiness]) */
     var happinessList = LinkedHashMap<String, Float>()
 
     /** The happiness of the city's buildings, policies and beliefs that [ModConstants.localHappinessCappedByPopulation] limits to the population
-     *  (CvCity::GetLocalHappiness). Without that constant: the happiness of the buildings, nothing is limited. */
+     *  (CvCity::GetLocalHappiness). Without that constant: the happiness of the buildings, nothing is limited.
+     *  With [ModConstants.cityNeedsLikeVp]: the whole local happiness including the empire's share, [CityNeeds.localHappiness], which nothing limits. */
     var localHappiness = 0f
+
+    /** The city's needs and happiness of Vox Populi's model, only filled with [ModConstants.cityNeedsLikeVp] and only by the city's own stats ([City.cityStats]),
+     *  not by the stats that are calculated to see what a construction would give */
+    val needs = CityNeeds(city)
 
     var statsFromTiles = Stats()
 
@@ -373,6 +379,8 @@ class CityStats(val city: City) {
             signature.add(constructionMatchesFilter(construction, unique.params[1]) && city.matchesFilter(unique.params[2]))
         signature.add(construction is Building && city.civ.getCapital()?.cityConstructions?.isBuilt(construction.name) == true)
         signature.add(construction is INonPerpetualConstruction && construction.hasUnique(UniqueType.ConvertFoodToProductionWhenConstructed))
+        if (city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) // what unhappiness takes off the production of a unit depends on the kind of unit
+            signature.add(if (construction is BaseUnit) city.cityStats.needs.unitProductionPenalty(construction) else 0)
         return signature
     }
 
@@ -382,6 +390,14 @@ class CityStats(val city: City) {
         if (supplyDeficit > 0)
             return Stats(production = city.civ.stats.getUnitSupplyProductionPenalty())
         return null
+    }
+
+    /** The production percent of a settler or combat unit that unhappiness takes away, with [ModConstants.cityNeedsLikeVp] (CvCity::getProductionModifier(UnitTypes), see [CityNeeds.unitProductionPenalty]) */
+    @Readonly
+    private fun getStatPercentBonusesFromUnhappiness(currentConstruction: IConstruction): Stats? {
+        if (currentConstruction !is BaseUnit || !city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) return null
+        val penalty = city.cityStats.needs.unitProductionPenalty(currentConstruction)
+        return if (penalty == 0) null else Stats(production = penalty.toFloat())
     }
 
     @Readonly
@@ -449,12 +465,25 @@ class CityStats(val city: City) {
     }
 
 
+    /** The city's own stats ([City.cityStats]), as opposed to those [CityConstructions.productionForConstructionExact] calculates for another construction */
+    @Readonly
+    private fun isOwnStats() = city.cityStats === this
+
     // needs to be a separate function because we need to know the global happiness state
     // in order to determine how much food is produced in a city!
     fun updateCityHappiness(statsFromBuildings: StatTreeNode,
                             statsFromSpecialists: Stats = getStatsFromSpecialists(city.population.getNewSpecialists()),
                             statsFromUniquesBySource: StatTreeNode = getStatsFromUniquesBySource()) {
         val civInfo = city.civ
+        if (civInfo.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) {
+            // Vox Populi's model: the city's own happiness here, its needs once the yields are known (updateFinalStatList). Nothing of the original's
+            // "Cities", "Population" and "Occupied City" unhappiness, and nothing limits the happiness to the population
+            if (isOwnStats()) {
+                happinessList = needs.updateLocalHappiness(statsFromBuildings, statsFromSpecialists, statsFromTiles, statsFromUniquesBySource)
+                localHappiness = needs.localHappiness().toFloat()
+            }
+            return
+        }
         val newHappinessList = LinkedHashMap<String, Float>()
         // The original multiplies twice for an AI as well: the AI player's own handicap (Chieftain, AI_HANDICAP: CvPlayer::getHandicapInfo) gives the
         // city count and population part (NumCitiesUnhappinessMod, PopulationUnhappinessMod 60%), then the game's handicap scales the total
@@ -605,6 +634,7 @@ class CityStats(val city: City) {
         newStatsBonusTree.addStats(getStatPercentBonusesFromRailroad(), "Railroad")
         newStatsBonusTree.addStats(getStatPercentBonusesFromPuppetCity(), "Puppet City")
         newStatsBonusTree.addStats(getStatPercentBonusesFromUnitSupply(), "Unit Supply")
+        newStatsBonusTree.addStats(getStatPercentBonusesFromUnhappiness(currentConstruction), "Unhappiness")
         newStatsBonusTree.add(getStatsPercentBonusesFromUniquesBySource(currentConstruction))
         
         for (building in city.cityConstructions.getBuiltBuildings())
@@ -639,8 +669,11 @@ class CityStats(val city: City) {
         // the two, and neither reads it. Compute once and pass down.
         val statsFromSpecialists = getStatsFromSpecialists(city.population.getNewSpecialists())
         val statsFromUniquesBySource = getStatsFromUniquesBySource()
+        // updateBaseStatList merges the stats of the uniques that a building is the source of into statsFromBuildings, whose happiness
+        // the needs' local happiness adds up itself from the sources, so they get the buildings' own stats
+        val statsFromBuildingsForHappiness = if (city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) statsFromBuildings.clone() else statsFromBuildings
         updateBaseStatList(statsFromBuildings, statsFromSpecialists, statsFromUniquesBySource)
-        updateCityHappiness(statsFromBuildings, statsFromSpecialists, statsFromUniquesBySource)
+        updateCityHappiness(statsFromBuildingsForHappiness, statsFromSpecialists, statsFromUniquesBySource)
         updateStatPercentBonusList(currentConstruction)
 
         updateFinalStatList(currentConstruction, calculateGrowthModifiers) // again, we don't edit the existing currentCityStats directly, in order to avoid concurrency exceptions
@@ -659,6 +692,9 @@ class CityStats(val city: City) {
             newFinalStatList[key] = value.totalStats.clone()
 
         val statPercentBonusesSum = statPercentBonusTree.totalStats
+
+        val needsModel = city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
+        val productionBeforeBonuses = if (needsModel) newFinalStatList.values.map { it.production }.sum() else 0f
 
         for (entry in newFinalStatList.values)
             entry.production *= statPercentBonusesSum.production.toPercent()
@@ -715,6 +751,10 @@ class CityStats(val city: City) {
         Some policies have bonuses for growth only, not general food production. */
 
         val foodEaten = calcFoodEaten()
+        // Vox Populi's needs read the yields at this point: before the food is eaten and the growth modifiers, before the maintenance of the buildings
+        if (needsModel && isOwnStats())
+            updateNeeds(newFinalStatList, foodEaten, productionBeforeBonuses, statsFromTradeRoutes, currentConstruction)
+
         newFinalStatList["Population"]!!.food -= foodEaten
 
         var totalFood = newFinalStatList.values.map { it.food }.sum()
@@ -728,10 +768,20 @@ class CityStats(val city: City) {
             for (growthBonus in growthBonuses) {
                 newFinalStatList.add("[${growthBonus.key}] ([Growth])", growthBonus.value)
             }
-            if (city.isWeLoveTheKingDayActive() && city.civ.getHappiness() >= 0) {
-                // We Love The King Day +25%, only if not unhappy
+            // CvCity::getGrowthMods: the delta of the city's happiness over its unhappiness and the empire's unhappiness count too
+            if (needsModel) {
+                val happinessGrowth = city.cityStats.needs.growthModifier()
+                if (happinessGrowth != 0) newFinalStatList.add("Happiness", Stats(food = happinessGrowth / 100f * totalFood))
+            }
+            if (city.isWeLoveTheKingDayActive() && (needsModel || city.civ.getHappiness() >= 0)) {
+                // We Love The King Day +25%, only if not unhappy (the original's Vox Populi: whatever the happiness)
                 val weLoveTheKingFood = Stats(food = totalFood / 4)
                 newFinalStatList.add("We Love The King Day", weLoveTheKingFood)
+            }
+            // The growth modifiers add up to -100% at the most (CvCity::getGrowthMods), no city shrinks of them
+            if (needsModel) {
+                val foodAfterModifiers = newFinalStatList.values.map { it.food }.sum()
+                if (foodAfterModifiers < 0) newFinalStatList.add("Growth modifiers limit", Stats(food = -foodAfterModifiers))
             }
             // recalculate only when all applied - growth bonuses are not multiplicative
             // bonuses can allow a city to grow even with -100% unhappiness penalty, this is intended
@@ -773,6 +823,31 @@ class CityStats(val city: City) {
         if (!inAnarchy && newFinalStatList.values.map { it.production }.sum() < 1)  // Minimum production for things to progress
             newFinalStatList["Production"] = Stats(production = 1f)
         finalStatList = newFinalStatList
+    }
+
+    /**
+     *  Gives the city's [needs] what the city yields: the sums of [finalStatList] as they are before the food is eaten and before the maintenance of the
+     *  buildings are deducted (CvCity::getYieldRateTimes100, in whole hundredths), the production with the trade routes' part told apart for the medians.
+     *  Not the production penalty of unhappiness on a unit under construction, which Distress does not read ([NeedYields.production]).
+     *  @param productionBeforeBonuses the production of the sources before the production bonuses (and the penalty) multiplied it
+     *  @param statsFromTradeRoutes what the city's trade routes give, already in [finalStatList]
+     */
+    private fun updateNeeds(finalStatList: StatMap, foodEaten: Float, productionBeforeBonuses: Float, statsFromTradeRoutes: Stats, currentConstruction: IConstruction) {
+        val unitPenalty = if (currentConstruction is BaseUnit) needs.unitProductionPenalty(currentConstruction) else 0
+        val production = finalStatList.values.map { it.production }.sum() - productionBeforeBonuses * unitPenalty / 100f
+        fun hundredths(value: Float) = (value * 100f).roundToInt()
+        needs.update(NeedYields(
+            foodBeforeConsumption = hundredths(finalStatList.values.map { it.food }.sum()),
+            foodConsumption = hundredths(foodEaten),
+            production = hundredths(production),
+            productionWithoutTrade = hundredths(production - statsFromTradeRoutes.production),
+            gold = hundredths(finalStatList.values.map { it.gold }.sum()),
+            science = hundredths(finalStatList.values.map { it.science }.sum()),
+            culture = hundredths(finalStatList.values.map { it.culture }.sum()),
+            isFoodProduction = currentConstruction is INonPerpetualConstruction
+                && currentConstruction.hasUnique(UniqueType.ConvertFoodToProductionWhenConstructed)
+        ))
+        localHappiness = needs.localHappiness().toFloat()
     }
 
     @Readonly

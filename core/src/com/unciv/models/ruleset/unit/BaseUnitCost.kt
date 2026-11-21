@@ -91,6 +91,12 @@ class BaseUnitCost(val baseUnit: BaseUnit) {
                 cost *= unique.params[1].toPercent()
         }
 
+        // CvCity::GetPurchaseCost, CvCity::GetFaithPurchaseCost: with Vox Populi's needs unhappiness makes a settler dearer by what it takes off its production
+        if ((stat == Stat.Gold || stat == Stat.Faith) && city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) {
+            val surcharge = city.cityStats.needs.settlerPurchaseSurcharge(baseUnit)
+            if (surcharge != 0) cost *= (100 + surcharge) / 100.0
+        }
+
         return (cost / 10f).toInt() * 10
     }
 

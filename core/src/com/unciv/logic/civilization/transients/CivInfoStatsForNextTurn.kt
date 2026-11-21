@@ -2,6 +2,7 @@ package com.unciv.logic.civilization.transients
 
 import com.unciv.Constants
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.civilization.CivNeeds
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.map.tile.RoadStatus
@@ -31,6 +32,9 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
 
     @Transient
     var statsForNextTurn = Stats()
+
+    /** The empire's side of Vox Populi's happiness system, only filled with [com.unciv.models.ModConstants.cityNeedsLikeVp] */
+    val needs = CivNeeds(civInfo)
 
     /** The maintenance-free units: the ruleset's base plus the [UniqueType.FreeUnits] uniques */
     @Readonly
@@ -297,13 +301,26 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
     }
 
 
+    /**
+     *  What the civilization's happiness is made of. With [com.unciv.models.ModConstants.cityNeedsLikeVp] this is the pool of the empire (CvPlayer::DoUpdateTotalHappiness)
+     *  that [CivNeeds] hands out to the cities: the base happiness of the difficulty (and, for an AI player, its own addition), that of the game speed, the luxuries
+     *  at [com.unciv.models.ModConstants.NeedsConstants.happinessPerLuxury] each, and the uniques of the civilization. Not the happiness
+     *  and unhappiness of the cities, nor public opinion, which are the cities' (CvCity::GetLocalHappiness, CvCity::GetUnhappinessFromEmpire).
+     */
     @Readonly
     fun getHappinessBreakdown(): HashMap<String, Float> {
         val statMap = HashMap<String, Float>()
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        val needsModel = constants.cityNeedsLikeVp
 
         statMap["Base happiness"] = civInfo.getDifficulty().baseHappiness.toFloat()
+        if (needsModel) {
+            // CvPlayer::DoUpdateTotalHappiness: the game speed's starting happiness, and the game's AI happiness for an AI
+            if (civInfo.gameInfo.speed.startingHappiness != 0) statMap["Game speed"] = civInfo.gameInfo.speed.startingHappiness.toFloat()
+            if (!civInfo.isHuman()) statMap["Base happiness"] = statMap["Base happiness"]!! + civInfo.gameInfo.getDifficulty().aiBaseHappiness
+        }
 
-        var happinessPerUniqueLuxury = 4f + civInfo.getDifficulty().extraHappinessPerLuxury
+        var happinessPerUniqueLuxury = (if (needsModel) constants.needs.happinessPerLuxury.toFloat() else 4f) + civInfo.getDifficulty().extraHappinessPerLuxury
         civInfo.forEachMatchingUnique(UniqueType.BonusHappinessFromLuxury) { unique ->
             happinessPerUniqueLuxury += unique.params[0].toInt()
         }
@@ -342,7 +359,8 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
                     civInfo.getMatchingUniques(UniqueType.RetainHappinessFromLuxury)
                         .sumOf { it.params[0].toInt() } / 100f
 
-        for (city in civInfo.cities) {
+        // With the needs model the happiness of the cities is not part of the pool, and public opinion is unhappiness the empire shares among its cities
+        if (!needsModel) for (city in civInfo.cities) {
             // There appears to be a concurrency problem? In concurrent thread in ConstructionsTable.getConstructionButtonDTOs
             // Literally no idea how, since happinessList is ONLY replaced, NEVER altered.
             // Oh well, toList() should solve the problem, wherever it may come from.
@@ -352,7 +370,7 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
 
         // Not in a city but in the total of the civilization: the other ideologies are what the people of all cities suffer under
         val publicOpinionUnhappiness = civInfo.culture.publicOpinion.unhappiness
-        if (publicOpinionUnhappiness > 0) {
+        if (!needsModel && publicOpinionUnhappiness > 0) {
             var unhappiness = publicOpinionUnhappiness.toFloat()
             if (!civInfo.isHuman()) unhappiness *= civInfo.gameInfo.getDifficulty().aiUnhappinessModifier // as for the other unhappiness, see CityStats
             statMap["Public Opinion"] = -unhappiness
@@ -418,7 +436,8 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
             statMap.add("Stats", unique.stats.times(amount))
         }
 
-        val statsPerNaturalWonder = Stats(happiness = 1f)
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        val statsPerNaturalWonder = Stats(happiness = if (constants.cityNeedsLikeVp) constants.needs.happinessPerNaturalWonder.toFloat() else 1f)
 
         civInfo.forEachMatchingUnique(UniqueType.StatsFromNaturalWonders) { unique ->
             statsPerNaturalWonder.add(unique.stats)

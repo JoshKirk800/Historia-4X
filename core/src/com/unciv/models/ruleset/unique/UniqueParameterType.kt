@@ -605,6 +605,13 @@ enum class UniqueParameterType(
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = com.unciv.logic.civilization.managers.TourismRelation.entries.map { it.label }.toSet()
     },
 
+    /** The needs of a city, used by [UniqueType.NeedReduction], see [com.unciv.logic.city.NeedType] */
+    Need("need", "Distress", "One of `Distress`, `Poverty`, `Illiteracy`, `Boredom` or `Religious Unrest`", "Needs",
+        severityDefault = UniqueType.UniqueParameterErrorSeverity.RulesetInvariant
+    ) {
+        override val staticKnownValues = com.unciv.logic.city.NeedType.entries.map { it.label }.toSet()
+    },
+
     /** The name of a work in GreatWorks.json */
     GreatWorkName("greatWork", "Mona Lisa", "The name of any Great Work") {
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = ruleset.greatWorks.keys

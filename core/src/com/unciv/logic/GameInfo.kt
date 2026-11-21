@@ -158,6 +158,9 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
     /** The World Congress, `null` until it is founded and in rulesets without resolutions, see [League.tryFound] */
     var league: League? = null
 
+    /** The medians the cities' needs are measured against, updated once per game turn, only with [com.unciv.models.ModConstants.cityNeedsLikeVp]. 0 in a game saved before they existed */
+    var needsMedians = NeedsMedians()
+
     //endregion
     //region Fields - Transient
 
@@ -234,6 +237,7 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
         toReturn.unitNamesTaken.addAll(unitNamesTaken)
         toReturn.archaeologyTriggered = archaeologyTriggered
         toReturn.league = league?.clone()
+        toReturn.needsMedians = needsMedians.clone()
 
         return toReturn
     }
@@ -417,6 +421,8 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
             if (playerIndex == 0) {
                 recordRankingStats()
                 turns++
+                // CvGame::doTurn ends with updateGlobalMedians: once for the whole game turn, here where the last player has played
+                if (ruleset.modOptions.constants.cityNeedsLikeVp) needsMedians.update(this)
                 doLeagueTurn()
                 if (DebugUtils.SIMULATE_UNTIL_TURN != 0)
                     debug("Starting simulation of turn %s", turns)

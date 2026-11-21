@@ -521,8 +521,13 @@ class Civilization : IsPartOfGameInfoSerialization {
 
     fun updateStatsForNextTurn(): Unit = timeThis<Unit>("Civilization.updateStatsForNextTurn") {
         val previousHappiness = stats.happiness
-        stats.happiness = stats.getHappinessBreakdown().values.sum().roundToInt()
-        if (stats.happiness != previousHappiness && (gameInfo.ruleset.hasUniquesScalingWithHappiness
+        // Vox Populi's model: the pool and the unhappiness are handed to the cities, and the stat Happiness is the approval rating less the unhappy threshold.
+        // The cities that read the deltas and penalties of the empire in their growth and unit production update again when those changed
+        val needsModel = gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
+        val citiesOutOfDate = needsModel && stats.needs.update()
+        stats.happiness = if (needsModel) stats.needs.approval - gameInfo.ruleset.modOptions.constants.needs.unhappyThreshold
+            else stats.getHappinessBreakdown().values.sum().roundToInt()
+        if (citiesOutOfDate || stats.happiness != previousHappiness && (gameInfo.ruleset.hasUniquesScalingWithHappiness
                 || gameInfo.ruleset.allHappinessLevelsThatAffectUniques.any {
                     stats.happiness < it != previousHappiness < it // If move from being below them to not, or vice versa
                 }))
@@ -534,8 +539,27 @@ class Civilization : IsPartOfGameInfoSerialization {
         stats.statsForNextTurn = newStats
     }
 
+    /** The stat Happiness. With [com.unciv.models.ModConstants.cityNeedsLikeVp]: the approval rating less the unhappy threshold, so 0 is the line under which the empire is unhappy */
     @Readonly
     fun getHappiness() = stats.happiness
+
+    /** The approval rating in percent (CvPlayer::GetExcessHappiness of Vox Populi). Only [com.unciv.models.ModConstants.cityNeedsLikeVp] has one, without it this is the unhappy threshold */
+    @Readonly
+    fun getApproval(): Int = stats.needs.approval
+
+    /** CvPlayer::IsEmpireUnhappy: with [com.unciv.models.ModConstants.cityNeedsLikeVp] the approval rating is under the unhappy threshold, else the happiness is under 0 */
+    @Readonly
+    fun isEmpireUnhappy() = if (gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) stats.needs.isUnhappy() else stats.happiness < 0
+
+    /** CvPlayer::IsEmpireVeryUnhappy: with `cityNeedsLikeVp` the approval rating is under the very unhappy threshold, else the happiness is at most VERY_UNHAPPY_THRESHOLD */
+    @Readonly
+    fun isEmpireVeryUnhappy() = if (gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) stats.needs.isVeryUnhappy()
+        else stats.happiness <= gameInfo.ruleset.ai.define(AiDefine.VERY_UNHAPPY_THRESHOLD)
+
+    /** CvPlayer::IsEmpireSuperUnhappy: with `cityNeedsLikeVp` the approval rating is under the super unhappy threshold, else the happiness is at most SUPER_UNHAPPY_THRESHOLD */
+    @Readonly
+    fun isEmpireSuperUnhappy() = if (gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) stats.needs.isSuperUnhappy()
+        else stats.happiness <= gameInfo.ruleset.ai.define(AiDefine.SUPER_UNHAPPY_THRESHOLD)
     
     @OptIn(ExperimentalContracts::class)
     @Readonly

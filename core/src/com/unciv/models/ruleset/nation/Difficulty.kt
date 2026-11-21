@@ -13,6 +13,20 @@ class Difficulty : RulesetObject() {
     override lateinit var name: String
     var baseHappiness: Int = 0
     var extraHappinessPerLuxury: Float = 0f
+    /** Happiness of the capital on top of [baseHappiness] (the original's `HappinessDefaultCapital`, CvCity::GetLocalHappiness), only with [com.unciv.models.ModConstants.cityNeedsLikeVp] */
+    var baseHappinessCapital: Int = 0
+    /** Added to [baseHappiness] and [baseHappinessCapital] of an AI civilization, from the game's chosen difficulty and not from the AI's own level
+     *  (`AIHappinessDefault`, `AIHappinessDefaultCapital`: CvPlayer::DoUpdateTotalHappiness, CvCity::GetLocalHappiness), only with `cityNeedsLikeVp` */
+    var aiBaseHappiness: Int = 0
+    var aiBaseHappinessCapital: Int = 0
+    /** Percent points added to every need of every city (`PopulationUnhappinessMod`, CvCity::GetAllNeedsModifier); an AI civilization adds
+     *  [aiPopulationNeedModifier] of the chosen difficulty to the one of its own level (`AIPopulationUnhappinessMod`). Only with `cityNeedsLikeVp` */
+    var populationNeedModifier: Int = 0
+    var aiPopulationNeedModifier: Int = 0
+    /** Percent change of the empire size modifier of the needs (`EmpireSizeUnhappinessMod`, CvCity::GetEmpireSizeModifier), likewise for an AI.
+     *  Only with `cityNeedsLikeVp` */
+    var empireSizeNeedModifier: Int = 0
+    var aiEmpireSizeNeedModifier: Int = 0
     var researchCostModifier: Float = 1f
     var unitCostModifier: Float = 1f
     var unitSupplyBase: Int = 5

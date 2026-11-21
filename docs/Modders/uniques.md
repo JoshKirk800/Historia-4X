@@ -813,6 +813,62 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "Reduces [need] by [positiveAmount] [cityFilter]"
+	Takes that many unhappy citizens off the need in the matching cities, which can not fall below 0 (the original's `DistressFlatReduction`, `PovertyFlatReduction`, `IlliteracyFlatReduction`, `BoredomFlatReduction` and `ReligiousUnrestFlatReduction`, with their `Global` variants for `in all cities`). Several add up. Distress is the unhappiness of a city's food and production, Poverty of its gold, Illiteracy of its science, Boredom of its culture, Religious Unrest of its religious minorities. Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "Reduces [Distress] by [3] [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "Reduces the empire size need modifier by [positiveAmount] [cityFilter]"
+	Takes percent points off the rise of every need of the matching cities that the cities and the citizens of the empire cause. It does not go below 0 or above that rise (the original's `EmpireSizeModifierReduction` and `EmpireSizeModifierReductionGlobal`, which hold negative numbers). Several add up. Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "Reduces the empire size need modifier by [3] [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "The first [positiveAmount] specialists cause no unhappiness [cityFilter]"
+	In the matching cities that many specialists cost no unhappiness (the original's `NoUnhappfromXSpecialists`, `...Global` and `...Capital`). Several add up. Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "The first [3] specialists cause no unhappiness [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[amount] Happiness from the first [positiveAmount] specialists [cityFilter]"
+	Local happiness of the matching cities: the first number for each of their first specialists, as many as the second number (the original's `HappfromXSpecialists`, one happiness per specialist). Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "[3] Happiness from the first [3] specialists [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[amount] Happiness per [positiveAmount] citizens [cityFilter]"
+	Local happiness of the matching cities: amount x citizens / the second number, rounded towards 0 (the original's `HappinessPerXPopulation` and `HappinessPerXPopulationGlobal`). Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "[3] Happiness per [3] citizens [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[amount] Happiness per [positiveAmount] Great Works [cityFilter]"
+	Local happiness of the matching cities: amount for every second-number Great Works in the city (the original's `HappinessPerXGreatWorks`). Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "[3] Happiness per [3] Great Works [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[amount] Happiness per active trade route [cityFilter]"
+	Local happiness of the matching cities: amount for each trade route that starts in the city (the original's `HappinessPerActiveTradeRoute`). Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "[3] Happiness per active trade route [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount]% golden age points from happiness"
+	The golden age points a civilization makes each turn from its cities' happiness over unhappiness (their positive deltas) grow by this percentage (the original's `GAPFromHappinessModifier`). Several add up. Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "[+20]% golden age points from happiness"
+
+	Applicable to: Global
+
 ??? example  "Cannot build [baseUnitFilter] units"
 	Example: "Cannot build [Melee] units"
 
@@ -1107,11 +1163,6 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Units in cities cost no Maintenance"
 	Applicable to: Global
-
-??? example  "Uses unit supply"
-	Marks a non-military unit as one that counts against the civilization's unit supply, as the original's MilitarySupport does for the Caravan, the Cargo Ship and the Work Boat. Units with a combat strength use supply without it; the other civilians never do.
-
-	Applicable to: Unit
 
 ??? example  "Enables embarkation for land units"
 	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
@@ -1704,7 +1755,6 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Cannot be hurried"
 	Applicable to: Tech, Building
 
-
 ??? example  "Will not be displayed in Civilopedia"
 	Supports conditionals that need only a Game as context and nothing else.
 
@@ -1738,7 +1788,6 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Meant to be used together with conditionals, like "Unavailable &lt;after generating a Great Prophet&gt;".
 
 	Applicable to: Resolution, Tech, Policy, FounderBelief, FollowerBelief, Building, Unit, Promotion, Improvement, Ruins, Event, EventChoice, Victory
-
 
 ??? example  "Will not be displayed in Civilopedia"
 	Supports conditionals that need only a Game as context and nothing else.
@@ -2011,6 +2060,55 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "[relativeAmount]% Unhappiness from [populationFilter] [cityFilter]"
 	Example: "[+20]% Unhappiness from [Followers of this Religion] [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "Reduces [need] by [positiveAmount] [cityFilter]"
+	Takes that many unhappy citizens off the need in the matching cities, which can not fall below 0 (the original's `DistressFlatReduction`, `PovertyFlatReduction`, `IlliteracyFlatReduction`, `BoredomFlatReduction` and `ReligiousUnrestFlatReduction`, with their `Global` variants for `in all cities`). Several add up. Distress is the unhappiness of a city's food and production, Poverty of its gold, Illiteracy of its science, Boredom of its culture, Religious Unrest of its religious minorities. Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "Reduces [Distress] by [3] [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "Reduces the empire size need modifier by [positiveAmount] [cityFilter]"
+	Takes percent points off the rise of every need of the matching cities that the cities and the citizens of the empire cause. It does not go below 0 or above that rise (the original's `EmpireSizeModifierReduction` and `EmpireSizeModifierReductionGlobal`, which hold negative numbers). Several add up. Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "Reduces the empire size need modifier by [3] [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "The first [positiveAmount] specialists cause no unhappiness [cityFilter]"
+	In the matching cities that many specialists cost no unhappiness (the original's `NoUnhappfromXSpecialists`, `...Global` and `...Capital`). Several add up. Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "The first [3] specialists cause no unhappiness [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[amount] Happiness from the first [positiveAmount] specialists [cityFilter]"
+	Local happiness of the matching cities: the first number for each of their first specialists, as many as the second number (the original's `HappfromXSpecialists`, one happiness per specialist). Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "[3] Happiness from the first [3] specialists [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[amount] Happiness per [positiveAmount] citizens [cityFilter]"
+	Local happiness of the matching cities: amount x citizens / the second number, rounded towards 0 (the original's `HappinessPerXPopulation` and `HappinessPerXPopulationGlobal`). Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "[3] Happiness per [3] citizens [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[amount] Happiness per [positiveAmount] Great Works [cityFilter]"
+	Local happiness of the matching cities: amount for every second-number Great Works in the city (the original's `HappinessPerXGreatWorks`). Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "[3] Happiness per [3] Great Works [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[amount] Happiness per active trade route [cityFilter]"
+	Local happiness of the matching cities: amount for each trade route that starts in the city (the original's `HappinessPerActiveTradeRoute`). Only with the ModConstants `cityNeedsLikeVp`
+
+	Example: "[3] Happiness per active trade route [in all cities]"
 
 	Applicable to: Global, FollowerBelief
 
@@ -2337,6 +2435,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Happiness from this building is not limited by the population of the city"
 	Only matters with the ModConstants `localHappinessCappedByPopulation`, which limits the happiness of the buildings of a city to its population. Civ V's `UnmoddedHappiness` buildings (Circus Maximus, Notre Dame, Eiffel Tower, Prora) are exempt from that.
+
 	Applicable to: Building
 
 ??? example  "Connects trade routes over water"
@@ -2478,6 +2577,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Great General provides double combat bonus"
 	Applicable to: Global, Unit
+
+??? example  "Uses unit supply"
+	Marks a non-military unit as one that counts against the civilization's unit supply, as the original's MilitarySupport does for the Caravan, the Cargo Ship and the Work Boat. Units with a combat strength use supply without it; the other civilians never do.
+
+	Applicable to: Unit
 
 ??? example  "Consumes [amount] [resource]"
 	Example: "Consumes [3] [Iron]"
@@ -5029,6 +5133,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 *[modFilter]: A Mod name, case-sensitive _or_ a simple wildcard filter beginning and ending in an Asterisk, case-insensitive.
 Note that this must use the Mod name as Unciv displays it, not the Repository name.
 There is a conversion affecting dashes and leading/trailing blanks. Please make sure not to get confused.
+*[need]: One of `Distress`, `Poverty`, `Illiteracy`, `Boredom` or `Religious Unrest`.
 *[nonNegativeAmount]: This indicates a non-negative whole number, larger than or equal to zero, a '+' sign is optional.
 *[pediaLink]: A Civilopedia link in the form category/entry.
 *[policy]: The name of any policy.

@@ -100,6 +100,12 @@ object BattleDamage {
             if (greatGeneralBonus != 0)
                 modifiers[greatGeneralName] = greatGeneralBonus
 
+            // CvUnit::GetMaxAttackStrength, GetMaxDefenseStrength: with Vox Populi's needs the units of an unhappy empire fight worse (CvPlayer::GetUnhappinessCombatStrengthPenalty)
+            if (civInfo.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) {
+                val unhappinessPenalty = civInfo.stats.needs.combatPenalty
+                if (unhappinessPenalty != 0) modifiers["Unhappiness"] = unhappinessPenalty
+            }
+
         } else if (combatant is CityCombatant) {
             combatant.city.forEachMatchingUnique(UniqueType.StrengthForCities, conditionalState) { unique ->
                 modifiers.add(getModifierStringFromUnique(unique), unique.params[0].toInt())

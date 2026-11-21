@@ -25,6 +25,8 @@ class Speed : RulesetObject() {
     var improvementBuildLengthModifier: Float = modifier
     var goldenAgeLengthModifier: Float = modifier
     var religiousPressureAdjacentCity: Int = 6
+    /** Happiness every civilization starts with on this speed (the original's `StartingHappiness` of the game speed, CvPlayer::DoUpdateTotalHappiness), only with [com.unciv.models.ModConstants.cityNeedsLikeVp] */
+    var startingHappiness: Int = 0
     var peaceDealDuration: Int = 10
     var dealDuration: Int = 30
     var startYear: Float = -4000f

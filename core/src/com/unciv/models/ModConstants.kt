@@ -177,6 +177,13 @@ class ModConstants {
     // beliefs per city or on rivers is limited to the city's population (2/3 of it, rounded, for India). false: no limit, as before.
     // true: CvCity::GetLocalHappiness. Buildings with "Happiness from this building is not limited by the population of the city" are exempt.
     var localHappinessCappedByPopulation = false
+    // Which happiness model the ruleset plays. false: the original's (one number for the whole civilization, summed from the luxuries, the cities
+    // and the civilization's own sources, less the unhappiness of the cities and of public opinion; its effects are the uniques of GlobalUniques.json).
+    // true: Vox Populi's per-city needs (CvCity::GetUnhappinessAggregated, CvCity::GetLocalHappiness, CvPlayer::DoUpdateTotalHappiness,
+    // CvPlayer::DistributeHappinessToCities, CvPlayer::CalculateNetHappiness): the cities have needs (see [needs]), the empire a pool of happiness
+    // that is handed to the cities, and the approval rating (happy citizens against unhappy ones) decides the empire's effects. The stat Happiness is
+    // then the approval rating less [NeedsConstants.unhappyThreshold].
+    var cityNeedsLikeVp = false
     // Whether a unit with the unique "Before engaging in combat performs an extra ranged attack with [amount]% of melee combat strength" gets
     // no combat bonus for being fortified. false: it does. true: CvUnit::fortifyModifier returns 0 for a unit with ranged support fire (the Impi).
     var rangedSupportFireUnitsGetNoFortification = false
@@ -264,6 +271,86 @@ class ModConstants {
         val roundTo: Int = 5
     )
     var unitUpgradeCost = UnitUpgradeCost()
+
+    /**
+     *  The numbers of Vox Populi's per-city needs, read only with [cityNeedsLikeVp] (can only be modded all-or-nothing, a data class so the Json
+     *  serializer can omit it when default). The defaults are the GlobalDefines of Vox Populi 5.4.8: `DEF-CP` is
+     *  `(1) Community Patch/Database Changes/Defines/CoreDefineChanges.sql`, `DEF-VP` is `(2) Vox Populi/Database Changes/DefineChanges.sql`.
+     *  The fields marked "(S2)" are for conquest, puppets and golden ages, which read them in their own change.
+     *
+     *  Departures: VP's four median rates of change and four base modifiers are each one value here (all four are equal in VP); the city-state
+     *  luxury multiplier `MINOR_POLICY_RESOURCE_HAPPINESS_MULTIPLIER` is not a field, the percentage of the unique `City-State luxuries ...` is it.
+     */
+    data class NeedsConstants(
+        /** Approval rating (percent) under which the empire is unhappy (DEF-CP `UNHAPPY_THRESHOLD`), very unhappy (DEF-VP `VERY_UNHAPPY_THRESHOLD`) and super unhappy (DEF-VP `SUPER_UNHAPPY_THRESHOLD`) */
+        val unhappyThreshold: Int = 50,
+        val veryUnhappyThreshold: Int = 35,
+        val superUnhappyThreshold: Int = 20,
+        /** Percent of growth and of settler production lost per approval point under [unhappyThreshold] (DEF-CP `GLOBAL_GROWTH_PENALTY_PER_UNHAPPY`, `GLOBAL_SETTLER_PRODUCTION_PENALTY_PER_UNHAPPY`) */
+        val globalGrowthPenaltyPerPoint: Float = 2.5f,
+        val globalSettlerPenaltyPerPoint: Float = 2.5f,
+        /** The most percent of production a settler or combat unit can lose to unhappiness (DEF-CP `UNHAPPY_MAX_UNIT_PRODUCTION_PENALTY`) */
+        val maxUnitProductionPenalty: Int = -75,
+        /** Percent growth per point of a city's happiness delta, above 0 and below (DEF-CP `LOCAL_HAPPINESS_FOOD_MODIFIER`, `LOCAL_UNHAPPINESS_FOOD_MODIFIER`) */
+        val localHappinessGrowthPerPoint: Int = 2,
+        val localUnhappinessGrowthPerPoint: Int = 10,
+        /** Percent production of settlers and of combat units per point of a city's unhappiness over its happiness, negative (DEF-CP `LOCAL_UNHAPPY_SETTLER_PRODUCTION_PENALTY`, `LOCAL_UNHAPPY_COMBAT_UNIT_PRODUCTION_PENALTY`; the formula multiplies by -1 twice) */
+        val localUnhappySettlerPenalty: Int = -10,
+        val localUnhappyCombatUnitPenalty: Int = -10,
+        /** Percent combat strength lost while very unhappy, half of it while only unhappy (DEF-VP `VERY_UNHAPPY_MAX_COMBAT_PENALTY`) */
+        val veryUnhappyMaxCombatPenalty: Int = -20,
+        /** The percentile of the cities' yields per citizen that is the median, of the technologies the civilizations know, and the population a city needs to count (DEF-CP `YIELD_MEDIAN_PERCENTILE`, `TECH_COUNT_MEDIAN_PERCENTILE`, `YIELD_MEDIAN_MIN_POP_REQUIREMENT`) */
+        val medianPercentile: Int = 50,
+        val techMedianPercentile: Int = 50,
+        val medianMinPopulation: Int = 3,
+        /** The share of the new median in the smoothed one (DEF-CP `DISTRESS_MEDIAN_RATE_CHANGE`, `POVERTY_`, `ILLITERACY_`, `BOREDOM_`, all 0.65) */
+        val medianRateOfChange: Float = 0.65f,
+        /** Percent of the modified median a citizen must make (DEF-CP `DISTRESS_MEDIAN_BASE_MODIFIER`, `POVERTY_`, `ILLITERACY_`, `BOREDOM_`, all 100) */
+        val medianBaseModifier: Int = 100,
+        /** Percent points the needs of the capital rise by (DEF-CP `CAPITAL_NEED_MODIFIER`), and hundredths of a percent point per citizen of the city (`CITY_SIZE_NEED_MODIFIER`) */
+        val capitalNeedModifier: Int = 25,
+        val citySizeNeedModifier: Int = 0,
+        /** Hundredths of a percent point of the needs per technology above and below the median of the civilizations, and per percent of the technologies researched (DEF-CP `TECH_NEED_MODIFIER_PER_TECH_ABOVE_MEDIAN`, `..._BELOW_MEDIAN`, `TECH_NEED_MODIFIER_PERCENT_RESEARCHED`) */
+        val techNeedPerTechAboveMedian: Int = 100,
+        val techNeedPerTechBelowMedian: Int = -200,
+        val techNeedPercentResearched: Int = 0,
+        /** Hundredths of a percent point of the needs per city but the capital and the puppets, thousandths per citizen outside puppets, and the most the sum can be (DEF-CP `EMPIRE_SIZE_NEED_MODIFIER_CITIES`, `..._POP`, `..._CAP`) */
+        val empireSizeNeedPerCity: Int = 500,
+        val empireSizeNeedPerPopulation: Int = 125,
+        val empireSizeNeedCap: Int = 100000,
+        /** Unhappy citizens per religious minority citizen, starving food, pillaged tile and isolated citizen (DEF-CP `UNHAPPINESS_PER_RELIGIOUS_MINORITY_POP`, `..._PER_STARVING_POP`, `..._PER_PILLAGED_TILE`, `..._PER_ISOLATED_POP`) */
+        val unhappinessPerReligiousMinority: Float = 0.5f,
+        val unhappinessPerStarvingPop: Float = 1f,
+        val unhappinessPerPillagedTile: Float = 0.5f,
+        val unhappinessPerIsolatedPop: Float = 0.34f,
+        /** Hundredths of an unhappy citizen per specialist, and the citizens of a puppet per unhappy one (DEF-CP `UNHAPPINESS_PER_SPECIALIST`, `UNHAPPINESS_PER_X_PUPPET_CITIZENS`) */
+        val unhappinessPerSpecialist: Int = 100,
+        val puppetCitizensPerUnhappiness: Int = 4,
+        /** Unhappy citizens per citizen of an occupied city (DEF-VP `UNHAPPINESS_PER_OCCUPIED_POPULATION`, 1.34 in Brave New World) */
+        val unhappinessPerOccupiedPopulation: Float = 1f,
+        /** Happiness of each luxury resource the empire has (the luxuries' `Happiness` column in Vox Populi, 2, 4 in Brave New World) and of each natural wonder it owns (GlobalDefines `HAPPINESS_PER_NATURAL_WONDER`) */
+        val happinessPerLuxury: Int = 2,
+        val happinessPerNaturalWonder: Int = 1,
+        /** (S2) Percent of the gold, science, culture, faith, tourism and golden age points a puppet yields (DEF-VP `PUPPET_YIELD_AND_SUPPLY_MODIFIER_MULTIPLICATIVE`) */
+        val puppetYieldMultiplier: Int = 30,
+        /** (S2) The turns of resistance after a conquest are population x numerator / denominator (CvPlayer::acquireCity) and annexing a city in resistance halves what is left (CvCity::DoAnnex) */
+        val resistanceTurnsPopulationNumerator: Int = 2,
+        val resistanceTurnsPopulationDenominator: Int = 3,
+        val annexHalvesResistance: Boolean = true,
+        /** (S2) The turns a very unhappy empire waits before a city revolts (DEF-CP `REVOLT_COUNTER_MIN`) */
+        val revoltCounterMin: Int = 10,
+        /** (S2) The golden age threshold (CvPlayer::GetGoldenAgeProgressThreshold): the first one, the base of the later ones, the rise per golden age had, percent per city, and the divisor the shown threshold is rounded to (DEF-VP `GOLDEN_AGE_BASE_THRESHOLD_INITIAL`, `..._HAPPINESS`, `GOLDEN_AGE_EACH_GA_ADDITIONAL_HAPPINESS`, `GOLDEN_AGE_THRESHOLD_CITY_MULTIPLIER`, DEF-CP `GOLDEN_AGE_VISIBLE_THRESHOLD_DIVISOR`) */
+        val goldenAgeThresholdInitial: Int = 1000,
+        val goldenAgeThresholdBase: Int = 400,
+        val goldenAgeThresholdPerGoldenAge: Int = 2000,
+        val goldenAgeThresholdPerCityPercent: Int = 5,
+        val goldenAgeVisibleDivisor: Int = 5,
+        /** (P6) The city strength from which a city gives the happiness of the policy `HappinessPerCityOverStrengthThreshold` (DEF-CP `CITY_STRENGTH_THRESHOLD_FOR_BONUSES`, CvCity::GetHappinessFromPolicies); city strength is not Vox Populi's until the military package */
+        val cityStrengthThresholdForBonuses: Int = 10,
+        /** (P6) The most percent of its population a civilization's war weariness can cost in unhappy citizens (DEF-CP `WAR_WEARINESS_POPULATION_PERCENT_CAP`) */
+        val warWearinessPopulationPercentCap: Int = 34,
+    )
+    var needs = NeedsConstants()
 
     // How the "[relativeAmount]% Gold cost of upgrading" uniques of a civilization combine. false: they are multiplied (-33% twice gives x0.4489).
     // true: as in Civ V (CvPlayer::SetUnitUpgradeCostMod, CvUnit::upgradePrice) the percentages are summed (-33% twice gives x0.34) and the sum is at least [unitUpgradeCostDiscountMax]

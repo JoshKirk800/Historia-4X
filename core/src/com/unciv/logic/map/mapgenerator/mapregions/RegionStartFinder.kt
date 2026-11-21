@@ -20,11 +20,15 @@ import kotlin.math.roundToInt
 
 object RegionStartFinder {
     /** AssignStartingPlots `centerBias` and `middleBias`: the share of a region's size examined first and second */
-    private const val CENTER_BIAS_PERCENT = 34
-    private const val MIDDLE_BIAS_PERCENT = 67
+    internal const val CENTER_BIAS_PERCENT = 34
+    internal const val MIDDLE_BIAS_PERCENT = 67
 
     /** Attempts to find a good start close to the center of [region]. Calls setRegionStart with the position*/
-    internal fun findStart(region: Region, tileData: TileDataMap) {
+    fun findStart(region: Region, tileData: TileDataMap) {
+        if (region.tileMap.ruleset!!.modOptions.constants.startFinderLikeVoxPopuli) {
+            VoxPopuliStartFinder.findStart(region, tileData)
+            return
+        }
         val fallbackTiles = HashSet<Tile>()
         // Priority: 1. Adjacent to river, 2. Adjacent to coast or fresh water, 3. Other.
 
@@ -129,9 +133,12 @@ object RegionStartFinder {
             setRegionStart(region, fallbackPosition.position, tileData)
             return
         }
+        setRegionStart(region, panicPosition(region, tileData), tileData)
+    }
 
-        // Something went extremely wrong and there is somehow no place to start in the region (it holds no land: an empty region's
-        // rectangle lies outside the map). Take the best free land anywhere, or make a tile land
+    /** Something went extremely wrong and there is somehow no place to start in the region (it holds no land: an empty region's
+     *  rectangle lies outside the map). Take the best free land anywhere, or make a tile land */
+    internal fun panicPosition(region: Region, tileData: TileDataMap): HexCoord {
         val tileMap = region.tileMap
         val taken = tileMap.startingLocations.mapTo(HashSet()) { it.position }
         val panicTile = tileMap.values.filter { it.isLand && !it.isImpassible() && it.position !in taken }
@@ -140,7 +147,7 @@ object RegionStartFinder {
                 it.baseTerrain = tileMap.ruleset!!.terrains.values.first { terrain -> terrain.type == TerrainType.Land }.name
                 it.setTerrainFeatures(listOf())
             }
-        setRegionStart(region, panicTile.position, tileData)
+        return panicTile.position
     }
     
     /** @returns a Rectangle centered over [originalRect] that is [biasPercent] of its size, as AssignStartingPlots:FindStart
@@ -234,7 +241,7 @@ object RegionStartFinder {
         localData.startScore = totalScore
     }
 
-    private fun setRegionStart(region: Region, position:HexCoord, tileData: TileDataMap) {
+    internal fun setRegionStart(region: Region, position:HexCoord, tileData: TileDataMap) {
         region.startPosition = position
 
         for ((ring, penalty) in closeStartPenaltyForRing) {

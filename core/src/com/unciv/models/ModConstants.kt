@@ -94,6 +94,11 @@ class ModConstants {
      *  Implies the sites of [cityStateSitesLikeCivV]. false: the forced placements (within the impact of a start, then on top of one) of the other rulesets. */
     var cityStatePlacementLikeVoxPopuli = false
 
+    /** Choose the start of each region as Vox Populi's AssignStartingPlots:FindStart does (see VoxPopuliStartFinder): one candidate list per area scored with
+     *  +80 for the coast, its own minimums (production 1, 1, 3), no cap on junk, the best eligible tile of the outer area nearest to a corner.
+     *  false: Brave New World's: river tiles before coastal before dry, coast +40. */
+    var startFinderLikeVoxPopuli = false
+
     /** Assign and place the luxuries as AssignStartingPlots.lua does (see CivVLuxuryPlacement). It names the luxuries of Civ V.
      *  false: the generic placement of the resources' `Generated with weight` rules. */
     var luxuryPlacementLikeCivV = false

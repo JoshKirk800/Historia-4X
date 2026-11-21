@@ -1,11 +1,13 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.Constants
+import com.unciv.logic.automation.NeedsAiScenarios
 import com.unciv.logic.automation.unit.SettlerAutomation
 import com.unciv.logic.automation.civilization.UseGoldAutomation
 import com.unciv.logic.automation.diplomacy.PactPlanningAi
 import com.unciv.logic.automation.diplomacy.WarGoal
 import com.unciv.logic.city.City
+import com.unciv.logic.city.NeedsTestWorld
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
@@ -341,6 +343,32 @@ class EconomicMilitaryAiTests {
         city.cityStats.happinessList = linkedMapOf("Cities" to -3f, "Population" to -3f)
         assertTrue(EconomicMilitaryStrategyTests.needHappiness(civ, need))
         assertTrue(EconomicMilitaryStrategyTests.needHappinessCritical(civ, critical))
+    }
+
+    @Test
+    fun `with the needs model need happiness reads the approval rating and the unhappy citizens of the cities`() {
+        val world = NeedsTestWorld()
+        val civ = world.civ
+        civ.ai.setPersonalityFlavor(Flavor.Happiness, 8)
+        val need = world.game.ruleset.ai.economicStrategies.first { it.name == "ECONOMICAISTRATEGY_NEED_HAPPINESS" }
+        val critical = world.game.ruleset.ai.economicStrategies.first { it.name == "ECONOMICAISTRATEGY_NEED_HAPPINESS_CRITICAL" }
+        NeedsAiScenarios.addEmpireCity(world, civ, 9, 10) // approval 45: happiness -5, 10 unhappy citizens
+        assertEquals(-5, civ.getHappiness())
+        assertEquals(10, civ.stats.needs.unhappyCitizens)
+        assertTrue(EconomicMilitaryStrategyTests.needHappiness(civ, need))
+        assertTrue(EconomicMilitaryStrategyTests.needHappinessCritical(civ, critical))
+
+        val content = NeedsTestWorld()
+        content.civ.ai.setPersonalityFlavor(Flavor.Happiness, 8)
+        NeedsAiScenarios.addEmpireCity(content, content.civ, 20, 10) // approval 100
+        assertFalse(EconomicMilitaryStrategyTests.needHappiness(content.civ, need))
+        assertFalse(EconomicMilitaryStrategyTests.needHappinessCritical(content.civ, critical))
+
+        val none = NeedsTestWorld()
+        none.addCity(3)
+        NeedsAiScenarios.refresh(none.civ)
+        assertEquals("no unhappy citizen at all", 0, none.civ.stats.needs.unhappyCitizens)
+        assertFalse(EconomicMilitaryStrategyTests.needHappiness(none.civ, need))
     }
 
     @Test

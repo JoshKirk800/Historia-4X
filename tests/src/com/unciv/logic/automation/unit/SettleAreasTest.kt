@@ -1,9 +1,11 @@
 package com.unciv.logic.automation.unit
 
+import com.unciv.logic.automation.NeedsAiScenarios
 import com.unciv.logic.automation.diplomacy.DisputeAi
 import com.unciv.logic.automation.diplomacy.DisputeLevel
 import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.AiOperationType
+import com.unciv.logic.city.NeedsTestWorld
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
@@ -457,5 +459,16 @@ class SettleAreasTest {
         assertEquals(Int.MAX_VALUE, CityDistances.cityDistancePathLength(barbarians, tile(0, 0)))
         assertEquals(0, SettleAreas.mapToPercent(Int.MAX_VALUE, 10, 5))
         assertEquals(100, SettleAreas.mapToPercent(Int.MIN_VALUE, 10, 5))
+    }
+
+    @Test
+    fun `a very unhappy empire cannot found a city with the needs model`() {
+        for ((happy, unhappy, canFound) in listOf(Triple(20, 10, true), Triple(9, 10, true), Triple(2, 3, false))) {
+            val world = NeedsTestWorld()
+            NeedsAiScenarios.addEmpireCity(world, world.civ, happy, unhappy)
+            val site = world.game.getTile(HexCoord(5, 0))
+            val settler = world.game.addUnit("Settler", world.civ, site)
+            assertEquals("approval ${world.civ.getApproval()}", canFound, SettleAreas.canFound(settler, site))
+        }
     }
 }

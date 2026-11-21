@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.Constants
+import com.unciv.logic.automation.NeedsAiScenarios
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.PeaceTreatyType
 import com.unciv.logic.automation.strategy.GrandStrategyAi
@@ -9,6 +10,7 @@ import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.WarDamageAi
 import com.unciv.logic.city.City
 import com.unciv.logic.city.GreatWorkSlot
+import com.unciv.logic.city.NeedsTestWorld
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
@@ -25,6 +27,8 @@ import com.unciv.models.ruleset.GreatWorkInstance
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.tile.ResourceType
+import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -644,5 +648,68 @@ class DealAiTests {
         assertEquals(DealAi.NEVER, DealAi.getTradeItemValue(a, b, voteOffer(league, League.NO, 3), true, false, Trade()))
         assertEquals(DealAi.NEVER, DealAi.getTradeItemValue(a, b, voteOffer(league, League.YES, 1), true, false, Trade()))
     }
+    //endregion
+
+    //region The needs model (cityNeedsLikeVp): luxuries
+
+    /** A luxury on the centre tile of a new city of [owner], connected without an improvement */
+    private fun giveLuxury(world: NeedsTestWorld, owner: Civilization): TileResource {
+        val resource = world.game.ruleset.tileResources.values.first { it.resourceType == ResourceType.Luxury }
+        val city = world.addCity(1, of = owner)
+        city.getCenterTile().tileResource = resource
+        city.getCenterTile().resourceAmount = 1
+        for (improvement in resource.getImprovements())
+            world.game.ruleset.tileImprovements[improvement]?.techRequired?.let { owner.tech.addTechnology(it) }
+        owner.cache.updateCivResources()
+        return resource
+    }
+
+    /** What a buyer with [happy] happiness against [unhappy] unhappy citizens (approval min(200, happy x 100 / unhappy) / 2) is told a luxury of the seller is worth */
+    private fun luxuryForBuyer(happy: Int, unhappy: Int): Int {
+        val world = NeedsTestWorld()
+        val seller = world.game.addCiv()
+        val resource = giveLuxury(world, seller)
+        if (happy > 0 || unhappy > 0) NeedsAiScenarios.addEmpireCity(world, world.civ, happy, unhappy)
+        return DealResourceValues.luxuryValue(world.civ, seller, resource, 30, fromMe = false, netGoldOfReceiver = 0)!!
+    }
+
+    @Test
+    fun `a luxury is worth more to a very unhappy buyer`() {
+        val happy = luxuryForBuyer(20, 10)  // 100
+        assertTrue(happy > 0)
+        assertEquals("approval 45: unhappy", 2 * happy, luxuryForBuyer(9, 10))
+        assertEquals("approval 33: very unhappy", 3 * happy, luxuryForBuyer(2, 3))
+        assertEquals("approval 15: super unhappy", 4 * happy, luxuryForBuyer(3, 10))
+    }
+
+    @Test
+    fun `a luxury gives the happiness the needs constants say`() {
+        val world = NeedsTestWorld()
+        val seller = world.game.addCiv()
+        val resource = giveLuxury(world, seller)
+        assertEquals(2, DealResourceValues.happinessFromLuxury(seller, resource))
+        world.constants.needs = world.constants.needs.copy(happinessPerLuxury = 3)
+        assertEquals(3, DealResourceValues.happinessFromLuxury(seller, resource))
+        world.constants.cityNeedsLikeVp = false
+        assertEquals("BNW's own", 4, DealResourceValues.happinessFromLuxury(seller, resource))
+    }
+
+    @Test
+    fun `the last copy of a luxury is not sold when losing its happiness would make the empire unhappy`() {
+        val world = NeedsTestWorld()
+        val buyer = world.game.addCiv()
+        NeedsAiScenarios.addEmpireCity(world, world.civ, 9, 10)
+        val resource = giveLuxury(world, world.civ)
+        NeedsAiScenarios.refresh(world.civ)
+        // 9 + 2 from the luxury: approval 55. Without the luxury 9 x 100 / 10 / 2 = 45
+        assertEquals(55, world.civ.getApproval())
+        assertFalse(world.civ.isEmpireUnhappy())
+        assertEquals(null, DealResourceValues.luxuryValue(world.civ, buyer, resource, 30, fromMe = true, netGoldOfReceiver = 0))
+
+        world.giveHappiness(world.civ.cities.first(), 2)
+        NeedsAiScenarios.refresh(world.civ)
+        assertTrue(DealResourceValues.luxuryValue(world.civ, buyer, resource, 30, fromMe = true, netGoldOfReceiver = 0)!! > 0)
+    }
+
     //endregion
 }

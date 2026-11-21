@@ -1,6 +1,9 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.logic.automation.NeedsAiScenarios
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.city.NeedYields
+import com.unciv.logic.city.NeedsTestWorld
 import com.unciv.logic.civilization.CivFlags
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.InfluenceLevel
@@ -303,5 +306,51 @@ class PolicyAutomationTests {
         setPriorities(100, 100, 125, 100) // not more than 25%
         assertTrue(PolicyAutomation.considerIdeologySwitch(civ))
     }
+    //endregion
+
+    //region The needs model (cityNeedsLikeVp): CvPolicyAI::WeightPolicyAttributes
+
+    private fun needsWeights(world: NeedsTestWorld, vararg uniques: String): IntArray =
+        PolicyAttributeAi.weightPolicyAttributes(world.game.createPolicy(*uniques), PolicyAttributeAi.Inputs(world.civ))
+
+    private val food = PolicyAttributeAi.AttributeYield.Food.ordinal
+
+    @Test
+    fun `a policy with a distress reduction is weighted 100 per point when the empire has distress`() {
+        val world = NeedsTestWorld()
+        val city = world.addCity(5)
+        world.medians.basic = 500
+        world.needsOf(city).update(NeedYields()) // 5 unhappy citizens of distress
+        assertEquals(200, needsWeights(world, "Reduces [Distress] by [2] [in all cities]")[food])
+        world.medians.gold = 500
+        world.needsOf(city).update(NeedYields())
+        assertEquals("poverty is weighted 40 a point", 80, needsWeights(world, "Reduces [Poverty] by [2] [in all cities]")[food])
+        world.medians.gold = 0
+
+        world.medians.basic = 0
+        world.needsOf(city).update(NeedYields())
+        assertEquals("no distress: half", 100, needsWeights(world, "Reduces [Distress] by [2] [in all cities]")[food])
+        assertEquals("no poverty: 20 a point", 40, needsWeights(world, "Reduces [Poverty] by [2] [in all cities]")[food])
+        assertEquals(100, needsWeights(world, "Reduces [Illiteracy] by [2] [in all cities]")[food])
+        assertEquals(100, needsWeights(world, "Reduces [Religious Unrest] by [2] [in all cities]")[food])
+    }
+
+    @Test
+    fun `specialists without unhappiness are weighted 10 a specialist, 25 in the capital`() {
+        val world = NeedsTestWorld()
+        world.addCity(5)
+        assertEquals(20, needsWeights(world, "The first [2] specialists cause no unhappiness [in all cities]")[food])
+        assertEquals(50, needsWeights(world, "The first [2] specialists cause no unhappiness [in capital]")[food])
+    }
+
+    @Test
+    fun `golden age points from happiness are weighted by the positive deltas of the cities`() {
+        val world = NeedsTestWorld()
+        val city = NeedsAiScenarios.addEmpireCity(world, world.civ, 9, 2) // delta 7
+        assertEquals(7, world.needsOf(city).delta)
+        val gap = PolicyAttributeAi.AttributeYield.GoldenAgePoints.ordinal
+        assertEquals(7 * 40 / 100, needsWeights(world, "[40]% golden age points from happiness")[gap])
+    }
+
     //endregion
 }

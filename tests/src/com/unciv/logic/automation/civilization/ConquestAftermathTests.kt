@@ -1,12 +1,14 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.Constants
+import com.unciv.logic.automation.NeedsAiScenarios
 import com.unciv.logic.automation.civilization.CityConquestAutomation.ConquestChoice
 import com.unciv.logic.automation.diplomacy.WarmongerAi
 import com.unciv.logic.automation.strategy.AttackTargetsAi
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityFlags
+import com.unciv.logic.city.NeedsTestWorld
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.managers.PublicOpinion
@@ -378,6 +380,106 @@ class ConquestAftermathTests {
         e.nets[e.small] = 3f
         assertEquals(emptyList<City>(), raze(e, -25))
         assertTrue(listOf(e.big, e.medium, e.small).none { it.isBeingRazed })
+    }
+
+    //endregion
+
+    //region The needs model (cityNeedsLikeVp): the approval rating decides
+
+    private fun neutralize(civ: Civilization) {
+        for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
+        for (value in DiplomacyPersonality.entries) civ.ai.setDiplomacyValue(value, 0)
+        civ.ai.setGrandStrategyAndPursuit(null)
+    }
+
+    /** An AI conqueror whose capital has [unhappy] unhappy citizens and [happy] happiness (approval min(200, happy x 100 / unhappy) / 2), a defender and a city it just took */
+    private inner class NeedsConquest(happy: Int, unhappy: Int) {
+        val world = NeedsTestWorld()
+        val attacker: Civilization = world.game.addCiv().also { neutralize(it) }
+        val defender: Civilization = world.game.addCiv().also { neutralize(it) }
+        val capital = NeedsAiScenarios.addEmpireCity(world, attacker, happy, unhappy)
+        val target: City
+
+        init {
+            val others = listOf(world.addCity(3, of = defender), world.addCity(3, of = defender), world.addCity(3, of = defender))
+            target = world.game.addCity(defender, world.game.getTile(HexCoord(0, -5)))
+            for (city in others + capital + target) city.cityStats.currentCityStats.production = MEDIAN_PRODUCTION
+        }
+
+        /** The target is worth [percent] percent of the median city, or a little more */
+        fun worth(percent: Int) {
+            for (production in 0..400) {
+                target.cityStats.currentCityStats.production = production.toFloat()
+                if (AttackTargetsAi.economicValue(target, attacker) * 100 / WarmongerAi.medianEconomicValue(world.game.gameInfo) >= percent) break
+            }
+        }
+
+        fun choice() = CityConquestAutomation.chooseConquest(attacker, target)
+    }
+
+    @Test
+    fun `with the needs model a conquest is annexed until the approval rating is under 40, puppeted below that, and razed by a very unhappy empire that may revolt`() {
+        var e = NeedsConquest(20, 10) // approval 100
+        e.worth(100)
+        assertEquals(100, e.attacker.getApproval())
+        assertEquals(ConquestChoice.Annex, e.choice())
+
+        e = NeedsConquest(9, 10) // 45: unhappy, but only a little: a buffer under 40
+        e.worth(100)
+        assertTrue(e.attacker.isEmpireUnhappy())
+        assertEquals(45, e.attacker.getApproval())
+        assertEquals("a little unhappy is fine to take a city", ConquestChoice.Annex, e.choice())
+
+        e = NeedsConquest(7, 9) // 38
+        e.worth(100)
+        assertEquals(38, e.attacker.getApproval())
+        assertEquals(ConquestChoice.Puppet, e.choice())
+
+        e = NeedsConquest(3, 5) // 30: very unhappy keeps no city for its value
+        e.worth(100)
+        assertTrue(e.attacker.isEmpireVeryUnhappy())
+        assertEquals(ConquestChoice.Raze, e.choice())
+    }
+
+    @Test
+    fun `a very unhappy empire may revolt without the opinion of the people against it`() {
+        val e = NeedsConquest(3, 5) // approval 30
+        e.worth(0)
+        e.capital.getCenterTile().apply { clearContinent(); setContinent(1) }
+        e.target.getCenterTile().apply { clearContinent(); setContinent(2) }
+        assertEquals(0, e.attacker.culture.publicOpinion.unhappiness)
+        assertEquals("its only city on the continent is razed, as it may revolt", ConquestChoice.Raze, e.choice())
+    }
+
+    /** An occupied city of [civ] of [population] citizens: taken from a defender and annexed, no longer in resistance */
+    private fun occupied(world: NeedsTestWorld, civ: Civilization, defender: Civilization, at: HexCoord, population: Int): City {
+        val city = world.game.addCity(defender, world.game.getTile(at), initialPopulation = population)
+        city.puppetCity(civ)
+        city.annexCity()
+        city.removeFlag(CityFlags.Resistance)
+        city.population.setPopulation(population) // taking a city costs citizens
+        return city
+    }
+
+    @Test
+    fun `a very unhappy empire burns the occupied city whose loss raises the approval rating most, and stops at the very unhappy threshold`() {
+        for ((happiness, expectedRazed) in listOf(2 to listOf("big"), 1 to listOf("big", "small"), 6 to emptyList())) {
+            val world = NeedsTestWorld()
+            val civ = world.game.addCiv().also { neutralize(it) }
+            val defender = world.game.addCiv().also { neutralize(it) }
+            NeedsAiScenarios.addEmpireCity(world, civ, happiness, 0)
+            world.addCity(3, of = defender) // the defender's capital: a capital is not razed, so it must not be one of the cities taken
+            val big = occupied(world, civ, defender, HexCoord(0, -5), 4)
+            val small = occupied(world, civ, defender, HexCoord(5, 0), 2)
+            NeedsAiScenarios.refresh(civ)
+            // Occupied cities give no happiness and have their citizens unhappy: 6 unhappy against the capital's happiness
+            assertEquals(6, civ.stats.needs.unhappyCitizens)
+            assertEquals(happiness, civ.stats.needs.happyCitizens)
+
+            val razed = CityConquestAutomation.considerRaze(civ)
+            assertEquals("with $happiness happiness", expectedRazed.map { if (it == "big") big else small }, razed)
+            if (expectedRazed.isEmpty()) assertFalse("not very unhappy: nothing to do", civ.isEmpireVeryUnhappy())
+        }
     }
 
     //endregion

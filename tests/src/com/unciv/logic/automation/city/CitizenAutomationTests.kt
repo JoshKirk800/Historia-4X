@@ -1,8 +1,10 @@
 package com.unciv.logic.automation.city
 
 import com.unciv.Constants
+import com.unciv.logic.automation.NeedsAiScenarios
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityFocus
+import com.unciv.logic.city.NeedsTestWorld
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
@@ -208,4 +210,87 @@ class CitizenAutomationTests {
         assertEquals(CityFocus.NoFocus, puppet.getCityFocus())
         assertFalse(puppet.avoidGrowth)
     }
+
+    //region The needs model (cityNeedsLikeVp): CvCityCitizens::IsAvoidGrowth, ScoreYieldChange
+
+    @Test
+    fun `a city avoids growth when the empire is unhappy and its delta is below minus one, and a very unhappy AI avoids growth everywhere`() {
+        // Approval 40: happy 8 x 100 / unhappy 10 / 2. The city's delta is 8 - 10
+        var world = NeedsTestWorld()
+        var city = NeedsAiScenarios.addEmpireCity(world, world.civ, 8, 10)
+        assertTrue(world.civ.isEmpireUnhappy())
+        assertEquals(-2, world.needsOf(city).delta)
+        assertTrue("unhappy and under -1", CitizenAutomation.isAvoidGrowth(city))
+        // 4 against 5: the same approval, a delta of -1
+        world = NeedsTestWorld()
+        city = NeedsAiScenarios.addEmpireCity(world, world.civ, 4, 5)
+        assertTrue(world.civ.isEmpireUnhappy())
+        assertEquals(-1, world.needsOf(city).delta)
+        assertFalse("unhappy, but the city is not that unhappy", CitizenAutomation.isAvoidGrowth(city))
+        city.avoidGrowth = true
+        assertTrue("the city's own flag", CitizenAutomation.isAvoidGrowth(city))
+
+        // A very unhappy AI (approval 30) avoids it in every city, a human one only where the delta is under -1
+        for (human in listOf(false, true)) {
+            world = NeedsTestWorld()
+            val owner = if (human) world.civ else world.game.addCiv()
+            NeedsAiScenarios.addEmpireCity(world, owner, 3, 5)
+            val happyCity = NeedsAiScenarios.addEmpireCity(world, owner, 0, 0)
+            assertTrue(owner.isEmpireVeryUnhappy())
+            assertEquals("a third of its 3 citizens are unhappy for the lack of a road", -1, world.needsOf(happyCity).delta)
+            assertEquals("a city of a ${if (human) "human" else "AI"} empire that is very unhappy", !human, CitizenAutomation.isAvoidGrowth(happyCity))
+        }
+    }
+
+    @Test
+    fun `a happy empire's city does not avoid growth`() {
+        val world = NeedsTestWorld()
+        val city = NeedsAiScenarios.addEmpireCity(world, world.civ, 20, 10)
+        assertFalse(world.civ.isEmpireUnhappy())
+        assertFalse(CitizenAutomation.isAvoidGrowth(city))
+    }
+
+    /** What one more specialist in [city] changes in the value of a Writer: the score of the unhappiness it adds, against the same specialist in a city that has some for free */
+    private fun specialistUnhappinessScore(world: NeedsTestWorld, city: City): Int {
+        val writer = world.game.ruleset.specialists["Writer"]!!
+        val stats = city.cityStats.getStatsOfSpecialist("Writer")
+        val value = CitizenAutomation.Valuation(city).specialistValue(writer, stats)
+        world.build(city, "The first [20] specialists cause no unhappiness [in this city]")
+        return value - CitizenAutomation.Valuation(city).specialistValue(writer, stats)
+    }
+
+    @Test
+    fun `a specialist that would add unhappiness in an empire close to unhappy scores minus 15000`() {
+        // Approval 50 with 3 specialists (3 unhappy, 3 happy); a fourth makes 3 x 100 / 4 / 2 = 37, within 5 of the unhappy threshold
+        val world = NeedsTestWorld()
+        val city = NeedsAiScenarios.addEmpireCity(world, world.civ, 3, 3, population = 8)
+        assertEquals(50, world.civ.getApproval())
+        assertEquals(-15000, specialistUnhappinessScore(world, city))
+    }
+
+    @Test
+    fun `a specialist that would make the empire very unhappy scores minus 50000, one in a happy empire and a happy city minus 2000`() {
+        var world = NeedsTestWorld()
+        var city = NeedsAiScenarios.addEmpireCity(world, world.civ, 2, 3, population = 8) // 33, a fourth: 25
+        assertEquals(-50000, specialistUnhappinessScore(world, city))
+
+        world = NeedsTestWorld()
+        city = NeedsAiScenarios.addEmpireCity(world, world.civ, 20, 3, population = 8)
+        assertEquals("20 happy against 4 unhappy: all is well", -2000, specialistUnhappinessScore(world, city))
+
+        // The other city is happy for the empire, this one has more unhappy citizens than happiness
+        world = NeedsTestWorld()
+        city = NeedsAiScenarios.addEmpireCity(world, world.civ, 0, 3, population = 8)
+        NeedsAiScenarios.addEmpireCity(world, world.civ, 40, 0)
+        assertEquals(-5000, specialistUnhappinessScore(world, city))
+    }
+
+    @Test
+    fun `a specialist that costs no unhappiness is not scored`() {
+        val world = NeedsTestWorld("The first [5] specialists cause no unhappiness [in all cities]")
+        val city = NeedsAiScenarios.addEmpireCity(world, world.civ, 3, 3, population = 8)
+        assertEquals(0, specialistUnhappinessScore(world, city))
+    }
+
+    //endregion
 }

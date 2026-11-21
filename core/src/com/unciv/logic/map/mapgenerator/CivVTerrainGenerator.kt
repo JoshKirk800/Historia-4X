@@ -15,8 +15,9 @@ import kotlin.random.Random
  *  It names the terrains and features of the Civ V rulesets. Mountains and hills stay as the elevation generator made them.
  *  Rivers have to be there before the features: flood plains need one, oases and (on the edge) tundra do not like them.
  *  The scripts' options for the temperature and the rainfall come from the map parameters (see [temperatureOption] and [rainfallOption]).
+ *  A [script] of the layered family changes the latitude function, takes the ice away and may take the mountains off the coast.
  */
-class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
+class CivVTerrainGenerator(private val map: TileMap, private val rng: Random, private val script: CivVScript = CivVScripts.standard) {
 
     companion object {
         private const val MARSH = "Marsh"
@@ -63,7 +64,7 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
     private val marshPercent = when (rainfall) { 1 -> 8 / 1.5; 3 -> 8 * 1.5; else -> 8.0 }
     private val oasisPercent = when (rainfall) { 1 -> 6 / 1.5; 3 -> 6 * 1.5; else -> 6.0 }
 
-    private val noMountainsOnTheCoast = map.ruleset?.modOptions?.constants?.noMountainsOnTheCoast == true
+    private val noMountainsOnTheCoast = script.mountainsOffTheCoast || map.ruleset?.modOptions?.constants?.noMountainsOnTheCoast == true
 
     private val tiles = map.values.toList()
     private val minColumn = tiles.minOf { it.getColumn() }
@@ -72,13 +73,15 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
     private val gridHeight = tiles.maxOf { it.getRow() } - minRow + 1
     private val wrapX = map.mapParameters.worldWrap
     private val maxLatitude = map.maxLatitude.coerceAtLeast(1)
-    private val worldSize = CivVWorldSize.forTiles(gridWidth * gridHeight)
+    private val worldSize = script.worldSizeOfGrid(gridWidth) ?: CivVWorldSize.forTiles(gridWidth * gridHeight)
 
     private fun x(tile: Tile) = tile.getColumn() - minColumn
     private fun y(tile: Tile) = tile.getRow() - minRow
 
-    /** The latitude of the feature generator: 0 at the equator, 1 at the poles */
-    private fun latitude(tile: Tile) = abs(tile.latitude).toDouble() / maxLatitude
+    private fun rawLatitude(tile: Tile) = abs(tile.latitude).toDouble() / maxLatitude
+
+    /** The latitude of the feature generator: 0 at the equator, 1 at the poles (a script may bend it) */
+    private fun latitude(tile: Tile) = script.latitude(rawLatitude(tile))
 
     private fun fractal(grain: Int) = CivVFractal(gridWidth, gridHeight, grain, wrapX, false, rng)
 
@@ -97,7 +100,7 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
             // Vox Populi's FeatureGenerator:AddFeatures (allow_mountains_on_coast is nil in the scripts, so false there): a mountain on the coast is hills
             val coastalMountain = noMountainsOnTheCoast && tile.baseTerrain == Constants.mountain && tile.neighbors.any { it.isWater }
             if (tile.isImpassible() && !coastalMountain) continue
-            val lat = (latitude(tile) + (128 - variation.getHeight(x(tile), y(tile))) / (255.0 * 5.0)).coerceIn(0.0, 1.0)
+            val lat = script.latitude((rawLatitude(tile) + (128 - variation.getHeight(x(tile), y(tile))) / (255.0 * 5.0)).coerceIn(0.0, 1.0))
             val terrain = when {
                 lat >= snowLatitude -> Constants.snow
                 lat >= tundraLatitude -> Constants.tundra
@@ -140,7 +143,7 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
         for (tile in tiles.sortedWith(compareBy({ y(it) }, { x(it) }))) {
             val lat = latitude(tile)
             if (tile.isWater) {
-                addIce(tile, lat)
+                if (script.ice) addIce(tile, lat)
                 continue
             }
             if (tile.isImpassible()) continue

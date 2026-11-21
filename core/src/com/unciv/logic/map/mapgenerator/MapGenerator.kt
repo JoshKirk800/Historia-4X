@@ -169,6 +169,12 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         if (mapParameters.seed == 0L)
             mapParameters.seed = System.currentTimeMillis()
 
+        // A script that sets its own grid (GetMapInitData) makes the map on it, from a copy of the parameters
+        val ownGrid = CivVScripts.withOwnGrid(mapParameters)
+        return generateChecked(ownGrid ?: mapParameters, gameParameters, gameInfo, ownGrid?.mapSize ?: mapSize)
+    }
+
+    private fun generateChecked(mapParameters: MapParameters, gameParameters: GameParameters, gameInfo: GameInfo?, mapSize: MapSize): TileMap {
         startFairnessAttempts = 1
         startFairnessFailures = emptyList()
         // Region based start placement only runs for a game with civilizations, not in the map editor
@@ -222,8 +228,8 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         runAndMeasure("applyHumidityAndTemperature") {
             applyHumidityAndTemperature(map)
         }
-        // The Civ V Continents type brings its own ridges
-        if (mapType != MapType.continentsLikeCivV) runAndMeasure("raiseMountainsAndHills") {
+        // The Civ V types bring their own ridges
+        if (mapType !in MapType.ownElevation) runAndMeasure("raiseMountainsAndHills") {
             MapElevationGenerator(map, ruleset, terrainConditions, randomness).raiseMountainsAndHills()
         }
         runAndMeasure("spawnLakesAndCoasts") {
@@ -231,10 +237,11 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         }
         if (ruleset.modOptions.constants.terrainGeneratorLikeCivV) {
             // As the Civ V scripts: terrain by latitude, then rivers, then the features that depend on them
-            val civVTerrain = CivVTerrainGenerator(map, randomness.RNG)
+            val script = CivVScripts.of(mapType)
+            val civVTerrain = CivVTerrainGenerator(map, randomness.RNG, script)
             runAndMeasure("CivVTerrainGenerator.generateBaseTerrain") { civVTerrain.generateBaseTerrain() }
             runAndMeasure("assignContinents") { map.assignContinents(TileMap.AssignContinentsMode.Assign) }
-            val civVRivers = CivVRiverGenerator(map, randomness.RNG)
+            val civVRivers = CivVRiverGenerator(map, randomness.RNG, script)
             runAndMeasure("CivVRiverGenerator") { civVRivers.spawnRivers() }
             runAndMeasure("CivVRiverGenerator.addLakes") { civVRivers.addLakes() }
             runAndMeasure("assignContinents again") { map.assignContinents(TileMap.AssignContinentsMode.Reassign) }

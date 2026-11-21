@@ -68,6 +68,7 @@ class MapLandmassGenerator(
             MapType.smallContinents -> createSmallContinents()
             MapType.spiral -> createSpiral()
             MapType.continentsLikeCivV -> createContinentsLikeCivV()
+            MapType.fourCornersLikeCivV, MapType.inlandSeaLikeCivV -> createLayeredLikeCivV()
         }
 
         if (tileMap.mapParameters.shape == MapShape.flatEarth) {
@@ -301,6 +302,25 @@ class MapLandmassGenerator(
             val landTiles = tiles.count { it.isLand }
             (tileMap.continentSizes.values.maxOrNull() ?: 0) <= landTiles * 0.58
         }
+        for (tile in tiles) {
+            val (x, y) = geometry.cellOf(tile)
+            tile.baseTerrain = when {
+                result.mountains[x][y] -> Constants.mountain
+                result.land[x][y] -> landTerrainName
+                else -> waterTerrainName
+            }
+            if (result.hills[x][y]) tile.setTerrainFeatures(listOf(Constants.hill))
+            tile.setTerrainTransients()
+        }
+        tileMap.assignContinents(TileMap.AssignContinentsMode.Clear)
+    }
+
+    /** Four_Corners.lua and InlandSea.lua (the layered scripts), see [CivVLayeredScripts]: land, hills and mountains, on the grid the script set */
+    private fun createLayeredLikeCivV() {
+        val tiles = tileMap.values.toList()
+        val geometry = UncivHexGeometry(tileMap)
+        val parameters = tileMap.mapParameters
+        val result = CivVLayeredScripts.generate(parameters.type, geometry, parameters.worldWrap, randomness.RNG, parameters.worldAge)
         for (tile in tiles) {
             val (x, y) = geometry.cellOf(tile)
             tile.baseTerrain = when {

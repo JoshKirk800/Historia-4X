@@ -41,6 +41,13 @@ object MapType {
     const val spiral = "Spiral"
     /** The Continents map script of Civ V, see [com.unciv.logic.map.mapgenerator.MapLandmassGenerator] */
     const val continentsLikeCivV = "Continents (Civ V)"
+    /** Four_Corners.lua on the script's own grid, see [com.unciv.logic.map.mapgenerator.CivVScripts] */
+    const val fourCornersLikeCivV = "Four Corners (Civ V)"
+    /** InlandSea.lua on the script's own grid, see [com.unciv.logic.map.mapgenerator.CivVScripts] */
+    const val inlandSeaLikeCivV = "Inland Sea (Civ V)"
+
+    /** The types that make their own hills and mountains and the world age matters to (the elevation generator does not run for them) */
+    val ownElevation = setOf(continentsLikeCivV, fourCornersLikeCivV, inlandSeaLikeCivV)
     
     // ordered based on popularity poll
     val allValues = listOf(
@@ -57,7 +64,9 @@ object MapType {
         fourCorners,
         spiral,
         boreal,
-        continentsLikeCivV
+        continentsLikeCivV,
+        fourCornersLikeCivV,
+        inlandSeaLikeCivV
     )
 
     // All ocean tiles
@@ -214,7 +223,7 @@ class MapParameters : IsPartOfGameInfoSerialization {
         yield(", {Max Coast extension}=$maxCoastExtension")
         yield(", {Biome size}=$tilesPerBiomeArea")
         yield(", {Water level}=" + waterThreshold.niceToString(2))
-        if (type == MapType.continentsLikeCivV) yield(", {World age (billion years)}=$worldAge")
+        if (type in MapType.ownElevation) yield(", {World age (billion years)}=$worldAge")
     }.joinToString("")
 
     @Readonly

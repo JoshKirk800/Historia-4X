@@ -17,8 +17,13 @@ import kotlin.random.Random
  *  (the value of a way ahead is reduced by a quarter if it is), until it meets water or an edge that already has a river.
  *  The scripts' grid has pointy hexes, Unciv's flat ones: the corners and edges are Unciv's ([RiverCoordinate]); the six headings are east,
  *  west and the four diagonals.
+ *
+ *  A [script] of the layered family has its own rules: Four_Corners lets a plot with a neighbour off the map restart the sum of
+ *  GetRiverValueAtPlot (the rivers run for the edge), InlandSea adds the distance to the centre (times 0 to 2) to the value, leaves the edge
+ *  rows and columns without sources and gives every river a first heading towards the centre ([CivVScript.RiverCode]).
+ *  Not ported: Four_Corners' DoRiver lets a river leave the map through the top row and the left column; here a river ends at the edge.
  */
-class CivVRiverGenerator(private val map: TileMap, private val rng: Random) {
+class CivVRiverGenerator(private val map: TileMap, private val rng: Random, private val script: CivVScript = CivVScripts.standard) {
 
     companion object {
         private const val PLOTS_PER_RIVER_EDGE = 12
@@ -36,6 +41,14 @@ class CivVRiverGenerator(private val map: TileMap, private val rng: Random) {
     }
 
     private val tiles = map.values.sortedWith(compareBy({ it.getRow() }, { it.getColumn() }))
+
+    // The cell of a tile on the script's grid (the size of the map in columns and rows), for the scripts that look at the edge or the centre
+    private val minColumn = tiles.minOf { it.getColumn() }
+    private val minRow = tiles.minOf { it.getRow() }
+    private val gridWidth = tiles.maxOf { it.getColumn() } - minColumn + 1
+    private val gridHeight = tiles.maxOf { it.getRow() } - minRow + 1
+    private fun cellX(tile: Tile) = tile.getColumn() - minColumn
+    private fun cellY(tile: Tile) = tile.getRow() - minRow
     private val edgesOfLandmass = HashMap<Int, Int>()
     private val riverOfVertex = HashMap<RiverCoordinate, Int>()
     private var nextRiverId = 0
@@ -51,6 +64,7 @@ class CivVRiverGenerator(private val map: TileMap, private val rng: Random) {
             val seaRange = if (pass <= 2) RIVER_SOURCE_MIN_SEAWATER_RANGE else RIVER_SOURCE_MIN_SEAWATER_RANGE / 2
             for (tile in tiles) {
                 if (tile.isWater) continue
+                if (script.rivers == CivVScript.RiverCode.InlandSea && isTooCloseToTheEdge(tile)) continue
                 val wanted = when (pass) {
                     1 -> isHillsOrMountain(tile)
                     2 -> !isCoastalLand(tile) && rng.nextInt(8) == 0
@@ -60,9 +74,31 @@ class CivVRiverGenerator(private val map: TileMap, private val rng: Random) {
                 if (!wanted) continue
                 if (hasFreshWaterWithin(tile, sourceRange) || hasWaterWithin(tile, seaRange)) continue
                 val corner = inlandCorner(tile) ?: continue
-                doRiver(corner)
+                doRiver(corner, if (script.rivers == CivVScript.RiverCode.InlandSea) headingToTheCentre(tile) else null)
             }
         }
+    }
+
+    /** InlandSea's AddRivers ignores the plots in the first column, the last two, the first two rows and the last one */
+    private fun isTooCloseToTheEdge(tile: Tile): Boolean {
+        val x = cellX(tile)
+        val y = cellY(tile)
+        return x < 1 || x >= gridWidth - 2 || y < 2 || y >= gridHeight - 1
+    }
+
+    /**
+     *  InlandSea's `orig_direction`: a river that starts in the south half runs north (in the south-west third north-east, in the south-east third
+     *  north-west), in the north half south (south-east in the north-west third, south-west in the north-east third). The scripts' pointy grid has
+     *  rivers running north and south, Unciv's flat grid has none: the middle third takes the diagonal that leans to the middle column.
+     */
+    private fun headingToTheCentre(tile: Tile): Heading {
+        val x = cellX(tile)
+        val south = cellY(tile) < gridHeight / 2.0
+        val west = x < gridWidth / 3.0
+        val east = x > gridWidth * 0.66
+        val towardsEast = if (west) true else if (east) false else x < gridWidth / 2.0
+        return if (south) { if (towardsEast) Heading.NorthEast else Heading.NorthWest }
+        else { if (towardsEast) Heading.SouthEast else Heading.SouthWest }
     }
 
     private fun isHillsOrMountain(tile: Tile) = Constants.hill in tile.terrainFeatures || tile.baseTerrain == Constants.mountain
@@ -104,7 +140,7 @@ class CivVRiverGenerator(private val map: TileMap, private val rng: Random) {
     }
 
     /** GetRiverValueAtPlot: low is wet and flat. Water is 1, flat land 2, hills 3, mountains 4 (x 20 for the tile, x 1 for each of its 6 neighbours, 40 off the map) and a random 0-9 */
-    private fun valueAt(tile: Tile): Int {
+    private fun valueAt(tile: Tile): Double {
         fun rise(t: Tile) = when {
             t.isWater -> 1
             t.baseTerrain == Constants.mountain -> 4
@@ -112,20 +148,35 @@ class CivVRiverGenerator(private val map: TileMap, private val rng: Random) {
             else -> 2
         }
         var sum = rise(tile) * 20
-        val neighbors = tile.neighbors.toList()
-        sum += neighbors.sumOf { rise(it) }
-        sum += (6 - neighbors.size) * 40
-        return sum + rng.nextInt(10)
+        when (script.rivers) {
+            CivVScript.RiverCode.FourCorners -> {
+                // `sum = 0` for every direction that leaves the map: only the neighbours listed after the last such direction count
+                val clockPositions = listOf(2, 4, 6, 8, 10, 12)
+                for (clock in clockPositions) {
+                    val neighbor = map.getClockPositionNeighborTile(tile, clock)
+                    if (neighbor == null) sum = 0 else sum += rise(neighbor)
+                }
+            }
+            else -> {
+                val neighbors = tile.neighbors.toList()
+                sum += neighbors.sumOf { rise(it) }
+                sum += (6 - neighbors.size) * 40
+            }
+        }
+        var value = sum.toDouble()
+        if (script.rivers == CivVScript.RiverCode.InlandSea)
+            value += CivVLayeredScripts.distanceToCentre(cellX(tile), cellY(tile), gridWidth, gridHeight) * rng.nextInt(3)
+        return value + rng.nextInt(10)
     }
 
-    /** DoRiver, from a corner */
-    private fun doRiver(start: RiverCoordinate) {
+    /** DoRiver, from a corner; [firstHeading] is the `originalFlowDirection` a script gives (InlandSea), otherwise the first step sets it */
+    private fun doRiver(start: RiverCoordinate, firstHeading: Heading? = null) {
         val riverId = nextRiverId++
         val other = riverOfVertex[start]
         if (other != null && other != riverId) return // cannot branch off another river
         var vertex = start
         var heading: Heading? = null
-        var original: Heading? = null
+        var original: Heading? = firstHeading
 
         repeat(MAX_RIVER_LENGTH) {
             // The ways on: the other two neighbouring corners (all three at the start), but not back and not along a river edge
@@ -137,7 +188,7 @@ class CivVRiverGenerator(private val map: TileMap, private val rng: Random) {
                 for ((h, next) in options) {
                     if (avoidBack && original != null && h.opposite == original) continue
                     val ahead = next.getAdjacentTiles().firstOrNull { it !in vertex.getAdjacentTiles().toList() } ?: continue
-                    var value = valueAt(ahead).toDouble()
+                    var value = valueAt(ahead)
                     if (h == original) value = value * 3 / 4
                     if (value < bestValue) { bestValue = value; best = h to next }
                 }

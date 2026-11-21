@@ -14,7 +14,6 @@ import com.unciv.logic.map.mapgenerator.mapregions.MapRegions.Companion.minimumP
 import com.unciv.logic.map.mapgenerator.mapregions.MapRegions.Companion.secondRingFoodScores
 import com.unciv.logic.map.mapgenerator.mapregions.MapRegions.Companion.secondRingProdScores
 import com.unciv.logic.map.tile.Tile
-import com.unciv.logic.map.toHexCoord
 import com.unciv.models.ruleset.tile.TerrainType
 import yairm210.purity.annotations.Pure
 import kotlin.math.roundToInt
@@ -131,12 +130,17 @@ object RegionStartFinder {
             return
         }
 
-        // Something went extremely wrong and there is somehow no place to start. Spawn some land and start there
-        val panicPosition = region.rect.getPosition(Vector2()).toHexCoord()
-        val panicTerrain = region.tileMap.ruleset!!.terrains.values.first { it.type == TerrainType.Land }.name
-        region.tileMap[panicPosition].baseTerrain = panicTerrain
-        region.tileMap[panicPosition].setTerrainFeatures(listOf())
-        setRegionStart(region, panicPosition, tileData)
+        // Something went extremely wrong and there is somehow no place to start in the region (it holds no land: an empty region's
+        // rectangle lies outside the map). Take the best free land anywhere, or make a tile land
+        val tileMap = region.tileMap
+        val taken = tileMap.startingLocations.mapTo(HashSet()) { it.position }
+        val panicTile = tileMap.values.filter { it.isLand && !it.isImpassible() && it.position !in taken }
+            .maxByOrNull { tileData[it]?.startScore ?: 0 }
+            ?: tileMap.values.first { it.position !in taken }.also {
+                it.baseTerrain = tileMap.ruleset!!.terrains.values.first { terrain -> terrain.type == TerrainType.Land }.name
+                it.setTerrainFeatures(listOf())
+            }
+        setRegionStart(region, panicTile.position, tileData)
     }
     
     /** @returns a Rectangle centered over [originalRect] that is [biasPercent] of its size, as AssignStartingPlots:FindStart

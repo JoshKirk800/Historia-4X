@@ -2,6 +2,7 @@ package com.unciv.logic.map
 
 import com.unciv.logic.map.mapgenerator.CivVFractalLandmass
 import com.unciv.logic.map.mapgenerator.CivVWorldSize
+import com.unciv.logic.map.mapgenerator.FractalLandRecipe
 import com.unciv.logic.map.mapgenerator.FractalLandRecipes
 import com.unciv.logic.map.mapgenerator.MapGenerator
 import com.unciv.logic.map.mapgenerator.PointyHexGeometry
@@ -209,6 +210,162 @@ class FractalLandRecipeTests {
             else assertTrue("seed $seed: south, land moved $moved rows", moved < 0.5 * pushed.poleShiftRows)
         }
         assertTrue("$checked pushed maps", checked >= 10)
+    }
+
+    @Test
+    fun `Small Continents, Archipelago, Tiny Islands and Fractal are the recipes of their scripts`() {
+        val small = FractalLandRecipes.smallContinents
+        assertEquals(MapType.smallContinentsLikeCivV, small.mapType)
+        assertEquals(listOf(69, 75, 80), SeaLevel.entries.map { small.waterPercent(it) })
+        assertEquals(10, small.extraMountains)
+        assertEquals(1.5, small.platesMultiplier, 0.0)
+        assertEquals(3, small.fixedGrain)
+        assertNull(small.coastDice)
+
+        val archipelago = FractalLandRecipes.archipelago
+        assertEquals(MapType.archipelagoLikeCivV, archipelago.mapType)
+        assertEquals(listOf(72, 78, 83), SeaLevel.entries.map { archipelago.waterPercent(it) })
+        assertEquals(10, archipelago.extraMountains)
+        assertEquals(2.0, archipelago.platesMultiplier, 0.0)
+        assertEquals(4, archipelago.fixedGrain)
+        assertEquals(listOf(10, 4, 4), archipelago.coastDice)
+
+        val tiny = FractalLandRecipes.tinyIslands
+        assertEquals(MapType.tinyIslandsLikeCivV, tiny.mapType)
+        assertEquals(listOf(73, 78, 82), SeaLevel.entries.map { tiny.waterPercent(it) })
+        assertEquals(15, tiny.extraMountains)
+        assertEquals(2.5, tiny.platesMultiplier, 0.0)
+        assertEquals(5, tiny.fixedGrain)
+        assertEquals(listOf(10, 4, 4), tiny.coastDice)
+
+        for (island in listOf(small, archipelago, tiny)) {
+            assertTrue(island.script, island.tectonicIslands)
+            assertFalse(island.script, island.centreRift)
+            assertFalse(island.script, island.poleShift)
+            assertTrue(island.script, island.offersWorldOptions)
+            assertTrue(island.script, island.accepts(1, 100) && island.accepts(100, 100))
+        }
+
+        val fractal = FractalLandRecipes.fractal
+        assertEquals(MapType.fractalLikeCivV, fractal.mapType)
+        assertEquals(listOf(65, 72, 78), SeaLevel.entries.map { fractal.waterPercent(it) })
+        assertEquals(0, fractal.extraMountains)
+        assertEquals(1.0, fractal.platesMultiplier, 0.0)
+        assertEquals(2, fractal.fixedGrain)
+        assertFalse(fractal.tectonicIslands)
+        assertFalse(fractal.centreRift)
+        assertFalse(fractal.poleShift)
+        assertFalse(fractal.offersWorldOptions)
+        assertNull(fractal.coastDice)
+    }
+
+    @Test
+    fun `the new map types are offered, find their recipes and make their own elevation`() {
+        val types = listOf("Small Continents (Civ V)", "Archipelago (Civ V)", "Tiny Islands (Civ V)", "Fractal (Civ V)")
+        assertEquals(types, listOf(MapType.smallContinentsLikeCivV, MapType.archipelagoLikeCivV, MapType.tinyIslandsLikeCivV, MapType.fractalLikeCivV))
+        for (type in types) {
+            assertTrue(type, type in MapType.allValues)
+            assertTrue(type, type in MapType.ownElevation)
+            assertEquals(type, FractalLandRecipes.forType(type)?.mapType)
+        }
+        assertNull(FractalLandRecipes.forType(MapType.archipelago))
+        assertNull(FractalLandRecipes.forType(MapType.smallContinents))
+        assertNull(FractalLandRecipes.forType(MapType.fractal))
+    }
+
+    @Test
+    fun `the land share follows the script's water percent and the recipes without a criterion draw one fractal`() {
+        for ((recipe, expected) in listOf(
+            FractalLandRecipes.smallContinents to 0.25, FractalLandRecipes.archipelago to 0.22,
+            FractalLandRecipes.tinyIslands to 0.22, FractalLandRecipes.fractal to 0.28
+        )) {
+            val shares = (1..8).map { seed ->
+                val landmass = CivVFractalLandmass(standard, true, Random(seed), recipe)
+                val land = count(landmass.generate().land)
+                assertEquals("${recipe.script} seed $seed", 1, landmass.attempts)
+                land / (standard.width * standard.height).toDouble()
+            }
+            // the interpolated cells have fewer extremes than the nodes the percent is taken from, so the share is somewhat under the script's
+            assertTrue("${recipe.script}: land ${shares.average()} for $expected", shares.average() in expected - 0.07..expected + 0.01)
+        }
+    }
+
+    @Test
+    fun `more grain makes more and smaller landmasses`() {
+        fun landmasses(grain: Int) = (1..10).map { seed ->
+            landmassSizes(CivVFractalLandmass(standard, true, Random(seed), FractalLandRecipes.smallContinents.copy(fixedGrain = grain)).generate().land).size
+        }.average()
+        val coarse = landmasses(2)
+        val fine = landmasses(5)
+        assertTrue("landmasses $coarse at grain 2, $fine at grain 5", fine > coarse * 1.5)
+    }
+
+    @Test
+    fun `Fractal has no sea level or world age option and Small Continents has`() {
+        fun cells(recipe: FractalLandRecipe, level: SeaLevel, age: Int) = CivVFractalLandmass(standard, true, Random(5), recipe, level, age).generate().let {
+            listOf(it.land, it.hills, it.mountains).map { array -> array.map { column -> column.toList() } }
+        }
+        assertEquals(cells(FractalLandRecipes.fractal, SeaLevel.Normal, 4), cells(FractalLandRecipes.fractal, SeaLevel.High, 3))
+        assertEquals(cells(FractalLandRecipes.fractal, SeaLevel.Normal, 4), cells(FractalLandRecipes.fractal, SeaLevel.Low, 5))
+        assertTrue(cells(FractalLandRecipes.smallContinents, SeaLevel.Normal, 4) != cells(FractalLandRecipes.smallContinents, SeaLevel.High, 4))
+        assertTrue(cells(FractalLandRecipes.smallContinents, SeaLevel.Normal, 4) != cells(FractalLandRecipes.smallContinents, SeaLevel.Normal, 3))
+    }
+
+    @Test
+    fun `the hills and mountains fields are read from the 128 by 64 nodes, so a Duel map has few tectonic island cells`() {
+        // The islands are the ocean cells at exactly the 100th, 99th, 97th and 95th percentile of the mountain field. Made per map cell a Duel map
+        // had 6.4 of them on average over seeds 1 to 100 and a Standard map 22.6, the nodes with interpolation give 4.8 and 14.6
+        val recipe = FractalLandRecipes.pangaea
+        val cells = (1..100).map { seed ->
+            val with = count(CivVFractalLandmass(duel, true, Random(seed), recipe).generate().land)
+            val without = count(CivVFractalLandmass(duel, true, Random(seed), recipe.copy(tectonicIslands = false)).generate().land)
+            with - without
+        }
+        assertTrue("island cells on a Duel map: ${cells.average()} on average", cells.average() in 3.0..5.7)
+        // On a bigger map the nodes are the same, the cells are more: the islands follow the number of cells
+        val standardCells = (1..100).map { seed ->
+            count(CivVFractalLandmass(standard, true, Random(seed), recipe).generate().land) -
+                count(CivVFractalLandmass(standard, true, Random(seed), recipe.copy(tectonicIslands = false)).generate().land)
+        }
+        assertTrue("island cells on a Standard map: ${standardCells.average()}, on Duel ${cells.average()}", standardCells.average() in 10.0..18.0)
+    }
+
+    @Test
+    fun `the generator counts the island cells the mountain field made`() {
+        val landmass = CivVFractalLandmass(duel, true, Random(4), FractalLandRecipes.pangaea)
+        val result = landmass.generate()
+        val plain = CivVFractalLandmass(duel, true, Random(4), FractalLandRecipes.pangaea.copy(tectonicIslands = false))
+        val without = plain.generate()
+        assertEquals(count(result.land) - count(without.land), landmass.tectonicIslandCells)
+        assertEquals(0, plain.tectonicIslandCells)
+    }
+
+    @Test
+    fun `generated maps of the new types have the land of their script and the island scripts widen the coast with their own dice`() {
+        RulesetCache.loadRulesets(noMods = true)
+        val ruleset = RulesetCache[BaseRuleset.Civ_V_BNW.fullName]!!
+        fun generate(type: String, seed: Long) = MapGenerator(ruleset).generateMap(MapParameters().apply {
+            this.seed = seed; this.type = type; shape = MapShape.rectangular; mapSize = MapSize(100, 64); worldWrap = true
+        })
+        // A coast tile with no land within 3 tiles took three widening passes: only the dice {10, 4, 4} have a third
+        fun farCoast(map: TileMap) = map.values.count { tile ->
+            tile.baseTerrain == "Coast" && tile.getTilesInDistance(3).none { it.isLand }
+        }
+        for ((type, water) in listOf(
+            MapType.smallContinentsLikeCivV to 75, MapType.archipelagoLikeCivV to 78, MapType.tinyIslandsLikeCivV to 78, MapType.fractalLikeCivV to 72
+        )) {
+            var far = 0
+            for (seed in 1L..6L) {
+                val map = generate(type, seed)
+                val share = map.values.count { it.isLand } / map.values.size.toDouble()
+                assertTrue("$type seed $seed: land share $share against $water % water", share in (100 - water) / 100.0 - 0.08..(100 - water) / 100.0 + 0.02)
+                assertTrue("$type seed $seed: hills", map.values.any { it.isLand && it.terrainFeatures.contains("Hill") })
+                far += farCoast(map)
+            }
+            // (6 maps of each: the dice {10, 4, 4} gave Archipelago 64 and Tiny Islands 35 such tiles, the ruleset's {4, 4} none on Pangaea)
+            if (type == MapType.archipelagoLikeCivV || type == MapType.tinyIslandsLikeCivV) assertTrue("$type: $far coast tiles three tiles from land", far > 8)
+            else assertTrue("$type: $far coast tiles three tiles from land", far <= 2)
+        }
     }
 
     @Test

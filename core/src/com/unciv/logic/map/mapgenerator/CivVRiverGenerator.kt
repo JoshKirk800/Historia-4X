@@ -141,7 +141,7 @@ class CivVRiverGenerator(private val map: TileMap, private val rng: Random, priv
 
     private fun isHillsOrMountain(tile: Tile) = Constants.hill in tile.terrainFeatures || tile.baseTerrain == Constants.mountain
 
-    private fun isCoastalLand(tile: Tile) = tile.neighbors.any { it.isWater }
+    private fun isCoastalLand(tile: Tile) = tile.isCoastalLandLikeCivV()
 
     private fun riverEdgesBelowBudget(tile: Tile): Boolean {
         val landmass = tile.getContinent()
@@ -258,7 +258,7 @@ class CivVRiverGenerator(private val map: TileMap, private val rng: Random, priv
         }
     }
 
-    /** AddLakes: 1 in 160 of the inland land tiles without a river becomes a lake, in the order of the tiles (a lake makes its neighbours coastal) */
+    /** AddLakes: 1 in 160 of the inland land tiles without a river becomes a lake, in the order of the tiles (a lake of one tile does not make its neighbours coastal, `IsCoastalLand` wants a water body of ten tiles) */
     fun addLakes() {
         if ("Lakes" !in map.ruleset!!.terrains) return
         for (tile in tiles) {

@@ -263,10 +263,6 @@ enum class DonutCentre { Hills, Mountains, Ocean, Standard }
  *  * The ridges of the hills and mountains fields are made on the map's cells, their seeds 7 nodes of the original's 128 columns apart as cells for the small grids
  *    of these scripts ([CivVScript.ridgesOnNodeScale]); the originals use the fields' nodes. Seeds 7 cells apart would not fit a map 16 or 24 cells wide (Four_Corners
  *    and InlandSea, which come from the earlier branch, keep 7 cells).
- *  * The mountains of a coast that touches a water body of fewer than ten tiles (a lake) are hills in the BNW ruleset (`noMountainsOnTheCoast`) and in the scripts that
- *    pass `AddFeatures(false)`, as `IsCoastalLand` of the generic pipeline counts lakes; the original's `IsCoastalLand()` counts water bodies of 10 tiles or more
- *    (CvPlot::isCoastalLand with MIN_WATER_SIZE_FOR_OCEAN). It is the same in the rivers' `IsCoastalLand`. Not changed here (it is shared with the types of the earlier branches);
- *    it takes mountains away on lake-heavy maps (Highlands, Lakes).
  *
  *  What Four_Corners and InlandSea do that is not what they say, and what is done here (the effective behaviour is ported):
  *  * Four_Corners calls `GenerateCoasts({bExpandCoasts = false})` and InlandSea `GenerateCoasts()`: the function reads `args.bExpandCoasts or true`, which is

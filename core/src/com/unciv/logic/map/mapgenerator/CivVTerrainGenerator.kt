@@ -9,6 +9,12 @@ import kotlin.math.floor
 import kotlin.random.Random
 
 /**
+ *  `plot:IsCoastalLand()` of the scripts: CvPlot::isCoastalLand with its default minimum water size (`MIN_WATER_SIZE_FOR_OCEAN`, 10 tiles), so a land tile that touches only
+ *  water bodies of fewer than ten tiles is not coastal. Unciv's lakes are the water bodies of at most `maxLakeSize` (9) tiles, which the pipeline made before.
+ */
+fun Tile.isCoastalLandLikeCivV() = !isWater && neighbors.any { it.isWater && it.baseTerrain != "Lakes" }
+
+/**
  *  The terrain and features of the Civ V map scripts: TerrainGenerator.lua (the base terrain of land by latitude) and
  *  FeatureGenerator.lua (flood plains, oases, ice, marsh, jungle, forest), for rulesets that set `terrainGeneratorLikeCivV`.
  *
@@ -111,7 +117,7 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random, pr
         for (tile in tiles) {
             if (!tile.isLand) continue
             // Vox Populi's FeatureGenerator:AddFeatures (allow_mountains_on_coast is nil in the scripts, so false there): a mountain on the coast is hills
-            val coastalMountain = noMountainsOnTheCoast && tile.baseTerrain == Constants.mountain && tile.neighbors.any { it.isWater }
+            val coastalMountain = noMountainsOnTheCoast && tile.baseTerrain == Constants.mountain && tile.isCoastalLandLikeCivV()
             if (tile.isImpassible() && !coastalMountain) continue
             val lat = script.latitude(rawLatitude(tile, (128 - variation.getHeight(x(tile), y(tile))) / (255.0 * 5.0)))
             val terrain = when {

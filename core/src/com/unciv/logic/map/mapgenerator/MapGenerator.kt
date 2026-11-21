@@ -292,7 +292,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         val numberOfMajorCivs = gameInfo.civilizations.count { it.isMajorCiv }
         val numberOfMinorCivs = gameInfo.civilizations.count { it.isCityState }
         // Brave New World's world sizes (CIV5Worlds.xml), interpolated for the number of civilizations and city-states
-        val (width, height) = CivVWorldSizes.dimensions(numberOfMajorCivs, numberOfMinorCivs)
+        val (width, height) = CivVWorldSizes.dimensions(ruleset.ai.effectiveWorldSizes(), numberOfMajorCivs, numberOfMinorCivs)
         mapParameters.mapSize.width = width
         mapParameters.mapSize.height = height
         mapParameters.mapSize.radius = HexMath.getEquivalentHexagonalRadius(width, height)

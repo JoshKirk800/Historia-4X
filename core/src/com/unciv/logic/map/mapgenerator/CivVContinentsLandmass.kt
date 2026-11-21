@@ -1,5 +1,6 @@
 package com.unciv.logic.map.mapgenerator
 
+import yairm210.purity.annotations.Pure
 import kotlin.random.Random
 
 /** The sizes of world of Civ V (Duel to Huge) by the number of tiles of Unciv's map, to pick the values the scripts keep per world size */
@@ -12,6 +13,7 @@ enum class CivVWorldSize(val grainChange: Int, val continentsGrain: Int, val pla
     Huge(1, 5, 30, 12, 7);
 
     companion object {
+        @Pure
         fun forTiles(tiles: Int) = when {
             tiles < 1500 -> Duel
             tiles < 2500 -> Tiny

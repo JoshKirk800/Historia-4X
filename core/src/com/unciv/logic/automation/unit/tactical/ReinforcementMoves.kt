@@ -6,7 +6,7 @@ import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.battle.TargetHelper
-import com.unciv.logic.map.MapSize
+import com.unciv.logic.map.mapgenerator.CivVWorldSize
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 
@@ -30,9 +30,9 @@ object ReinforcementMoves {
     /** CvTacticalAI::GetRecruitRange: AI_TACTICAL_RECRUIT_RANGE, plus one per 100 turns of a 400-turn game, plus one on a large and two on a huge map */
     fun recruitRange(ctx: TacticalContext): Int {
         var range = ctx.recruitRange + 4 * ctx.turn / MAX_TURNS
-        when (ctx.civ.gameInfo.tileMap.mapParameters.mapSize.getPredefinedOrNextSmaller()) {
-            MapSize.Predefined.Large -> range += 1
-            MapSize.Predefined.Huge -> range += 2
+        when (CivVWorldSize.forTiles(ctx.civ.gameInfo.tileMap.tileList.size)) {
+            CivVWorldSize.Large -> range += 1
+            CivVWorldSize.Huge -> range += 2
             else -> Unit
         }
         return range

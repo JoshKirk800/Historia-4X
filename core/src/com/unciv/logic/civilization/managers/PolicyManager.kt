@@ -7,6 +7,7 @@ import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.Policy.PolicyBranchType
 import com.unciv.models.ruleset.PolicyBranch
+import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
@@ -159,16 +160,22 @@ class PolicyManager : IsPartOfGameInfoSerialization {
     }
 
     /** Follows CvPlayerPolicies::GetNextPolicyCost: every step truncates to a whole number (that is what the integer arithmetic
-     *  of the original does), then the result is rounded down to a multiple of 5. */
+     *  of the original does), then the result is rounded down to a multiple of 5.
+     *
+     *  The cost per city is Vox Populi's (CvPlayerPolicies::GetPolicyCityModifierTimes100): the world row's percent for each city, the first
+     *  included, plus [AiDefine.NUM_CITIES_COST_MOD_SCALING] hundredths of a percent for each pair of cities. */
     @Readonly
     fun getPolicyCultureCost(numberOfAdoptedPolicies: Int): Int {
         var cost = 25 + (numberOfAdoptedPolicies * 3).toDouble().pow(2.01).toInt()
-        val worldSizeModifier = civInfo.gameInfo.tileMap.mapParameters.mapSize.getPredefinedOrNextSmaller().policyCostPerCityModifier
-        var cityModifier = worldSizeModifier.toDouble()
-        civInfo.forEachMatchingUnique(UniqueType.LessPolicyCostFromCities) { unique -> cityModifier *= 1 - unique.params[0].toFloat() / 100 }
+        val ai = civInfo.gameInfo.ruleset.ai
+        val perCity = ai.worldSizeForTiles(civInfo.gameInfo.tileMap.tileList.size).numCitiesPolicyCostMod / 100.0
+        val perPair = ai.define(AiDefine.NUM_CITIES_COST_MOD_SCALING) / 10000.0
+        var reduction = 1.0
+        civInfo.forEachMatchingUnique(UniqueType.LessPolicyCostFromCities) { unique -> reduction *= 1 - unique.params[0].toFloat() / 100 }
         // The cost counts the most cities this civilization ever had: losing cities does not make policies cheaper
         val effectiveCities = maxOf(maxEffectiveCities, getEffectiveCityCount())
-        cost += (cost * (effectiveCities - 1) * cityModifier).toInt()
+        val cityModifier = (perCity * effectiveCities + perPair * effectiveCities * (effectiveCities - 1) / 2) * reduction
+        cost += (cost * cityModifier).toInt()
         civInfo.forEachMatchingUnique(UniqueType.LessPolicyCost) { unique -> cost = (cost * unique.params[0].toPercent()).toInt() }
         // CvPlayerPolicies::GetNextPolicyCost applies the handicap's PolicyPercent to every player; an AI has the handicap of its AI level
         cost = (cost * civInfo.getDifficulty().policyCostModifier).toInt()

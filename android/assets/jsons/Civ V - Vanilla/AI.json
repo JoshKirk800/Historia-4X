@@ -825,7 +825,8 @@
     "WONDER_DISPUTE_FIERCE_THRESHOLD": 10,
     "WONDER_DISPUTE_STRONG_THRESHOLD": 7,
     "WONDER_DISPUTE_WEAK_THRESHOLD": 5,
-    "WOUNDED_DAMAGE_MULTIPLIER": 50
+    "WOUNDED_DAMAGE_MULTIPLIER": 50,
+    "NUM_CITIES_COST_MOD_SCALING": 20
   },
   "postDefines": {
     "AI_HANDICAP": "Chieftain",
@@ -7226,27 +7227,69 @@
   "worldSizes": [
     {
       "name": "Duel",
-      "estimatedNumCities": 0
+      "defaultPlayers": 2,
+      "defaultMinorCivs": 4,
+      "gridWidth": 40,
+      "gridHeight": 24,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
+      "numCitiesUnhappinessPercent": 150
     },
     {
       "name": "Tiny",
-      "estimatedNumCities": 0
+      "defaultPlayers": 4,
+      "defaultMinorCivs": 8,
+      "gridWidth": 56,
+      "gridHeight": 36,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
+      "numCitiesUnhappinessPercent": 125
     },
     {
       "name": "Small",
-      "estimatedNumCities": 0
+      "defaultPlayers": 6,
+      "defaultMinorCivs": 12,
+      "gridWidth": 66,
+      "gridHeight": 42,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
+      "numCitiesUnhappinessPercent": 115
     },
     {
-      "name": "Medium",
-      "estimatedNumCities": 0
+      "name": "Standard",
+      "defaultPlayers": 8,
+      "defaultMinorCivs": 16,
+      "gridWidth": 80,
+      "gridHeight": 52,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
+      "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Large",
-      "estimatedNumCities": 0
+      "defaultPlayers": 10,
+      "defaultMinorCivs": 20,
+      "gridWidth": 104,
+      "gridHeight": 64,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
+      "numCitiesUnhappinessPercent": 80
     },
     {
       "name": "Huge",
-      "estimatedNumCities": 0
+      "defaultPlayers": 12,
+      "defaultMinorCivs": 24,
+      "gridWidth": 128,
+      "gridHeight": 80,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
+      "numCitiesUnhappinessPercent": 60
     }
   ],
   "multiUnitFormations": [

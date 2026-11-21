@@ -258,15 +258,11 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
 
         val numberOfMajorCivs = gameInfo.civilizations.count { it.isMajorCiv }
         val numberOfMinorCivs = gameInfo.civilizations.count { it.isCityState }
-        // This is mostly just vibes, tries to make the average distance between a civ and its closest neighbor as close to 13 tiles as possible
-        val majorCivContribution = 384 * numberOfMajorCivs - 134
-        val targetNumberOfTiles = (majorCivContribution + numberOfMinorCivs * 60)
-
-        // Calculates mapsize from tile number, simple algebra reversing area formulas
-        val aspectRatio = 1.55 // This is around the default aspect ratios
-        mapParameters.mapSize.radius = (sqrt(1.0/3 * targetNumberOfTiles - 1.0/12) + 1.0/2).roundToInt()
-        mapParameters.mapSize.height = sqrt(targetNumberOfTiles/aspectRatio).roundToInt()
-        mapParameters.mapSize.width = (sqrt(targetNumberOfTiles/aspectRatio) * aspectRatio).roundToInt()
+        // Brave New World's world sizes (CIV5Worlds.xml), interpolated for the number of civilizations and city-states
+        val (width, height) = CivVWorldSizes.dimensions(numberOfMajorCivs, numberOfMinorCivs)
+        mapParameters.mapSize.width = width
+        mapParameters.mapSize.height = height
+        mapParameters.mapSize.radius = HexMath.getEquivalentHexagonalRadius(width, height)
 
         return mapParameters.mapSize
     }

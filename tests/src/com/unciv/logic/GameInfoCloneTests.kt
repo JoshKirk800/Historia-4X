@@ -38,6 +38,7 @@ class GameInfoCloneTests {
         field.type == Boolean::class.javaPrimitiveType -> !(current as Boolean)
         field.type == String::class.java -> "changed ${field.name}"
         field.type == VictoryData::class.java -> VictoryData("someCiv", "someVictory", 7)
+        field.type == NeedsMedians::class.java -> NeedsMedians().apply { basic = 11; gold = 22; science = 33; culture = 44; techs = 5 }
         field.type == HashMap::class.java && field.name == "diplomaticVictoryVotesCast" -> hashMapOf<String, String?>("a" to "b", "c" to null)
         field.type == ArrayList::class.java && field.name == "unitNamesTaken" -> arrayListOf("Some Name")
         else -> throw AssertionError(

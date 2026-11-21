@@ -485,7 +485,7 @@ Legend:
     e.g. "C__C", where "C" is a tile with a city and "_" is a tile without a city, has a distance of 2.
     First constant is for cities on the same landmass, the second is for cities on different continents.
     Minimum 0.
-- [^E]: NaturalWonderGenerator uses these to determine the number of Natural Wonders to spawn for a given map size. The number scales linearly with map radius: #wonders = radius * naturalWonderCountMultiplier + naturalWonderCountAddedConstant. The defaults effectively mean Tiny - 1, Small - 2, Medium - 3, Large - 4, Huge - 5, Custom radius >=109 - all G&K wonders.
+- [^E]: NaturalWonderGenerator uses these to determine the number of Natural Wonders to spawn for a given map size. The number scales linearly with map radius: #wonders = radius * naturalWonderCountMultiplier + naturalWonderCountAddedConstant. The defaults effectively mean radius 10 - 1, 15 - 2, 20 - 3, 30 - 4, 40 - 5 (these were the radii of the sizes Unciv used to offer, Tiny to Huge), radius >=109 - all G&K wonders. The sizes offered now are those of Civ V (Duel, Tiny, Small, Standard, Large, Huge); their radius is that of the hexagon with as many tiles as their grid.
 - [^F]: MapGenerator.spreadAncientRuins: number of ruins = suitable tile count * this
 - [^H]: MapGenerator.spawnLakesAndCoasts: Water bodies up to this tile count become Lakes
 - [^I]: RiverGenerator: river frequency and length bounds

@@ -11,7 +11,6 @@ import com.badlogic.gdx.utils.Align
 import com.unciv.logic.files.FileChooser
 import com.unciv.logic.files.MapSaver
 import com.unciv.logic.map.MapShape
-import com.unciv.logic.map.MapSize
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.addSeparator
 import com.unciv.ui.components.extensions.isEnabled
@@ -163,7 +162,7 @@ class MapEditorOptionsTab(
         // Can't change for hexagonal at all, as non-ww must always have an odd number of columns and ww nust have an even number of columns
         if (params.shape != MapShape.rectangular) return false
         // Too small?
-        if (params.mapSize.radius < MapSize.Tiny.radius) return false
+        if (params.mapSize.radius < MIN_RADIUS_TO_CHANGE_WORLD_WRAP) return false
         // Even-width rectangular have no problems, but that has not necessarily been saved in mapSize!
         if (params.mapSize.width % 2 == 0) return true
         // The recorded width may have been reduced to even by the TileMap constructor.
@@ -187,5 +186,10 @@ class MapEditorOptionsTab(
 
     override fun deactivated(index: Int, caption: String, pager: TabbedPager) {
         editorScreen.tileMatchFuzziness = tileMatchFuzziness
+    }
+
+    private companion object {
+        /** Maps of a smaller radius cannot change their world wrap setting. This is the radius of Unciv's old Tiny: kept as it was, and not tied to the sizes offered now */
+        const val MIN_RADIUS_TO_CHANGE_WORLD_WRAP = 10
     }
 }

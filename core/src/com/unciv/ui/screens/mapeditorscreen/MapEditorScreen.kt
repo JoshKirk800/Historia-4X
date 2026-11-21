@@ -101,8 +101,9 @@ class MapEditorScreen(map: TileMap? = null) : BaseScreen(), RecreateOnResize {
     init {
         if (map == null) {
             ruleset = RulesetCache[BaseRuleset.Civ_V_GnK.fullName]!!
-            tileMap = TileMap(MapSize.Tiny.radius, ruleset, false).apply {
-                mapParameters.mapSize = MapSize.Tiny
+            // A blank hexagonal map of Civ V's smallest size: quick to create and to draw on, and a size the pickers offer
+            tileMap = TileMap(MapSize.Duel.radius, ruleset, false).apply {
+                mapParameters.mapSize = MapSize.Duel
             }
         } else {
             ruleset = map.ruleset ?: RulesetCache.getComplexRuleset(map.mapParameters)
@@ -154,7 +155,7 @@ class MapEditorScreen(map: TileMap? = null) : BaseScreen(), RecreateOnResize {
     companion object {
         private fun getDefaultParameters(): MapParameters {
             val lastSetup = UncivGame.Current.settings.lastGameSetup
-                ?: return MapParameters()
+                ?: return GameSetupInfo.firstSetup().mapParameters
             return lastSetup.mapParameters.clone().apply {
                 reseed()
                 mods.removeAll(RulesetCache.getSortedBaseRulesets().toSet())

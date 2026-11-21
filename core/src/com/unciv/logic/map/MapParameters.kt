@@ -65,21 +65,9 @@ object MapType {
         fourCornersLikeCivV, inlandSeaLikeCivV,
         lakesLikeCivV, northVsSouthLikeCivV, westVsEastLikeCivV, highlandsLikeCivV, borealLikeCivV, donutLikeCivV)
     
-    // ordered based on popularity poll
+    /** The map types a player can pick, in the new game screen and in the map editor: the land steps and scripts of Civ V.
+     *  Unciv's own types ([uncivValues]) are not offered any more, see there. */
     val allValues = listOf(
-        pangaea,
-        smallContinents,
-        perlin,
-        fractal,
-        continentAndIslands,
-        archipelago,
-        twoContinents,
-        threeContinents,
-        innerSea,
-        lakes,
-        fourCorners,
-        spiral,
-        boreal,
         continentsLikeCivV,
         pangaeaLikeCivV,
         smallContinentsLikeCivV,
@@ -94,6 +82,24 @@ object MapType {
         highlandsLikeCivV,
         borealLikeCivV,
         donutLikeCivV
+    )
+
+    /** Unciv's own types, ordered as they were once, based on a popularity poll. They are not offered any more (the maps follow Civ V),
+     *  but they still generate: saved games, saved settings and mods name them, and [pangaea] is the default of [MapParameters.type]. */
+    val uncivValues = listOf(
+        pangaea,
+        smallContinents,
+        perlin,
+        fractal,
+        continentAndIslands,
+        archipelago,
+        twoContinents,
+        threeContinents,
+        innerSea,
+        lakes,
+        fourCorners,
+        spiral,
+        boreal,
     )
 
     // All ocean tiles
@@ -113,7 +119,8 @@ class MapParameters : IsPartOfGameInfoSerialization {
     var type = MapType.pangaea
     // DO NOT CHANGE DEFAULTS since that changes all existing games to new default!
     var shape = MapShape.hexagonal
-    var mapSize = MapSize.Medium
+    /** Unciv's old Medium, which is no longer offered (see [MapSize.SavedGameDefault]); the new game screen starts from [com.unciv.models.metadata.GameSetupInfo.firstSetup] */
+    var mapSize = MapSize.SavedGameDefault
     var mapResources = MapResourceSetting.default.label
     var mirroring: String = MirroringType.none
     var noRuins = false

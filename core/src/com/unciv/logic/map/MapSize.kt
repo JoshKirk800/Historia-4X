@@ -35,7 +35,10 @@ class MapSize private constructor(
 
     constructor(size: Predefined) : this(size.name, size.radius, size.width, size.height)
 
-    constructor(name: String) : this(if (name == auto) Auto else MapSize(Predefined.safeValueOf(name)))
+    /** The size called [name] of the sizes offered ([names]). A name that is not offered (a size of Unciv's old table such as "Medium")
+     *  is the default [Predefined.Small]: a saved game never comes here (its size is read field by field), and the pickers
+     *  turn such a size into a custom one first ([forPicker]). */
+    constructor(name: String) : this(if (name == auto) Auto else MapSize(Predefined.safeValueOf(name) ?: Predefined.Small))
 
     constructor(radius: Int) : this(custom, radius, 0, 0) {
         setNewRadius(radius)
@@ -45,28 +48,27 @@ class MapSize private constructor(
 
     constructor(other: MapSize) : this(other.name, other.radius, other.width, other.height)
 
-    /** Predefined Map Sizes, their name can appear in json only as copy in MapSize */
+    /**
+     *  The world sizes of Civ V: the `gridWidth` and `gridHeight` of the `worldSizes` of the Brave New World ruleset (CIV5Worlds.xml:
+     *  Duel 40x24, Tiny 56x36, Small 66x42, Standard 80x52, Large 104x64, Huge 128x80, see [CivVWorldSizes]).
+     *  Their name can appear in json only as copy in MapSize. The radius is that of the hexagonal map with as many tiles.
+     */
     enum class Predefined(
-        val radius: Int,
         val width: Int,
         val height: Int,
     ) {
-        Tiny(10, 23, 15),
-        Small(15, 33, 21),
-        Medium(20, 44, 29),
-        Large(30, 66, 43),
-        Huge(40, 87, 57);
-        /* - ours are a little lighter than the original values. For reference those are:
-            Civ5Duel(40,24,17),
-            Civ5Tiny(56,36,25),
-            Civ5Small(66,42,30),
-            Civ5Medium(80,52,37),
-            Civ5Large(104,64,47),
-            Civ5Huge(128,80,58),
-         */
+        Duel(40, 24),
+        Tiny(56, 36),
+        Small(66, 42),
+        Standard(80, 52),
+        Large(104, 64),
+        Huge(128, 80);
+
+        val radius = HexMath.getEquivalentHexagonalRadius(width, height)
 
         companion object {
-            @Readonly fun safeValueOf(name: String) = entries.firstOrNull { it.name == name } ?: Tiny
+            /** @return the size called [name], null if there is none (for instance the "Medium" of the sizes Unciv used to offer) */
+            @Readonly fun safeValueOf(name: String) = entries.firstOrNull { it.name == name }
         }
     }
 
@@ -76,16 +78,41 @@ class MapSize private constructor(
          * Do not mistake for [MapGeneratedMainType.custom]. */
         const val custom = "Custom"
         const val auto = "Auto"
-        val Auto get() = MapSize(auto, Predefined.Medium.radius, Predefined.Medium.width, Predefined.Medium.height)
+
+        /*
+         *  The "Medium" of the sizes Unciv offered before the maps followed Civ V. It is no longer offered, but it is the value
+         *  of every saved game that did not write its size, see the DO NOT CHANGE DEFAULTS note in [MapParameters]: a game's size is read
+         *  from the save, and the fields a save omits are these. [Auto] starts from the same numbers (they are replaced when the map is generated).
+         */
+        private const val savedGameDefaultName = "Medium"
+        private const val savedGameDefaultRadius = 20
+        private const val savedGameDefaultWidth = 44
+        private const val savedGameDefaultHeight = 29
+
+        /** The default of [MapParameters.mapSize]: the old Medium (name "Medium", radius 20, 44x29), so that saved games load unchanged. Not in [names]; a picker shows it as custom ([forPicker]) */
+        val SavedGameDefault get() = MapSize(savedGameDefaultName, savedGameDefaultRadius, savedGameDefaultWidth, savedGameDefaultHeight)
+        val Auto get() = MapSize(auto, savedGameDefaultRadius, savedGameDefaultWidth, savedGameDefaultHeight)
+        val Duel get() = MapSize(Predefined.Duel)
         val Tiny get() = MapSize(Predefined.Tiny)
         val Small get() = MapSize(Predefined.Small)
-        val Medium get() = MapSize(Predefined.Medium)
+        val Standard get() = MapSize(Predefined.Standard)
         val Large get() = MapSize(Predefined.Large)
         val Huge get() = MapSize(Predefined.Huge)
+        /** The sizes a player can pick: Civ V's six and [auto] (a picker adds [custom]) */
         fun names() = Predefined.entries.map { it.name } + listOf(auto)
     }
 
     fun clone() = MapSize(name, radius, width, height)
+
+    /** The size as a size picker shows it: itself if it is [custom], [auto] or a [Predefined] size with its dimensions, otherwise
+     *  (a saved game's or saved settings' size that is not offered, such as Unciv's "Medium", or one that carries the name
+     *  of an offered size but the dimensions of Unciv's old table, such as its "Small" of 33x21) a [custom] size with the very same radius, width and height. */
+    fun forPicker(): MapSize {
+        if (name == custom || name == auto) return this
+        val predefined = Predefined.safeValueOf(name)
+        if (predefined != null && predefined.radius == radius && predefined.width == width && predefined.height == height) return this
+        return MapSize(custom, radius, width, height)
+    }
 
     /** Check custom dimensions, fix if too extreme
      * @param worldWrap whether world wrap is on

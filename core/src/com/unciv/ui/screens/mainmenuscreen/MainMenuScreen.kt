@@ -262,11 +262,11 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
     private fun startBackgroundMapGeneration() {
         stopBackgroundMapGeneration()  // shouldn't be necessary as resize re-instantiates this class
         backgroundMapGenerationJob = Concurrency.run("ShowMapBackground") {
-            // MapSize.Small has easily enough tiles to fill the entire background - unless the user sized their window to some extreme aspect ratio
+            // 33x21 (Unciv's old Small size) has easily enough tiles to fill the entire background - unless the user sized their window to some extreme aspect ratio
             val mapWidth = stage.width / TileGroupMap.groupHorizontalAdvance
             val mapHeight = stage.height / TileGroupMap.groupSize
             @Pure fun Float.scaleCoord(scale: Float) = ceil(this * scale).toInt().coerceAtLeast(6)
-            // These scale values are chosen so that a common 4:3 screen minus taskbar gives the same as MapSize.Small
+            // These scale values are chosen so that a common 4:3 screen minus taskbar gives the same as 33x21
             val backgroundMapSize = MapSize(mapWidth.scaleCoord(.77f), mapHeight.scaleCoord(1f))
 
             val newMap = MapGenerator(backgroundMapRuleset, this)

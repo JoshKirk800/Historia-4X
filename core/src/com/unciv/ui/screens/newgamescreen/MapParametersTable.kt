@@ -206,6 +206,9 @@ class MapParametersTable(
             }
             add(optionsTable).colspan(2).grow().row()
         } else {
+            // One of Unciv's own types (an old game's or old saved settings') is not offered, and the box would show the first entry instead:
+            // start from the type of a new installation
+            if (mapParameters.type in MapType.uncivValues) mapParameters.type = MapType.continentsLikeCivV
             mapTypeSelectBox = TranslatedSelectBox(mapTypes, mapParameters.type)
 
 
@@ -246,6 +249,8 @@ class MapParametersTable(
             }
             add(optionsTable).colspan(2).grow().row()
         } else {
+            // A size that is not offered (Unciv's "Medium" of an old game or old saved settings) shows as Custom with its own dimensions
+            mapParameters.mapSize = mapParameters.mapSize.forPicker()
             val mapSizes = MapSize.names() + listOf(MapSize.custom)
             worldSizeSelectBox = TranslatedSelectBox(mapSizes, mapParameters.mapSize.name)
             worldSizeSelectBox.onChange { updateWorldSizeTable(); generateExampleMap() }

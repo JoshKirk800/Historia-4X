@@ -10,7 +10,6 @@ import com.badlogic.gdx.scenes.scene2d.Touchable
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.MapShape
-import com.unciv.logic.map.MapSize
 import com.unciv.ui.components.NonTransformGroup
 import com.unciv.ui.components.input.UncivActorGestureListener
 import com.unciv.ui.images.ClippingImage
@@ -26,6 +25,12 @@ class TileLayerGroup: NonTransformGroup() {
 }
 
 class Minimap(val mapHolder: WorldMapHolder, minimapSize: Int, private val civInfo: Civilization?) : NonTransformGroup() {
+    private companion object {
+        /** Radius and height of Unciv's old Huge size (radius 40, 87x57): the scale of the minimap tiles of rectangular maps is fixed to them, whatever the sizes offered are */
+        const val REFERENCE_RADIUS = 40
+        const val REFERENCE_HEIGHT = 57
+    }
+
     private val tileLayer = TileLayerGroup()
     private val borderLayer = NonTransformGroup()
     private val cityLayer = NonTransformGroup()
@@ -122,7 +127,7 @@ class Minimap(val mapHolder: WorldMapHolder, minimapSize: Int, private val civIn
                     else max(
                         mapSize.height,
                         mapSize.width * 3 / 4
-                    ) * MapSize.Huge.radius / MapSize.Huge.height
+                    ) * REFERENCE_RADIUS / REFERENCE_HEIGHT
                 }
 
         val mapSizePercent = if (minimapSize < 22) minimapSize + 9 else minimapSize * 5 - 75

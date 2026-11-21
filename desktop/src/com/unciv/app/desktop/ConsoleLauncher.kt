@@ -68,7 +68,7 @@ internal object ConsoleLauncher {
 
     private fun getMapParameters(): MapParameters {
         return MapParameters().apply {
-            mapSize = MapSize.Tiny
+            mapSize = MapSize(10) // radius 10, 23x15: the small map these games always used (Unciv's old Tiny; Civ V's Tiny is 56x36)
             noRuins = true
             noNaturalWonders = true
             legendaryStart = true

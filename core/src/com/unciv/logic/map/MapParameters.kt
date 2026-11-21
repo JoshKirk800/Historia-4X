@@ -45,9 +45,11 @@ object MapType {
     const val fourCornersLikeCivV = "Four Corners (Civ V)"
     /** InlandSea.lua on the script's own grid, see [com.unciv.logic.map.mapgenerator.CivVScripts] */
     const val inlandSeaLikeCivV = "Inland Sea (Civ V)"
+    /** The Pangaea map script of Civ V, see [com.unciv.logic.map.mapgenerator.FractalLandRecipes] */
+    const val pangaeaLikeCivV = "Pangaea (Civ V)"
 
     /** The types that make their own hills and mountains and the world age matters to (the elevation generator does not run for them) */
-    val ownElevation = setOf(continentsLikeCivV, fourCornersLikeCivV, inlandSeaLikeCivV)
+    val ownElevation = setOf(continentsLikeCivV, pangaeaLikeCivV, fourCornersLikeCivV, inlandSeaLikeCivV)
     
     // ordered based on popularity poll
     val allValues = listOf(
@@ -65,6 +67,7 @@ object MapType {
         spiral,
         boreal,
         continentsLikeCivV,
+        pangaeaLikeCivV,
         fourCornersLikeCivV,
         inlandSeaLikeCivV
     )

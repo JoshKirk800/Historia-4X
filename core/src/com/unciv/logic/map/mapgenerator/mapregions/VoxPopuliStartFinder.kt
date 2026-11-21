@@ -24,9 +24,8 @@ import yairm210.purity.annotations.Readonly
  * too and the first of the shuffled ties is the first in that order, so a seed always gives the same start.
  */
 object VoxPopuliStartFinder {
-    /** `ChooseLocations` defaults of the Lua: minimum food, production and good tiles in the first, second and third ring (running totals) */
-    private val minimumFood = listOf(1, 4, 4)
-    private val minimumProd = listOf(1, 1, 3)
+    /** `ChooseLocations` defaults of the Lua for the good tiles in the first, second and third ring (running totals); food and production are [StartMinimums.voxPopuli],
+     *  which a map type's [StartRecipe] can lower */
     private val minimumGood = listOf(3, 6, 8)
 
     /** `WEIGHTED_FOOD_SCORE` and `WEIGHTED_PROD_SCORE`: the score for a total of 0, 1, ... tiles; each tile beyond the table adds 1 */
@@ -34,6 +33,9 @@ object VoxPopuliStartFinder {
     private val prodScores = listOf(listOf(0, 10, 16, 20, 22, 24), listOf(0, 10, 20, 25, 30, 35, 39, 42, 44), listOf(0))
     private val goodMultiplier = listOf(2, 2, 1)
     private val junkMultiplier = listOf(-3, -3, -2)
+
+    /** `FindStart` gives up the coast for a region with fewer coastal land tiles than this */
+    private const val MIN_COASTAL_LAND = 3
 
     private const val COASTAL_SCORE = 80
     private const val FRESH_WATER_SCORE = 40
@@ -51,9 +53,10 @@ object VoxPopuliStartFinder {
     /**
      * `EvaluateCandidatePlot`: [rings] are the three rings around the candidate, [baseScore] the coast or fresh water score.
      * The totals of food, production, good, junk and rivers run over the rings; [closeStartPenalty] is the candidate's ripple value (0: none).
+     * The totals must reach the [minimums] of food and production to be eligible.
      */
     @Readonly
-    fun evaluate(rings: List<RingCounts>, baseScore: Int, closeStartPenalty: Int): Scored<Unit> {
+    fun evaluate(rings: List<RingCounts>, baseScore: Int, closeStartPenalty: Int, minimums: StartMinimums = StartMinimums.voxPopuli): Scored<Unit> {
         var food = 0
         var prod = 0
         var good = 0
@@ -67,7 +70,7 @@ object VoxPopuliStartFinder {
             good += ring.good
             junk += ring.junk + (6 * (index + 1) - ring.tilesOnMap) // off the map counts as junk
             river += ring.river
-            if (food < minimumFood[index] || prod < minimumProd[index] || good < minimumGood[index]) meetsMinimums = false
+            if (food < minimums.food[index] || prod < minimums.prod[index] || good < minimumGood[index]) meetsMinimums = false
             // Without food the production cannot be used; the cap stays for the rings after
             prod = minOf(prod, food * 2)
             score += tableScore(foodScores[index], food) + tableScore(prodScores[index], prod) +
@@ -99,9 +102,43 @@ object VoxPopuliStartFinder {
 
     /** Vox Populi's `FindStart` for [region]: calls `RegionStartFinder.setRegionStart` with the position */
     internal fun findStart(region: Region, tileData: TileDataMap) {
+        val recipe = StartRecipes.forType(region.tileMap.mapParameters.type)
+            ?: return findStart(region, tileData, false, StartMinimums.voxPopuli)
+        if (recipe.regionMethod == RegionMethod.Rectangular) findStartWithoutRegardToArea(region, tileData, recipe.mustBeCoast, recipe.minimums())
+        else findStart(region, tileData, recipe.mustBeCoast, recipe.minimums())
+    }
+
+    /** `FindStartWithoutRegardToAreaID` (the start of a rectangular region, method 3 and 4): the landmasses in the region are tried from the most to the
+     *  least fertile (the fertility of their land in the region), and the first with an eligible site gives the start, its best scored one. A region with only
+     *  fallback sites takes the best scored of them; with no site at all the Lua makes the corner a grass tile. With [mustBeCoast] the candidates are the coastal
+     *  sites only, and the Lua has no inland second try. */
+    private fun findStartWithoutRegardToArea(region: Region, tileData: TileDataMap, mustBeCoast: Boolean, minimums: StartMinimums) {
+        val land = inRowOrder(region.tileMap.getTilesInRectangle(region.rect).filter { it.isLand && !it.isImpassible() && it.getContinent() != -1 })
+        val fertility = land.groupBy { it.getContinent() }.mapValues { (_, tiles) -> tiles.sumOf { it.getTileFertility(false) } }
+        val areas = fertility.entries.sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenBy { it.key }).map { it.key }
+
+        val fallbacks = ArrayList<Scored<Tile>>()
+        for (area in areas) {
+            val candidates = land.filter { it.getContinent() == area && !tileData[it]!!.isTwoFromCoast && (!mustBeCoast || it.isAdjacentToCoast()) }
+            val scored = candidates.map { scoreCandidate(it, tileData, minimums) }
+            val eligible = best(scored, true, -5000)
+            if (eligible != null) return RegionStartFinder.setRegionStart(region, eligible.item.position, tileData)
+            best(scored, false, -5000)?.let { fallbacks += it }
+        }
+        val fallback = best(fallbacks, false, 0)
+        RegionStartFinder.setRegionStart(region, fallback?.item?.position ?: RegionStartFinder.panicPosition(region, tileData), tileData)
+    }
+
+    /** The land of the region a start can be on, next to the sea: `MeasureTerrainInRegions`'s `coastalLandCount` */
+    private fun coastalLandCount(region: Region) = region.tiles.count { it.isLand && !it.isImpassible() && it.isAdjacentToCoast() }
+
+    private fun findStart(region: Region, tileData: TileDataMap, mustBeCoast: Boolean, minimums: StartMinimums) {
+        // A region with fewer than 3 coastal land tiles cannot start on the coast: the Lua tries again without
+        if (mustBeCoast && coastalLandCount(region) < MIN_COASTAL_LAND) return findStart(region, tileData, false, minimums)
         val tileMap = region.tileMap
         val inRegion = inRowOrder(tileMap.getTilesInRectangle(region.rect)).filter { tile ->
-            tile.isLand && !tile.isImpassible() && !tileData[tile]!!.isTwoFromCoast && (region.continentID == -1 || region.continentID == tile.getContinent())
+            tile.isLand && !tile.isImpassible() && !tileData[tile]!!.isTwoFromCoast && (region.continentID == -1 || region.continentID == tile.getContinent()) &&
+                (!mustBeCoast || tile.isAdjacentToCoast())
         }
         val centerRect = RegionStartFinder.getCentralRectangle(region.rect, RegionStartFinder.CENTER_BIAS_PERCENT)
         val middleRect = RegionStartFinder.getCentralRectangle(region.rect, RegionStartFinder.MIDDLE_BIAS_PERCENT)
@@ -113,14 +150,14 @@ object VoxPopuliStartFinder {
 
         val fallbacks = ArrayList<Scored<Tile>>()
         for (area in listOf(center, middle)) {
-            val scored = area.map { scoreCandidate(it, tileData) }
+            val scored = area.map { scoreCandidate(it, tileData, minimums) }
             val eligible = best(scored, true, -5000)
             if (eligible != null) return RegionStartFinder.setRegionStart(region, eligible.item.position, tileData)
             best(scored, false, -5000)?.let { fallbacks += it }
         }
 
         if (outer.isNotEmpty()) {
-            val scored = outer.map { scoreCandidate(it, tileData) }
+            val scored = outer.map { scoreCandidate(it, tileData, minimums) }
             val eligible = scored.filter { it.meetsMinimums }
             if (eligible.isNotEmpty()) {
                 val closest = eligible.minByOrNull { distanceToNearestCorner(region, it.item) }!!
@@ -131,6 +168,7 @@ object VoxPopuliStartFinder {
 
         val fallback = best(fallbacks, false, 0)
         if (fallback != null) return RegionStartFinder.setRegionStart(region, fallback.item.position, tileData)
+        if (mustBeCoast) return findStart(region, tileData, false, minimums) // no coastal site at all: the Lua tries an inland start
         // Reaching this means that the region has no tile to start on: the Lua makes the corner a grass tile
         RegionStartFinder.setRegionStart(region, RegionStartFinder.panicPosition(region, tileData), tileData)
     }
@@ -147,7 +185,7 @@ object VoxPopuliStartFinder {
     }
 
     /** `EvaluateCandidatePlot` of [tile] with its class totals from the three rings around it */
-    private fun scoreCandidate(tile: Tile, tileData: TileDataMap): Scored<Tile> {
+    private fun scoreCandidate(tile: Tile, tileData: TileDataMap, minimums: StartMinimums): Scored<Tile> {
         val rings = (1..3).map { ring ->
             var food = 0
             var prod = 0
@@ -173,7 +211,7 @@ object VoxPopuliStartFinder {
             tile.isAdjacentToRiver() || tile.isAdjacentTo(com.unciv.Constants.freshWater) -> FRESH_WATER_SCORE
             else -> 0
         }
-        val result = evaluate(rings, baseScore, tileData[tile]!!.closeStartPenalty)
+        val result = evaluate(rings, baseScore, tileData[tile]!!.closeStartPenalty, minimums)
         return Scored(tile, result.score, result.meetsMinimums)
     }
 }

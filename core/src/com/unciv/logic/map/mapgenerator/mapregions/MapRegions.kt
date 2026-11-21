@@ -102,7 +102,8 @@ class MapRegions (val ruleset: Ruleset) {
 
         // Lots of small islands - just split ut the map in rectangles while ignoring Continents
         // 25% is chosen as limit so Four Corners maps don't fall in this category
-        if (tileMap.usingArchipelagoRegions()) {
+        // A script that asks for method 3 (Archipelago, Tiny Islands) always does
+        if (StartRecipes.forType(tileMap.mapParameters.type)?.regionMethod == RegionMethod.Rectangular || tileMap.usingArchipelagoRegions()) {
             divideWholeMap(tileMap, mapRect, numRegions)
             return
         }

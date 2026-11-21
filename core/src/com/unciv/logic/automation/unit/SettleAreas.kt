@@ -12,6 +12,7 @@ import com.unciv.logic.automation.unit.tactical.TacticalTerritory
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.map.MapType
+import com.unciv.logic.map.mapgenerator.mapregions.StartRecipes
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActionsFromUniques
 import com.unciv.logic.map.tile.Tile
@@ -50,10 +51,14 @@ object SettleAreas {
     private val bestPlotCache = WeakHashMap<Civilization, BestPlot>()
 
     /** CvMap::GetAIMapHint, set by the original's map scripts: 1 = naval map, 4 = offshore expansion map (Archipelago 1+4, Small Continents 4) */
-    fun aiMapHint(gameInfo: GameInfo): Int = when (gameInfo.tileMap.mapParameters.type) {
-        MapType.archipelago -> 1 + 4
-        MapType.smallContinents -> 4
-        else -> 0
+    fun aiMapHint(gameInfo: GameInfo): Int {
+        val type = gameInfo.tileMap.mapParameters.type
+        StartRecipes.forType(type)?.let { return it.aiMapHint } // the Civ V scripts' `Map.ChangeAIMapHint`
+        return when (type) {
+            MapType.archipelago -> 1 + 4
+            MapType.smallContinents -> 4
+            else -> 0
+        }
     }
 
     /** This turn's found values of [civ], computed on first use */

@@ -26,6 +26,14 @@ import java.io.File
  * AI_ECON rows every 5 turns, what sets the army size (CvEconomicAI::GetSoftSupplyCap, CvMilitaryAI::SetRecommendedArmyNavySize):
  *     AI_ECON turn  name  gold  goldPerTurn  softSupplyCap  unitSupply  unitsToSupply  recommendedLand  recommendedNavy  numLandUnits  numNavalUnits  goldBySource
  * goldBySource is `source:gold` for every source of next turn's gold that is not 0, comma-separated.
+ * Happiness rows every 10 turns (columns in [HappinessColumns], the header line names them): AI_HAPPY per living major civilization,
+ * AI_CITYHAPPY per city of one:
+ *     AI_HAPPY      turn  name  happiness  pool  localHappinessSum  localUnhappinessSum
+ *     AI_CITYHAPPY  turn  name  city  population  localHappiness  localUnhappiness  delta
+ * With the model as it is (BNW's global happiness) happiness is [com.unciv.logic.civilization.Civilization.getHappiness], pool the sum of
+ * the happiness breakdown (the entries before the integer truncation of happiness), localHappinessSum the cities' [com.unciv.logic.city.CityStats.localHappiness],
+ * localUnhappinessSum what the cities' own entries "Cities", "Population" and "Occupied City" of the breakdown take away (the civilization-wide
+ * Public Opinion and Transportation Upkeep are in neither sum); a city's delta is its localHappiness less its localUnhappiness.
  * Written once per turn after the turn has been played, so a row for turn N is the state the original's observer sees at the start of turn N+1.
  */
 class DecisionLog(private val game: GameInfo, private val file: File) {
@@ -34,7 +42,8 @@ class DecisionLog(private val game: GameInfo, private val file: File) {
             "# AI_CIV\tturn\tname\tcities\tmilitaryMight\tmilitaryUnits\n" +
                 "# AI_PAIR\tturn\tname\tother\tatWar\tmajorCivApproach\tlandDispute\tvictoryDispute\twarmongerThreat\tnumWarsFought\tdoF\topinion\twantsDoF\ttooEarly\tproximity\tminCityDistance\n" +
                 "# AI_CITY\tturn\tname\tcolumn\trow\tpopulation\tisCapital\n" +
-                "# AI_ECON\tturn\tname\tgold\tgoldPerTurn\tsoftSupplyCap\tunitSupply\tunitsToSupply\trecommendedLand\trecommendedNavy\tnumLandUnits\tnumNavalUnits\tgoldBySource\n"
+                "# AI_ECON\tturn\tname\tgold\tgoldPerTurn\tsoftSupplyCap\tunitSupply\tunitsToSupply\trecommendedLand\trecommendedNavy\tnumLandUnits\tnumNavalUnits\tgoldBySource\n" +
+                HappinessColumns.header()
         )
     }
 
@@ -47,8 +56,9 @@ class DecisionLog(private val game: GameInfo, private val file: File) {
     }
 
     fun afterTurn(turn: Int) {
-        val majors = game.civilizations.filter { it.isMajorCiv && !it.isSpectator && !it.isBarbarian && !it.isDefeated() }
+        val majors = HappinessColumns.livingMajors(game)
         val text = StringBuilder()
+        if (turn % HappinessColumns.EVERY_TURNS == 0) text.append(HappinessColumns.rows(game, turn))
         for (civ in majors) {
             text.append("AI_CIV\t$turn\t${civ.civName}\t${civ.cities.size}\t${civ.ai.militaryMight()}\t")
                 .append(civ.units.getCivUnits().count { it.isMilitary() }).append('\n')

@@ -7,6 +7,7 @@ import com.unciv.logic.map.mapgenerator.MapGenerator
 import com.unciv.logic.map.mapgenerator.StartFairness
 import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
+import com.unciv.testing.UncivMapSizes
 import org.junit.Assert
 import org.junit.Before
 import org.junit.Test
@@ -110,7 +111,7 @@ class StartFairnessTests {
             }
             val parameters = MapParameters().apply {
                 type = MapType.continentAndIslands
-                mapSize = MapSize.Tiny
+                mapSize = UncivMapSizes.Tiny
                 this.seed = seed
                 balancedStarts = balanced
             }

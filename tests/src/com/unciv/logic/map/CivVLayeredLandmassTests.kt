@@ -16,6 +16,7 @@ import com.unciv.logic.map.mapgenerator.UncivHexGeometry
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.UncivMapSizes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -488,10 +489,10 @@ class CivVLayeredLandmassTests {
         RulesetCache.loadRulesets(noMods = true)
         val ruleset = RulesetCache[BaseRuleset.Civ_V_BNW.fullName]!!
         val params = MapParameters().apply {
-            seed = 5; type = MapType.fourCornersLikeCivV; shape = MapShape.hexagonal; worldWrap = true; mapSize = MapSize.Small
+            seed = 5; type = MapType.fourCornersLikeCivV; shape = MapShape.hexagonal; worldWrap = true; mapSize = UncivMapSizes.Small
         }
         val map = MapGenerator(ruleset).generateMap(params)
-        // Small is 33 x 21 = 693 tiles in Unciv's table: the Duel world size, so 16 x 16
+        // Unciv's old Small is 33 x 21 = 693 tiles: the Duel world size, so 16 x 16
         assertEquals(16 * 16, map.values.size)
         assertEquals(MapShape.rectangular, map.mapParameters.shape)
         assertFalse(map.mapParameters.worldWrap)

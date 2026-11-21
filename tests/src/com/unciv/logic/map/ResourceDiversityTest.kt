@@ -3,6 +3,7 @@ package com.unciv.logic.map
 import com.unciv.logic.map.mapgenerator.MapGenerator
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.testing.BaseTestRunner
+import com.unciv.testing.UncivMapSizes
 import org.junit.Assert
 import org.junit.Ignore
 import org.junit.Test
@@ -43,11 +44,12 @@ class ResourceDiversityTest {
     private data class SizeCase(val size: MapSize, val minUnique: Int, val minEntropy: Double)
 
     private val sizeCases = listOf(
-        SizeCase(MapSize.Tiny,   minUnique = 20, minEntropy = 0.85),
-        SizeCase(MapSize.Small,  minUnique = 24, minEntropy = 0.84),
-        SizeCase(MapSize.Medium, minUnique = 25, minEntropy = 0.85),
-        SizeCase(MapSize.Large,  minUnique = 25, minEntropy = 0.86),
-        SizeCase(MapSize.Huge,   minUnique = 25, minEntropy = 0.86),
+        // The thresholds were taken on the sizes Unciv used to offer (see the raw minimums above), not on Civ V's
+        SizeCase(UncivMapSizes.Tiny,   minUnique = 20, minEntropy = 0.85),
+        SizeCase(UncivMapSizes.Small,  minUnique = 24, minEntropy = 0.84),
+        SizeCase(UncivMapSizes.Medium, minUnique = 25, minEntropy = 0.85),
+        SizeCase(UncivMapSizes.Large,  minUnique = 25, minEntropy = 0.86),
+        SizeCase(UncivMapSizes.Huge,   minUnique = 25, minEntropy = 0.86),
     )
 
     // Per-type thresholds for Large hexagonal maps at 90% of observed values.
@@ -74,9 +76,10 @@ class ResourceDiversityTest {
         }
 
         // Large hexagonal × every map type
-        for (mapType in MapType.allValues) {
+        // (Unciv's types, which the thresholds were taken on and saved games still name, and the types offered; Civ V's have the default)
+        for (mapType in MapType.uncivValues + MapType.allValues) {
             val (minUnique, minEntropy) = largeTypeThresholds.getValue(mapType)
-            val counts = countResources(mapType = mapType, shape = MapShape.hexagonal, size = MapSize.Large, ruleset = ruleset)
+            val counts = countResources(mapType = mapType, shape = MapShape.hexagonal, size = UncivMapSizes.Large, ruleset = ruleset)
             assertDiversity("$mapType / Large", counts, minUnique, minEntropy)
         }
     }

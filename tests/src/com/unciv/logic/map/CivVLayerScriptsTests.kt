@@ -588,7 +588,9 @@ class CivVLayerScriptsTests {
             assertTrue(type, type in MapType.allValues)
             assertTrue(type, type in MapType.ownElevation)
         }
-        assertTrue(MapType.lakes in MapType.allValues && MapType.boreal in MapType.allValues)
+        // Unciv's own Lakes and Boreal are no longer offered, but they stay types that generate
+        assertTrue(MapType.lakes in MapType.uncivValues && MapType.boreal in MapType.uncivValues)
+        assertFalse(MapType.lakes in MapType.allValues || MapType.boreal in MapType.allValues)
         assertFalse(MapType.lakes in MapType.ownElevation || MapType.boreal in MapType.ownElevation)
     }
 

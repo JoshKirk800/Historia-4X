@@ -13,7 +13,6 @@ import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.files.MapSaver
 import com.unciv.logic.files.UncivFiles
 import com.unciv.logic.map.MapGeneratedMainType
-import com.unciv.logic.map.MapSize
 import com.unciv.logic.map.MapType
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.metadata.GameParameters
@@ -21,6 +20,7 @@ import com.unciv.models.metadata.GameSettings
 import com.unciv.models.metadata.GameSetupInfo
 import com.unciv.models.metadata.Player
 import com.unciv.models.ruleset.RulesetCache
+import com.unciv.testing.UncivMapSizes
 import com.unciv.ui.screens.LanguagePickerScreen
 import com.unciv.ui.screens.mainmenuscreen.MainMenuScreen
 import com.unciv.ui.screens.pickerscreens.TechPickerScreen
@@ -232,14 +232,9 @@ object OjhBenchmark {
             note("map ${file.name}: ${preview.mapSize.width}x${preview.mapSize.height}, ${preview.shape}")
         } else {
             setup.mapParameters.type = MapType.pangaea
-            setup.mapParameters.mapSize = when (size) {
-                "tiny" -> MapSize.Tiny
-                "small" -> MapSize.Small
-                "medium" -> MapSize.Medium
-                "large" -> MapSize.Large
-                "huge" -> MapSize.Huge
-                else -> throw IllegalArgumentException("unknown --size $size")
-            }
+            // the sizes Unciv used to offer, which this benchmark always ran on
+            setup.mapParameters.mapSize = UncivMapSizes.byName(size.replaceFirstChar { it.uppercase() })
+                ?: throw IllegalArgumentException("unknown --size $size")
             if (seed != 0L) setup.mapParameters.seed = seed
         }
 

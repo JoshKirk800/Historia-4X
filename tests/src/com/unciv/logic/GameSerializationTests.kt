@@ -9,7 +9,6 @@ import com.unciv.json.json
 import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.files.UncivFiles
 import com.unciv.logic.map.MapParameters
-import com.unciv.logic.map.MapSize
 import com.unciv.models.metadata.GameParameters
 import com.unciv.models.metadata.GameSettings
 import com.unciv.models.metadata.GameSetupInfo
@@ -25,6 +24,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.testing.BaseTestRunner
+import com.unciv.testing.UncivMapSizes
 import com.unciv.utils.debug
 import org.junit.After
 import org.junit.Assert
@@ -74,7 +74,7 @@ class GameSerializationTests {
             players.add(Player("Greece"))
         }
         val mapParameters = MapParameters().apply {
-            mapSize = MapSize.Tiny
+            mapSize = UncivMapSizes.Tiny
             seed = 42L
         }
         val setup = GameSetupInfo(param, mapParameters)

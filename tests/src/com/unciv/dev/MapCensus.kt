@@ -20,6 +20,7 @@ import com.unciv.models.metadata.GameSettings
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.UncivMapSizes
 import com.unciv.ui.audio.MusicController
 import org.junit.Assume
 import org.junit.BeforeClass
@@ -111,14 +112,8 @@ class MapCensus {
             if (width != null && height != null) {
                 mapSize = MapSize(width, height)
             } else {
-                mapSize = when (env("CENSUS_MAPSIZE", "Auto")) {
-                    "Tiny" -> MapSize.Tiny
-                    "Small" -> MapSize.Small
-                    "Medium" -> MapSize.Medium
-                    "Large" -> MapSize.Large
-                    "Huge" -> MapSize.Huge
-                    else -> MapSize(MapSize.auto)
-                }
+                // Auto, or a size Unciv used to offer; Civ V's grids come with CENSUS_MAPWIDTH and CENSUS_MAPHEIGHT
+                mapSize = UncivMapSizes.byName(env("CENSUS_MAPSIZE", "Auto")) ?: MapSize(MapSize.auto)
             }
             worldWrap = System.getenv("CENSUS_WORLD_WRAP") != null
             waterThreshold = env("CENSUS_WATER", "0").toFloat()

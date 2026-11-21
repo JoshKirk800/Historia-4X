@@ -7,7 +7,6 @@ import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.files.UncivFiles
 import com.unciv.logic.map.MapParameters
-import com.unciv.logic.map.MapSize
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.metadata.GameParameters
 import com.unciv.models.metadata.GameSettings
@@ -15,6 +14,7 @@ import com.unciv.models.metadata.GameSetupInfo
 import com.unciv.models.metadata.Player
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.testing.BaseTestRunner
+import com.unciv.testing.UncivMapSizes
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -47,7 +47,7 @@ class GameStarterExplorerTests {
             players.add(Player("Rome", PlayerType.Human))
             players.add(Player("Greece"))
         }
-        val mapParameters = MapParameters().apply { mapSize = MapSize.Tiny; seed = 42L }
+        val mapParameters = MapParameters().apply { mapSize = UncivMapSizes.Tiny; seed = 42L }
         UncivGame.Current = UncivGame()
         UncivGame.Current.files = UncivFiles(Gdx.files)
         settingsBackup = UncivGame.Current.files.getGeneralSettings()

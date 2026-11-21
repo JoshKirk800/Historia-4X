@@ -59,6 +59,7 @@ class FractalLandRecipeTests {
     fun `the map types find their recipes and Pangaea (Civ V) is offered`() {
         assertEquals("Pangaea (Civ V)", MapType.pangaeaLikeCivV)
         assertTrue(MapType.pangaeaLikeCivV in MapType.allValues)
+        assertFalse(MapType.pangaea in MapType.allValues)
         assertEquals(FractalLandRecipes.pangaea, FractalLandRecipes.forType(MapType.pangaeaLikeCivV))
         assertEquals(FractalLandRecipes.continents, FractalLandRecipes.forType(MapType.continentsLikeCivV))
         assertNull(FractalLandRecipes.forType(MapType.pangaea))

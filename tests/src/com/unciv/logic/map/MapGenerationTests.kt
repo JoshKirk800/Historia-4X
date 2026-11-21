@@ -7,6 +7,7 @@ import com.unciv.logic.map.mapgenerator.MapGenerator
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.testing.BaseTestRunner
+import com.unciv.testing.UncivMapSizes
 import org.junit.Assert
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,7 +21,8 @@ class MapGenerationTests {
         RulesetCache.loadRulesets(noMods = true)
         ruleSet = RulesetCache.getVanillaRuleset()
         val mapGenerator = MapGenerator(ruleSet)
-        for (mapType in MapType.allValues) {
+        // The types offered, and Unciv's own that saved games and mods still name
+        for (mapType in MapType.allValues + MapType.uncivValues) {
             for (mapShape in MapShape.allValues) {
                 for (worldWrap in listOf(true, false)) {
                     val mapParameters = MapParameters()
@@ -84,7 +86,7 @@ class MapGenerationTests {
             val mapParameters = MapParameters()
             mapParameters.type = MapType.perlin
             mapParameters.shape = MapShape.hexagonal
-            mapParameters.mapSize = MapSize.Small
+            mapParameters.mapSize = UncivMapSizes.Small // the counts below were taken on it
             mapParameters.worldWrap = true
             mapParameters.seed = seed
             val tileMap = mapGenerator.generateMap(mapParameters)

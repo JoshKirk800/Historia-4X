@@ -19,6 +19,7 @@ import com.unciv.models.metadata.GameSetupInfo
 import com.unciv.models.metadata.Player
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.UncivMapSizes
 import com.unciv.ui.audio.MusicController
 import org.junit.Assert
 import org.junit.Assume
@@ -131,13 +132,8 @@ class FullGameSim {
                 shape = MapShape.rectangular
                 mapSize = MapSize(width, height)
             } else {
-                mapSize = when (env("FULL_SIM_MAPSIZE", "Medium")) {
-                    "Tiny" -> MapSize.Tiny
-                    "Small" -> MapSize.Small
-                    "Large" -> MapSize.Large
-                    "Huge" -> MapSize.Huge
-                    else -> MapSize.Medium
-                }
+                // The sizes Unciv used to offer (what the studies before the Civ V sizes ran on); Civ V's come with FULL_SIM_MAPWIDTH and FULL_SIM_MAPHEIGHT
+                mapSize = UncivMapSizes.byName(env("FULL_SIM_MAPSIZE", "Medium")) ?: UncivMapSizes.Medium
             }
             worldWrap = System.getenv("FULL_SIM_WORLD_WRAP") != null
             waterThreshold = env("FULL_SIM_WATER_THRESHOLD", "0").toFloat()

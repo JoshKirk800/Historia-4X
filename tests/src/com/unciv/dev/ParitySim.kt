@@ -7,7 +7,6 @@ import com.unciv.logic.GameStarter
 import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.files.UncivFiles
 import com.unciv.logic.map.MapParameters
-import com.unciv.logic.map.MapSize
 import com.unciv.logic.map.MapType
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.metadata.GameParameters
@@ -16,6 +15,7 @@ import com.unciv.models.metadata.GameSetupInfo
 import com.unciv.models.metadata.Player
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.UncivMapSizes
 import com.unciv.ui.audio.MusicController
 import org.junit.Assume
 import org.junit.BeforeClass
@@ -77,7 +77,7 @@ class ParitySim {
         }
         val mapParameters = MapParameters().apply {
             type = MapType.pangaea
-            mapSize = MapSize.Small
+            mapSize = UncivMapSizes.Small // Unciv's old Small (33x21), the map these games ran on
             this.seed = seed
         }
         return GameStarter.startNewGame(GameSetupInfo(parameters, mapParameters), gameId = UUID.nameUUIDFromBytes("parity-sim-$seed".toByteArray()).toString())

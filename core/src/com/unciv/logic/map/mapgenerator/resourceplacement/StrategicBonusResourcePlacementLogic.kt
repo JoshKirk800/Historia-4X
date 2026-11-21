@@ -116,7 +116,7 @@ object StrategicBonusResourcePlacementLogic {
         val rng = GameContext(gameInfo = tileMap.gameInfo).stateBasedRandom("StrategicBonusResourcePlacementLogic.placeBonusInThirdRingOfStart")
         for (region in regions) {
             val terrain = if (region.type == "Hybrid") region.terrainCounts.filterNot { it.key == "Coastal" }
-                .maxByOrNull { it.value }!!.key
+                .maxByOrNull { it.value }?.key ?: continue // a region without land has no count
             else region.type
             val resourceUnique =
                 ruleset.terrains[terrain]!!.getMatchingUniques(UniqueType.RegionExtraResource).firstOrNull()

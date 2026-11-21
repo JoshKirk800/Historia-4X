@@ -83,8 +83,8 @@ object MapType {
         continentsLikeCivV,
         pangaeaLikeCivV,
         smallContinentsLikeCivV,
-        archipelagoLikeCivV,
-        tinyIslandsLikeCivV,
+        // Archipelago (Civ V) and Tiny Islands (Civ V) are not offered: their land leaves a civilization too little room for the start fairness
+        // check (Tiny Islands: 11 land tiles per start at the median, 1 map of 100 passes; Archipelago: 12 % of the Standard maps pass)
         fractalLikeCivV,
         fourCornersLikeCivV,
         inlandSeaLikeCivV,

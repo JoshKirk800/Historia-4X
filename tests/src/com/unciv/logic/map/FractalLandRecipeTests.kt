@@ -260,11 +260,12 @@ class FractalLandRecipeTests {
     }
 
     @Test
-    fun `the new map types are offered, find their recipes and make their own elevation`() {
+    fun `the new map types find their recipes and make their own elevation, and the island types that cannot pass the fairness check are not offered`() {
         val types = listOf("Small Continents (Civ V)", "Archipelago (Civ V)", "Tiny Islands (Civ V)", "Fractal (Civ V)")
         assertEquals(types, listOf(MapType.smallContinentsLikeCivV, MapType.archipelagoLikeCivV, MapType.tinyIslandsLikeCivV, MapType.fractalLikeCivV))
+        assertTrue(MapType.smallContinentsLikeCivV in MapType.allValues && MapType.fractalLikeCivV in MapType.allValues)
+        assertTrue(MapType.archipelagoLikeCivV !in MapType.allValues && MapType.tinyIslandsLikeCivV !in MapType.allValues)
         for (type in types) {
-            assertTrue(type, type in MapType.allValues)
             assertTrue(type, type in MapType.ownElevation)
             assertEquals(type, FractalLandRecipes.forType(type)?.mapType)
         }

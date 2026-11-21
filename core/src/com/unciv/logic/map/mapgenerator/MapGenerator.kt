@@ -147,14 +147,47 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
             .map { unique -> TerrainOccursRange(this, unique) }
             .ifEmpty { sequenceOf(TerrainOccursRange(this)) }
 
+    /** How many maps the last [generateMap] made before one passed [StartFairness] (1 when the check was off or the first passed), for logs */
+    var startFairnessAttempts = 0
+        private set
+    /** The failures of the last map returned that did not pass, empty when it passed or no check ran */
+    var startFairnessFailures: List<String> = emptyList()
+        private set
+
     fun generateMap(mapParameters: MapParameters, gameParameters: GameParameters = GameParameters(), gameInfo: GameInfo? = null): TileMap {
         val mapSize = if (mapParameters.mapSize.name != auto) mapParameters.mapSize else resolveAutoMapSize(mapParameters, gameParameters, gameInfo)
-        val mapType = mapParameters.type
 
         if (mapParameters.seed == 0L)
             mapParameters.seed = System.currentTimeMillis()
 
-        randomness.seedRNG(mapParameters.seed)
+        startFairnessAttempts = 1
+        startFairnessFailures = emptyList()
+        // Region based start placement only runs for a game with civilizations, not in the map editor
+        val checkStarts = mapParameters.balancedStarts && mapParameters.type != MapType.empty && gameInfo?.civilizations?.isNotEmpty() == true
+        if (!checkStarts) return generateMapOnce(mapParameters, gameParameters, gameInfo, mapSize, 0)
+
+        var best: TileMap? = null
+        var bestVerdict: StartFairness.Verdict? = null
+        for (attempt in 0 until StartFairness.MAX_ATTEMPTS) {
+            val map = generateMapOnce(mapParameters, gameParameters, gameInfo, mapSize, attempt)
+            val verdict = StartFairness(map, ruleset).evaluate()
+            startFairnessAttempts = attempt + 1
+            if (verdict.passes) return map
+            debug("Map seed %s attempt %s: starts not balanced: %s", mapParameters.seed, attempt + 1, verdict.failures)
+            if (bestVerdict == null || verdict.deficit < bestVerdict.deficit) {
+                best = map
+                bestVerdict = verdict
+            }
+        }
+        startFairnessFailures = bestVerdict!!.failures
+        return best!!
+    }
+
+    /** One map from the seed of [mapParameters] shifted by [attempt] steps, see [StartFairness.SEED_STEP] */
+    private fun generateMapOnce(mapParameters: MapParameters, gameParameters: GameParameters, gameInfo: GameInfo?, mapSize: MapSize, attempt: Int): TileMap {
+        val mapType = mapParameters.type
+
+        randomness.seedRNG(mapParameters.seed + attempt * StartFairness.SEED_STEP)
 
         val map: TileMap = if (mapParameters.shape == MapShape.rectangular)
             TileMap(mapSize.width, mapSize.height, ruleset, mapParameters.worldWrap)

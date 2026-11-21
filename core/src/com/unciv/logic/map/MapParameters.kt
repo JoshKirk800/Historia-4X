@@ -92,6 +92,10 @@ class MapParameters : IsPartOfGameInfoSerialization {
     var strategicBalance = false
     var legendaryStart = false
 
+    /** Generated maps are regenerated (up to [com.unciv.logic.map.mapgenerator.StartFairness.MAX_ATTEMPTS] times, with a derived seed) until every civilization's start has land, city sites and fertility
+     *  next to the others', see [com.unciv.logic.map.mapgenerator.StartFairness]. Only maps made for a game with civilizations are checked. */
+    var balancedStarts = true
+
     /** This is used mainly for the map editor, so you can continue editing a map under the same ruleset you started with */
     var mods = LinkedHashSet<String>()
     var baseRuleset = BaseRuleset.Civ_V_GnK.fullName // Hardcoded as the RulesetCache is not yet initialized when starting up
@@ -128,6 +132,7 @@ class MapParameters : IsPartOfGameInfoSerialization {
         toReturn.civVGridWrap = civVGridWrap
         toReturn.strategicBalance = strategicBalance
         toReturn.legendaryStart = legendaryStart
+        toReturn.balancedStarts = balancedStarts
         toReturn.mods = LinkedHashSet(mods)
         toReturn.baseRuleset = baseRuleset
         toReturn.seed = seed

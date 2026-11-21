@@ -55,6 +55,7 @@ class MapParametersTable(
     private lateinit var worldWrapCheckbox: CheckBox
     private lateinit var legendaryStartCheckbox: CheckBox
     private lateinit var strategicBalanceCheckbox: CheckBox
+    private lateinit var balancedStartsCheckbox: CheckBox
     private lateinit var seedTextField: UncivTextField.Numeric
 
     private lateinit var mapShapesOptionsValues: HashSet<String>
@@ -416,6 +417,13 @@ class MapParametersTable(
         add(legendaryStartCheckbox).row()
     }
 
+    private fun Table.addBalancedStartsCheckbox() {
+        balancedStartsCheckbox = "Balanced Starts".toCheckBox(mapParameters.balancedStarts) {
+            mapParameters.balancedStarts = it
+        }
+        add(balancedStartsCheckbox).row()
+    }
+
     private fun addWrappedCheckBoxes() {
         val worldWrapWarning = "World wrap maps are very memory intensive - creating large world wrap maps on Android can lead to crashes!"
         if (mapGeneratedMainType == MapGeneratedMainType.randomGenerated) {
@@ -424,6 +432,7 @@ class MapParametersTable(
                 persistenceID = "NewGameOtherSettings", startsOutOpened = false) {
                 it.defaults().pad(5f,0f)
                 it.addStrategicBalanceCheckbox()
+                it.addBalancedStartsCheckbox()
                 it.addLegendaryStartCheckbox()
                 it.addNoRuinsCheckbox()
                 it.addNoNaturalWondersCheckbox()
@@ -434,6 +443,7 @@ class MapParametersTable(
             add(Table(skin).apply {
                 defaults().left().pad(2.5f)
                 addStrategicBalanceCheckbox()
+                addBalancedStartsCheckbox()
                 addLegendaryStartCheckbox()
                 addNoRuinsCheckbox()
                 addNoNaturalWondersCheckbox()

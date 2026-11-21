@@ -63,6 +63,8 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
     private val marshPercent = when (rainfall) { 1 -> 8 / 1.5; 3 -> 8 * 1.5; else -> 8.0 }
     private val oasisPercent = when (rainfall) { 1 -> 6 / 1.5; 3 -> 6 * 1.5; else -> 6.0 }
 
+    private val noMountainsOnTheCoast = map.ruleset?.modOptions?.constants?.noMountainsOnTheCoast == true
+
     private val tiles = map.values.toList()
     private val minColumn = tiles.minOf { it.getColumn() }
     private val minRow = tiles.minOf { it.getRow() }
@@ -91,7 +93,10 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
         val variation = fractal(TERRAIN_GRAIN)
 
         for (tile in tiles) {
-            if (!tile.isLand || tile.isImpassible()) continue
+            if (!tile.isLand) continue
+            // Vox Populi's FeatureGenerator:AddFeatures (allow_mountains_on_coast is nil in the scripts, so false there): a mountain on the coast is hills
+            val coastalMountain = noMountainsOnTheCoast && tile.baseTerrain == Constants.mountain && tile.neighbors.any { it.isWater }
+            if (tile.isImpassible() && !coastalMountain) continue
             val lat = (latitude(tile) + (128 - variation.getHeight(x(tile), y(tile))) / (255.0 * 5.0)).coerceIn(0.0, 1.0)
             val terrain = when {
                 lat >= snowLatitude -> Constants.snow
@@ -107,7 +112,7 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
                 }
             }
             // Only the base terrain: the hills the elevation generator made stay
-            val hill = tile.hasHill
+            val hill = tile.hasHill || coastalMountain
             tile.removeTerrainFeatures()
             tile.baseTerrain = terrain
             if (hill) tile.setTerrainFeatures(listOf(Constants.hill))

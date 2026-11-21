@@ -84,6 +84,10 @@ class ModConstants {
      *  false: Brave New World's 1 at each start (2 on a Legendary Start), one more for each poor-fertility test failed. */
     var startLuxuriesLikeVoxPopuli = false
 
+    /** With [terrainGeneratorLikeCivV], make a mountain on the coast (a land tile next to water) hills, as Vox Populi's FeatureGenerator:AddFeatures does
+     *  (the Civ V scripts call it without an argument, which Brave New World reads as 'allow', and Vox Populi as 'do not allow'). */
+    var noMountainsOnTheCoast = false
+
     /** Make the terrain and the features of land as the Civ V map scripts do (see CivVTerrainGenerator): the base terrain by latitude
      *  with fractal noise, rivers and lakes as MapGenerator.lua places them, then jungle, forest, marsh, oases, flood plains, ice and atolls
      *  from fractal thresholds. It names the terrains and features of the Civ V rulesets.

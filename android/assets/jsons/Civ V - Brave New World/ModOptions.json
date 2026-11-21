@@ -94,6 +94,8 @@
         "seaDepositsOfLandResource": "Oil",
         // TerrainGenerator.lua and FeatureGenerator.lua
         "terrainGeneratorLikeCivV": true,
+        // FeatureGenerator:AddFeatures of Vox Populi: a mountain on the coast is hills (Brave New World's keeps it)
+        "noMountainsOnTheCoast": true,
         // AssignStartingPlots.lua of Brave New World (the Gods & Kings one differs: no cocoa, other counts)
         "luxuryPlacementLikeCivV": true,
         // PlaceLuxuries and PlaceIvory of Vox Populi's AssignStartingPlots.lua: 2 luxuries at each start, no compensation for a poor region, ivory of at least 2

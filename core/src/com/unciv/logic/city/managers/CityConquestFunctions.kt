@@ -163,7 +163,7 @@ class CityConquestFunctions(val city: City) {
             city.population.addPopulation(-(1 + city.population.population / 4) * (100 - influenceReduction) / 100) // so from 2-4 population, remove 1, from 5-8, remove 2, etc.
         city.reassignAllPopulation()
 
-        val resistanceTurns = city.population.population * (100 - influenceReduction) / 100
+        val resistanceTurns = getResistanceTurns(influenceReduction)
         if (!reconqueredCityWhileStillInResistance && city.foundingCivObject != receivingCiv && resistanceTurns > 0) {
             // add resistance
             // I checked, and even if you puppet there's resistance for conquering
@@ -178,6 +178,22 @@ class CityConquestFunctions(val city: City) {
         }
     }
 
+
+    /**
+     *  The turns of resistance a conquered city has (CvPlayer::acquireCity, V:CvPlayer.cpp:4463-4470): its population, which tourism influence over the
+     *  old owner reduces by [influenceReduction] percent. With [com.unciv.models.ModConstants.cityNeedsLikeVp] only population x 2 / 3 of it
+     *  (the numerator and denominator are [com.unciv.models.ModConstants.NeedsConstants.resistanceTurnsPopulationNumerator] and
+     *  `...Denominator`), reduced the same way, and at least 1 whatever the reduction.
+     */
+    @Readonly
+    private fun getResistanceTurns(influenceReduction: Int): Int {
+        val constants = city.civ.gameInfo.ruleset.modOptions.constants
+        if (!constants.cityNeedsLikeVp)
+            return city.population.population * (100 - influenceReduction) / 100
+        val needs = constants.needs
+        val turns = city.population.population * needs.resistanceTurnsPopulationNumerator / needs.resistanceTurnsPopulationDenominator
+        return max(turns * (100 - influenceReduction) / 100, 1)
+    }
 
     /** This happens when we either puppet OR annex, basically whenever we conquer a city and don't liberate it */
     fun puppetCity(conqueringCiv: Civilization) {
@@ -198,7 +214,16 @@ class CityConquestFunctions(val city: City) {
         city.cityConstructions.removeAll()
     }
 
+    /**
+     *  CvCity::DoAnnex: with [com.unciv.models.ModConstants.cityNeedsLikeVp] a city in resistance has half of the turns it has left taken off,
+     *  rounded down (V:CvCity.cpp:19604-19609), so one turn is still one turn.
+     */
     fun annexCity() {
+        val constants = city.civ.gameInfo.ruleset.modOptions.constants
+        if (constants.cityNeedsLikeVp && constants.needs.annexHalvesResistance && city.isInResistance()) {
+            val turnsLeft = city.getFlag(CityFlags.Resistance)
+            city.setFlag(CityFlags.Resistance, turnsLeft - turnsLeft / 2)
+        }
         city.isPuppet = false
         if (!city.isInResistance()) city.shouldReassignPopulation = true
         city.avoidGrowth = false

@@ -53,6 +53,10 @@ object UnitActionsFromUniques {
         if (!unit.hasMovement() || !tile.canBeSettled(unit.civ))
             return UnitAction(UnitActionType.FoundCity, associatedUnique = unique, action = null)
 
+        // CvPlayer::canFound: "Settlers cannot found cities while empire is very unhappy" (V:CvPlayer.cpp:13851-13860), with Vox Populi's needs only
+        if (unit.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp && unit.civ.isEmpireVeryUnhappy())
+            return UnitAction(UnitActionType.FoundCity, associatedUnique = unique, action = null)
+
         val hasActionModifiers = unique.modifiers.any { it.type?.targetTypes?.contains(
             UniqueTarget.UnitActionModifier
         ) == true }

@@ -191,11 +191,28 @@ class CityStats(val city: City) {
         return null
     }
 
-    /** The percent bonuses of a puppet city (BNW's PUPPET_SCIENCE_MODIFIER and PUPPET_CULTURE_MODIFIER, -25); read by the builder AI's yield prices */
+    /**
+     *  The percent bonuses of a puppet city (BNW's PUPPET_SCIENCE_MODIFIER and PUPPET_CULTURE_MODIFIER, -25); read by the builder AI's yield prices.
+     *  With [com.unciv.models.ModConstants.cityNeedsLikeVp] none: Vox Populi sets those two to 0 and a puppet's yields are multiplied
+     *  by [com.unciv.models.ModConstants.NeedsConstants.puppetYieldMultiplier] instead ([getPuppetYieldMultiplier]).
+     */
     @Readonly
     fun getStatPercentBonusesFromPuppetCity(): Stats? {
-        if (!city.isPuppet) return null
+        if (!city.isPuppet || city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) return null
         return Stats(science = -25f, culture = -25f)
+    }
+
+    /**
+     *  CvCity::getYieldModifierMultiplicative: with [com.unciv.models.ModConstants.cityNeedsLikeVp] a puppet city keeps 30 percent of its gold,
+     *  science, culture and faith (`PUPPET_YIELD_AND_SUPPLY_MODIFIER_MULTIPLICATIVE` of Vox Populi, V:CvCity.cpp:23039-23047; it applies to tourism and golden age points too,
+     *  which Unciv's cities do not make as yields). The share is taken of the yield after the percent bonuses and before the trade routes
+     *  (CvCity::getYieldRateTimes100 multiplies before it adds the trade yield). 1 for any other city.
+     */
+    @Readonly
+    private fun getPuppetYieldMultiplier(): Float {
+        val constants = city.civ.gameInfo.ruleset.modOptions.constants
+        if (!city.isPuppet || !constants.cityNeedsLikeVp) return 1f
+        return constants.needs.puppetYieldMultiplier / 100f
     }
 
     @Readonly
@@ -728,6 +745,13 @@ class CityStats(val city: City) {
         }
         for (entry in newFinalStatList.values) {
             entry.science *= statPercentBonusesSum.science.toPercent()
+        }
+        val puppetMultiplier = getPuppetYieldMultiplier()
+        if (puppetMultiplier != 1f) for (entry in newFinalStatList.values) {
+            entry.gold *= puppetMultiplier
+            entry.science *= puppetMultiplier
+            entry.culture *= puppetMultiplier
+            entry.faith *= puppetMultiplier
         }
         if (!statsFromTradeRoutes.isEmpty()) newFinalStatList[TradeRouteManager.STAT_SOURCE] = statsFromTradeRoutes
 

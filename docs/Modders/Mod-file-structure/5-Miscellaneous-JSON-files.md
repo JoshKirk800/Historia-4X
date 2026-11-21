@@ -575,6 +575,8 @@ Only read with `cityNeedsLikeVp`. These values are not merged individually, only
 | resistanceTurnsPopulationDenominator | Int | 3 | |
 | annexHalvesResistance | Boolean | true | Annexing a city in resistance halves what is left (read by the conquest rules) |
 | revoltCounterMin | Int | 10 | Turns a very unhappy empire waits before a city revolts (read by the revolt rules) |
+| uprisingRebelsBase | Int | 100 | An uprising spawns (this + (cities + a random number below the number of cities) x the next) / 100 rebel units |
+| uprisingRebelsPerCity | Int | 20 | See above |
 | goldenAgeThresholdInitial | Int | 1000 | The first golden age's threshold (read by the golden age rules) |
 | goldenAgeThresholdBase | Int | 400 | The base of the later ones |
 | goldenAgeThresholdPerGoldenAge | Int | 2000 | Added for each golden age had |

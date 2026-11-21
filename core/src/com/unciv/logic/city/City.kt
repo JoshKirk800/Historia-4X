@@ -330,7 +330,21 @@ class City : IsPartOfGameInfoSerialization, INamed {
     fun containsBuildingUnique(uniqueType: UniqueType, state: GameContext = this.state) =
         cityConstructions.builtBuildingUniqueMap.getMatchingUniques(uniqueType, state).any()
 
-    @Readonly fun getGreatPersonPoints() = GreatPersonPointsBreakdown(this).sum()
+    /**
+     *  CvCity::IsOccupied: a city the civilization took (it was not founded by it) and has not made a puppet; an annexed one. Conquest sets it in the original
+     *  (CvPlayer::acquireCity) and the city keeps it, so a puppet that is annexed later is occupied; what a puppet pays is told by [isPuppet].
+     *  Whether the occupation costs unhappiness is [CityStats.hasExtraAnnexUnhappiness] (a Courthouse makes it cost nothing, CvCity::IsNoOccupiedUnhappiness).
+     */
+    @Readonly fun isOccupied() = !isPuppet && foundingCivObject.let { it != null && it != civ }
+
+    /**
+     *  The points of the city toward each great person this turn. With [com.unciv.models.ModConstants.cityNeedsLikeVp] a puppet makes none
+     *  (CvPlayer::doTurn's great person points skip `MOD_BALANCE_PUPPET_CHANGES && IsPuppet()`, V:CvPlayer.cpp:28505-28509).
+     */
+    @Readonly
+    fun getGreatPersonPoints(): Counter<String> =
+        if (isPuppet && getRuleset().modOptions.constants.cityNeedsLikeVp) Counter()
+        else GreatPersonPointsBreakdown(this).sum()
 
     fun gainStockpiledResource(resource: TileResource, amount: Int) =
         if (resource.isCityWide) resourceStockpiles.add(resource.name, amount)

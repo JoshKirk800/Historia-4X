@@ -131,8 +131,8 @@ class CityNeeds(private val city: City) {
 
     @Readonly private fun isRazingOrInResistance() = city.isBeingRazed || city.isInResistance()
 
-    /** `IsOccupied() && !IsNoOccupiedUnhappiness()`: the city is an annexed one with the extra unhappiness (see [CityStats.hasExtraAnnexUnhappiness]), which is no puppet */
-    @Readonly private fun isOccupiedWithUnhappiness() = city.cityStats.hasExtraAnnexUnhappiness()
+    /** `IsOccupied() && !IsNoOccupiedUnhappiness()`: the city is an occupied one ([City.isOccupied], no puppet) without a Courthouse or the like */
+    @Readonly private fun isOccupiedWithUnhappiness() = city.isOccupied() && !city.containsBuildingUnique(UniqueType.RemovesAnnexUnhappiness)
 
     /** CvPlayer::GetNumRealCities counts these: no puppet that may be annexed and no occupied city (that is, one with the extra unhappiness), but cities in resistance do count */
     @Readonly

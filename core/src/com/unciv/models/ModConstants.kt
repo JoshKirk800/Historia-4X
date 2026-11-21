@@ -339,6 +339,9 @@ class ModConstants {
         val annexHalvesResistance: Boolean = true,
         /** (S2) The turns a very unhappy empire waits before a city revolts (DEF-CP `REVOLT_COUNTER_MIN`) */
         val revoltCounterMin: Int = 10,
+        /** (S2) The rebels of an uprising are (this + (cities + a random number below the cities) x the next) / 100 (CvPlayer::DoUprising, GlobalDefines `UPRISING_NUM_BASE`, `UPRISING_NUM_CITY_COUNT`, unchanged from Brave New World) */
+        val uprisingRebelsBase: Int = 100,
+        val uprisingRebelsPerCity: Int = 20,
         /** (S2) The golden age threshold (CvPlayer::GetGoldenAgeProgressThreshold): the first one, the base of the later ones, the rise per golden age had, percent per city, and the divisor the shown threshold is rounded to (DEF-VP `GOLDEN_AGE_BASE_THRESHOLD_INITIAL`, `..._HAPPINESS`, `GOLDEN_AGE_EACH_GA_ADDITIONAL_HAPPINESS`, `GOLDEN_AGE_THRESHOLD_CITY_MULTIPLIER`, DEF-CP `GOLDEN_AGE_VISIBLE_THRESHOLD_DIVISOR`) */
         val goldenAgeThresholdInitial: Int = 1000,
         val goldenAgeThresholdBase: Int = 400,

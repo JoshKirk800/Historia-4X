@@ -70,7 +70,8 @@ class MapLandmassGenerator(
             MapType.archipelagoLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.archipelago)
             MapType.tinyIslandsLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.tinyIslands)
             MapType.fractalLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.fractal)
-            MapType.fourCornersLikeCivV, MapType.inlandSeaLikeCivV -> createLayeredLikeCivV()
+            MapType.fourCornersLikeCivV, MapType.inlandSeaLikeCivV, MapType.lakesLikeCivV, MapType.northVsSouthLikeCivV, MapType.westVsEastLikeCivV,
+            MapType.highlandsLikeCivV, MapType.borealLikeCivV, MapType.donutLikeCivV -> createLayeredLikeCivV()
         }
 
         if (tileMap.mapParameters.shape == MapShape.flatEarth) {
@@ -309,7 +310,7 @@ class MapLandmassGenerator(
         tileMap.assignContinents(TileMap.AssignContinentsMode.Clear)
     }
 
-    /** Four_Corners.lua and InlandSea.lua (the layered scripts), see [CivVLayeredScripts]: land, hills and mountains, on the grid the script set */
+    /** The layered and regional scripts (Four_Corners, InlandSea, Lakes, North_vs_South, West_vs_East, Donut, Highlands, Boreal), see [CivVLayeredScripts]: land, hills and mountains, on the grid the script set */
     private fun createLayeredLikeCivV() {
         val tiles = tileMap.values.toList()
         val geometry = UncivHexGeometry(tileMap)

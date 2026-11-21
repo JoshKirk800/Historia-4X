@@ -65,9 +65,19 @@ class CivVLayeredWorld(
     private val geometry: HexGeometry,
     private val wrapX: Boolean,
     private val rng: Random,
-    private val worldSize: CivVWorldSize
+    private val worldSize: CivVWorldSize,
+    /** The least distance in cells between two seeds of a ridge field: `CvFractal::ridgeBuilder` keeps 7 nodes of its 128 x 64 apart, see [nodeSeedDistance] */
+    private val seedDistance: Int = MIN_SEED_DISTANCE
 ) {
     companion object {
+        const val MIN_SEED_DISTANCE = 7
+
+        /**
+         *  The 7 nodes of the original's ridge builder, which lays its seeds on 128 columns of nodes whatever the size of the map, as cells of a map [width] cells wide:
+         *  about 0.05 cells per node column, at least 1. A grid of 16 or 24 columns (the small scripts) has no room for six seeds 7 cells apart.
+         */
+        fun nodeSeedDistance(width: Int) = maxOf(1, Math.round(MIN_SEED_DISTANCE * width / (1 shl CivVFractal.DEFAULT_X_EXP).toDouble()).toInt())
+
         /** PlotTypes: mountain 0, hills 1, land 2, ocean 3 */
         const val MOUNTAIN = 0
         const val HILLS = 1
@@ -260,7 +270,7 @@ class CivVLayeredWorld(
     }
 
     /** CvFractal::getHeightFromPercent on a field of the map's cells */
-    private fun percent(field: Array<IntArray>, percent: Int): Int {
+    fun percent(field: Array<IntArray>, percent: Int): Int {
         val p = percent.coerceIn(0, 100)
         val total = width * height
         var lower = 0
@@ -281,7 +291,7 @@ class CivVLayeredWorld(
      *  closest: low in the middle of a region, high on the borders between regions: ridges), blended with [base] as
      *  (ridge x [blendRidge] + base x [blendFract]) / (sum). [biased] adds the seeds' weakness, a little noise and the direction bias to the distance.
      */
-    private fun ridgeField(base: CivVFractal, numSeeds: Int, biased: Boolean, blendRidge: Int, blendFract: Int): Array<IntArray> {
+    fun ridgeField(base: CivVFractal, numSeeds: Int, biased: Boolean, blendRidge: Int, blendFract: Int): Array<IntArray> {
         class Seed(val x: Int, val y: Int, val weakness: Int, val direction: Int, val strength: Int)
         val seeds = ArrayList<Seed>()
         repeat(maxOf(numSeeds, 3)) {
@@ -291,7 +301,7 @@ class CivVLayeredWorld(
             val direction = rng.nextInt(6)
             val strength = maxOf(0, rng.nextInt(8) - 4)
             var tries = 0
-            while (seeds.any { geometry.distance(x, y, it.x, it.y) < 7 } && tries++ < 200) { x = rng.nextInt(width); y = rng.nextInt(height) }
+            while (seeds.any { geometry.distance(x, y, it.x, it.y) < seedDistance } && tries++ < 200) { x = rng.nextInt(width); y = rng.nextInt(height) }
             seeds.add(Seed(x, y, weakness, direction, strength))
         }
         fun estimateDirection(dx: Double, dy: Double): Int {
@@ -322,7 +332,8 @@ class CivVLayeredWorld(
                     if (distance < closest) { nextClosest = closest; closest = distance }
                     else if (distance < nextClosest) nextClosest = distance
                 }
-                val ridge = (255 * closest) / nextClosest
+                // (two seeds on one cell, which the 200 tries leave on a map too small for them, would divide by zero: the original has no such case)
+                val ridge = (255 * closest) / maxOf(nextClosest, 1)
                 (ridge * blendRidge + base.getHeight(x, y) * blendFract) / maxOf(blendRidge + blendFract, 1)
             }
         }

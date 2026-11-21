@@ -52,9 +52,18 @@ object MapType {
     const val archipelagoLikeCivV = "Archipelago (Civ V)"
     const val tinyIslandsLikeCivV = "Tiny Islands (Civ V)"
     const val fractalLikeCivV = "Fractal (Civ V)"
+    /** Lakes.lua, North_vs_South.lua, West_vs_East.lua, Highlands.lua, Boreal.lua and Donut.lua on their own grids, see [com.unciv.logic.map.mapgenerator.CivVScripts] */
+    const val lakesLikeCivV = "Lakes (Civ V)"
+    const val northVsSouthLikeCivV = "North vs South (Civ V)"
+    const val westVsEastLikeCivV = "West vs East (Civ V)"
+    const val highlandsLikeCivV = "Highlands (Civ V)"
+    const val borealLikeCivV = "Boreal (Civ V)"
+    const val donutLikeCivV = "Donut (Civ V)"
 
     /** The types that make their own hills and mountains and the world age matters to (the elevation generator does not run for them) */
-    val ownElevation = setOf(continentsLikeCivV, pangaeaLikeCivV, smallContinentsLikeCivV, archipelagoLikeCivV, tinyIslandsLikeCivV, fractalLikeCivV, fourCornersLikeCivV, inlandSeaLikeCivV)
+    val ownElevation = setOf(continentsLikeCivV, pangaeaLikeCivV, smallContinentsLikeCivV, archipelagoLikeCivV, tinyIslandsLikeCivV, fractalLikeCivV,
+        fourCornersLikeCivV, inlandSeaLikeCivV,
+        lakesLikeCivV, northVsSouthLikeCivV, westVsEastLikeCivV, highlandsLikeCivV, borealLikeCivV, donutLikeCivV)
     
     // ordered based on popularity poll
     val allValues = listOf(
@@ -78,7 +87,13 @@ object MapType {
         tinyIslandsLikeCivV,
         fractalLikeCivV,
         fourCornersLikeCivV,
-        inlandSeaLikeCivV
+        inlandSeaLikeCivV,
+        lakesLikeCivV,
+        northVsSouthLikeCivV,
+        westVsEastLikeCivV,
+        highlandsLikeCivV,
+        borealLikeCivV,
+        donutLikeCivV
     )
 
     // All ocean tiles

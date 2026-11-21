@@ -79,6 +79,11 @@ class ModConstants {
      *  false: the generic placement of the resources' `Generated with weight` rules. */
     var luxuryPlacementLikeCivV = false
 
+    /** With [luxuryPlacementLikeCivV], place the luxuries at the civs' starts as Vox Populi's AssignStartingPlots.lua does: 2 at each start (3 on a
+     *  Legendary Start) without making up for a poor region, and Ivory as a special case (like marble) of at least 2.
+     *  false: Brave New World's 1 at each start (2 on a Legendary Start), one more for each poor-fertility test failed. */
+    var startLuxuriesLikeVoxPopuli = false
+
     /** Make the terrain and the features of land as the Civ V map scripts do (see CivVTerrainGenerator): the base terrain by latitude
      *  with fractal noise, rivers and lakes as MapGenerator.lua places them, then jungle, forest, marsh, oases, flood plains, ice and atolls
      *  from fractal thresholds. It names the terrains and features of the Civ V rulesets.

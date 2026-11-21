@@ -23,8 +23,10 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.utils.debug
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
+import yairm210.purity.annotations.Pure
 import kotlin.math.E
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -46,6 +48,13 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
 
     companion object {
         private const val consoleTimings = false
+
+        /**
+         *  The ancient ruins of a landmass of [landTiles] tiles (AddGoodies of MapGenerator.lua): a ruin is placed while the count is below
+         *  `(landTiles + tilesPerRuin / 2) / tilesPerRuin` in floating point, so the landmass gets that number rounded up.
+         */
+        @Pure
+        fun ruinsWanted(landTiles: Int, tilesPerRuin: Int): Int = ceil((landTiles + tilesPerRuin / 2.0) / tilesPerRuin).toInt()
 
         /**
          * @return Radius in range 0.0 (center of map) to 1.0 (edge of map).
@@ -536,7 +545,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
     }
 
     /**
-     *  AddGoodies: on every landmass of at least 3 tiles one ruin per 40 land tiles (rounded to nearest: (tiles + 20) / 40), each on a random
+     *  AddGoodies: on every landmass of at least 3 tiles one ruin per 40 land tiles (rounded up, see [ruinsWanted]), each on a random
      *  tile that has no resource, no improvement and is at least 3 tiles away from every other ruin and more than 3 from every start.
      */
     private fun spreadAncientRuinsLikeCivV(
@@ -552,7 +561,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         for ((continent, tiles) in byContinent.entries.sortedBy { it.key }) {
             val size = map.continentSizes[continent] ?: tiles.size
             if (size < 3) continue
-            val wanted = (size + tilesPerGoody / 2) / tilesPerGoody
+            val wanted = ruinsWanted(size, tilesPerGoody)
             var count = 0
             for (tile in tiles.shuffled(randomness.RNG)) {
                 if (count >= wanted) break

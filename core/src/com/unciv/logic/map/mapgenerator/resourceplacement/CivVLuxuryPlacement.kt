@@ -52,6 +52,7 @@ class CivVLuxuryPlacement(
             "Citrus" to 5, "Truffles" to 5, "Cocoa" to 5, "Crab" to 10
         )
         private const val MARBLE = "Marble"
+        private const val IVORY = "Ivory"
         private val waterLuxuries = setOf("Whales", "Pearls", "Crab")
 
         /** GetIndicesForLuxuryType: the numbers (1-15) of the plot lists a luxury goes on, best first */
@@ -111,6 +112,7 @@ class CivVLuxuryPlacement(
         tileMap.mapParameters.getMapResources() == MapResourceSetting.abundant -> 3
         else -> 2
     }
+    private val viaVoxPopuli = ruleset.modOptions.constants.startLuxuriesLikeVoxPopuli
     private val worldSize = CivVWorldSize.forTiles(tileMap.values.size)
     private val luxuryCount = HashMap<String, Int>()
     private val assignedToRegions = ArrayList<String>()
@@ -308,14 +310,14 @@ class CivVLuxuryPlacement(
         // 1. The civs' starts
         for (region in order) {
             val name = region.luxury!!
-            var toPlace = if (resourceSetting == 4) 2 else 1
-            if (averageFertilityPerRectangle(region) < 2.5) {
+            var toPlace = if (viaVoxPopuli) (if (resourceSetting == 4) 3 else 2) else if (resourceSetting == 4) 2 else 1
+            if (!viaVoxPopuli && averageFertilityPerRectangle(region) < 2.5) {
                 toPlace++
                 lowFertilityOfLuxury.merge(name, 1, Int::plus)
                 lowFertilityOfRegion.merge(region, 1, Int::plus)
             }
             val landPlots = region.tiles.count { it.baseTerrain != Constants.mountain }.coerceAtLeast(1)
-            if (region.totalFertility.toDouble() / landPlots < 4) {
+            if (!viaVoxPopuli && region.totalFertility.toDouble() / landPlots < 4) {
                 toPlace++
                 lowFertilityOfLuxury.merge(name, 1, Int::plus)
                 lowFertilityOfRegion.merge(region, 1, Int::plus)
@@ -341,6 +343,12 @@ class CivVLuxuryPlacement(
         for (start in tileMap.startingLocationsByNation.filterKeys { ruleset.nations[it]!!.isCityState }.map { it.value.first() })
             placeCityStateLuxury(start)
 
+        // Vox Populi places the special cases, ivory and marble, here, before the regional and random luxuries fill the luxury layer
+        if (viaVoxPopuli) {
+            if (IVORY in ruleset.tileResources) placeIvory()
+            if (MARBLE in ruleset.tileResources) placeMarble()
+        }
+
         // 3. The regions' own luxury
         val numCivs = regions.size
         val targets = regionTargets[worldSize]!!
@@ -360,8 +368,8 @@ class CivVLuxuryPlacement(
         // 5. A second luxury at each start (not on sparse)
         if (resourceSetting != 1) for (region in regions) placeSecondLuxury(region)
 
-        // 6. Marble
-        if (MARBLE in ruleset.tileResources) placeMarble()
+        // 6. Marble (Vox Populi placed it, and ivory, before the regions' luxuries)
+        if (!viaVoxPopuli && MARBLE in ruleset.tileResources) placeMarble()
     }
 
     private fun placeCityStateLuxury(start: Tile) {
@@ -465,6 +473,39 @@ class CivVLuxuryPlacement(
             tileData.placeImpact(ImpactType.Luxury, tile, 1)
             for (ring in 1..6) tile.getTilesAtDistance(ring).forEach { marbleLayer.add(it) }
             marbleLayer.add(tile)
+        }
+    }
+
+    /**
+     *  PlaceIvory of Vox Populi: `ceil(civs x 0.5 / 0.75 / 1)` ivory in all, at least 2 more than there are, each keeping the luxury layer at 1.
+     *  Its lists, best first: featureless plains, plains covered by forest or jungle, featureless grass without and with fresh water, hills
+     *  of plains without a feature. AdjustTiles then makes the tile flat plains: the hill and the trees go, grassland becomes plains.
+     */
+    private fun placeIvory() {
+        val resource = resource(IVORY) ?: return
+        val plains = ruleset.terrains[Constants.plains] ?: return
+        val placed = tileMap.values.count { it.resource == IVORY }
+        val target = ceil(regions.size * when (resourceSetting) { 1 -> 0.5; 3 -> 1.0; else -> 0.75 }).toInt()
+        var left = max(2, target - placed)
+        val lists = listOf(
+            globalLists[11],
+            (globalLists[8] + globalLists[9]).filter { it.baseTerrain == Constants.plains },
+            globalLists[12],
+            globalLists[13],
+            globalLists[4].filter { it.baseTerrain == Constants.plains }
+        )
+        for (list in lists) {
+            for (tile in list.shuffled(rng)) {
+                if (left <= 0) return
+                if (!canHold(resource, tile) || tileData[tile]!!.impacts.containsKey(ImpactType.Luxury)) continue
+                tile.setTileResource(resource, majorDeposit = false)
+                totalPlaced++
+                left--
+                tileData.placeImpact(ImpactType.Luxury, tile, 1)
+                tile.removeTerrainFeatures()
+                if (tile.baseTerrain != Constants.plains) tile.setBaseTerrain(plains)
+                tile.setTerrainTransients()
+            }
         }
     }
 

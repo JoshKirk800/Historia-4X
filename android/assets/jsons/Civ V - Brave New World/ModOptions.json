@@ -96,6 +96,8 @@
         "terrainGeneratorLikeCivV": true,
         // AssignStartingPlots.lua of Brave New World (the Gods & Kings one differs: no cocoa, other counts)
         "luxuryPlacementLikeCivV": true,
+        // PlaceLuxuries and PlaceIvory of Vox Populi's AssignStartingPlots.lua: 2 luxuries at each start, no compensation for a poor region, ivory of at least 2
+        "startLuxuriesLikeVoxPopuli": true,
         // AssignStartingPlots:BalanceAndAssign of Brave New World (it differs from the Gods & Kings one by the civs placed first)
         "startAssignmentLikeCivV": true,
         // AddExtraBonusesToHillsRegions, PlaceSexyBonusAtCivStarts, AddModernMinorStrategicsToCityStates, the strategic top-ups, FixSugarJungles

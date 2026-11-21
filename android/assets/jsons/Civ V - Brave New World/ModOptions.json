@@ -104,6 +104,9 @@
         "startAssignmentLikeCivV": true,
         // AddExtraBonusesToHillsRegions, PlaceSexyBonusAtCivStarts, AddModernMinorStrategicsToCityStates, the strategic top-ups, FixSugarJungles
         "resourceExtrasLikeCivV": true,
+        // AssignStartingPlots.lua of Vox Populi 5.4.8: PlaceStrategicAndBonusResources, AddModernMinorStrategicsToCityStates, PlaceSmallQuantitiesOfStrategics, PlaceOilInTheSea.
+        // It replaces the strategic parts of the placement above (the major deposits per terrain, the small deposits at 23 tiles, the oil in the sea at 1 in 4, the top-ups)
+        "strategicPlacementLikeVoxPopuli": true,
         "naturalWondersLikeCivV": true,
         "ancientRuinsLikeCivV": true
     },

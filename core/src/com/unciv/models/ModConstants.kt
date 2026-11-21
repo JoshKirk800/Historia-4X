@@ -75,6 +75,13 @@ class ModConstants {
      *  for each civ, by groups (the sea, preferred, avoided types), civs with the `Chooses its start region before...` unique first. */
     var startAssignmentLikeCivV = false
 
+    /** Place the strategic resources as the AssignStartingPlots.lua of Vox Populi does (see VoxPopuliStrategics): each of iron, horses, coal, oil,
+     *  aluminum and uranium on its own plot lists with its own one-deposit-per-N-tiles rule and impact layer (at least one deposit for each non-empty list),
+     *  small deposits, oil in the sea as a fifth of the units on land, a small deposit at 3 in 5 city states and the top-ups per civ. It names the
+     *  strategic resources of Civ V and takes their amounts from `majorDepositAmount` and `minorDepositAmount`.
+     *  false: the major deposits per terrain (`MajorStrategicFrequency`), the minor deposits, `seaDepositsOfLandResource` and the extras. */
+    var strategicPlacementLikeVoxPopuli = false
+
     /** Assign and place the luxuries as AssignStartingPlots.lua does (see CivVLuxuryPlacement). It names the luxuries of Civ V.
      *  false: the generic placement of the resources' `Generated with weight` rules. */
     var luxuryPlacementLikeCivV = false

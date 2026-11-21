@@ -53,7 +53,9 @@ object StrategicBonusResourcePlacementLogic {
         val landList = ArrayList<Tile>() // For minor deposits
 
         /** Maps resource uniques for determining frequency/weighting/size to relevant tiles  */ 
-        val ruleLists = buildRuleLists(ruleset, tileMap, regions, fallbackStrategic, strategicResources) // For rule-based generation
+        // The Vox Populi placement has its own lists (VoxPopuliStrategics): the strategic rules of the resources are not used
+        val voxPopuli = ruleset.modOptions.constants.strategicPlacementLikeVoxPopuli
+        val ruleLists = buildRuleLists(ruleset, tileMap, regions, fallbackStrategic && !voxPopuli, strategicResources, includeStrategic = !voxPopuli) // For rule-based generation
         
         // Now go through the entire map to build lists
         val flatLandOnly = ruleset.modOptions.constants.minorDepositsOnFlatLandOnly
@@ -74,17 +76,24 @@ object StrategicBonusResourcePlacementLogic {
 
         val extras = if (ruleset.modOptions.constants.resourceExtrasLikeCivV)
             CivVResourceExtras(tileMap, regions, tileData, ruleset, GameContext(gameInfo = tileMap.gameInfo).stateBasedRandom("CivVResourceExtras")) else null
-        placeMajorDepositsOnLand(ruleset, ruleLists, totalPlaced, tileData, fallbackStrategic)
-        if (extras != null) extras.addModernMinorStrategicsToCityStates()
-        else placeSmallDepositsOfModernStrategicResourcesOnCityStates(ruleset, strategicResources, tileMap, totalPlaced, tileData)
-        placeMinorDepositsOnLand(ruleset.modOptions.constants.minorDepositFrequency, bonusMultiplier, landList, tileData, strategicResources, fallbackStrategic, totalPlaced)
-        placeSeaDepositsOfLandResource(ruleset, tileMap, tileData, totalPlaced)
-        placeMajorDepositsOnWater(ruleset, ruleLists, totalPlaced, tileData, fallbackStrategic)
-        if (extras != null) {
-            extras.topUpStrategics()
-            extras.placeBonusAtStarts()
-            extras.addBonusesToHillsRegions()
-        } else ensureMinimumResourcesPerCiv(strategicResources, regions, totalPlaced, ruleset, landList, tileMap, tileData)
+        if (voxPopuli) {
+            VoxPopuliStrategics(tileMap, regions, tileData, ruleset,
+                GameContext(gameInfo = tileMap.gameInfo).stateBasedRandom("VoxPopuliStrategics")).placeStrategics()
+            extras?.placeBonusAtStarts()
+            extras?.addBonusesToHillsRegions()
+        } else {
+            placeMajorDepositsOnLand(ruleset, ruleLists, totalPlaced, tileData, fallbackStrategic)
+            if (extras != null) extras.addModernMinorStrategicsToCityStates()
+            else placeSmallDepositsOfModernStrategicResourcesOnCityStates(ruleset, strategicResources, tileMap, totalPlaced, tileData)
+            placeMinorDepositsOnLand(ruleset.modOptions.constants.minorDepositFrequency, bonusMultiplier, landList, tileData, strategicResources, fallbackStrategic, totalPlaced)
+            placeSeaDepositsOfLandResource(ruleset, tileMap, tileData, totalPlaced)
+            placeMajorDepositsOnWater(ruleset, ruleLists, totalPlaced, tileData, fallbackStrategic)
+            if (extras != null) {
+                extras.topUpStrategics()
+                extras.placeBonusAtStarts()
+                extras.addBonusesToHillsRegions()
+            } else ensureMinimumResourcesPerCiv(strategicResources, regions, totalPlaced, ruleset, landList, tileMap, tileData)
+        }
         placeBonusResources(ruleset, ruleLists, tileData, bonusMultiplier, tileMap)
         if (extras != null) extras.fixSugarJungles() else placeBonusInThirdRingOfStart(regions, ruleset, tileMap, tileData)
     }
@@ -359,13 +368,14 @@ object StrategicBonusResourcePlacementLogic {
         tileMap: TileMap,
         regions: ArrayList<Region>,
         fallbackStrategic: Boolean,
-        strategicResources: List<TileResource>
+        strategicResources: List<TileResource>,
+        includeStrategic: Boolean = true
     ): HashMap<Unique, MutableList<Tile>> {
         val ruleLists = HashMap<Unique, MutableList<Tile>>() // For rule-based generation
 
         // Figure out which rules (sets of conditionals) need lists built
         for (resource in ruleset.tileResources.values.filter {
-            it.resourceType == ResourceType.Strategic ||
+            (includeStrategic && it.resourceType == ResourceType.Strategic) ||
                     it.resourceType == ResourceType.Bonus
         }) {
 

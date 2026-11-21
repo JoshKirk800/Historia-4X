@@ -23,8 +23,10 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.utils.debug
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
+import yairm210.purity.annotations.Pure
 import kotlin.math.E
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -46,6 +48,13 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
 
     companion object {
         private const val consoleTimings = false
+
+        /**
+         *  The ancient ruins of a landmass of [landTiles] tiles (AddGoodies of MapGenerator.lua): a ruin is placed while the count is below
+         *  `(landTiles + tilesPerRuin / 2) / tilesPerRuin` in floating point, so the landmass gets that number rounded up.
+         */
+        @Pure
+        fun ruinsWanted(landTiles: Int, tilesPerRuin: Int): Int = ceil((landTiles + tilesPerRuin / 2.0) / tilesPerRuin).toInt()
 
         /**
          * @return Radius in range 0.0 (center of map) to 1.0 (edge of map).
@@ -147,14 +156,53 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
             .map { unique -> TerrainOccursRange(this, unique) }
             .ifEmpty { sequenceOf(TerrainOccursRange(this)) }
 
+    /** How many maps the last [generateMap] made before one passed [StartFairness] (1 when the check was off or the first passed), for logs */
+    var startFairnessAttempts = 0
+        private set
+    /** The failures of the last map returned that did not pass, empty when it passed or no check ran */
+    var startFairnessFailures: List<String> = emptyList()
+        private set
+
     fun generateMap(mapParameters: MapParameters, gameParameters: GameParameters = GameParameters(), gameInfo: GameInfo? = null): TileMap {
         val mapSize = if (mapParameters.mapSize.name != auto) mapParameters.mapSize else resolveAutoMapSize(mapParameters, gameParameters, gameInfo)
-        val mapType = mapParameters.type
 
         if (mapParameters.seed == 0L)
             mapParameters.seed = System.currentTimeMillis()
 
-        randomness.seedRNG(mapParameters.seed)
+        // A script that sets its own grid (GetMapInitData) makes the map on it, from a copy of the parameters
+        val ownGrid = CivVScripts.withOwnGrid(mapParameters)
+        return generateChecked(ownGrid ?: mapParameters, gameParameters, gameInfo, ownGrid?.mapSize ?: mapSize)
+    }
+
+    private fun generateChecked(mapParameters: MapParameters, gameParameters: GameParameters, gameInfo: GameInfo?, mapSize: MapSize): TileMap {
+        startFairnessAttempts = 1
+        startFairnessFailures = emptyList()
+        // Region based start placement only runs for a game with civilizations, not in the map editor
+        val checkStarts = mapParameters.balancedStarts && mapParameters.type != MapType.empty && gameInfo?.civilizations?.isNotEmpty() == true
+        if (!checkStarts) return generateMapOnce(mapParameters, gameParameters, gameInfo, mapSize, 0)
+
+        var best: TileMap? = null
+        var bestVerdict: StartFairness.Verdict? = null
+        for (attempt in 0 until StartFairness.MAX_ATTEMPTS) {
+            val map = generateMapOnce(mapParameters, gameParameters, gameInfo, mapSize, attempt)
+            val verdict = StartFairness(map, ruleset).evaluate()
+            startFairnessAttempts = attempt + 1
+            if (verdict.passes) return map
+            debug("Map seed %s attempt %s: starts not balanced: %s", mapParameters.seed, attempt + 1, verdict.failures)
+            if (bestVerdict == null || verdict.deficit < bestVerdict.deficit) {
+                best = map
+                bestVerdict = verdict
+            }
+        }
+        startFairnessFailures = bestVerdict!!.failures
+        return best!!
+    }
+
+    /** One map from the seed of [mapParameters] shifted by [attempt] steps, see [StartFairness.SEED_STEP] */
+    private fun generateMapOnce(mapParameters: MapParameters, gameParameters: GameParameters, gameInfo: GameInfo?, mapSize: MapSize, attempt: Int): TileMap {
+        val mapType = mapParameters.type
+
+        randomness.seedRNG(mapParameters.seed + attempt * StartFairness.SEED_STEP)
 
         val map: TileMap = if (mapParameters.shape == MapShape.rectangular)
             TileMap(mapSize.width, mapSize.height, ruleset, mapParameters.worldWrap)
@@ -180,8 +228,8 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         runAndMeasure("applyHumidityAndTemperature") {
             applyHumidityAndTemperature(map)
         }
-        // The Civ V Continents type brings its own ridges
-        if (mapType != MapType.continentsLikeCivV) runAndMeasure("raiseMountainsAndHills") {
+        // The Civ V types bring their own ridges
+        if (mapType !in MapType.ownElevation) runAndMeasure("raiseMountainsAndHills") {
             MapElevationGenerator(map, ruleset, terrainConditions, randomness).raiseMountainsAndHills()
         }
         runAndMeasure("spawnLakesAndCoasts") {
@@ -189,10 +237,11 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         }
         if (ruleset.modOptions.constants.terrainGeneratorLikeCivV) {
             // As the Civ V scripts: terrain by latitude, then rivers, then the features that depend on them
-            val civVTerrain = CivVTerrainGenerator(map, randomness.RNG)
+            val script = CivVScripts.of(mapType)
+            val civVTerrain = CivVTerrainGenerator(map, randomness.RNG, script)
             runAndMeasure("CivVTerrainGenerator.generateBaseTerrain") { civVTerrain.generateBaseTerrain() }
             runAndMeasure("assignContinents") { map.assignContinents(TileMap.AssignContinentsMode.Assign) }
-            val civVRivers = CivVRiverGenerator(map, randomness.RNG)
+            val civVRivers = CivVRiverGenerator(map, randomness.RNG, script)
             runAndMeasure("CivVRiverGenerator") { civVRivers.spawnRivers() }
             runAndMeasure("CivVRiverGenerator.addLakes") { civVRivers.addLakes() }
             runAndMeasure("assignContinents again") { map.assignContinents(TileMap.AssignContinentsMode.Reassign) }
@@ -258,15 +307,11 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
 
         val numberOfMajorCivs = gameInfo.civilizations.count { it.isMajorCiv }
         val numberOfMinorCivs = gameInfo.civilizations.count { it.isCityState }
-        // This is mostly just vibes, tries to make the average distance between a civ and its closest neighbor as close to 13 tiles as possible
-        val majorCivContribution = 384 * numberOfMajorCivs - 134
-        val targetNumberOfTiles = (majorCivContribution + numberOfMinorCivs * 60)
-
-        // Calculates mapsize from tile number, simple algebra reversing area formulas
-        val aspectRatio = 1.55 // This is around the default aspect ratios
-        mapParameters.mapSize.radius = (sqrt(1.0/3 * targetNumberOfTiles - 1.0/12) + 1.0/2).roundToInt()
-        mapParameters.mapSize.height = sqrt(targetNumberOfTiles/aspectRatio).roundToInt()
-        mapParameters.mapSize.width = (sqrt(targetNumberOfTiles/aspectRatio) * aspectRatio).roundToInt()
+        // Brave New World's world sizes (CIV5Worlds.xml), interpolated for the number of civilizations and city-states
+        val (width, height) = CivVWorldSizes.dimensions(ruleset.ai.effectiveWorldSizes(), numberOfMajorCivs, numberOfMinorCivs)
+        mapParameters.mapSize.width = width
+        mapParameters.mapSize.height = height
+        mapParameters.mapSize.radius = HexMath.getEquivalentHexagonalRadius(width, height)
 
         return mapParameters.mapSize
     }
@@ -476,7 +521,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         if (coasts.isNotEmpty()) {
             val dice = ruleset.modOptions.constants.coastExpansionDice
             if (dice.isEmpty()) spreadCoast(map, coasts)
-            else spreadCoastLikeCivV(map, coasts, dice)
+            else spreadCoastLikeCivV(map, coasts, FractalLandRecipes.forType(map.mapParameters.type)?.coastDice ?: dice)
         }
     }
 
@@ -507,7 +552,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
     }
 
     /**
-     *  AddGoodies: on every landmass of at least 3 tiles one ruin per 40 land tiles (rounded to nearest: (tiles + 20) / 40), each on a random
+     *  AddGoodies: on every landmass of at least 3 tiles one ruin per 40 land tiles (rounded up, see [ruinsWanted]), each on a random
      *  tile that has no resource, no improvement and is at least 3 tiles away from every other ruin and more than 3 from every start.
      */
     private fun spreadAncientRuinsLikeCivV(
@@ -523,7 +568,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         for ((continent, tiles) in byContinent.entries.sortedBy { it.key }) {
             val size = map.continentSizes[continent] ?: tiles.size
             if (size < 3) continue
-            val wanted = (size + tilesPerGoody / 2) / tilesPerGoody
+            val wanted = ruinsWanted(size, tilesPerGoody)
             var count = 0
             for (tile in tiles.shuffled(randomness.RNG)) {
                 if (count >= wanted) break

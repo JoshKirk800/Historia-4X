@@ -473,8 +473,9 @@ class CityStats(val city: City) {
             uniqueUnhappinessModifier += unique.params[0].toFloat()
         }
 
-        // Original game (CvPlayer::GetUnhappinessFromCityForUI): the larger the map, the less the number of cities weighs
-        val mapSizeModifier = civInfo.gameInfo.tileMap.mapParameters.mapSize.getPredefinedOrNextSmaller().cityCountUnhappinessModifier
+        // The larger the map, the less the number of cities weighs: the world row's percent, at most 100 as Vox Populi's CvCity empire size need
+        // takes it (a small map's 115 to 150 is for the policy AI only), the row of the map's tile count
+        val mapSizeModifier = minOf(100, civInfo.gameInfo.ruleset.ai.worldSizeForTiles(civInfo.gameInfo.tileMap.tileList.size).numCitiesUnhappinessPercent) / 100f
         newHappinessList["Cities"] = unhappinessFromCity * unhappinessModifier * uniqueUnhappinessModifier.toPercent() * mapSizeModifier
 
         var unhappinessFromCitizens = city.population.population.toFloat()

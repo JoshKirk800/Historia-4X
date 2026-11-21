@@ -36,7 +36,7 @@ object PolicyAttributeAi {
         val wonderCompetitiveness = ai.diplomacyValue(DiplomacyPersonality.WonderCompetitiveness)
 
         private val unhappinessPercent = civ.gameInfo.ruleset.ai
-            .worldSize(civ.gameInfo.tileMap.mapParameters.mapSize.getPredefinedOrNextSmaller().name).numCitiesUnhappinessPercent
+            .worldSizeForTiles(civ.gameInfo.tileMap.tileList.size).numCitiesUnhappinessPercent
 
         /** iNumCities: 4 for Venice; else the cities, +1 for an expansionist, -1 for a smaller civ, and in the first quarter of the
          *  game 3 more (the expansion to come) scaled by the map's NumCitiesUnhappinessPercent (at least 50), at least 1 */

@@ -7,6 +7,7 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.*
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.models.ruleset.INonPerpetualConstruction
+import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.tech.Era
 import com.unciv.models.ruleset.tech.Technology
 import com.unciv.models.ruleset.tile.TileResource
@@ -127,10 +128,14 @@ class TechManager : IsPartOfGameInfoSerialization {
         if (knownByAnyPercent != 0 && civInfo.gameInfo.civilizations.any {
                 it != civInfo && it.isAlive() && !it.isBarbarian && !it.isSpectator && it.tech.isResearched(techName) })
             techCost /= (100 + knownByAnyPercent) / 100f
-        val mapSizePredef = civInfo.gameInfo.tileMap.mapParameters.mapSize.getPredefinedOrNextSmaller()
-        techCost *= mapSizePredef.techCostMultiplier
+        // Vox Populi's world row by the map's tile count: ResearchPercent, and the cost per city (CvPlayerTechs::GetResearchCityModifierTimes100)
+        // as the world row's percent for each city plus NUM_CITIES_COST_MOD_SCALING hundredths of a percent for each pair of cities
+        val ai = getRuleset().ai
+        val world = ai.worldSizeForTiles(civInfo.gameInfo.tileMap.tileList.size)
+        techCost *= world.researchPercent / 100f
         techCost *= civInfo.gameInfo.getStartingEra().researchPercent / 100f
-        var cityModifier = (civInfo.cities.count { !it.isPuppet } - 1) * mapSizePredef.techCostPerCityModifier
+        val cities = civInfo.cities.count { !it.isPuppet }
+        var cityModifier = world.numCitiesTechCostMod / 100f * cities + ai.define(AiDefine.NUM_CITIES_COST_MOD_SCALING) / 10000f * cities * (cities - 1) / 2
         civInfo.forEachMatchingUnique(UniqueType.LessTechCostFromCities) { unique -> cityModifier *= 1 - unique.params[0].toFloat() / 100 }
         civInfo.forEachMatchingUnique(UniqueType.LessTechCost) { unique -> techCost *= unique.params[0].toPercent() }
         techCost *= 1 + cityModifier

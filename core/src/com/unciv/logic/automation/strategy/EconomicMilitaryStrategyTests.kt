@@ -392,7 +392,7 @@ object EconomicMilitaryStrategyTests {
     fun expandLikeCrazy(civ: Civilization, def: PlayerStrategyDef): Boolean {
         if (civ.isOneCityChallenger()) return false
         if (civ.ai.isGoingForCultureVictory() &&
-            civ.gameInfo.tileMap.mapParameters.mapSize.getPredefinedOrNextSmaller().policyCostPerCityModifier > 0) return false
+            civ.gameInfo.ruleset.ai.worldSizeForTiles(civ.gameInfo.tileMap.tileList.size).numCitiesPolicyCostMod > 0) return false
         return civ.ai.personalityAndGrandStrategy(Flavor.Expansion) >= def.weightThreshold
     }
 

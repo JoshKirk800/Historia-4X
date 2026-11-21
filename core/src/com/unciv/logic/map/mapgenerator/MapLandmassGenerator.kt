@@ -33,9 +33,6 @@ class MapLandmassGenerator(
     //endregion
 
     companion object {
-        /** Continents.lua: sea level normal, the share of the fractal's cells under water */
-        private const val CONTINENTS_WATER_PERCENT = 72
-
         // this is called from TileMap constructors as well
         internal fun getInitializationTerrain(ruleset: Ruleset, type: TerrainType) =
             ruleset.terrains.values.firstOrNull { it.type == type && !it.hasUnique(UniqueType.NoNaturalGeneration) }?.name
@@ -67,7 +64,14 @@ class MapLandmassGenerator(
             MapType.boreal -> createBoreal()
             MapType.smallContinents -> createSmallContinents()
             MapType.spiral -> createSpiral()
-            MapType.continentsLikeCivV -> createContinentsLikeCivV()
+            MapType.continentsLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.continents)
+            MapType.pangaeaLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.pangaea)
+            MapType.smallContinentsLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.smallContinents)
+            MapType.archipelagoLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.archipelago)
+            MapType.tinyIslandsLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.tinyIslands)
+            MapType.fractalLikeCivV -> createFractalLandLikeCivV(FractalLandRecipes.fractal)
+            MapType.fourCornersLikeCivV, MapType.inlandSeaLikeCivV, MapType.lakesLikeCivV, MapType.northVsSouthLikeCivV, MapType.westVsEastLikeCivV,
+            MapType.highlandsLikeCivV, MapType.borealLikeCivV, MapType.donutLikeCivV -> createLayeredLikeCivV()
         }
 
         if (tileMap.mapParameters.shape == MapShape.flatEarth) {
@@ -279,28 +283,39 @@ class MapLandmassGenerator(
     }
 
     /**
-     *  Continents.lua, see [CivVContinentsLandmass]: land, hills and mountains. The sea level of the script's options comes from
-     *  [MapParameters.waterThreshold] (below -0.05 low: 67 % of the cells water, above 0.05 high: 76 %, else 72 %: the slider goes from -0.1 to 0.1) and the world age from [MapParameters.worldAge].
+     *  The land step of a Civ V script that draws one fractal (Continents.lua, Pangaea.lua), see [CivVFractalLandmass] and [FractalLandRecipe]:
+     *  land, hills and mountains. The sea level of the script's options comes from [MapParameters.waterThreshold] (below -0.05 low, above 0.05
+     *  high, else normal: the slider goes from -0.1 to 0.1) and the world age from [MapParameters.worldAge].
      */
-    private fun createContinentsLikeCivV() {
+    private fun createFractalLandLikeCivV(recipe: FractalLandRecipe) {
         val tiles = tileMap.values.toList()
         val geometry = UncivHexGeometry(tileMap)
         val seaLevel = when {
-            waterThreshold < -0.05 -> 67
-            waterThreshold > 0.05 -> 76
-            else -> CONTINENTS_WATER_PERCENT
+            waterThreshold < -0.05 -> SeaLevel.Low
+            waterThreshold > 0.05 -> SeaLevel.High
+            else -> SeaLevel.Normal
         }
-        val generator = CivVContinentsLandmass(geometry, tileMap.mapParameters.worldWrap, randomness.RNG, seaLevel, tileMap.mapParameters.worldAge)
-        val result = generator.generate { land ->
-            for (tile in tiles) {
-                val (x, y) = geometry.cellOf(tile)
-                tile.baseTerrain = if (land[x][y]) landTerrainName else waterTerrainName
+        val generator = CivVFractalLandmass(geometry, tileMap.mapParameters.worldWrap, randomness.RNG, recipe, seaLevel, tileMap.mapParameters.worldAge)
+        val result = generator.generate()
+        for (tile in tiles) {
+            val (x, y) = geometry.cellOf(tile)
+            tile.baseTerrain = when {
+                result.mountains[x][y] -> Constants.mountain
+                result.land[x][y] -> landTerrainName
+                else -> waterTerrainName
             }
-            for (tile in tiles) tile.setTerrainTransients()
-            tileMap.assignContinents(TileMap.AssignContinentsMode.Reassign)
-            val landTiles = tiles.count { it.isLand }
-            (tileMap.continentSizes.values.maxOrNull() ?: 0) <= landTiles * 0.58
+            if (result.hills[x][y]) tile.setTerrainFeatures(listOf(Constants.hill))
+            tile.setTerrainTransients()
         }
+        tileMap.assignContinents(TileMap.AssignContinentsMode.Clear)
+    }
+
+    /** The layered and regional scripts (Four_Corners, InlandSea, Lakes, North_vs_South, West_vs_East, Donut, Highlands, Boreal), see [CivVLayeredScripts]: land, hills and mountains, on the grid the script set */
+    private fun createLayeredLikeCivV() {
+        val tiles = tileMap.values.toList()
+        val geometry = UncivHexGeometry(tileMap)
+        val parameters = tileMap.mapParameters
+        val result = CivVLayeredScripts.generate(parameters.type, geometry, parameters.worldWrap, randomness.RNG, parameters.worldAge)
         for (tile in tiles) {
             val (x, y) = geometry.cellOf(tile)
             tile.baseTerrain = when {

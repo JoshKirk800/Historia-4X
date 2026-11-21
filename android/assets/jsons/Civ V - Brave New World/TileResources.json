@@ -108,7 +108,8 @@
 		"name": "Horses",
 		"resourceType": "Strategic",
 		"revealedBy": "Animal Husbandry",
-		"terrainsCanBeFoundOn": ["Plains","Grassland","Hill"], // Hill only if plains or grassland
+		// Hill only if plains or grassland. Desert and Tundra: AssignStartingPlots.lua of Vox Populi places horses on flat tundra and on flood plains and fresh water desert
+		"terrainsCanBeFoundOn": ["Plains","Grassland","Hill","Desert","Tundra"],
 		"production": 1,
 		"improvement": "Pasture",
 		"improvementStats": {"production": 1},
@@ -120,8 +121,10 @@
 					"Minor deposits generated with weight [100] <in [{Featureless} {Grassland}] tiles> <in [Fresh Water] tiles>",
 					"Minor deposits generated with weight [20] <in [{Featureless} {Grassland}] tiles> <in tiles without [Fresh Water]>",
 					"Minor deposits generated with weight [30] <in [{Featureless} {Plains}] tiles>"],
-		"majorDepositAmount": {"sparse": 4, "default": 4, "abundant": 6},
-		"minorDepositAmount": {"sparse": 1, "default": 2, "abundant": 3}
+		// Deposit amounts of strategic resources, sparse / default / abundant: AssignStartingPlots:GetMajorStrategicResourceQuantityValues and
+		// GetSmallStrategicResourceQuantityValues of Vox Populi (resource size small / standard / large). The sea oil of PlaceOilInTheSea has fixed amounts (VoxPopuliStrategics)
+		"majorDepositAmount": {"sparse": 2, "default": 3, "abundant": 6},
+		"minorDepositAmount": {"sparse": 1, "default": 2, "abundant": 2}
 	},
 	{
 		"name": "Iron",
@@ -146,8 +149,8 @@
 					"Minor deposits generated with weight [10] <in [{Featureless} {Desert}] tiles>",
 					"Minor deposits generated with weight [10] <in [{Featureless} {Tundra}] tiles>",
 					"Minor deposits generated with weight [10] <in [{Featureless} {Snow}] tiles>"],
-		"majorDepositAmount": {"sparse": 4, "default": 6, "abundant": 9},
-		"minorDepositAmount": {"sparse": 1, "default": 2, "abundant": 3}
+		"majorDepositAmount": {"sparse": 2, "default": 3, "abundant": 6},
+		"minorDepositAmount": {"sparse": 1, "default": 2, "abundant": 2}
 	},
 	{
 		"name": "Coal",
@@ -168,8 +171,8 @@
 					"Minor deposits generated with weight [30] <in [{Desert} {Hill}] tiles>",
 					"Minor deposits generated with weight [30] <in [{Tundra} {Hill}] tiles>",
 					"Minor deposits generated with weight [30] <in [{Snow} {Hill}] tiles>"],
-		"majorDepositAmount": {"sparse": 5, "default": 7, "abundant": 10},
-		"minorDepositAmount": {"sparse": 2, "default": 3, "abundant": 3}
+		"majorDepositAmount": {"sparse": 2, "default": 4, "abundant": 7},
+		"minorDepositAmount": {"sparse": 1, "default": 2, "abundant": 2}
 	},
 	{
 		"name": "Oil",
@@ -190,15 +193,15 @@
 					"Minor deposits generated with weight [10] <in [{Featureless} {Desert}] tiles>",
 					"Minor deposits generated with weight [20] <in [{Featureless} {Tundra}] tiles>",
 					"Minor deposits generated with weight [20] <in [{Featureless} {Snow}] tiles>"],
-		"majorDepositAmount": {"sparse": 5, "default": 7, "abundant": 9},
-		"minorDepositAmount": {"sparse": 2, "default": 3, "abundant": 3}
+		"majorDepositAmount": {"sparse": 3, "default": 5, "abundant": 8},
+		"minorDepositAmount": {"sparse": 1, "default": 2, "abundant": 2}
 	},
 	{
 		"name": "Aluminum",
 		"resourceType": "Strategic",
 		"revealedBy": "Electricity",
-		// Forest: aluminum on forested hills, see Iron
-		"terrainsCanBeFoundOn": ["Desert","Tundra","Hill","Snow","Jungle","Forest"],
+		// Forest: aluminum on forested hills, see Iron. Plains: aluminum on hills and flat plains (AssignStartingPlots.lua of Vox Populi)
+		"terrainsCanBeFoundOn": ["Desert","Tundra","Hill","Snow","Jungle","Forest","Plains"],
 		"production": 1,
 		"improvement": "Mine",
 		"improvementStats": {"production": 1},
@@ -207,14 +210,15 @@
 					"Generated with weight [39] <in [Hill] tiles>",
 					"Minor deposits generated with weight [20] <in [Jungle] tiles>",
 					"Minor deposits generated with weight [10] <in [{Featureless} {Desert}] tiles>"],
-		"majorDepositAmount": {"sparse": 5, "default": 8, "abundant": 10},
+		"majorDepositAmount": {"sparse": 3, "default": 7, "abundant": 10},
 		"minorDepositAmount": {"sparse": 2, "default": 3, "abundant": 3}
 	},
 	{
 		"name": "Uranium",
 		"resourceType": "Strategic",
 		"revealedBy": "Atomic Theory",
-		"terrainsCanBeFoundOn": ["Marsh","Jungle","Forest","Tundra","Snow"],
+		// Hill, Plains, Grassland, Desert: AssignStartingPlots.lua of Vox Populi places uranium on every land terrain (the database of Brave New World has them all too)
+		"terrainsCanBeFoundOn": ["Marsh","Jungle","Forest","Tundra","Snow","Hill","Plains","Grassland","Desert"],
 		"production": 1,
 		"improvement": "Mine",
 		"improvementStats": {"production": 1},
@@ -224,8 +228,8 @@
 					"Minor deposits generated with weight [10] <in [Forest] tiles>",
 					"Minor deposits generated with weight [10] <in [{Featureless} {Tundra}] tiles>",
 					"Minor deposits generated with weight [10] <in [{Featureless} {Snow}] tiles>"],
-		"majorDepositAmount": {"sparse": 2, "default": 4, "abundant": 4},
-		"minorDepositAmount": {"sparse": 1, "default": 2, "abundant": 3}
+		"majorDepositAmount": {"sparse": 2, "default": 2, "abundant": 4},
+		"minorDepositAmount": {"sparse": 1, "default": 1, "abundant": 2}
 	},
 
 	// Luxury resources

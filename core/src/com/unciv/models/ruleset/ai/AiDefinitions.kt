@@ -226,10 +226,46 @@ class GameSpeedDiplomacyDef : INamed {
     var opinionDurationPercent = 100
 }
 
-/** Worlds.NumCitiesUnhappinessPercent (CvPolicyAI::WeightPolicyAttributes), by Unciv map size name */
+/**
+ *  One row of Worlds (CIV5Worlds.xml, Vox Populi's values), by Civ V's size name: the grid and default players of the size, and the
+ *  rule scaling that depends on it. The rules read the row of the size nearest to the map's tile count ([AiRuleset.worldSizeForTiles]).
+ *
+ *  @property numCitiesPolicyCostMod percent more per city on the cost of a policy (Vox Populi: the same for every size, BNW's 10/7.5/5 by size)
+ *  @property numCitiesTechCostMod percent more per city on the cost of a technology (Vox Populi 5, BNW 5/3.75/2.5)
+ *  @property researchPercent percent of the cost of a technology (Vox Populi 100, BNW 100/110/120/130)
+ *  @property numCitiesUnhappinessPercent CvPolicyAI::WeightPolicyAttributes divides by it, the unhappiness from the number of cities is scaled by at most 100 of it
+ */
 class WorldSizeDef : INamed {
     override var name = ""
+    var defaultPlayers = 8
+    var defaultMinorCivs = 16
+    var gridWidth = 80
+    var gridHeight = 52
+    var researchPercent = 100
+    var numCitiesPolicyCostMod = 5f
+    var numCitiesTechCostMod = 5f
     var numCitiesUnhappinessPercent = 100
+
+    companion object {
+        private fun row(name: String, players: Int, minors: Int, width: Int, height: Int, unhappiness: Int) = WorldSizeDef().also {
+            it.name = name
+            it.defaultPlayers = players
+            it.defaultMinorCivs = minors
+            it.gridWidth = width
+            it.gridHeight = height
+            it.numCitiesUnhappinessPercent = unhappiness
+        }
+
+        /** Vox Populi's Worlds table, for a ruleset or mod without the table in its AI.json */
+        val defaultRows = listOf(
+            row("Duel", 2, 4, 40, 24, 150),
+            row("Tiny", 4, 8, 56, 36, 125),
+            row("Small", 6, 12, 66, 42, 115),
+            row("Standard", 8, 16, 80, 52, 100),
+            row("Large", 10, 20, 104, 64, 80),
+            row("Huge", 12, 24, 128, 80, 60),
+        )
+    }
 }
 
 /** MultiUnitPositionTypes (CvTacticalAI.h): where a unit of a formation stands relative to the others while the army moves */

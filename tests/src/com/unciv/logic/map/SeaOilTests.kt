@@ -37,7 +37,7 @@ class SeaOilTests {
     @Test
     fun `the sea gets one deposit of 4 for every 8 units of oil on land`() {
         val (units, sea) = place(landDeposits = 16)
-        assertEquals(7 * 16, units)
+        assertEquals(game.ruleset.tileResources["Oil"]!!.majorDepositAmount.default * 16, units)
         assertEquals(units / 2 / 4, sea.size)
         assertTrue(sea.all { it.resourceAmount == 4 })
     }

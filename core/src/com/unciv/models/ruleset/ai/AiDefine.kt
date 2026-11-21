@@ -1264,4 +1264,6 @@ enum class AiDefine(val default: Float) {
     WAR_PROGRESS_PILLAGED_IMPROVEMENT(10f),
     WAR_PROGRESS_LOST_IMPROVEMENT(-5f),
     WAR_PROGRESS_HIGH_VALUE_PILLAGE_MULTIPLIER(200f),
+    // CvPlayerPolicies::GetPolicyCityModifierTimes100, CvPlayerTechs::GetResearchCityModifierTimes100: hundredths of a percent more per pair of cities
+    NUM_CITIES_COST_MOD_SCALING(20f), // Vox Populi's (BNW and Community Patch: 0, the cost is linear in the number of cities)
 }

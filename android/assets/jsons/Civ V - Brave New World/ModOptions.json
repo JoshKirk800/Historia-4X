@@ -94,12 +94,25 @@
         "seaDepositsOfLandResource": "Oil",
         // TerrainGenerator.lua and FeatureGenerator.lua
         "terrainGeneratorLikeCivV": true,
+        // FeatureGenerator:AddFeatures of Vox Populi: a mountain on the coast is hills (Brave New World's keeps it)
+        "noMountainsOnTheCoast": true,
         // AssignStartingPlots.lua of Brave New World (the Gods & Kings one differs: no cocoa, other counts)
         "luxuryPlacementLikeCivV": true,
+        // PlaceLuxuries and PlaceIvory of Vox Populi's AssignStartingPlots.lua: 2 luxuries at each start, no compensation for a poor region, ivory of at least 2
+        "startLuxuriesLikeVoxPopuli": true,
         // AssignStartingPlots:BalanceAndAssign of Brave New World (it differs from the Gods & Kings one by the civs placed first)
         "startAssignmentLikeCivV": true,
+        // Vox Populi's AssignStartingPlots:GenerateRegions (continental method): civs settle a continent in pairs, so both civs of a Duel share one
+        "regionAssignmentLikeVoxPopuli": true,
+        // Vox Populi's AssignStartingPlots:CanPlaceCityStateAt, PlaceCityStateInRegion and the last-chance pass of PlaceCityStates: no edge, ice or fertile sites, discard instead of force
+        "cityStatePlacementLikeVoxPopuli": true,
+        // Vox Populi's AssignStartingPlots:FindStart and EvaluateCandidatePlot: one scored candidate list per area, coast +80, production minimums 1, 1, 3, no junk cap
+        "startFinderLikeVoxPopuli": true,
         // AddExtraBonusesToHillsRegions, PlaceSexyBonusAtCivStarts, AddModernMinorStrategicsToCityStates, the strategic top-ups, FixSugarJungles
         "resourceExtrasLikeCivV": true,
+        // AssignStartingPlots.lua of Vox Populi 5.4.8: PlaceStrategicAndBonusResources, AddModernMinorStrategicsToCityStates, PlaceSmallQuantitiesOfStrategics, PlaceOilInTheSea.
+        // It replaces the strategic parts of the placement above (the major deposits per terrain, the small deposits at 23 tiles, the oil in the sea at 1 in 4, the top-ups)
+        "strategicPlacementLikeVoxPopuli": true,
         "naturalWondersLikeCivV": true,
         "ancientRuinsLikeCivV": true
     },

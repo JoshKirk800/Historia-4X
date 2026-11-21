@@ -808,6 +808,7 @@
     "MIN_WATER_SIZE_FOR_OCEAN": 10,
     "MOVE_DENOMINATOR": 60,
     "NUKE_BLAST_RADIUS": 2,
+    "NUM_CITIES_COST_MOD_SCALING": 20,
     "NUM_OR_TECH_PREREQS": 3,
     "OCEAN_EXPLORE_TILE_VALUE": 10,
     "OPINION_THRESHOLD_ALLY": -160,
@@ -12275,26 +12276,68 @@
   "worldSizes": [
     {
       "name": "Duel",
-      "numCitiesUnhappinessPercent": 100
+      "defaultPlayers": 2,
+      "defaultMinorCivs": 4,
+      "gridWidth": 40,
+      "gridHeight": 24,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
+      "numCitiesUnhappinessPercent": 150
     },
     {
       "name": "Tiny",
-      "numCitiesUnhappinessPercent": 100
+      "defaultPlayers": 4,
+      "defaultMinorCivs": 8,
+      "gridWidth": 56,
+      "gridHeight": 36,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
+      "numCitiesUnhappinessPercent": 125
     },
     {
       "name": "Small",
-      "numCitiesUnhappinessPercent": 100
+      "defaultPlayers": 6,
+      "defaultMinorCivs": 12,
+      "gridWidth": 66,
+      "gridHeight": 42,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
+      "numCitiesUnhappinessPercent": 115
     },
     {
-      "name": "Medium",
+      "name": "Standard",
+      "defaultPlayers": 8,
+      "defaultMinorCivs": 16,
+      "gridWidth": 80,
+      "gridHeight": 52,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
       "numCitiesUnhappinessPercent": 100
     },
     {
       "name": "Large",
+      "defaultPlayers": 10,
+      "defaultMinorCivs": 20,
+      "gridWidth": 104,
+      "gridHeight": 64,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
       "numCitiesUnhappinessPercent": 80
     },
     {
       "name": "Huge",
+      "defaultPlayers": 12,
+      "defaultMinorCivs": 24,
+      "gridWidth": 128,
+      "gridHeight": 80,
+      "researchPercent": 100,
+      "numCitiesPolicyCostMod": 5.0,
+      "numCitiesTechCostMod": 5.0,
       "numCitiesUnhappinessPercent": 60
     }
   ],

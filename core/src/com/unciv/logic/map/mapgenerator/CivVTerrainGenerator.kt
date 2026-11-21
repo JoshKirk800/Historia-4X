@@ -9,14 +9,22 @@ import kotlin.math.floor
 import kotlin.random.Random
 
 /**
+ *  `plot:IsCoastalLand()` of the scripts: CvPlot::isCoastalLand with its default minimum water size (`MIN_WATER_SIZE_FOR_OCEAN`, 10 tiles), so a land tile that touches only
+ *  water bodies of fewer than ten tiles is not coastal. Unciv's lakes are the water bodies of at most `maxLakeSize` (9) tiles, which the pipeline made before.
+ */
+fun Tile.isCoastalLandLikeCivV() = !isWater && neighbors.any { it.isWater && it.baseTerrain != "Lakes" }
+
+/**
  *  The terrain and features of the Civ V map scripts: TerrainGenerator.lua (the base terrain of land by latitude) and
  *  FeatureGenerator.lua (flood plains, oases, ice, marsh, jungle, forest), for rulesets that set `terrainGeneratorLikeCivV`.
  *
  *  It names the terrains and features of the Civ V rulesets. Mountains and hills stay as the elevation generator made them.
  *  Rivers have to be there before the features: flood plains need one, oases and (on the edge) tundra do not like them.
  *  The scripts' options for the temperature and the rainfall come from the map parameters (see [temperatureOption] and [rainfallOption]).
+ *  A [script] of the layered family changes the latitude function (and where the poles are), takes the ice away or has its own, may take the mountains off the coast
+ *  (or keep them there), and replaces the terrain of Donut and Boreal and the features of Boreal and Donut ([CivVScript.TerrainCode], [CivVScript.FeatureCode]).
  */
-class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
+class CivVTerrainGenerator(private val map: TileMap, private val rng: Random, private val script: CivVScript = CivVScripts.standard) {
 
     companion object {
         private const val MARSH = "Marsh"
@@ -63,6 +71,9 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
     private val marshPercent = when (rainfall) { 1 -> 8 / 1.5; 3 -> 8 * 1.5; else -> 8.0 }
     private val oasisPercent = when (rainfall) { 1 -> 6 / 1.5; 3 -> 6 * 1.5; else -> 6.0 }
 
+    private val noMountainsOnTheCoast = !script.keepsCoastalMountains &&
+        (script.mountainsOffTheCoast || map.ruleset?.modOptions?.constants?.noMountainsOnTheCoast == true)
+
     private val tiles = map.values.toList()
     private val minColumn = tiles.minOf { it.getColumn() }
     private val minRow = tiles.minOf { it.getRow() }
@@ -70,18 +81,31 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
     private val gridHeight = tiles.maxOf { it.getRow() } - minRow + 1
     private val wrapX = map.mapParameters.worldWrap
     private val maxLatitude = map.maxLatitude.coerceAtLeast(1)
-    private val worldSize = CivVWorldSize.forTiles(gridWidth * gridHeight)
+    private val worldSize = script.worldSizeOfGrid(gridWidth) ?: CivVWorldSize.forTiles(gridWidth * gridHeight)
 
     private fun x(tile: Tile) = tile.getColumn() - minColumn
     private fun y(tile: Tile) = tile.getRow() - minRow
 
-    /** The latitude of the feature generator: 0 at the equator, 1 at the poles */
-    private fun latitude(tile: Tile) = abs(tile.latitude).toDouble() / maxLatitude
+    /** Highlands: which edge is the cold one, drawn for each map (`ShiftMultiplier`: 0 the north, 1 the south) */
+    private val coldShift = if (script.climate == CivVScript.Climate.ColdPole) rng.nextInt(2) else 0
+
+    /**
+     *  The latitude before the script's function, with the terrain generator's [variation] (0 for the feature generator's): 0 at the equator and 1 at the poles,
+     *  or for a script with [CivVScript.Climate.ColdPole] 0 at the warm edge and 1 at the cold one (`|row / height - shift|`).
+     */
+    private fun rawLatitude(tile: Tile, variation: Double = 0.0) = when (script.climate) {
+        CivVScript.Climate.Equator -> (abs(tile.latitude).toDouble() / maxLatitude + variation).coerceIn(0.0, 1.0)
+        CivVScript.Climate.ColdPole -> abs((y(tile).toDouble() / gridHeight + variation).coerceIn(0.0, 1.0) - coldShift)
+    }
+
+    /** The latitude of the feature generator: 0 at the equator, 1 at the poles (a script may bend it) */
+    private fun latitude(tile: Tile) = script.latitude(rawLatitude(tile))
 
     private fun fractal(grain: Int) = CivVFractal(gridWidth, gridHeight, grain, wrapX, false, rng)
 
     /** TerrainGenerator:GenerateTerrain */
     fun generateBaseTerrain() {
+        if (script.terrain == CivVScript.TerrainCode.Boreal) { generateBorealTerrain(); return }
         val deserts = fractal(TERRAIN_GRAIN)
         val desertTop = deserts.getHeightFromPercent(100)
         val desertBottom = deserts.getHeightFromPercent(maxOf(0, floor(100.0 - desertPercent).toInt()))
@@ -91,12 +115,16 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
         val variation = fractal(TERRAIN_GRAIN)
 
         for (tile in tiles) {
-            if (!tile.isLand || tile.isImpassible()) continue
-            val lat = (latitude(tile) + (128 - variation.getHeight(x(tile), y(tile))) / (255.0 * 5.0)).coerceIn(0.0, 1.0)
+            if (!tile.isLand) continue
+            // Vox Populi's FeatureGenerator:AddFeatures (allow_mountains_on_coast is nil in the scripts, so false there): a mountain on the coast is hills
+            val coastalMountain = noMountainsOnTheCoast && tile.baseTerrain == Constants.mountain && tile.isCoastalLandLikeCivV()
+            if (tile.isImpassible() && !coastalMountain) continue
+            val lat = script.latitude(rawLatitude(tile, (128 - variation.getHeight(x(tile), y(tile))) / (255.0 * 5.0)))
             val terrain = when {
+                script.terrain == CivVScript.TerrainCode.Bands -> bandTerrain(tile, deserts, desertBottom, desertTop, plains, plainsBottom, plainsTop)
                 lat >= snowLatitude -> Constants.snow
                 lat >= tundraLatitude -> Constants.tundra
-                lat < grassLatitude -> Constants.grassland
+                lat < grassLatitude -> if (script.terrain == CivVScript.TerrainCode.DesertAtTheEquator) Constants.desert else Constants.grassland
                 else -> {
                     val desertValue = deserts.getHeight(x(tile), y(tile))
                     val plainsValue = plains.getHeight(x(tile), y(tile))
@@ -107,7 +135,7 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
                 }
             }
             // Only the base terrain: the hills the elevation generator made stay
-            val hill = tile.hasHill
+            val hill = tile.hasHill || coastalMountain
             tile.removeTerrainFeatures()
             tile.baseTerrain = terrain
             if (hill) tile.setTerrainFeatures(listOf(Constants.hill))
@@ -115,12 +143,63 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
         }
     }
 
+    /** Donut's `GenerateTerrainAtPlot` (the desert centre of its option is not ported): no latitude, desert where the desert fractal is in its band, plains in the plains band, else grass */
+    private fun bandTerrain(tile: Tile, deserts: CivVFractal, desertBottom: Int, desertTop: Int, plains: CivVFractal, plainsBottom: Int, plainsTop: Int): String = when {
+        deserts.getHeight(x(tile), y(tile)) in desertBottom..desertTop -> Constants.desert
+        plains.getHeight(x(tile), y(tile)) in plainsBottom..plainsTop -> Constants.plains
+        else -> Constants.grassland
+    }
+
+    /**
+     *  Boreal's `GenerateTerrain`: snow where the first fractal (grain 3) is in its top 35 % (and on mountains, which are not a terrain here), tundra where the plains
+     *  fractal (grain 4) is below its 91st percentile or on hills, plains in the rest; then in the northern 40 % of the rows another fractal (grain 2, 55 % of it snow) paints snow.
+     *  There is no latitude, no desert, no grass and (the features' job) no marsh or jungle.
+     */
+    private fun generateBorealTerrain() {
+        val snow = fractal(3)
+        val snowNorth = CivVFractal(gridWidth, 1 + floor(gridHeight * 0.4).toInt(), 2, false, false, rng, fracXExp = 7, fracYExp = 6)
+        val plains = fractal(4)
+        val snowThreshold = snow.getHeightFromPercent(65)
+        val snowNorthThreshold = snowNorth.getHeightFromPercent(45)
+        val plainsThreshold = plains.getHeightFromPercent(91)
+        val northFrom = gridHeight - floor(gridHeight * 0.4).toInt()
+        val northOffset = floor(gridHeight * 0.6).toInt()
+        for (tile in tiles) {
+            if (!tile.isLand || tile.isImpassible()) continue
+            val terrain = when {
+                snow.getHeight(x(tile), y(tile)) >= snowThreshold -> Constants.snow
+                plains.getHeight(x(tile), y(tile)) < plainsThreshold || tile.hasHill -> Constants.tundra
+                else -> Constants.plains
+            }
+            val hill = tile.hasHill
+            tile.removeTerrainFeatures()
+            tile.baseTerrain = terrain
+            if (hill) tile.setTerrainFeatures(listOf(Constants.hill))
+            tile.setTerrainTransients()
+        }
+        for (tile in tiles) {
+            if (!tile.isLand || tile.isImpassible() || y(tile) < northFrom) continue
+            if (snowNorth.getHeight(x(tile), y(tile) - northOffset) < snowNorthThreshold) continue
+            val hill = tile.hasHill
+            tile.removeTerrainFeatures()
+            tile.baseTerrain = Constants.snow
+            if (hill) tile.setTerrainFeatures(listOf(Constants.hill))
+            tile.setTerrainTransients()
+        }
+    }
+
     private val Tile.hasHill get() = Constants.hill in terrainFeatures
 
-    /** FeatureGenerator:AddFeatures and AdjustTerrainTypes. The rivers have to be made before. */
+    /**
+     *  FeatureGenerator:AddFeatures and AdjustTerrainTypes. The rivers have to be made before. Boreal's own `AddFeatures` has no atolls and no marsh or
+     *  jungle, and softens the arctic rivers before the features, not after (it has no jungle, so the order only decides what a forest can grow on).
+     */
     fun addFeatures() {
         val grainChange = worldSize.grainChange
-        addAtolls()
+        val boreal = script.features == CivVScript.FeatureCode.Boreal
+        val jungleAllowed = script.features == CivVScript.FeatureCode.Standard
+        val marshAllowed = !boreal
+        if (boreal) adjustTerrainTypes() else addAtolls()
         val jungles = fractal(JUNGLE_GRAIN + grainChange)
         val forests = fractal(FOREST_GRAIN + grainChange)
         val clumps = fractal(CLUMP_GRAIN)
@@ -135,7 +214,7 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
         for (tile in tiles.sortedWith(compareBy({ y(it) }, { x(it) }))) {
             val lat = latitude(tile)
             if (tile.isWater) {
-                addIce(tile, lat)
+                if (script.ice) addIce(tile, lat)
                 continue
             }
             if (tile.isImpassible()) continue
@@ -149,9 +228,9 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
             if (!hasFeature() && terrain == Constants.desert && flat && !tile.isAdjacentToCoast() && !river &&
                 tile.neighbors.none { OASIS in it.terrainFeatures } && rng.nextInt(100) <= oasisPercent)
                 tile.addTerrainFeature(OASIS)
-            if (!hasFeature() && terrain == Constants.grassland && flat && marsh.getHeight(x(tile), y(tile)) >= marshLevel)
+            if (marshAllowed && !hasFeature() && terrain == Constants.grassland && flat && marsh.getHeight(x(tile), y(tile)) >= marshLevel)
                 tile.addTerrainFeature(MARSH)
-            if (!hasFeature() && terrain == Constants.grassland) {
+            if (jungleAllowed && !hasFeature() && terrain == Constants.grassland) {
                 val height = jungles.getHeight(x(tile), y(tile))
                 if (height <= jungleTop && height >= jungleBottom + jungleRange * lat)
                     tile.addTerrainFeature(Constants.jungle)
@@ -161,7 +240,11 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
                 tile.addTerrainFeature(Constants.forest)
         }
 
-        // AdjustTerrainTypes: plains under the jungle, and softer arctic rivers
+        if (!boreal) adjustTerrainTypes()
+    }
+
+    /** AdjustTerrainTypes: plains under the jungle, and softer arctic rivers */
+    private fun adjustTerrainTypes() {
         for (tile in tiles) {
             if (tile.isWater || tile.isImpassible()) continue
             if (Constants.jungle in tile.terrainFeatures) tile.baseTerrain = Constants.plains
@@ -239,11 +322,25 @@ class CivVTerrainGenerator(private val map: TileMap, private val rng: Random) {
         }
     }
 
+    /** Boreal's `AddIceAtPlot`: the top row is ice, the four rows below it are ice at 70, 50, 30 and 20 % where the water is ocean (coast stays open) */
+    private fun addBorealIce(tile: Tile) {
+        val fromTop = gridHeight - 1 - y(tile)
+        if (fromTop == 0) { tile.addTerrainFeature(Constants.ice); return }
+        val target = when (fromTop) { 1 -> 70; 2 -> 50; 3 -> 30; 4 -> 20; else -> return }
+        if (tile.baseTerrain == Constants.ocean && rng.nextInt(100) < target) tile.addTerrainFeature(Constants.ice)
+    }
+
     /** FeatureGenerator:AddIceAtPlot: always on the rows at the edge of a map that wraps, otherwise more the closer to the pole */
     private fun addIce(tile: Tile, lat: Double) {
         if (tile.baseTerrain != Constants.ocean && tile.baseTerrain != Constants.coast) return
         if (tile.terrainFeatures.isNotEmpty()) return
-        val onEdgeRow = map.mapParameters.shape == MapShape.rectangular && wrapX && (y(tile) == 0 || y(tile) == gridHeight - 1)
+        when (script.iceCode) {
+            CivVScript.IceCode.Boreal -> { addBorealIce(tile); return }
+            CivVScript.IceCode.TwoPolarRows -> if (y(tile) < 2 || y(tile) >= gridHeight - 2) { tile.addTerrainFeature(Constants.ice); return }
+            CivVScript.IceCode.Standard -> Unit
+        }
+        val onEdgeRow = script.iceCode == CivVScript.IceCode.Standard && map.mapParameters.shape == MapShape.rectangular && wrapX &&
+            (y(tile) == 0 || y(tile) == gridHeight - 1)
         if (onEdgeRow) {
             tile.addTerrainFeature(Constants.ice)
             return

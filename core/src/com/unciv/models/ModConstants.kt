@@ -75,9 +75,42 @@ class ModConstants {
      *  for each civ, by groups (the sea, preferred, avoided types), civs with the `Chooses its start region before...` unique first. */
     var startAssignmentLikeCivV = false
 
+    /** Place the strategic resources as the AssignStartingPlots.lua of Vox Populi does (see VoxPopuliStrategics): each of iron, horses, coal, oil,
+     *  aluminum and uranium on its own plot lists with its own one-deposit-per-N-tiles rule and impact layer (at least one deposit for each non-empty list),
+     *  small deposits, oil in the sea as a fifth of the units on land, a small deposit at 3 in 5 city states and the top-ups per civ. It names the
+     *  strategic resources of Civ V and takes their amounts from `majorDepositAmount` and `minorDepositAmount`.
+     *  false: the major deposits per terrain (`MajorStrategicFrequency`), the minor deposits, `seaDepositsOfLandResource` and the extras. */
+    var strategicPlacementLikeVoxPopuli = false
+
+    /** Deal the civs to the continents as Vox Populi's AssignStartingPlots:GenerateRegions does (see VoxPopuliContinentAssignment): continents with less
+     *  than a quarter of the biggest one's fertility are ignored and civs settle a continent in pairs, so on Duel both civs share one.
+     *  false: each civ goes to the continent with the best fertility / (1 + civs already there), as Brave New World's script does. */
+    var regionAssignmentLikeVoxPopuli = false
+
+    /** Place the city-states as Vox Populi's AssignStartingPlots.lua does (see MinorCivPlacer, VoxPopuliCityStateSites): a site is not on the outermost
+     *  ring of the map, not next to ice and has at most 30 fertility (the yields of the tiles within 2, by distance) around it; the city-states are
+     *  placed in the order of assignment, only on free sites of their region (or of the uninhabited landmasses, those with at least 2 sites); one that
+     *  does not fit is discarded, then a last-chance pass puts the discarded ones on any free site of the map, and what still does not fit is dropped.
+     *  Implies the sites of [cityStateSitesLikeCivV]. false: the forced placements (within the impact of a start, then on top of one) of the other rulesets. */
+    var cityStatePlacementLikeVoxPopuli = false
+
+    /** Choose the start of each region as Vox Populi's AssignStartingPlots:FindStart does (see VoxPopuliStartFinder): one candidate list per area scored with
+     *  +80 for the coast, its own minimums (production 1, 1, 3), no cap on junk, the best eligible tile of the outer area nearest to a corner.
+     *  false: Brave New World's: river tiles before coastal before dry, coast +40. */
+    var startFinderLikeVoxPopuli = false
+
     /** Assign and place the luxuries as AssignStartingPlots.lua does (see CivVLuxuryPlacement). It names the luxuries of Civ V.
      *  false: the generic placement of the resources' `Generated with weight` rules. */
     var luxuryPlacementLikeCivV = false
+
+    /** With [luxuryPlacementLikeCivV], place the luxuries at the civs' starts as Vox Populi's AssignStartingPlots.lua does: 2 at each start (3 on a
+     *  Legendary Start) without making up for a poor region, and Ivory as a special case (like marble) of at least 2.
+     *  false: Brave New World's 1 at each start (2 on a Legendary Start), one more for each poor-fertility test failed. */
+    var startLuxuriesLikeVoxPopuli = false
+
+    /** With [terrainGeneratorLikeCivV], make a mountain on the coast (a land tile next to water) hills, as Vox Populi's FeatureGenerator:AddFeatures does
+     *  (the Civ V scripts call it without an argument, which Brave New World reads as 'allow', and Vox Populi as 'do not allow'). */
+    var noMountainsOnTheCoast = false
 
     /** Make the terrain and the features of land as the Civ V map scripts do (see CivVTerrainGenerator): the base terrain by latitude
      *  with fractal noise, rivers and lakes as MapGenerator.lua places them, then jungle, forest, marsh, oases, flood plains, ice and atolls

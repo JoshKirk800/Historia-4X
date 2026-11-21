@@ -39,7 +39,7 @@ class CivVGoodiesTests {
             }
             for ((continent, size) in map.continentSizes.filter { it.value >= 40 }) {
                 val count = ruins.count { it.getContinent() == continent }
-                val expected = (size + 20) / 40
+                val expected = MapGenerator.ruinsWanted(size, 40)
                 // A landmass can be short of tiles that keep the distances, never over the number
                 assertTrue("seed $seed continent $continent of $size has $count ruins, wanted $expected", count in (expected - 1)..expected)
             }

@@ -1,5 +1,6 @@
 package com.unciv.models.ruleset.ai
 
+import com.unciv.logic.map.mapgenerator.CivVWorldSize
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.Policy
@@ -180,12 +181,21 @@ class AiRuleset {
     /** Relationship and opinion durations of a game speed; standard speed's for a speed without an entry */
     fun gameSpeedDiplomacy(speedName: String): GameSpeedDiplomacyDef = gameSpeedDiplomacy.firstOrNull { it.name == speedName } ?: defaultGameSpeedDiplomacy
 
-    /** EstimatedNumCities of a map size; a standard map's for a size without an entry (custom sizes) */
-    fun worldSize(mapSizeName: String): WorldSizeDef = worldSizes.firstOrNull { it.name == mapSizeName } ?: defaultWorldSize
+    /** The rows of Worlds: the ruleset's, else Vox Populi's table */
+    @Readonly fun effectiveWorldSizes(): List<WorldSizeDef> = worldSizes.ifEmpty { WorldSizeDef.defaultRows }
+
+    /** The row of Civ V's size [sizeName] (Duel, Tiny, Small, Standard, Large, Huge); Standard's for a name without a row */
+    @Readonly
+    fun worldSize(sizeName: String): WorldSizeDef {
+        val rows = effectiveWorldSizes()
+        return rows.firstOrNull { it.name == sizeName } ?: rows.firstOrNull { it.name == "Standard" } ?: WorldSizeDef.defaultRows[3]
+    }
+
+    /** The row a map of [tiles] tiles plays by: the Civ V size whose grid is nearest, see [CivVWorldSize.forTiles] */
+    @Readonly fun worldSizeForTiles(tiles: Int): WorldSizeDef = worldSize(CivVWorldSize.forTiles(tiles).name)
 
     @Transient private val defaultEraDiplomacy = EraDiplomacyDef()
     @Transient private val defaultGameSpeedDiplomacy = GameSpeedDiplomacyDef()
-    @Transient private val defaultWorldSize = WorldSizeDef()
 
     /** The four grand strategies of the original, without flavors, for a ruleset without AI.json */
     @delegate:Transient

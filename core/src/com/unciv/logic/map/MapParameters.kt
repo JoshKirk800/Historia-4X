@@ -41,6 +41,29 @@ object MapType {
     const val spiral = "Spiral"
     /** The Continents map script of Civ V, see [com.unciv.logic.map.mapgenerator.MapLandmassGenerator] */
     const val continentsLikeCivV = "Continents (Civ V)"
+    /** Four_Corners.lua on the script's own grid, see [com.unciv.logic.map.mapgenerator.CivVScripts] */
+    const val fourCornersLikeCivV = "Four Corners (Civ V)"
+    /** InlandSea.lua on the script's own grid, see [com.unciv.logic.map.mapgenerator.CivVScripts] */
+    const val inlandSeaLikeCivV = "Inland Sea (Civ V)"
+    /** The Pangaea map script of Civ V, see [com.unciv.logic.map.mapgenerator.FractalLandRecipes] */
+    const val pangaeaLikeCivV = "Pangaea (Civ V)"
+    /** SmallContinents.lua, Archipelago.lua, TinyIslands.lua and Fractal.lua: more recipes of [com.unciv.logic.map.mapgenerator.FractalLandRecipes] */
+    const val smallContinentsLikeCivV = "Small Continents (Civ V)"
+    const val archipelagoLikeCivV = "Archipelago (Civ V)"
+    const val tinyIslandsLikeCivV = "Tiny Islands (Civ V)"
+    const val fractalLikeCivV = "Fractal (Civ V)"
+    /** Lakes.lua, North_vs_South.lua, West_vs_East.lua, Highlands.lua, Boreal.lua and Donut.lua on their own grids, see [com.unciv.logic.map.mapgenerator.CivVScripts] */
+    const val lakesLikeCivV = "Lakes (Civ V)"
+    const val northVsSouthLikeCivV = "North vs South (Civ V)"
+    const val westVsEastLikeCivV = "West vs East (Civ V)"
+    const val highlandsLikeCivV = "Highlands (Civ V)"
+    const val borealLikeCivV = "Boreal (Civ V)"
+    const val donutLikeCivV = "Donut (Civ V)"
+
+    /** The types that make their own hills and mountains and the world age matters to (the elevation generator does not run for them) */
+    val ownElevation = setOf(continentsLikeCivV, pangaeaLikeCivV, smallContinentsLikeCivV, archipelagoLikeCivV, tinyIslandsLikeCivV, fractalLikeCivV,
+        fourCornersLikeCivV, inlandSeaLikeCivV,
+        lakesLikeCivV, northVsSouthLikeCivV, westVsEastLikeCivV, highlandsLikeCivV, borealLikeCivV, donutLikeCivV)
     
     // ordered based on popularity poll
     val allValues = listOf(
@@ -57,7 +80,20 @@ object MapType {
         fourCorners,
         spiral,
         boreal,
-        continentsLikeCivV
+        continentsLikeCivV,
+        pangaeaLikeCivV,
+        smallContinentsLikeCivV,
+        // Archipelago (Civ V) and Tiny Islands (Civ V) are not offered: their land leaves a civilization too little room for the start fairness
+        // check (Tiny Islands: 11 land tiles per start at the median, 1 map of 100 passes; Archipelago: 12 % of the Standard maps pass)
+        fractalLikeCivV,
+        fourCornersLikeCivV,
+        inlandSeaLikeCivV,
+        lakesLikeCivV,
+        northVsSouthLikeCivV,
+        westVsEastLikeCivV,
+        highlandsLikeCivV,
+        borealLikeCivV,
+        donutLikeCivV
     )
 
     // All ocean tiles
@@ -91,6 +127,10 @@ class MapParameters : IsPartOfGameInfoSerialization {
     var civVGridWrap = false
     var strategicBalance = false
     var legendaryStart = false
+
+    /** Generated maps are regenerated (up to [com.unciv.logic.map.mapgenerator.StartFairness.MAX_ATTEMPTS] times, with a derived seed) until every civilization's start has land, city sites and fertility
+     *  next to the others', see [com.unciv.logic.map.mapgenerator.StartFairness]. Only maps made for a game with civilizations are checked. */
+    var balancedStarts = true
 
     /** This is used mainly for the map editor, so you can continue editing a map under the same ruleset you started with */
     var mods = LinkedHashSet<String>()
@@ -128,6 +168,7 @@ class MapParameters : IsPartOfGameInfoSerialization {
         toReturn.civVGridWrap = civVGridWrap
         toReturn.strategicBalance = strategicBalance
         toReturn.legendaryStart = legendaryStart
+        toReturn.balancedStarts = balancedStarts
         toReturn.mods = LinkedHashSet(mods)
         toReturn.baseRuleset = baseRuleset
         toReturn.seed = seed
@@ -209,7 +250,7 @@ class MapParameters : IsPartOfGameInfoSerialization {
         yield(", {Max Coast extension}=$maxCoastExtension")
         yield(", {Biome size}=$tilesPerBiomeArea")
         yield(", {Water level}=" + waterThreshold.niceToString(2))
-        if (type == MapType.continentsLikeCivV) yield(", {World age (billion years)}=$worldAge")
+        if (type in MapType.ownElevation) yield(", {World age (billion years)}=$worldAge")
     }.joinToString("")
 
     @Readonly

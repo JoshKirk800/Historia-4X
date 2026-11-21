@@ -1,7 +1,9 @@
 package com.unciv.logic.map
 
-import com.unciv.logic.map.mapgenerator.CivVContinentsLandmass
+import com.unciv.logic.map.mapgenerator.CivVFractalLandmass
+import com.unciv.logic.map.mapgenerator.FractalLandRecipes
 import com.unciv.logic.map.mapgenerator.HexGeometry
+import com.unciv.logic.map.mapgenerator.SeaLevel
 import com.unciv.logic.map.mapgenerator.PointyHexGeometry
 import com.unciv.logic.map.mapgenerator.UncivHexGeometry
 import com.unciv.logic.map.mapgenerator.CivVFractal
@@ -20,6 +22,8 @@ import kotlin.random.Random
 /** The rest of the terrain port: rifts, ridges, the centre rift, options, atolls, rivers and lakes */
 @RunWith(GdxTestRunner::class)
 class CivVTerrainPortTests {
+    /** Continents.lua without its retry: the first fractal counts */
+    private val firstFractal = FractalLandRecipes.continents.copy(biggestLandmass = 0.0..1.0)
 
     @Test
     fun `a fractal with rifts has a valley to the east in every row`() {
@@ -62,8 +66,8 @@ class CivVTerrainPortTests {
         val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
         game.makeRectangularMap(newHeight = 60, newWidth = 100, baseTerrain = "Grassland")
         for (geometry in listOf(PointyHexGeometry(100, 60, true), UncivHexGeometry(game.tileMap))) {
-            val landmass = CivVContinentsLandmass(geometry, false, Random(12))
-            landmass.generate { true }
+            val landmass = CivVFractalLandmass(geometry, false, Random(12), firstFractal)
+            landmass.generate()
             val rift = landmass.centreRift
             assertEquals("starts at the bottom", 0, rift.first().second)
             assertEquals("ends at the top", geometry.height - 1, rift.last().second)
@@ -77,7 +81,7 @@ class CivVTerrainPortTests {
         val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
         game.makeRectangularMap(newHeight = 60, newWidth = 100, baseTerrain = "Grassland")
         for (geometry in listOf(PointyHexGeometry(100, 60, true), UncivHexGeometry(game.tileMap))) {
-            val result = CivVContinentsLandmass(geometry, true, Random(5)).generate { true }
+            val result = CivVFractalLandmass(geometry, true, Random(5), firstFractal).generate()
             val land = result.land.sumOf { column -> column.count { it } }
             val hills = result.hills.sumOf { column -> column.count { it } } / land.toDouble()
             val peaks = result.mountains.sumOf { column -> column.count { it } } / land.toDouble()
@@ -169,10 +173,10 @@ class CivVTerrainPortTests {
 
     @Test
     fun `a young world has more mountains and hills than an old one`() {
-        fun count(age: Int, pick: (CivVContinentsLandmass.Result) -> Array<BooleanArray>): Int {
+        fun count(age: Int, pick: (CivVFractalLandmass.Result) -> Array<BooleanArray>): Int {
             val geometry = PointyHexGeometry(128, 80, true)
             return (1..3).sumOf { seed ->
-                val result = CivVContinentsLandmass(geometry, true, Random(seed), 72, age).generate { true }
+                val result = CivVFractalLandmass(geometry, true, Random(seed), firstFractal, SeaLevel.Normal, age).generate()
                 pick(result).sumOf { column -> column.count { it } }
             }
         }

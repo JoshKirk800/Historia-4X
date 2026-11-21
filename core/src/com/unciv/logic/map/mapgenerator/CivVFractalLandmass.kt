@@ -1,17 +1,22 @@
 package com.unciv.logic.map.mapgenerator
 
+import yairm210.purity.annotations.Pure
 import kotlin.random.Random
 
-/** The sizes of world of Civ V (Duel to Huge) by the number of tiles of Unciv's map, to pick the values the scripts keep per world size */
-enum class CivVWorldSize(val grainChange: Int, val continentsGrain: Int, val plates: Int, val atolls: Int, val naturalWonders: Int) {
-    Duel(-1, 3, 6, 2, 2),
-    Tiny(-1, 3, 9, 4, 3),
-    Small(0, 4, 12, 5, 4),
-    Standard(0, 4, 18, 7, 5),
-    Large(1, 5, 24, 9, 6),
-    Huge(1, 5, 30, 12, 7);
+/**
+ *  The sizes of world of Civ V (Duel to Huge) by the number of tiles of Unciv's map, to pick the values the scripts keep per world size:
+ *  [plates] of the ridge fields that make hills and mountains, [landPlates] of the ridges blended into the land fractal (FractalWorld:InitFractal)
+ */
+enum class CivVWorldSize(val grainChange: Int, val continentsGrain: Int, val plates: Int, val landPlates: Int, val atolls: Int, val naturalWonders: Int) {
+    Duel(-1, 3, 6, 4, 2, 2),
+    Tiny(-1, 3, 9, 8, 4, 3),
+    Small(0, 4, 12, 16, 5, 4),
+    Standard(0, 4, 18, 20, 7, 5),
+    Large(1, 5, 24, 24, 9, 6),
+    Huge(1, 5, 30, 32, 12, 7);
 
     companion object {
+        @Pure
         fun forTiles(tiles: Int) = when {
             tiles < 1500 -> Duel
             tiles < 2500 -> Tiny
@@ -33,6 +38,12 @@ enum class CivVWorldSize(val grainChange: Int, val continentsGrain: Int, val pla
 interface HexGeometry {
     val width: Int
     val height: Int
+    /** Whether the cell is a tile of the map (the cells are a rectangle, a hexagonal map does not fill it) */
+    fun contains(x: Int, y: Int) = true
+    /** The smallest shifts of the cells along x and along y that keep every neighbouring pair neighbouring: a shift by an odd number of
+     *  rows (pointy hexes) or columns (flat hexes) turns the half-cell stagger around and breaks a one-tile link */
+    val shiftPeriodX: Int get() = 1
+    val shiftPeriodY: Int get() = 1
     fun neighbors(x: Int, y: Int): List<Pair<Int, Int>>
     fun distance(x1: Int, y1: Int, x2: Int, y2: Int): Int
     fun center(x: Int, y: Int): Pair<Double, Double>
@@ -42,6 +53,8 @@ interface HexGeometry {
 /** The scripts' own grid: pointy hexes, rows shifted east when odd, wrapping in x when [wrapX] */
 class PointyHexGeometry(override val width: Int, override val height: Int, private val wrapX: Boolean) : HexGeometry {
     private fun wrap(x: Int) = if (wrapX) Math.floorMod(x, width) else x
+
+    override val shiftPeriodY get() = 2
 
     override fun neighbors(x: Int, y: Int): List<Pair<Int, Int>> {
         val shift = y and 1
@@ -69,24 +82,55 @@ class PointyHexGeometry(override val width: Int, override val height: Int, priva
 }
 
 /**
- *  The landmass of Continents.lua (ContinentsFractalWorld:GeneratePlotTypes) on a grid of [width] x [height] cells, with FractalWorld's
- *  ShiftPlotTypes and GenerateCenterRift, and the hills and mountains it builds from two ridge fields.
+ *  The landmass of the Civ V scripts that draw one fractal and cut it at a sea level (Continents.lua: ContinentsFractalWorld:GeneratePlotTypes,
+ *  Pangaea.lua: PangaeaFractalWorld:GeneratePlotTypes; the numbers that differ are in the [recipe]) on a grid of [width] x [height] cells,
+ *  with FractalWorld's ShiftPlotTypes and GenerateCenterRift, and the hills and mountains it builds from two ridge fields.
  *
- *  The land is a [CivVFractal] with its edges at zero (no land at the poles), cut so [seaLevelPercent] of its cells are water, with
- *  rifts of its own in two thirds of the attempts, shifted so the map edge runs through the emptiest columns and rows, and split by a long
- *  rift that wanders up the middle (Atlantic style), until [acceptable] likes the result (the original: no landmass beyond 58 % of the land).
+ *  The land is a [CivVFractal] on the scripts' 128 x 64 nodes with its edges at zero and a third of ridges blended in (InitFractal: rough coasts and
+ *  inland seas; the ridge builder does not keep the poles at zero, so a little land can reach them), read at the map's cells by interpolation and
+ *  cut so the recipe's water percent of its nodes are water, with rifts of its own in two thirds of the attempts, until the biggest landmass is
+ *  the share of the land the recipe asks for. With a
+ *  centre rift (Continents) the land is shifted so the map edge runs through the emptiest columns and rows, and split by a long rift that
+ *  wanders up the middle (Atlantic style), before it is measured. Without one (Pangaea) the land is measured as cut; then the hills,
+ *  mountains and the tectonic islands (ocean cells on the topmost percentiles of the mountain field) are added, everything is shifted
+ *  to the emptiest edge, and the biggest landmass is pushed towards a pole.
  *  The centre rift is a line the scripts draw on their own grid and that is followed here over the cells of [geometry] from step to step
  *  (so no land touches across it), and the ridges are Voronoi diagrams in the steps of [geometry].
- *  Not ported: the options for the age of the world (it is the normal one: hills and mountains ridges as `world_age_normal`).
+ *
+ *  What the scripts do and this does not:
+ *  - The hills and mountains fields are made as the land's: fractal and ridges (Voronoi diagrams in the steps of the scripts' pointy grid) on the
+ *    128 x 64 nodes, the percentiles those of the nodes, the map's cells reading the nodes by interpolation (FractalWorld:GeneratePlotTypes
+ *    calls GetHeight(x, y) for all three). A Duel map has fewer cells at the tectonic islands' percentile values than when the ridges were
+ *    made per cell, and fewer mountain cells (the interpolated field has fewer extremes than the nodes').
+ *  - `ApplyTectonics` as a pass of its own (MultilayeredFractal.lua, the layered family): the hills and mountains here are [elevate], which
+ *    both recipes call (FractalWorld:GeneratePlotTypes keeps them in its main loop too); the layered scripts apply them to the finished layers.
+ *  - The scripts' plot arrays are written 0-based and read 1-based in places, which moves the whole land by one tile in the engine's
+ *    index order; Pangaea.lua tests the area numbers against that offset array. No effect on the shapes, not ported.
+ *  - The scripts loop until the criterion is met; this stops after [MAX_ATTEMPTS] with the last fractal (Pangaea needs 1.5 on average).
+ *  - The start method (Pangaea.lua asks for region method 1, the biggest landmass; Continents.lua 2) is not chosen by the land step: Unciv's
+ *    region division takes the continental method of Vox Populi, which falls back to the biggest landmass when the others are under a
+ *    quarter of its fertility, as a Pangaea's are.
+ *  - `GenerateCoasts` is called without arguments by Continents, Pangaea, Small Continents and Fractal, so the ruleset's coast dice are right;
+ *    Archipelago and Tiny Islands pass `{10, 4, 4}`: [FractalLandRecipe.coastDice], applied by MapGenerator.spawnLakesAndCoasts.
+ *  - What the other scripts of the family do besides the land step is not ported here: region method 3 (rectangular division) of Archipelago and
+ *    Tiny Islands, `ChooseLocations` with `mustBeCoast` and lowered food and production minimums (Small Continents, Archipelago, Tiny Islands),
+ *    the AI map hint 1 + 4 of Tiny Islands, the resources option; Unciv's region division and start finder decide those.
+ *    Small Continents asks for region method 2 like Continents. Fractal.lua has no `StartPlotSystem` (the engine default).
+ *  - The recipes without a criterion (everything but Continents and Pangaea) draw one fractal: their scripts do not retry.
  */
-class CivVContinentsLandmass(
+class CivVFractalLandmass(
     private val geometry: HexGeometry,
     private val wrapX: Boolean,
     private val rng: Random,
-    private val seaLevelPercent: Int = 72,
+    private val recipe: FractalLandRecipe,
+    seaLevel: SeaLevel = SeaLevel.Normal,
     /** In billions of years: 3 (young: more hills, more and sharper mountains, more ridges), 4 (normal), 5 (old: fewer, worn down) */
-    private val worldAge: Int = 4
+    worldAge: Int = 4
 ) {
+    /** A script without the options (Fractal.lua) runs with the sea level and the world age they default to */
+    private val seaLevel = if (recipe.offersWorldOptions) seaLevel else SeaLevel.Normal
+    private val worldAge = if (recipe.offersWorldOptions) worldAge else 4
+
     private val width = geometry.width
     private val height = geometry.height
 
@@ -94,29 +138,179 @@ class CivVContinentsLandmass(
     var centreRift: List<Pair<Int, Int>> = emptyList()
         private set
 
+    /** How many fractals were drawn, and the share of the land the biggest landmass of the one returned had (as the recipe measures it) */
+    var attempts = 0
+        private set
+    var biggestLandmassShare = 0.0
+        private set
+
+    /** The ocean cells the tectonic islands turned into land, hills or a peak (the cells of the mountain field at its 100th, 99th, 97th and 95th percentile) */
+    var tectonicIslandCells = 0
+        private set
+
+    /** The rows the biggest landmass was pushed by, towards the north edge (row [height] - 1) when positive, towards the south edge when negative; 0 for none */
+    var poleShiftRows = 0
+        private set
+
     class Result(val land: Array<BooleanArray>, val hills: Array<BooleanArray>, val mountains: Array<BooleanArray>)
 
     private val worldSize = CivVWorldSize.forTiles(width * height)
 
-    fun generate(acceptable: (Array<BooleanArray>) -> Boolean): Result {
-        var land = Array(width) { BooleanArray(height) }
-        repeat(20) {
-            val grain = if (rng.nextInt(7) < 4) 2 else 1
-            val riftGrain = rng.nextInt(3).let { if (it < 1) -1 else it }
-            val rifts = if (riftGrain in 1..3) CivVFractal(width, height, riftGrain, false, false, rng) else null
-            val fractal = CivVFractal(width, height, grain, false, false, rng, polar = true, rifts = rifts)
-            val level = fractal.getHeightFromPercent(seaLevelPercent)
-            land = Array(width) { x -> BooleanArray(height) { y -> fractal.getHeight(x, y) > level } }
-            land = shiftToEmptiestEdge(land)
-            generateCenterRift(land)
-            if (acceptable(land)) return elevate(land)
-        }
-        return elevate(land)
+    companion object {
+        const val MAX_ATTEMPTS = 100
+        private const val NODES_X = 1 shl CivVFractal.DEFAULT_X_EXP
+        private const val NODES_Y = 1 shl CivVFractal.DEFAULT_Y_EXP
     }
 
-    /** FractalWorld:ShiftPlotTypes: the group of columns (a tenth of the width on each side of its middle) with the least land
-     *  becomes the new left edge, likewise the group of rows (a fifteenth of the height) the new bottom edge */
-    private fun shiftToEmptiestEdge(land: Array<BooleanArray>): Array<BooleanArray> {
+    /** The scripts' own grid under the fractals: the land fractal and its ridges are made on its 128 x 64 nodes, whatever the size of the map */
+    private val nodeGrid = PointyHexGeometry(NODES_X, NODES_Y, wrapX)
+
+    /**
+     *  FractalWorld:InitFractal: `BuildRidges(plates, flags, 1, 2)` blends a third of ridges into the land [fractal], on its nodes: rough coasts and
+     *  inland seas. The native ridge builder (CvFractal::ridgeBuilder) does not keep the poles at zero: the ridge value goes into every node, but the
+     *  row and the column beyond the last node it visits keep the fractal's own value. Returns the nodes (with that row and column) and the height
+     *  below which the recipe's water percent of the nodes are.
+     */
+    private fun landNodes(fractal: CivVFractal): Pair<Array<IntArray>, Int> {
+        val field = nodeField(fractal, worldSize.landPlates, 1, 2)
+        return field.nodes to percent(field.ridged, recipe.waterPercent(seaLevel))
+    }
+
+    /** A fractal with its ridges on the scripts' nodes: [ridged] are the nodes below the last row and column, [nodes] add that row and column with the fractal's own value */
+    private class NodeField(val ridged: Array<IntArray>, val nodes: Array<IntArray>)
+
+    /** `Fractal:BuildRidges(plates, flags, blendRidge, blendFract)` of the [fractal] on the nodes (FractalWorld:InitFractal for the land, GeneratePlotTypes for the hills and the mountains) */
+    private fun nodeField(fractal: CivVFractal, plates: Int, blendRidge: Int, blendFract: Int): NodeField {
+        val ridged = ridgeField(fractal, plates, wrapX, blendRidge, blendFract, nodeGrid)
+        val nodes = Array(NODES_X + 1) { x -> IntArray(NODES_Y + 1) { y -> if (x < NODES_X && y < NODES_Y) ridged[x][y] else fractal.getHeight(x, y) } }
+        return NodeField(ridged, nodes)
+    }
+
+    /** The field at the map's cells, read from its nodes by interpolation as `CvFractal::getHeight(x, y)` does */
+    private fun cellsOf(field: NodeField) = Array(width) { x -> IntArray(height) { y -> interpolate(field.nodes, x, y) } }
+
+    /** CvFractal::getHeight: the nodes' heights blended by the position of the map cell between them */
+    private fun interpolate(nodes: Array<IntArray>, x: Int, y: Int): Int {
+        val gx = x.toDouble() * NODES_X / width
+        val gy = y.toDouble() * NODES_Y / height
+        val lowX = gx.toInt().coerceAtMost(NODES_X - 1)
+        val lowY = gy.toInt().coerceAtMost(NODES_Y - 1)
+        val errX = gx - lowX
+        val errY = gy - lowY
+        val sum = (1 - errX) * (1 - errY) * nodes[lowX][lowY] + errX * (1 - errY) * nodes[lowX + 1][lowY] +
+            (1 - errX) * errY * nodes[lowX][lowY + 1] + errX * errY * nodes[lowX + 1][lowY + 1]
+        return sum.toInt().coerceIn(0, 255)
+    }
+
+    /** The landmasses of a land array: the number of each cell's landmass (-1 for water), the size of each landmass and the land in all */
+    private class Landmasses(val ids: Array<IntArray>, val sizes: List<Int>) {
+        val total get() = sizes.sum()
+        val biggest get() = sizes.indices.maxByOrNull { sizes[it] } ?: -1
+    }
+
+    /** `Map.RecalculateAreas`: land cells that touch (across the east-west seam too, on a wrapping map) are one landmass; cells that are no tile of the map are nothing */
+    private fun landmassesOf(land: Array<BooleanArray>): Landmasses {
+        val ids = Array(width) { IntArray(height) { -1 } }
+        val sizes = ArrayList<Int>()
+        val queue = ArrayDeque<Pair<Int, Int>>()
+        for (x in 0 until width) for (y in 0 until height) {
+            if (!land[x][y] || ids[x][y] != -1 || !geometry.contains(x, y)) continue
+            val id = sizes.size
+            var size = 0
+            ids[x][y] = id
+            queue.add(x to y)
+            while (queue.isNotEmpty()) {
+                val (cx, cy) = queue.removeFirst()
+                size++
+                for ((nx, ny) in geometry.neighbors(cx, cy)) {
+                    if (!land[nx][ny] || ids[nx][ny] != -1) continue
+                    ids[nx][ny] = id
+                    queue.add(nx to ny)
+                }
+            }
+            sizes.add(size)
+        }
+        return Landmasses(ids, sizes)
+    }
+
+    /** Draws fractals until the recipe likes the biggest landmass (up to [MAX_ATTEMPTS]: the scripts loop until they get one) */
+    fun generate(): Result {
+        var land = Array(width) { BooleanArray(height) }
+        var masses = Landmasses(Array(width) { IntArray(height) { -1 } }, emptyList())
+        attempts = 0
+        while (attempts < MAX_ATTEMPTS) {
+            attempts++
+            val fixedGrain = recipe.fixedGrain
+            val grain = fixedGrain ?: if (rng.nextInt(7) < 4) recipe.grainOnLowRoll else 3 - recipe.grainOnLowRoll
+            val riftGrain = if (fixedGrain != null) -1 else rng.nextInt(3).let { if (it < 1) -1 else it }
+            val rifts = if (riftGrain in 1..3) CivVFractal(NODES_X, NODES_Y, riftGrain, false, false, rng) else null
+            val fractal = CivVFractal(NODES_X, NODES_Y, grain, false, false, rng, polar = true, rifts = rifts)
+            val (nodes, level) = landNodes(fractal)
+            land = Array(width) { x -> BooleanArray(height) { y -> interpolate(nodes, x, y) > level } }
+            if (recipe.centreRift) {
+                val (shiftX, shiftY) = emptiestEdge(land)
+                land = rotate(land, shiftX, shiftY)
+                generateCenterRift(land)
+            }
+            masses = landmassesOf(land)
+            val biggestSize = masses.sizes.maxOrNull() ?: 0
+            biggestLandmassShare = if (masses.total == 0) 0.0 else biggestSize.toDouble() / masses.total
+            if (recipe.accepts(biggestSize, masses.total)) break
+        }
+        if (recipe.centreRift) return elevate(land)
+
+        // The land was measured as cut; the hills, mountains and tectonic islands are added to it, and all of it is shifted
+        // by whole periods of the grid, so the shift cannot break the landmass that was just measured (see shiftPeriodX)
+        val elevated = elevate(land)
+        val (emptiestX, emptiestY) = emptiestEdge(elevated.land)
+        fun snap(shift: Int, period: Int, size: Int) = Math.floorMod((shift + period / 2) / period * period, size)
+        val shiftX = snap(emptiestX, geometry.shiftPeriodX, width)
+        val shiftY = snap(emptiestY, geometry.shiftPeriodY, height)
+        val result = Result(rotate(elevated.land, shiftX, shiftY), rotate(elevated.hills, shiftX, shiftY), rotate(elevated.mountains, shiftX, shiftY))
+        if (recipe.poleShift) shiftToPole(result, masses)
+        return result
+    }
+
+    /**
+     *  The end of Pangaea.lua's GeneratePlotTypes: a random pole, the rows of water between the biggest landmass and that edge (a landmass
+     *  further than 4 rows from the edge has them), and the land is moved by 30 % to 100 % of them, at least 2 and an even number (an odd
+     *  number would break a one-tile isthmus on the scripts' grid).
+     *  The script looks for the landmass by the area number the map holds for a plot, but the map still has the land as it was cut, before
+     *  the shift (the shifted types are in a table it only hands to the map afterwards): the row it finds is the first from the pole on that has
+     *  land now and had a plot of the biggest landmass then, and that is ported as it is. [before] is the land as it was cut.
+     */
+    private fun shiftToPole(result: Result, before: Landmasses) {
+        val biggest = before.biggest
+        val north = rng.nextInt(2) == 1
+        var startRow = -1
+        val rows = if (north) (height - 2 downTo 1) else (1..height - 2)
+        search@ for (y in rows) for (x in 0 until width) {
+            if (result.land[x][y] && !result.mountains[x][y] && before.ids[x][y] == biggest) {
+                startRow = if (north) y + 1 else y - 1
+                break@search
+            }
+        }
+        val canShift = startRow >= 0 && (if (north) startRow < height - 4 else startRow > 3)
+        if (!canShift) return
+        val difference = if (north) height - startRow - 2 else startRow - 1
+        val inPlay = (difference * 0.7).toInt()
+        val base = kotlin.math.ceil(difference * 0.3).toInt()
+        val rowsToShift = maxOf(2, 2 * (minOf(difference - 1, base + rng.nextInt(inPlay)) / 2))
+        for (array in listOf(result.land, result.hills, result.mountains)) for (column in array) {
+            if (north) {
+                for (y in height - 1 - rowsToShift downTo 0) column[y + rowsToShift] = column[y]
+                for (y in 0 until rowsToShift) column[y] = false
+            } else {
+                for (y in 0..height - 1 - rowsToShift) column[y] = column[y + rowsToShift]
+                for (y in height - rowsToShift until height) column[y] = false
+            }
+        }
+        poleShiftRows = if (north) rowsToShift else -rowsToShift
+    }
+
+    /** FractalWorld:DetermineXShift and DetermineYShift: the group of columns (a tenth of the width on each side of its middle) with the least land
+     *  is to become the new left edge, likewise the group of rows (a fifteenth of the height) the new bottom edge */
+    private fun emptiestEdge(land: Array<BooleanArray>): Pair<Int, Int> {
         fun emptiestStart(totals: IntArray, radius: Int): Int {
             val n = totals.size
             var best = Int.MAX_VALUE
@@ -130,8 +324,12 @@ class CivVContinentsLandmass(
         }
         val shiftX = emptiestStart(IntArray(width) { x -> land[x].count { it } }, width / 10)
         val shiftY = emptiestStart(IntArray(height) { y -> (0 until width).count { x -> land[x][y] } }, height / 15)
-        return Array(width) { x -> BooleanArray(height) { y -> land[(x + shiftX) % width][(y + shiftY) % height] } }
+        return shiftX to shiftY
     }
+
+    /** FractalWorld:ShiftPlotTypesBy: the cell at (x + [shiftX], y + [shiftY]), wrapped around the array, is the new (x, y) */
+    private fun rotate(cells: Array<BooleanArray>, shiftX: Int, shiftY: Int) =
+        Array(width) { x -> BooleanArray(height) { y -> cells[(x + shiftX) % width][(y + shiftY) % height] } }
 
     private enum class Dir { NorthEast, East, West, NorthWest }
 
@@ -311,33 +509,56 @@ class CivVContinentsLandmass(
         return result
     }
 
-    /** The hills and mountains of Continents.lua: two ridge fields (the world age is the normal one) */
+    /**
+     *  The hills and mountains of the scripts: two ridge fields, the recipe's extra mountains and plates, and with its tectonic islands the
+     *  ocean cells at exactly the 100th (a peak), 99th (hills) and 97th and 95th (flat land) percentile of the mountain field, which come
+     *  out as islands along the ridge lines. The result's land is [land] plus those islands.
+     */
     private fun elevate(land: Array<BooleanArray>): Result {
         val adjustment = when { worldAge <= 3 -> 5; worldAge == 4 -> 3; else -> 2 }
-        val numPlates = worldSize.plates * when { worldAge <= 3 -> 1.5f; worldAge == 4 -> 1f; else -> 0.75f }
+        val numPlates = worldSize.plates * (recipe.platesMultiplier * when { worldAge <= 3 -> 1.5; worldAge == 4 -> 1.0; else -> 0.75 })
         val hillsBottom1 = 28 - adjustment
         val hillsTop1 = 28 + adjustment
         val hillsBottom2 = 72 - adjustment
         val hillsTop2 = 72 + adjustment
-        val hillsNearMountains = 91 - adjustment * 2
-        val mountains = 97 - adjustment
+        val hillsNearMountains = 91 - adjustment * 2 - recipe.extraMountains
+        val mountains = 97 - adjustment - recipe.extraMountains
+        tectonicIslandCells = 0
 
-        val hillsBase = CivVFractal(width, height, worldSize.continentsGrain, wrapX, false, rng)
-        val mountainsBase = CivVFractal(width, height, worldSize.continentsGrain, wrapX, false, rng)
-        val hillsField = ridgeField(hillsBase, numPlates.toInt(), wrapX, 1, 2)
-        val mountainsField = ridgeField(mountainsBase, (numPlates * 2 / 3).toInt(), wrapX, 6, 1)
-        val bottom1 = percent(hillsField, hillsBottom1)
-        val top1 = percent(hillsField, hillsTop1)
-        val bottom2 = percent(hillsField, hillsBottom2)
-        val top2 = percent(hillsField, hillsTop2)
-        val nearMountains = percent(mountainsField, hillsNearMountains)
-        val mountainThreshold = percent(mountainsField, mountains)
-        val passThreshold = percent(hillsField, hillsNearMountains)
+        // Both fractals and their ridges are made on the scripts' nodes, the percentiles are the nodes', the cells read the nodes by interpolation
+        val hillsBase = CivVFractal(NODES_X, NODES_Y, worldSize.continentsGrain, wrapX, false, rng)
+        val mountainsBase = CivVFractal(NODES_X, NODES_Y, worldSize.continentsGrain, wrapX, false, rng)
+        val hillsNodes = nodeField(hillsBase, numPlates.toInt(), 1, 2)
+        val mountainsNodes = nodeField(mountainsBase, (numPlates * 2 / 3).toInt(), 6, 1)
+        val bottom1 = percent(hillsNodes.ridged, hillsBottom1)
+        val top1 = percent(hillsNodes.ridged, hillsTop1)
+        val bottom2 = percent(hillsNodes.ridged, hillsBottom2)
+        val top2 = percent(hillsNodes.ridged, hillsTop2)
+        val nearMountains = percent(mountainsNodes.ridged, hillsNearMountains)
+        val mountainThreshold = percent(mountainsNodes.ridged, mountains)
+        val passThreshold = percent(hillsNodes.ridged, hillsNearMountains)
+        val hillsField = cellsOf(hillsNodes)
+        val mountainsField = cellsOf(mountainsNodes)
 
         val hills = Array(width) { BooleanArray(height) }
         val peaks = Array(width) { BooleanArray(height) }
+        val islandPeak = if (recipe.tectonicIslands) percent(mountainsNodes.ridged, 100) else -1
+        val islandHills = if (recipe.tectonicIslands) percent(mountainsNodes.ridged, 99) else -1
+        val islandLand1 = if (recipe.tectonicIslands) percent(mountainsNodes.ridged, 97) else -1
+        val islandLand2 = if (recipe.tectonicIslands) percent(mountainsNodes.ridged, 95) else -1
+        val withIslands = if (recipe.tectonicIslands) Array(width) { land[it].copyOf() } else land
         for (x in 0 until width) for (y in 0 until height) {
-            if (!land[x][y]) continue
+            if (!land[x][y]) {
+                if (!recipe.tectonicIslands) continue
+                val value = mountainsField[x][y]
+                when {
+                    value == islandPeak -> { withIslands[x][y] = true; peaks[x][y] = true }
+                    value == islandHills -> { withIslands[x][y] = true; hills[x][y] = true }
+                    value == islandLand1 || value == islandLand2 -> withIslands[x][y] = true
+                }
+                if (withIslands[x][y]) tectonicIslandCells++
+                continue
+            }
             val mountainValue = mountainsField[x][y]
             val hillValue = hillsField[x][y]
             when {
@@ -346,13 +567,13 @@ class CivVContinentsLandmass(
                 hillValue in bottom1..top1 || hillValue in bottom2..top2 -> hills[x][y] = true
             }
         }
-        return Result(land, hills, peaks)
+        return Result(withIslands, hills, peaks)
     }
 
     /** CvFractal::getHeightFromPercent on a field of the map's cells */
     private fun percent(field: Array<IntArray>, percent: Int): Int {
         val p = percent.coerceIn(0, 100)
-        val total = width * height
+        val total = field.size * field[0].size
         var lower = 0
         var upper = 255
         var estimate = 255 * p / 100
@@ -366,12 +587,16 @@ class CivVContinentsLandmass(
     }
 
     /**
-     *  CvFractal::ridgeBuilder on the cells of [geometry]: [numSeeds] (at least 3) random cells, each with a weakness, a favoured direction
+     *  CvFractal::ridgeBuilder on the cells of [geometry] (the scripts' nodes): [numSeeds] (at least 3) random cells, each with a weakness, a favoured direction
      *  and its strength; a cell's value is how near its closest seed is compared to the second closest (255 x closest / second closest: low
      *  in the middle of a region, high on the borders between regions: ridges), blended with [base] as
      *  (ridge x [blendRidge] + base x [blendFract]) / (sum). [biased] adds the seeds' weakness, a little noise and the direction bias to the distance.
      */
-    private fun ridgeField(base: CivVFractal, numSeeds: Int, biased: Boolean, blendRidge: Int, blendFract: Int): Array<IntArray> {
+    private fun ridgeField(
+        base: CivVFractal, numSeeds: Int, biased: Boolean, blendRidge: Int, blendFract: Int, geometry: HexGeometry
+    ): Array<IntArray> {
+        val width = geometry.width
+        val height = geometry.height
         class Seed(val x: Int, val y: Int, val weakness: Int, val direction: Int, val strength: Int)
         val seeds = ArrayList<Seed>()
         repeat(maxOf(numSeeds, 3)) {
@@ -440,6 +665,10 @@ class UncivHexGeometry(private val tileMap: com.unciv.logic.map.TileMap) : HexGe
     fun cellOf(tile: com.unciv.logic.map.tile.Tile) = (tile.getColumn() - minColumn) to (cellRow(tile) - minRow)
 
     fun tileOf(x: Int, y: Int) = tileAt[x to y]
+
+    override fun contains(x: Int, y: Int) = tileAt.containsKey(x to y)
+
+    override val shiftPeriodX get() = 2
 
     override fun neighbors(x: Int, y: Int): List<Pair<Int, Int>> =
         tileAt[x to y]?.neighbors?.map { cellOf(it) }?.toList() ?: emptyList()

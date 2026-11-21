@@ -10,6 +10,7 @@ import com.unciv.models.stats.Stat
 import com.unciv.models.stats.StatMap
 import com.unciv.ui.components.extensions.addSeparator
 import com.unciv.ui.components.extensions.toLabel
+import com.unciv.ui.components.widgets.NeedsRowsTable
 import com.unciv.ui.components.widgets.TabbedPager
 import com.unciv.ui.components.widgets.UncivSlider
 import com.unciv.ui.images.ImageGetter
@@ -120,6 +121,13 @@ class StatsOverviewTab(
     }
 
     private fun updateHappinessTable() = happinessTable.apply {
+        if (viewingPlayer.usesNeedsModel()) {
+            // Approval rating, thresholds, the pool of happiness and what the cities get of it
+            clear()
+            add(NeedsRowsTable(viewingPlayer.getNeedsRows()))
+            pack()
+            return@apply
+        }
         addHeading("Happiness")
         val happinessBreakdown = viewingPlayer.getHappinessBreakdown()
         for ((key, value) in happinessBreakdown)

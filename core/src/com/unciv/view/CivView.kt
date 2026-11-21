@@ -19,6 +19,8 @@ import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.StatMap
+import com.unciv.ui.screens.NeedsRow
+import com.unciv.ui.screens.NeedsRows
 import yairm210.purity.annotations.Readonly
 
 /** View of a [Civilization] from the perspective of [viewer] via [gameView]. */
@@ -66,6 +68,12 @@ class CivView(civ: Civilization,
     @Readonly fun getKnownCivs(): List<ForeignCivView> = civ.getKnownCivs().map { gameView.getForeignCivView(it) }.toList()
     @Readonly fun getPersonalityValue(value: PersonalityValue): Float = civ.getPersonality()[value]
     @Readonly fun getHappiness(): Int = civ.getHappiness()
+    /** Whether the civilization has Vox Populi's needs ([com.unciv.models.ModConstants.cityNeedsLikeVp]) */
+    @Readonly fun usesNeedsModel(): Boolean = civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
+    /** The approval rating, the thresholds, the pool of happiness and the share of every city, empty without the needs model */
+    @Readonly fun getNeedsRows(): List<NeedsRow> = NeedsRows.empireRows(civ)
+    /** The tooltip of the Happiness stat, null without the needs model */
+    @Readonly fun getApprovalTooltip(): String? = NeedsRows.approvalTooltip(civ)
 
     // Tech
     @Readonly fun isResearched(techName: String): Boolean = civ.tech.isResearched(techName)

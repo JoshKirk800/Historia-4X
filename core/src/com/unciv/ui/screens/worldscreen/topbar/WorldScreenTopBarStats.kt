@@ -2,7 +2,9 @@ package com.unciv.ui.screens.worldscreen.topbar
 
 import com.badlogic.gdx.scenes.scene2d.Group
 import com.badlogic.gdx.scenes.scene2d.ui.Label
+import com.badlogic.gdx.utils.Align
 import com.unciv.Constants
+import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.stats.Stats
 import com.unciv.models.translations.tr
@@ -104,6 +106,10 @@ internal class WorldScreenTopBarStats(topbar: WorldScreenTopBar) : ScalingTableW
         }
         happinessContainer.onClick(invokeResourcesPage)
         happinessLabel.onClick(invokeResourcesPage)
+        // With Vox Populi's needs the number shown is the approval rating less the unhappy threshold: the tooltip tells the rating itself
+        if (worldScreen.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp)
+            happinessLabel.addTooltip("Approval rating", always = true, targetAlign = Align.bottom, tipAlign = Align.top,
+                dynamicTextProvider = { worldScreen.selectedGameView.civView.getApprovalTooltip() ?: "Approval rating" })
         add(happinessContainer).padBottom(defaultImageBottomPad).size(defaultImageSize)
         add(happinessLabel).padRight(padRightBetweenStats)
 

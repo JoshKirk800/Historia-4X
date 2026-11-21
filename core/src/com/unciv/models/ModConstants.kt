@@ -82,6 +82,11 @@ class ModConstants {
      *  false: the major deposits per terrain (`MajorStrategicFrequency`), the minor deposits, `seaDepositsOfLandResource` and the extras. */
     var strategicPlacementLikeVoxPopuli = false
 
+    /** Deal the civs to the continents as Vox Populi's AssignStartingPlots:GenerateRegions does (see VoxPopuliContinentAssignment): continents with less
+     *  than a quarter of the biggest one's fertility are ignored and civs settle a continent in pairs, so on Duel both civs share one.
+     *  false: each civ goes to the continent with the best fertility / (1 + civs already there), as Brave New World's script does. */
+    var regionAssignmentLikeVoxPopuli = false
+
     /** Assign and place the luxuries as AssignStartingPlots.lua does (see CivVLuxuryPlacement). It names the luxuries of Civ V.
      *  false: the generic placement of the resources' `Generated with weight` rules. */
     var luxuryPlacementLikeCivV = false

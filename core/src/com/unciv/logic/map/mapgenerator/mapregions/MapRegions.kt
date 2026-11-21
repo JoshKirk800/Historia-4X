@@ -103,11 +103,7 @@ class MapRegions (val ruleset: Ruleset) {
         // Lots of small islands - just split ut the map in rectangles while ignoring Continents
         // 25% is chosen as limit so Four Corners maps don't fall in this category
         if (tileMap.usingArchipelagoRegions()) {
-            // Make a huge rectangle covering the entire map
-            val hugeRect = Region(tileMap, mapRect, -1) // -1 meaning ignore continent data
-            hugeRect.affectedByWorldWrap = false // Might as well start at the seam
-            hugeRect.updateTiles()
-            divideRegion(hugeRect, numRegions)
+            divideWholeMap(tileMap, mapRect, numRegions)
             return
         }
         // Continents type - distribute civs according to total fertility, then split as needed
@@ -131,6 +127,19 @@ class MapRegions (val ruleset: Ruleset) {
             }
         }
 
+        if (ruleset.modOptions.constants.regionAssignmentLikeVoxPopuli) {
+            when (val result = VoxPopuliContinentAssignment.assign(continentFertility, numRegions)) {
+                is VoxPopuliContinentAssignment.Result.Continents -> for ((continent, civs) in result.civsPerContinent)
+                    divideContinent(tileMap, mapRect, continent, continentToColumnsItsIn[continent]!!, civs)
+                VoxPopuliContinentAssignment.Result.BiggestLandmass -> {
+                    val biggest = tileMap.continentSizes.maxByOrNull { it.value }!!.key
+                    divideContinent(tileMap, mapRect, biggest, continentToColumnsItsIn[biggest]!!, numRegions)
+                }
+                VoxPopuliContinentAssignment.Result.Rectangular -> divideWholeMap(tileMap, mapRect, numRegions)
+            }
+            return
+        }
+
         // Assign regions to the best continents, giving half value for region #2 etc
         repeat(numRegions) {
             val bestContinent = continents
@@ -139,20 +148,31 @@ class MapRegions (val ruleset: Ruleset) {
         }
 
         // Split up the continents
-        for (continent in civsAddedToContinent.keys) {
-            val continentRegion = Region(tileMap, Rectangle(mapRect), continent)
-            val cols = continentToColumnsItsIn[continent]!!
-            // Set origin at the rightmost column which does not have a neighbor on the left
-            continentRegion.rect.x = cols.filter { !cols.contains(it - 1) }.maxOf { it }.toFloat()
-            continentRegion.rect.width = cols.size.toFloat()
-            if (tileMap.mapParameters.worldWrap) {
-                // Check if the continent is wrapping - if the leftmost col is not the one we set origin by
-                if (cols.minOf { it } < continentRegion.rect.x)
-                    continentRegion.affectedByWorldWrap = true
-            }
-            continentRegion.updateTiles()
-            divideRegion(continentRegion, civsAddedToContinent[continent]!!)
+        for (continent in civsAddedToContinent.keys)
+            divideContinent(tileMap, mapRect, continent, continentToColumnsItsIn[continent]!!, civsAddedToContinent[continent]!!)
+    }
+
+    /** Make a huge rectangle covering the entire map and split it while ignoring the continents */
+    private fun divideWholeMap(tileMap: TileMap, mapRect: Rectangle, numRegions: Int) {
+        val hugeRect = Region(tileMap, mapRect, -1) // -1 meaning ignore continent data
+        hugeRect.affectedByWorldWrap = false // Might as well start at the seam
+        hugeRect.updateTiles()
+        divideRegion(hugeRect, numRegions)
+    }
+
+    /** Divides one continent, given the even-q columns it is in, into [numRegions] regions */
+    private fun divideContinent(tileMap: TileMap, mapRect: Rectangle, continent: Int, cols: Set<Int>, numRegions: Int) {
+        val continentRegion = Region(tileMap, Rectangle(mapRect), continent)
+        // Set origin at the rightmost column which does not have a neighbor on the left
+        continentRegion.rect.x = cols.filter { !cols.contains(it - 1) }.maxOf { it }.toFloat()
+        continentRegion.rect.width = cols.size.toFloat()
+        if (tileMap.mapParameters.worldWrap) {
+            // Check if the continent is wrapping - if the leftmost col is not the one we set origin by
+            if (cols.minOf { it } < continentRegion.rect.x)
+                continentRegion.affectedByWorldWrap = true
         }
+        continentRegion.updateTiles()
+        divideRegion(continentRegion, numRegions)
     }
 
     /** How AssignStartingPlots:DivideIntoRegions cuts a region of a given number of civs.

@@ -98,9 +98,10 @@ class PointyHexGeometry(override val width: Int, override val height: Int, priva
  *  (so no land touches across it), and the ridges are Voronoi diagrams in the steps of [geometry].
  *
  *  What the scripts do and this does not:
- *  - The hills and mountains ridges are Voronoi diagrams on the map's own cells (the land's are on the 128 x 64 nodes, as the scripts'): they
- *    follow Unciv's hexes. On the nodes and interpolated, a Duel map has 7 cells at the 99th, 97th and 95th percentile values of the mountain
- *    field that tectonic islands are made of, on the cells 10 (100 maps of seeds 1 to 100, any terrain).
+ *  - The hills and mountains fields are made as the land's: fractal and ridges (Voronoi diagrams in the steps of the scripts' pointy grid) on the
+ *    128 x 64 nodes, the percentiles those of the nodes, the map's cells reading the nodes by interpolation (FractalWorld:GeneratePlotTypes
+ *    calls GetHeight(x, y) for all three). A Duel map has fewer cells at the tectonic islands' percentile values than when the ridges were
+ *    made per cell, and fewer mountain cells (the interpolated field has fewer extremes than the nodes').
  *  - `ApplyTectonics` as a pass of its own (MultilayeredFractal.lua, the layered family): the hills and mountains here are [elevate], which
  *    both recipes call (FractalWorld:GeneratePlotTypes keeps them in its main loop too); the layered scripts apply them to the finished layers.
  *  - The scripts' plot arrays are written 0-based and read 1-based in places, which moves the whole land by one tile in the engine's
@@ -134,6 +135,10 @@ class CivVFractalLandmass(
     var biggestLandmassShare = 0.0
         private set
 
+    /** The ocean cells the tectonic islands turned into land, hills or a peak (the cells of the mountain field at its 100th, 99th, 97th and 95th percentile) */
+    var tectonicIslandCells = 0
+        private set
+
     /** The rows the biggest landmass was pushed by, towards the north edge (row [height] - 1) when positive, towards the south edge when negative; 0 for none */
     var poleShiftRows = 0
         private set
@@ -158,10 +163,22 @@ class CivVFractalLandmass(
      *  below which the recipe's water percent of the nodes are.
      */
     private fun landNodes(fractal: CivVFractal): Pair<Array<IntArray>, Int> {
-        val ridged = ridgeField(fractal, worldSize.landPlates, wrapX, 1, 2, nodeGrid)
-        val nodes = Array(NODES_X + 1) { x -> IntArray(NODES_Y + 1) { y -> if (x < NODES_X && y < NODES_Y) ridged[x][y] else fractal.getHeight(x, y) } }
-        return nodes to percent(ridged, recipe.waterPercent(seaLevel))
+        val field = nodeField(fractal, worldSize.landPlates, 1, 2)
+        return field.nodes to percent(field.ridged, recipe.waterPercent(seaLevel))
     }
+
+    /** A fractal with its ridges on the scripts' nodes: [ridged] are the nodes below the last row and column, [nodes] add that row and column with the fractal's own value */
+    private class NodeField(val ridged: Array<IntArray>, val nodes: Array<IntArray>)
+
+    /** `Fractal:BuildRidges(plates, flags, blendRidge, blendFract)` of the [fractal] on the nodes (FractalWorld:InitFractal for the land, GeneratePlotTypes for the hills and the mountains) */
+    private fun nodeField(fractal: CivVFractal, plates: Int, blendRidge: Int, blendFract: Int): NodeField {
+        val ridged = ridgeField(fractal, plates, wrapX, blendRidge, blendFract, nodeGrid)
+        val nodes = Array(NODES_X + 1) { x -> IntArray(NODES_Y + 1) { y -> if (x < NODES_X && y < NODES_Y) ridged[x][y] else fractal.getHeight(x, y) } }
+        return NodeField(ridged, nodes)
+    }
+
+    /** The field at the map's cells, read from its nodes by interpolation as `CvFractal::getHeight(x, y)` does */
+    private fun cellsOf(field: NodeField) = Array(width) { x -> IntArray(height) { y -> interpolate(field.nodes, x, y) } }
 
     /** CvFractal::getHeight: the nodes' heights blended by the position of the map cell between them */
     private fun interpolate(nodes: Array<IntArray>, x: Int, y: Int): Int {
@@ -496,25 +513,29 @@ class CivVFractalLandmass(
         val hillsTop2 = 72 + adjustment
         val hillsNearMountains = 91 - adjustment * 2 - recipe.extraMountains
         val mountains = 97 - adjustment - recipe.extraMountains
+        tectonicIslandCells = 0
 
-        val hillsBase = CivVFractal(width, height, worldSize.continentsGrain, wrapX, false, rng)
-        val mountainsBase = CivVFractal(width, height, worldSize.continentsGrain, wrapX, false, rng)
-        val hillsField = ridgeField(hillsBase, numPlates.toInt(), wrapX, 1, 2)
-        val mountainsField = ridgeField(mountainsBase, (numPlates * 2 / 3).toInt(), wrapX, 6, 1)
-        val bottom1 = percent(hillsField, hillsBottom1)
-        val top1 = percent(hillsField, hillsTop1)
-        val bottom2 = percent(hillsField, hillsBottom2)
-        val top2 = percent(hillsField, hillsTop2)
-        val nearMountains = percent(mountainsField, hillsNearMountains)
-        val mountainThreshold = percent(mountainsField, mountains)
-        val passThreshold = percent(hillsField, hillsNearMountains)
+        // Both fractals and their ridges are made on the scripts' nodes, the percentiles are the nodes', the cells read the nodes by interpolation
+        val hillsBase = CivVFractal(NODES_X, NODES_Y, worldSize.continentsGrain, wrapX, false, rng)
+        val mountainsBase = CivVFractal(NODES_X, NODES_Y, worldSize.continentsGrain, wrapX, false, rng)
+        val hillsNodes = nodeField(hillsBase, numPlates.toInt(), 1, 2)
+        val mountainsNodes = nodeField(mountainsBase, (numPlates * 2 / 3).toInt(), 6, 1)
+        val bottom1 = percent(hillsNodes.ridged, hillsBottom1)
+        val top1 = percent(hillsNodes.ridged, hillsTop1)
+        val bottom2 = percent(hillsNodes.ridged, hillsBottom2)
+        val top2 = percent(hillsNodes.ridged, hillsTop2)
+        val nearMountains = percent(mountainsNodes.ridged, hillsNearMountains)
+        val mountainThreshold = percent(mountainsNodes.ridged, mountains)
+        val passThreshold = percent(hillsNodes.ridged, hillsNearMountains)
+        val hillsField = cellsOf(hillsNodes)
+        val mountainsField = cellsOf(mountainsNodes)
 
         val hills = Array(width) { BooleanArray(height) }
         val peaks = Array(width) { BooleanArray(height) }
-        val islandPeak = if (recipe.tectonicIslands) percent(mountainsField, 100) else -1
-        val islandHills = if (recipe.tectonicIslands) percent(mountainsField, 99) else -1
-        val islandLand1 = if (recipe.tectonicIslands) percent(mountainsField, 97) else -1
-        val islandLand2 = if (recipe.tectonicIslands) percent(mountainsField, 95) else -1
+        val islandPeak = if (recipe.tectonicIslands) percent(mountainsNodes.ridged, 100) else -1
+        val islandHills = if (recipe.tectonicIslands) percent(mountainsNodes.ridged, 99) else -1
+        val islandLand1 = if (recipe.tectonicIslands) percent(mountainsNodes.ridged, 97) else -1
+        val islandLand2 = if (recipe.tectonicIslands) percent(mountainsNodes.ridged, 95) else -1
         val withIslands = if (recipe.tectonicIslands) Array(width) { land[it].copyOf() } else land
         for (x in 0 until width) for (y in 0 until height) {
             if (!land[x][y]) {
@@ -525,6 +546,7 @@ class CivVFractalLandmass(
                     value == islandHills -> { withIslands[x][y] = true; hills[x][y] = true }
                     value == islandLand1 || value == islandLand2 -> withIslands[x][y] = true
                 }
+                if (withIslands[x][y]) tectonicIslandCells++
                 continue
             }
             val mountainValue = mountainsField[x][y]
@@ -555,13 +577,13 @@ class CivVFractalLandmass(
     }
 
     /**
-     *  CvFractal::ridgeBuilder on the cells of [geometry] (the map's, or the scripts' nodes): [numSeeds] (at least 3) random cells, each with a weakness, a favoured direction
+     *  CvFractal::ridgeBuilder on the cells of [geometry] (the scripts' nodes): [numSeeds] (at least 3) random cells, each with a weakness, a favoured direction
      *  and its strength; a cell's value is how near its closest seed is compared to the second closest (255 x closest / second closest: low
      *  in the middle of a region, high on the borders between regions: ridges), blended with [base] as
      *  (ridge x [blendRidge] + base x [blendFract]) / (sum). [biased] adds the seeds' weakness, a little noise and the direction bias to the distance.
      */
     private fun ridgeField(
-        base: CivVFractal, numSeeds: Int, biased: Boolean, blendRidge: Int, blendFract: Int, geometry: HexGeometry = this.geometry
+        base: CivVFractal, numSeeds: Int, biased: Boolean, blendRidge: Int, blendFract: Int, geometry: HexGeometry
     ): Array<IntArray> {
         val width = geometry.width
         val height = geometry.height

@@ -119,9 +119,14 @@ class BnwMapClone {
             "CIVILIZATION_SPAIN" to "Spain", "CIVILIZATION_JAPAN" to "Japan", "CIVILIZATION_OTTOMAN" to "The Ottomans",
             "CIVILIZATION_KOREA" to "Korea", "CIVILIZATION_ETHIOPIA" to "Ethiopia", "CIVILIZATION_PERSIA" to "Persia",
             "CIVILIZATION_SONGHAI" to "Songhai", "CIVILIZATION_ASSYRIA" to "Assyria", "CIVILIZATION_ENGLAND" to "England",
-            "CIVILIZATION_ZULU" to "Zulus", "CIVILIZATION_HUNS" to "The Huns", "CIVILIZATION_POLAND" to "Poland",
+            "CIVILIZATION_ZULU" to "Zulus", "CIVILIZATION_HUNS" to "The Huns", "CIVILIZATION_POLAND" to "Poland", "CIVILIZATION_GREECE" to "Greece",
         )
         val cityStateNames = mapOf("MINOR_CIV_MBANZA_KONGO" to "M'Banza-Kongo")
+
+        /** The nation of a civilization type that is not in [nations]: its name in title case when the ruleset has a nation of that name (CIVILIZATION_GERMANY: Germany) */
+        fun civilizationName(type: String, ruleset: com.unciv.models.ruleset.Ruleset): String =
+            type.removePrefix("CIVILIZATION_").split('_').joinToString(" ") { it.lowercase().replaceFirstChar { c -> c.uppercase() } }
+                .also { require(it in ruleset.nations) { "nation $type: no nation named $it" } }
 
         fun cityStateName(type: String): String = cityStateNames[type]
             ?: type.removePrefix("MINOR_CIV_").split('_').joinToString(" ") { it.lowercase().replaceFirstChar { c -> c.uppercase() } }
@@ -199,10 +204,13 @@ class BnwMapClone {
         }
 
         var ruins = 0
+        val skippedResources = java.util.TreeMap<String, Int>()
         for (y in 0 until grid.height) for (x in 0 until grid.width) {
             val plot = plot(x, y)
             val tile = tile(x, y)
             plot.resource?.let {
+                if (it !in resources) { // a resource of Vox Populi that Brave New World's ruleset does not have (amber, maize, rice, coffee, ...): left off the map, counted in the summary
+                     skippedResources.merge(it, 1, Int::plus); return@let }
                 val resource = ruleset.tileResources[resources[it] ?: error("resource $it")] ?: error("no resource ${resources[it]}")
                 tile.setTileResource(resource, majorDeposit = true)
                 tile.resourceAmount = if (resource.resourceType == com.unciv.models.ruleset.tile.ResourceType.Strategic) plot.resourceQuantity else 0
@@ -229,13 +237,14 @@ class BnwMapClone {
         for (start in starts) {
             val player = players.get(start.name).let { listOf(it.getString(0), it.getString(3)) }
             val nation = if (player[0] == "CIVILIZATION_MINOR") cityStateName(player[1]).also { cityStates++ }
-                else (nations[player[0]] ?: error("nation ${player[0]}")).also { civilizations++ }
+                else (nations[player[0]] ?: civilizationName(player[0], ruleset)).also { civilizations++ }
             require(nation in ruleset.nations) { "no nation $nation" }
             map.startingLocations.add(TileMap.StartingLocation(grid.hexOf(start.getInt(0), start.getInt(1)), nation, TileMap.StartingLocation.Usage.Player))
         }
 
         FileConversions.writeJson(Gdx.files.absolute(System.getenv("BNW_CLONE_OUT")), map, zip = false)
-        File(System.getenv("BNW_CLONE_OUT") + ".summary.txt").writeText(summary(map, ruleset, rivers, ruins, civilizations, cityStates))
+        File(System.getenv("BNW_CLONE_OUT") + ".summary.txt").writeText(summary(map, ruleset, rivers, ruins, civilizations, cityStates) +
+            if (skippedResources.isEmpty()) "" else "resources left off (no counterpart in the ruleset): $skippedResources\n")
     }
 
     /** Every tile has exactly the neighbours its Civ V plot has (the wrap included), and the distance of Unciv is the number of steps between them */

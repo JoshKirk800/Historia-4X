@@ -726,7 +726,7 @@ object CityStateAi {
         if (hasQuest(minor, civ, QuestName.GiveGold)) value += 150
         if (hasQuest(minor, civ, QuestName.Invest)) value += 100
         if (hasFriendshipTrait(civ) || hasBonusTrait(civ)) value += civ.define(AiDefine.MC_GIFT_WEIGHT_DIPLO_VICTORY)
-        if (trait == MARITIME && civ.getHappiness() >= 0)
+        if (trait == MARITIME && !civ.isEmpireUnhappy())
             value += civ.define(AiDefine.MC_GIFT_WEIGHT_MARITIME_GROWTH) * ai.personalityAndGrandStrategy(Flavor.Growth) * max(1, civ.cities.size / 3)
         if (trait == MILITARISTIC && !ai.isGoingForWorldConquest()) value += civ.define(AiDefine.MC_GIFT_WEIGHT_MILITARISTIC)
         val lacking = MinorCivHelpers.numResourcesMajorLacks(minor, civ)

@@ -1,12 +1,14 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.unit.GreatPersonAutomation
+import com.unciv.logic.city.NeedType
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.Counter
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.PolicyAttributesDef
 import com.unciv.models.ruleset.ai.TraitCategory
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 
 /**
@@ -70,6 +72,12 @@ object PolicyAttributeAi {
         val numGreatWorks: Int by lazy { civ.cities.sumOf { it.greatWorks.getNumWorks() } }
         val numSpecialists: Int by lazy { civ.cities.sumOf { it.population.getNumberOfSpecialists() } }
 
+        /** CvPlayer::GetUnhappinessFromDistress and its siblings: the unhappy citizens of [need] in all our cities (with the needs model) */
+        fun unhappinessFrom(need: NeedType): Int = civ.cities.sumOf { it.cityStats.needs.yieldNeed(need) }
+
+        /** The golden age points a turn that the cities' positive happiness deltas make before a policy's percentage (CvPolicyAI's iTotalGAP) */
+        val happinessGoldenAgePoints: Int by lazy { civ.cities.sumOf { maxOf(0, it.cityStats.needs.delta) } }
+
         /** CvPlayer::CountAllImprovement: our tiles with each improvement */
         val improvementCounts: Counter<String> by lazy {
             Counter<String>().apply { for (city in civ.cities) for (tile in city.getTiles()) tile.improvement?.let { add(it, 1) } }
@@ -94,11 +102,57 @@ object PolicyAttributeAi {
     fun weightPolicyAttributes(policy: Policy, inputs: Inputs): IntArray {
         val yields = IntArray(AttributeYield.entries.size)
         if (!inputs.hasCapital) return yields
+        if (inputs.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) weighNeedUniques(policy, inputs, yields)
         val def = inputs.civ.gameInfo.ruleset.ai.policyAttributesOf(policy.name) ?: return yields
         weighColumns(def, inputs, yields)
         weighRows(def, inputs, yields)
         return yields
     }
+
+    /**
+     *  The columns of the needs, which with [com.unciv.models.ModConstants.cityNeedsLikeVp] are uniques of the policy (CvPolicyAI::WeightPolicyAttributes):
+     *  - a flat reduction of a need ([UniqueType.NeedReduction]): the points x 100 (x 50 when we have no unhappy citizen of that need and are no expansionist),
+     *    for Poverty x 40 (x 20), all in the Food yield;
+     *  - citizens whose specialists cost no unhappiness ([UniqueType.NoUnhappinessFromSpecialists]): x 15 for a smaller civilization, else x 10; in the capital x 50 (x 25);
+     *  - happiness from specialists ([UniqueType.HappinessFromSpecialists]): x 10 x max(1, population / 5) for a smaller civilization, else x 2 x max(1, population / 10);
+     *  - happiness per citizens and per trade route as the original's HappinessPerXPopulation and HappinessPerTradeRoute: [UniqueType.HappinessPerCitizens],
+     *    [UniqueType.HappinessPerTradeRoute];
+     *  - golden age points from happiness ([UniqueType.GoldenAgePointsFromHappinessPercent]): the cities' positive deltas x the percentage (x 2 for a tourism or smaller
+     *    civilization) in the golden age points yield.
+     *  The column of the empire size modifier has no weight in the source.
+     */
+    private fun weighNeedUniques(policy: Policy, inputs: Inputs, yields: IntArray) {
+        val food = AttributeYield.Food.ordinal
+        with(inputs) {
+            for (unique in policy.getMatchingUniques(UniqueType.NeedReduction, GameContext.IgnoreConditionals)) {
+                val need = NeedType.entries.firstOrNull { it.label == unique.params[0] } ?: continue
+                val points = unique.params[1].toInt()
+                val (high, low) = if (need == NeedType.Poverty) 40 to 20 else 100 to 50
+                yields[food] += points * if (expansionist || unhappinessFrom(need) > 0) high else low
+            }
+            for (unique in policy.getMatchingUniques(UniqueType.NoUnhappinessFromSpecialists, GameContext.IgnoreConditionals)) {
+                val citizens = unique.params[0].toInt()
+                val inCapital = unique.params[1] in CAPITAL_FILTERS
+                yields[food] += citizens * if (inCapital) (if (smaller) 50 else 25) else (if (smaller) 15 else 10)
+            }
+            for (unique in policy.getMatchingUniques(UniqueType.HappinessFromSpecialists, GameContext.IgnoreConditionals)) {
+                val specialists = unique.params[1].toInt()
+                yields[food] += if (smaller) specialists * 10 * maxOf(1, population / 5) else specialists * 2 * maxOf(1, population / 10)
+            }
+            for (unique in policy.getMatchingUniques(UniqueType.HappinessPerCitizens, GameContext.IgnoreConditionals)) {
+                val perCitizens = unique.params[1].toInt()
+                yields[food] += unique.params[0].toInt() * population * (if (expansionist) 200 else 100) / perCitizens
+            }
+            for (unique in policy.getMatchingUniques(UniqueType.HappinessPerTradeRoute, GameContext.IgnoreConditionals))
+                yields[food] += unique.params[0].toInt() * (if (expansionist) 10 else 5) * numCities
+            for (unique in policy.getMatchingUniques(UniqueType.GoldenAgePointsFromHappinessPercent, GameContext.IgnoreConditionals)) {
+                val points = happinessGoldenAgePoints * unique.params[0].toInt() / 100
+                yields[AttributeYield.GoldenAgePoints.ordinal] += if (tourism || smaller) points * 2 else points
+            }
+        }
+    }
+
+    private val CAPITAL_FILTERS = setOf("in capital", "Capital")
 
     /** The Policies columns, in the order of the original (its lines 1097-2860) */
     private fun weighColumns(def: PolicyAttributesDef, inputs: Inputs, yields: IntArray) {

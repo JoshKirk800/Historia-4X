@@ -1155,7 +1155,7 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
         var extra = 0
         if (civ.getResourceAmount(luxury) > 0) {
             extra -= 100
-            if (civ.stats.happiness < 0) extra -= 150
+            if (civ.isEmpireUnhappy()) extra -= 150
         }
         extra -= 75 * ownedTiles.count { it.resource == luxury }
         if (forSelf) extra += 100

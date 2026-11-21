@@ -9,12 +9,12 @@ import com.unciv.logic.automation.strategy.ProductionSanityAi.SR_UNKNOWN
 import com.unciv.logic.automation.strategy.ProductionSanityAi.SR_USELESS
 import com.unciv.logic.automation.unit.tactical.CityThreat
 import com.unciv.logic.city.City
+import com.unciv.logic.city.NeedType
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.QuestName
 import com.unciv.models.ruleset.Ruleset
-import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
@@ -31,8 +31,9 @@ import kotlin.math.min
  *  siege, bankruptcy), the weight (flavor weight brought to
  *  sqrti(10 x weight), plus the bonus sum below, 0 if the bonus is below 1) and the bonus terms: wonders (best city +500, the next wonder
  *  desired up to +1500, -150 for each rival building it), minor civ quests (+10), geography (airlift, trade and city connections, a
- *  luxury copying building), happiness (BNW's single happiness, each point worth 10, x4 for each of unhappy, very unhappy and super
- *  unhappy), defense (scaled up in border and coastal cities, at war and under siege), the courthouse of an occupied city (+5000 per
+ *  luxury copying building), happiness (each point worth 10, x4 for each of unhappy, very unhappy and super unhappy empire: [com.unciv.logic.civilization.Civilization.isEmpireUnhappy]
+ *  and its siblings, which are the approval rating's levels with the needs model and BNW's excess happiness without), with the needs model the
+ *  reductions of the empire size modifier and of the needs of the city ([Check.needTerms]), defense (scaled up in border and coastal cities, at war and under siege), the courthouse of an occupied city (+5000 per
  *  citizen), units the building unlocks, military experience and production (in the best city of the unit combat or domain, else half),
  *  gold maintenance, the war penalty, the era (+200 per era since the building's technology), buildings that need this one, unique
  *  buildings.
@@ -42,8 +43,7 @@ import kotlin.math.min
  *  original adds them; a building that helps a negative gold income is exempt from the maintenance refusal.
  *
  *  None, because VP's input is not in BNW: the free resources of a wonder (trait), the defense per wonder, accomplishments, the happiness
- *  of the VP rules (unhappiness, happiness per war, median modifiers, isolation), the empire's
- *  VP happiness levels (BNW's: excess happiness below 0, at most VERY_UNHAPPY_THRESHOLD, at most SUPER_UNHAPPY_THRESHOLD), the building
+ *  of the VP rules (happiness per war, median modifiers: no data in Vox Populi; the needs and the empire size modifier are read with the needs model), the building
  *  columns of VP (supply, ranged strike range and indirect fire, border obstacles of water and land, damage reduction, air and
  *  industrial routes, fresh water, units trainable, great work experience, corporations, marriages, themes, investments), the plots a
  *  building claims (VP's Building_ResourceClaim: BNW has no such building, so the claimed plots' terms and the refusal to take a major's
@@ -139,9 +139,8 @@ object BuildingProductionAi {
     ) {
         val civ = city.civ
         val ruleset = civ.gameInfo.ruleset
-        val rules = ruleset.ai
         val population = city.population.population
-        val happiness = civ.getHappiness()
+        val needsModel = ruleset.modOptions.constants.cityNeedsLikeVp
 
         //Bonus additive. All values below will be added to this and combined with real value at end.
         var bonus = 0
@@ -162,7 +161,7 @@ object BuildingProductionAi {
             valueTerms()
             val yields = BuildingYieldAi.yieldTerms(city, building)
             bonus += yields.bonus
-            maintenance(yields.goodForGold)?.let { return it }
+            maintenance(yields.goodForGold || goodForGoldFromNeeds)?.let { return it }
             bonus += BuildingValueAi.religionValue(city, building)
             warPenalty()
             eraTerms()
@@ -318,9 +317,9 @@ object BuildingProductionAi {
 
         private fun happinessTerms() {
             var happinessValue = 10 // value of one additional happiness
-            if (happiness < 0) happinessValue *= 4
-            if (happiness <= rules.define(AiDefine.SUPER_UNHAPPY_THRESHOLD)) happinessValue *= 4
-            if (happiness <= rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) happinessValue *= 4
+            if (civ.isEmpireUnhappy()) happinessValue *= 4
+            if (civ.isEmpireSuperUnhappy()) happinessValue *= 4
+            if (civ.isEmpireVeryUnhappy()) happinessValue *= 4
 
             if (building.happiness > 0) bonus += happinessValue * building.happiness.toInt()
 
@@ -345,12 +344,42 @@ object BuildingProductionAi {
                     bonus += needed * max(1, have) * 100
                 }
             }
-            if (happiness < 0) {
+            if (needsModel) needTerms()
+            if (civ.isEmpireUnhappy()) {
                 // the happiness this building gives for each building of a class
                 for (unique in building.getMatchingUniques(UniqueType.StatsFromObject, GameContext.IgnoreConditionals)) {
                     if (unique.stats.happiness <= 0 || unique.params[1] !in ruleset.buildings) continue
                     bonus += civ.cities.count { c -> c.cityConstructions.getBuiltBuildings().any { it.matchesFilter(unique.params[1]) } } * 25
                 }
+            }
+        }
+
+        /** Set by [needTerms]: the building lessens our poverty, which is as good as gold for the maintenance refusal (bGoodforGPT) */
+        private var goodForGoldFromNeeds = false
+
+        /**
+         *  What the needs of Vox Populi make a building worth (with the needs model), CvBuildingProductionAI::CheckBuildingBuildSanity under MOD_BALANCE_VP:
+         *  - the reduction of the empire size modifier ([UniqueType.EmpireSizeNeedReduction]) x what the city's modifier still is x 10 (for a city that has
+         *    the modifier, `GetReducedEmpireSizeModifier`);
+         *  - a flat reduction of a need ([UniqueType.NeedReduction], the original's `*FlatReduction` columns, which its yield loop values at 100 a point whatever the
+         *    city's need): 100 for each point that takes away an unhappy citizen that exists, in this city for a local reduction, in each city it reaches for
+         *    a global one. Departure from the source: points beyond the need are worth nothing, so a building is worth nothing in a city without that need.
+         *    The source's median modifier terms (no unique has them: Vox Populi has no data for the columns) multiply the need by the modifier in the same way.
+         */
+        private fun needTerms() {
+            val needs = city.cityStats.needs
+            var empire = 0
+            for (unique in building.getMatchingUniques(UniqueType.EmpireSizeNeedReduction, GameContext.IgnoreConditionals)) empire += unique.params[0].toInt()
+            if (empire > 0) bonus += needs.reducedEmpireSizeModifier() * empire * 10
+
+            for (unique in building.getMatchingUniques(UniqueType.NeedReduction, GameContext.IgnoreConditionals)) {
+                val need = NeedType.entries.firstOrNull { it.label == unique.params[0] } ?: continue
+                val points = unique.params[1].toInt()
+                val reached = if (unique.isLocalEffect) listOf(city) else civ.cities.filter { it.matchesFilter(unique.params[2]) }
+                val removed = reached.sumOf { min(points, it.cityStats.needs.yieldNeed(need)) }
+                if (removed <= 0) continue
+                bonus += removed * 100
+                if (need == NeedType.Poverty) goodForGoldFromNeeds = true
             }
         }
 
@@ -447,7 +476,7 @@ object BuildingProductionAi {
             //Tiny army? Eek!
             if (civ.units.getCivUnits().count { it.isMilitary() } <= civ.cities.size * 3) penalty += 75
             if (WarStateAi.numberCivsAtWarWith(civ) > 0 && building.cityStrength <= 0 && !isPuppetAndAnnexable && !freeBuilding &&
-                happiness > rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) {
+                !civ.isEmpireVeryUnhappy()) {
                 penalty += 50 + CityThreat.threatValue(city)
                 for (other in civ.gameInfo.civilizations) {
                     if (other == civ || !other.isMajorCiv || !other.isAlive() || !civ.isAtWarWith(other)) continue

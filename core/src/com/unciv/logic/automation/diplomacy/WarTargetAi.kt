@@ -100,7 +100,7 @@ object WarTargetAi {
             }
             val insane = !WarSanityAi.isWarSane(civ, other)
             if (!validApproach || insane || isRecentDemandAccepted(civ, other)) {
-                if (!goingForConquest || anyPeaceTreaty || civ.getHappiness() < 0) continue
+                if (!goingForConquest || anyPeaceTreaty || civ.isEmpireUnhappy()) continue
                 if (VictoryProgressAi.hasLostCapital(other) && other.cities.none { it.isOriginalCapital }) continue
                 if (insane && WarSanityAi.isWarWouldBankruptUs(civ, other)) continue
                 if (canCrossOcean || neighbours) lastResort.add(other)

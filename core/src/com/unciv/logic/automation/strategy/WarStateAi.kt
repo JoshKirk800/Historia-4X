@@ -246,7 +246,7 @@ object WarStateAi {
             if (!isNoNewWars(third) && thirdState <= WarState.Calm) return false
         }
         if (isInTerribleShapeForWar(other)) return true
-        val unhappy = civ.getHappiness() < 0
+        val unhappy = civ.isEmpireUnhappy()
         val theirMemory = other.ai.diplomacy.memoryOf(civ)
         val coop = CoopWarAi.globalState(civ, other)
         val ourRating = WarDamageAi.militaryRating(civ)
@@ -261,7 +261,7 @@ object WarStateAi {
             CoopWarAi.isLockedIntoCoopWar(civ, other, rules) || CompetitorAi.isEarlyGameCompetitor(civ, other, rules)
         val deterrents = listOf(unhappy, skillPenalty, ourMemory.numCitiesCapturedBy > theirMemory.numCitiesCapturedBy,
             lessAggressive, !wantsConquest, civ.ai.military.isExposedToEnemy(civ, null, other)).count { it }
-        val aggravators = listOf(coop == CoopWarState.Soon || coop == CoopWarState.Accepted, !unhappy && other.getHappiness() < 0,
+        val aggravators = listOf(coop == CoopWarState.Soon || coop == CoopWarState.Accepted, !unhappy && other.isEmpireUnhappy(),
             theirMemory.numCitiesCapturedBy > ourMemory.numCitiesCapturedBy, skillBoost, moreAggressive, wantsConquest,
             civ.ai.military.havePreferredAttackTarget(other)).count { it }
         val noNewWars = memory.noNewWars && !civ.isAtWarWith(other)
@@ -323,7 +323,7 @@ object WarStateAi {
      *  ([WarIntentAi.isPhonyWar]) or they are an easy target ([isEasyTarget], last turn's as in VP).
      */
     fun updateBadShapeForWar(civ: Civilization, memory: WarStateMemory, rules: AiRuleset) {
-        val terrible = isTerribleShapeNow(civ, memory, rules)
+        val terrible = isTerribleShapeNow(civ, memory)
         // The phony-war test below reads last turn's flags, as VP sets them only at the end
         val noNewWars = terrible || civ.gameInfo.civilizations.any { other ->
             if (!other.isMajorCiv || !other.isAlive() || !civ.isAtWarWith(other)) return@any false
@@ -341,11 +341,11 @@ object WarStateAi {
         memory.noNewWars = noNewWars
     }
 
-    private fun isTerribleShapeNow(civ: Civilization, memory: WarStateMemory, rules: AiRuleset): Boolean {
+    private fun isTerribleShapeNow(civ: Civilization, memory: WarStateMemory): Boolean {
         if (memory.stateAllWars == StateAllWars.Losing) return true
         if (civ.gold <= 0 && memory.avgGoldRate <= 0) return true
         if (VictoryProgressAi.hasLostCapital(civ)) return true
-        if (civ.getHappiness() <= rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) return true
+        if (civ.isEmpireVeryUnhappy()) return true
         return civ.gameInfo.civilizations.any { other ->
             other.isMajorCiv && other.isAlive() && civ.isAtWarWith(other) &&
                 (memory.warStates[other.civID] ?: WarState.Calm) <= WarState.Troubled &&

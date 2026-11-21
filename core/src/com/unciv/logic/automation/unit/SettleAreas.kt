@@ -151,10 +151,14 @@ object SettleAreas {
 
     /**
      *  CvUnit::canFoundCity: [unit] can found a city and the plot allows one (CvCitySiteEvaluator::CanFoundCity via [Tile.canBeSettled]); and
-     *  CvPlayer::canFound's first test, the plot is not one the civilization agreed not to settle ([isPromisedNotToSettle])
+     *  CvPlayer::canFound's first test, the plot is not one the civilization agreed not to settle ([isPromisedNotToSettle]); and, with the needs model
+     *  ([com.unciv.models.ModConstants.cityNeedsLikeVp]), its test that a very unhappy empire founds no cities (V:CvPlayer.cpp:13852-13860). The action of
+     *  [UnitActionsFromUniques.getFoundCityAction] is then there but cannot be done, and it does not stop the other uses of this function that ask
+     *  before the unit has movement left, which is why the empire's state is read here and the action's `action` is not required.
      */
     fun canFound(unit: MapUnit, tile: Tile): Boolean =
-        UnitActionsFromUniques.getFoundCityAction(unit, tile) != null && tile.canBeSettled(unit.civ) && !isPromisedNotToSettle(unit.civ, tile)
+        UnitActionsFromUniques.getFoundCityAction(unit, tile) != null && tile.canBeSettled(unit.civ) && !isPromisedNotToSettle(unit.civ, tile) &&
+            !(unit.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp && unit.civ.isEmpireVeryUnhappy())
 
     /**
      *  CvPlot::IsNoSettling as CvDiplomacyAI::SetPlayerNoSettleRequestAccepted sets it: [tile] is within 6 of a city of a civilization that

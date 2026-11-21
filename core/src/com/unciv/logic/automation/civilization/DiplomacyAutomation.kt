@@ -602,7 +602,7 @@ object DiplomacyAutomation {
             .any { it.resource.resourceType == ResourceType.Luxury && it.origin == Constants.tradable && it.amount >= 2 &&
                 other.getResourceAmount(it.resource) == 0 }
         if (ours) return null
-        val bias = if (civ.getHappiness() < 0) 25 else 0
+        val bias = if (civ.isEmpireUnhappy()) 25 else 0
         return TradeOffer(theirs.resource.name, TradeOfferType.Luxury_Resource, 1, civ.gameInfo.speed) to bias
     }
 

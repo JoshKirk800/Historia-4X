@@ -115,7 +115,7 @@ object PeaceAi {
         for (other in others) if (other.isMajorCiv) refuse(civ, other)
         if (civ.isHuman()) return
         val capital = civ.getCapital()
-        val critical = civ.getHappiness() <= rules.define(AiDefine.SUPER_UNHAPPY_THRESHOLD) || capital == null ||
+        val critical = civ.isEmpireSuperUnhappy() || capital == null ||
             CityDangerAi.isInDangerOfFalling(capital, extraCareful = true) || capital.health <= capital.getMaxHealth() / 2 ||
             atWar.any { WarStateAi.warState(civ, it) == WarState.NearlyDefeated }
         val candidates = atWar.filter { !isPeaceBlocked(civ, it, rules) }
@@ -135,11 +135,12 @@ object PeaceAi {
         memory.wantsPeace = false
     }
 
-    /** VP's war progress penalty for unhappiness (without VP's happiness: 4 per point of unhappiness) and for strategic resource shortages
-     *  (5 per missing unit, at most 50) */
+    /** VP's war progress penalty for unhappiness (4 per point of unhappiness; with the needs model 2 per point of approval under the unhappy threshold,
+     *  WAR_PROGRESS_PER_UNHAPPY of Vox Populi) and for strategic resource shortages (5 per missing unit, at most 50) */
     private fun warProgressPenalties(civ: Civilization): Int {
         val happiness = civ.getHappiness()
-        val unhappy = if (happiness < 0) happiness * 4 else 0
+        val perPoint = if (civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) 2 else 4
+        val unhappy = if (happiness < 0) happiness * perPoint else 0
         var shortage = 0
         for ((name, amount) in civ.getCivResourcesByName()) {
             if (amount >= 0 || civ.gameInfo.ruleset.tileResources[name]?.resourceType != ResourceType.Strategic) continue

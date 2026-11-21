@@ -131,7 +131,7 @@ object ProductionSanityAi {
                 UniqueType.OneTimeGainGoldenAgePoints -> modifier += unique.params[0].toInt() * 25
                 UniqueType.OneTimeAmountFreePolicies -> modifier += civ.policies.getAdoptedPolicies().size * 50
                 UniqueType.OneTimeGainPermanentStats ->
-                    modifier += unique.stats.happiness.toInt() * (100 - civ.getHappiness())
+                    modifier += unique.stats.happiness.toInt() * (100 - excessHappiness(civ))
                 UniqueType.StatPercentBonus, UniqueType.StatPercentBonusCities, UniqueType.TourismPercent -> {
                     val culture = unique.type != UniqueType.TourismPercent && unique.params[1] == Stat.Culture.name
                     if ((culture || unique.type == UniqueType.TourismPercent) && civ.ai.isEconomicStrategyActive(GS_CULTURE)) modifier += 1500
@@ -151,6 +151,10 @@ object ProductionSanityAi {
         }
         return modifier
     }
+
+    /** CvPlayer::GetExcessHappiness: the approval rating with the needs model ([Civilization.getApproval]), else BNW's happiness */
+    private fun excessHappiness(civ: Civilization): Int =
+        if (civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) civ.getApproval() else civ.getHappiness()
 
     /**
      *  CvProjectProductionAI::CheckProjectBuildSanity: refused under siege, for city-states and in puppets we may annex. The Manhattan

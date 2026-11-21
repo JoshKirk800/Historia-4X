@@ -124,16 +124,14 @@ object EconomicMilitaryStrategyTests {
     private const val EXPLORATION_FINISHER = "Exploration Complete"
     private val GUILDS = listOf("Writers' Guild", "Artists' Guild", "Musicians' Guild")
 
-    /** CvPlayer::IsEmpireUnhappy */
-    internal fun isEmpireUnhappy(civ: Civilization) = civ.getHappiness() < 0
+    /** CvPlayer::IsEmpireUnhappy ([Civilization.isEmpireUnhappy]: the approval rating under the unhappy threshold with the needs model, else happiness under 0) */
+    internal fun isEmpireUnhappy(civ: Civilization) = civ.isEmpireUnhappy()
 
-    /** CvPlayer::IsEmpireVeryUnhappy without VP's happiness rules: excess happiness at or below VERY_UNHAPPY_THRESHOLD */
-    internal fun isEmpireVeryUnhappy(civ: Civilization) =
-        civ.getHappiness() <= civ.gameInfo.ruleset.ai.define(AiDefine.VERY_UNHAPPY_THRESHOLD)
+    /** CvPlayer::IsEmpireVeryUnhappy ([Civilization.isEmpireVeryUnhappy]; without the needs model: excess happiness at or below VERY_UNHAPPY_THRESHOLD) */
+    internal fun isEmpireVeryUnhappy(civ: Civilization) = civ.isEmpireVeryUnhappy()
 
-    /** CvPlayer::IsEmpireSuperUnhappy without VP's happiness rules (the empire's cities may revolt): excess happiness at or below SUPER_UNHAPPY_THRESHOLD */
-    internal fun isEmpireSuperUnhappy(civ: Civilization) =
-        civ.getHappiness() <= civ.gameInfo.ruleset.ai.define(AiDefine.SUPER_UNHAPPY_THRESHOLD)
+    /** CvPlayer::IsEmpireSuperUnhappy ([Civilization.isEmpireSuperUnhappy]; without the needs model: excess happiness at or below SUPER_UNHAPPY_THRESHOLD) */
+    internal fun isEmpireSuperUnhappy(civ: Civilization) = civ.isEmpireSuperUnhappy()
 
 
     //region Economic
@@ -233,8 +231,14 @@ object EconomicMilitaryStrategyTests {
     /**
      *  CvPlayer::GetUnhappiness: the unhappiness of the city count, the citizens and the occupied cities (the negative parts of the cities'
      *  happiness lists, whose AI-handicap scaling is already in them) plus the public opinion unhappiness (scaled for an AI player), as a whole number.
+     *
+     *  With the needs model (`cityNeedsLikeVp`) it is the unhappy citizens of all the cities ([com.unciv.logic.civilization.CivNeeds.unhappyCitizens]). Departure
+     *  from the source: CvPlayer::GetUnhappiness is only the empire's own part there (public opinion, war weariness), and CvPlayer::GetExcessHappiness is
+     *  the approval rating, which the thresholds of the two NeedHappiness strategies (2 and -3, set for the original's signed sum) can hardly ever reach, so in the
+     *  source they are all but dead. Here they read the stat Happiness (approval less the unhappy threshold) and the citizens' unhappiness, as they meant to.
      */
     internal fun unhappiness(civ: Civilization): Int {
+        if (civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) return civ.stats.needs.unhappyCitizens
         var fromCities = 0f
         for (city in civ.cities)
             for (source in UNHAPPINESS_SOURCES) fromCities -= city.cityStats.happinessList[source] ?: 0f

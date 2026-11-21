@@ -16,6 +16,7 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  *  The player-level city decisions of Vox Populi's CvPlayerAI (Release-5.4.8; D7): what to do with a conquered city
@@ -78,7 +79,10 @@ object CityConquestAutomation {
 
         if (LiberationAi.isTryingToLiberate(conqueror, city)) return ConquestChoice.Liberate
 
-        val unhappy = EconomicMilitaryStrategyTests.isEmpireUnhappy(conqueror)
+        val needsModel = conqueror.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
+        // With the needs model the empire is "unhappy" for a conquest a little before the unhappy threshold: AI_MOSTLY_HAPPY_THRESHOLD, a buffer
+        val unhappy = if (needsModel) conqueror.getApproval() < rules.define(AiDefine.AI_MOSTLY_HAPPY_THRESHOLD)
+            else EconomicMilitaryStrategyTests.isEmpireUnhappy(conqueror)
         val veryUnhappy = EconomicMilitaryStrategyTests.isEmpireVeryUnhappy(conqueror)
 
         val median = WarmongerAi.medianEconomicValue(conqueror.gameInfo)
@@ -108,7 +112,7 @@ object CityConquestAutomation {
         }
 
         val canRevolt = EconomicMilitaryStrategyTests.isEmpireSuperUnhappy(conqueror) ||
-            (veryUnhappy && conqueror.culture.publicOpinion.unhappiness > 0)
+            (veryUnhappy && (needsModel || conqueror.culture.publicOpinion.unhappiness > 0))
         if (onlyCityOnContinent && !canRevolt) return ConquestChoice.Puppet
 
         if (!veryUnhappy && value >= rules.define(AiDefine.AI_CITY_SOME_VALUE_THRESHOLD) && !unhappy) return ConquestChoice.Puppet
@@ -135,9 +139,6 @@ object CityConquestAutomation {
 
     /** CvCity::getNumWorldWonders */
     private fun numWorldWonders(city: City) = city.cityConstructions.getBuiltBuildings().count { it.isWonder }
-
-    /** CvCity::IsOccupied: a city we took (not founded by us, not by marriage or purchase: those are no occupied cities) that is no puppet */
-    private fun isOccupied(city: City) = !city.isPuppet && city.foundingCivObject.let { it != null && it != city.civ }
 
     /** CvCity::IsNoOccupiedUnhappiness: the city has a building that removes the extra unhappiness of an annexed city (the courthouse) */
     private fun hasCourthouse(city: City) = city.containsBuildingUnique(UniqueType.RemovesAnnexUnhappiness)
@@ -183,7 +184,7 @@ object CityConquestAutomation {
         if (civ.hasUnique(UniqueType.MayNotAnnexCities)) return null
         if (EconomicMilitaryStrategyTests.isEmpireUnhappy(civ)) return null
         if (!canBuildCourthouse(civ)) return null
-        if (civ.cities.any { isOccupied(it) && !hasCourthouse(it) }) return null
+        if (civ.cities.any { it.isOccupied() && !hasCourthouse(it) }) return null
 
         val rules = civ.gameInfo.ruleset.ai
         val ourReligion = OpinionAi.stateReligion(civ)?.first
@@ -241,14 +242,31 @@ object CityConquestAutomation {
         var numCities = civ.cities.size
         if (numCities <= 1) return emptyList()
 
+        val needsModel = civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
         val ideologyUnrest = civ.culture.publicOpinion.unhappiness > 0
         val canRevolt = EconomicMilitaryStrategyTests.isEmpireSuperUnhappy(civ) ||
-            (EconomicMilitaryStrategyTests.isEmpireVeryUnhappy(civ) && ideologyUnrest)
+            (EconomicMilitaryStrategyTests.isEmpireVeryUnhappy(civ) && (needsModel || ideologyUnrest))
         if (!canRevolt) return emptyList()
 
         val rules = civ.gameInfo.ruleset.ai
-        val threshold = rules.define(if (ideologyUnrest) AiDefine.VERY_UNHAPPY_THRESHOLD else AiDefine.SUPER_UNHAPPY_THRESHOLD)
+        val needsConstants = civ.gameInfo.ruleset.modOptions.constants.needs
+        val threshold = if (needsModel) needsConstants.veryUnhappyThreshold
+            else rules.define(if (ideologyUnrest) AiDefine.VERY_UNHAPPY_THRESHOLD else AiDefine.SUPER_UNHAPPY_THRESHOLD)
+        // The excess happiness (without the needs model) or the citizens' happiness and unhappiness (with it) that the empire would have without the cities burnt so far
         var happiness = civ.getHappiness().toFloat()
+        var happyCitizens = civ.stats.needs.happyCitizens
+        var unhappyCitizens = civ.stats.needs.unhappyCitizens
+        // Protect against modder stupidity (the source's words): a threshold or happiness that is not above 0 gives nothing to compute
+        if (needsModel && (threshold <= 0 || happyCitizens <= 0)) return emptyList()
+
+        fun approvalWith(happy: Int, unhappy: Int) = min(200, happy * 100 / max(1, unhappy)) / 2
+        fun lose(city: City) {
+            if (needsModel) {
+                happyCitizens -= city.cityStats.needs.localHappiness()
+                unhappyCitizens -= city.cityStats.needs.aggregated
+            } else happiness -= happinessOf(city)
+        }
+        fun isEnough() = if (needsModel) approvalWith(happyCitizens, unhappyCitizens) >= threshold else happiness > threshold
 
         val enemies = civ.getCivsAtWarWith().filter { it.isAlive() && !it.isBarbarian }
         val endangered = HashSet<City>()
@@ -256,24 +274,28 @@ object CityConquestAutomation {
         for (city in civ.cities) {
             if (city.isBeingRazed) {
                 numCities--
-                happiness -= happinessOf(city)
+                lose(city)
                 continue
             }
-            if (!isOccupied(city) || !canRaze(civ, city, justCaptured = false)) continue
+            if (!city.isOccupied() || !canRaze(civ, city, justCaptured = false)) continue
             if (CityDangerAi.isInDangerFromPlayers(city, enemies)) endangered.add(city)
             valid.add(city)
         }
-        if (numCities <= 1 || happiness > threshold) return emptyList()
+        if (numCities <= 1 || isEnough()) return emptyList()
 
-        // Burn cities whose loss gains happiness, the biggest gain first
-        val candidates = valid.filter { happinessOf(it) < 0f }.sortedBy { happinessOf(it) }
+        // Burn cities whose loss gains happiness, the biggest gain first (CvPlayerAI::AI_computeHappinessFromRazing with the needs model: the change of the approval rating)
+        val candidates = if (needsModel) {
+            val now = approvalWith(happyCitizens, unhappyCitizens)
+            valid.associateWith { approvalWith(happyCitizens - it.cityStats.needs.localHappiness(), unhappyCitizens - it.cityStats.needs.aggregated) - now }
+                .filterValues { it > 0 }.entries.sortedByDescending { it.value }.map { it.key }
+        } else valid.filter { happinessOf(it) < 0f }.sortedBy { happinessOf(it) }
         val razed = ArrayList<City>()
         fun burn(city: City): Boolean {
             numCities--
-            happiness -= happinessOf(city)
+            lose(city)
             city.isBeingRazed = true
             razed.add(city)
-            return happiness > threshold || numCities == 1
+            return isEnough() || numCities == 1
         }
         val priorities = listOf<(City) -> Boolean>(
             { !hasCourthouse(it) && it in endangered },

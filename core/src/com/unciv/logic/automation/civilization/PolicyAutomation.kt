@@ -93,7 +93,7 @@ object PolicyAutomation {
             val propagationLevels = rules.define(AiDefine.POLICY_WEIGHT_PROPAGATION_LEVELS)
             val atWar = civ.isAtWar()
             val inDeficit = civ.ai.isEconomicStrategyActive(LOSING_MONEY)
-            val unhappy = civ.stats.happiness < 0
+            val unhappy = civ.isEmpireUnhappy()
             val temp = IntArray(count)
             for (flavor in Flavor.entries) {
                 var value = civ.ai.personalityAndGrandStrategy(flavor)
@@ -465,7 +465,7 @@ object PolicyAutomation {
         }
 
         val firstIdeology = others.none { it.getIdeology() != null }
-        if (!firstIdeology && civ.stats.happiness < 0) for (i in 0..2) {
+        if (!firstIdeology && civ.isEmpireUnhappy()) for (i in 0..2) {
             if (scores[i] == 0) continue
             scores[i] += maxOf(0, 250 - civ.culture.publicOpinion.hypotheticalUnhappiness(branches[i])) * rules.define(AiDefine.IDEOLOGY_SCORE_HAPPINESS)
         }
@@ -508,13 +508,26 @@ object PolicyAutomation {
         val rules = civ.gameInfo.ruleset.ai
         val preferred = civ.gameInfo.ruleset.policyBranches[opinion.preferredIdeology ?: return false] ?: return false
         if (opinion.unhappiness == 0 || preferred == current) return false
-        val happiness = civ.stats.happiness
-        val superThreshold = rules.define(AiDefine.SUPER_UNHAPPY_THRESHOLD)
-        val veryThreshold = rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)
-        val afterSwitch = happiness + opinion.unhappiness - opinion.hypotheticalUnhappiness(preferred)
-        val superUnhappy = happiness <= superThreshold && afterSwitch > superThreshold
-        val veryUnhappy = if (happiness <= superThreshold) happiness <= veryThreshold
-            else happiness <= veryThreshold && afterSwitch > veryThreshold
+        val superUnhappy: Boolean
+        val veryUnhappy: Boolean
+        if (civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) {
+            // The needs model: the approval rating the citizens would have with the opinion's unhappiness swapped for the preferred ideology's must reach the threshold
+            val needs = civ.stats.needs
+            val constants = civ.gameInfo.ruleset.modOptions.constants.needs
+            val unhappyAfter = needs.unhappyCitizens - opinion.unhappiness + opinion.hypotheticalUnhappiness(preferred)
+            val approvalAfter = needs.happyCitizens * 100 / maxOf(1, unhappyAfter) / 2
+            superUnhappy = civ.isEmpireSuperUnhappy() && approvalAfter >= constants.superUnhappyThreshold
+            veryUnhappy = if (civ.isEmpireSuperUnhappy()) true
+                else civ.isEmpireVeryUnhappy() && approvalAfter >= constants.veryUnhappyThreshold
+        } else {
+            val happiness = civ.stats.happiness
+            val superThreshold = rules.define(AiDefine.SUPER_UNHAPPY_THRESHOLD)
+            val veryThreshold = rules.define(AiDefine.VERY_UNHAPPY_THRESHOLD)
+            val afterSwitch = happiness + opinion.unhappiness - opinion.hypotheticalUnhappiness(preferred)
+            superUnhappy = happiness <= superThreshold && afterSwitch > superThreshold
+            veryUnhappy = if (happiness <= superThreshold) happiness <= veryThreshold
+                else happiness <= veryThreshold && afterSwitch > veryThreshold
+        }
         val recentlySwitched = civ.gameInfo.turns - opinion.turnIdeologySwitch <= 30
         if (superUnhappy) {
             if (recentlySwitched) return false

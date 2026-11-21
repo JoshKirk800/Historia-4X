@@ -369,9 +369,13 @@ class CityNeeds(private val city: City) {
      *  times [com.unciv.models.ModConstants.NeedsConstants.unhappinessPerSpecialist] / 100.
      */
     @Readonly
-    private fun specialistUnhappiness(): Int {
+    private fun specialistUnhappiness(): Int = specialistUnhappiness(city.population.getNumberOfSpecialists())
+
+    /** CvCity::getUnhappinessFromSpecialists(count): what [specialistCount] specialists would cost the city (the AI governor asks it for one more or one fewer) */
+    @Readonly
+    fun specialistUnhappiness(specialistCount: Int): Int {
         if (city.isPuppet) return 0
-        var count = city.population.getNumberOfSpecialists()
+        var count = specialistCount
         if (count > 0) {
             var free = 0
             city.forEachMatchingUnique(UniqueType.NoUnhappinessFromSpecialists) { unique ->

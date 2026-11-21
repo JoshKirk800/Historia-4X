@@ -60,7 +60,7 @@ object LiberationAi {
         if (alive && (opinion <= MajorCivOpinion.Enemy || approach <= MajorCivApproach.Guarded || OpinionAi.isUntrustworthyFriend(civ, founder))) return false
 
         // An unhappy empire gives back a city to a friend
-        if (civ.getHappiness() < 0 && opinion >= MajorCivOpinion.Friend) return true
+        if (civ.isEmpireUnhappy() && opinion >= MajorCivOpinion.Friend) return true
 
         // The original's quirk: a war whose state is not assessed yet counts as a bad one
         val warState = WarStateAi.warState(civ, oldOwner)

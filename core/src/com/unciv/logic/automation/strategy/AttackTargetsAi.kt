@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.WaterBodies
+import com.unciv.logic.automation.civilization.DealResourceValues
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -387,7 +388,7 @@ object AttackTargetsAi {
                 ResourceType.Luxury -> {
                     var value = if (city.civ.gameInfo.league?.isLuxuryBanned(resource.name) == true) 100 else 200
                     if (lacking) value = 600
-                    var happiness = 4
+                    var happiness = DealResourceValues.luxuryHappiness(possibleOwner)
                     possibleOwner.forEachMatchingUnique(UniqueType.BonusHappinessFromLuxury) { happiness += it.params[0].toInt() }
                     resourceValue += quantity * happiness * value
                 }

@@ -63,9 +63,10 @@ object DealResourceValues {
     fun happinessFromLuxury(civ: Civilization, resource: TileResource): Int {
         if (civ.gameInfo.league?.isLuxuryBanned(resource.name) == true) return 0
         if (resource.resourceType != ResourceType.Luxury) return 0
-        if (DealAi.numResourceAvailable(civ, resource, true) > 0) return LUXURY_HAPPINESS
+        val happiness = luxuryHappiness(civ)
+        if (DealAi.numResourceAvailable(civ, resource, true) > 0) return happiness
         val retained = civ.getMatchingUniques(UniqueType.RetainHappinessFromLuxury).sumOf { it.params[0].toInt() }
-        if (retained > 0 && resourceExport(civ, resource) > 0) return LUXURY_HAPPINESS * retained / 100
+        if (retained > 0 && resourceExport(civ, resource) > 0) return happiness * retained / 100
         return 0
     }
 
@@ -73,6 +74,14 @@ object DealResourceValues {
 
     /** CvResourceInfo::getHappiness of every BNW luxury (Resources.Happiness = 4), as Unciv's happiness calculation uses it */
     const val LUXURY_HAPPINESS = 4
+
+    /**
+     *  What a luxury gives [civ] as the original's Resources.Happiness: [LUXURY_HAPPINESS] (4 in Brave New World), with the needs model
+     *  ([com.unciv.models.ModConstants.cityNeedsLikeVp]) the constant that the happiness calculation itself uses (2 in Vox Populi).
+     */
+    fun luxuryHappiness(civ: Civilization): Int = with(civ.gameInfo.ruleset.modOptions.constants) {
+        if (cityNeedsLikeVp) needs.happinessPerLuxury else LUXURY_HAPPINESS
+    }
 
     /**
      *  CvDealAI::GetLuxuryResourceValue, Community Patch branch: (the happiness of one more copy for the owner of the item - ours if we
@@ -93,13 +102,31 @@ object DealResourceValues {
             value += min(surcharge, value)
         }
         val unhappy = EconomicMilitaryStrategyTests.isEmpireUnhappy(us)
+        val needsModel = us.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
         if (fromMe) {
             if (unhappy && available == 1) return null
+            if (needsModel && available == 1 && wouldBeUnhappyWithout(us, baseHappiness)) return null
             if (available == 1) value *= if (us.hasUnique(UniqueType.RetainHappinessFromLuxury)) 2 else 3
             return value
         }
-        if (unhappy) value *= if (us.getHappiness() <= us.gameInfo.ruleset.ai.define(AiDefine.VERY_UNHAPPY_THRESHOLD)) 3 else 2
+        if (unhappy) value *= when {
+            needsModel && us.isEmpireSuperUnhappy() -> 4
+            us.isEmpireVeryUnhappy() -> 3
+            else -> 2
+        }
         return value
+    }
+
+    /**
+     *  CvDealAI::GetLuxuryResourceValue (the selling branch of the Vox Populi calculation): the empire would be unhappy (the approval rating under the
+     *  unhappy threshold) if its citizens lost [happiness] of their happiness, so it keeps its last copy. Nothing while no citizen is unhappy.
+     *  The buying side's tiers are the original's 12, 6 and 3 gold per turn scaled, here as factors 4, 3 and 2 of the Community Patch value.
+     */
+    private fun wouldBeUnhappyWithout(civ: Civilization, happiness: Int): Boolean {
+        val needs = civ.stats.needs
+        if (needs.unhappyCitizens <= 0) return false
+        val percent = min(200, (needs.happyCitizens - happiness) * 100 / max(1, needs.unhappyCitizens)) / 2
+        return percent < civ.gameInfo.ruleset.modOptions.constants.needs.unhappyThreshold
     }
 
     /** CvPlayer::getNumResourceUnimproved: the copies of [resource] on tiles of [civ]'s cities that its improvement does not yet provide */

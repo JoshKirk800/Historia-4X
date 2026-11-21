@@ -2,6 +2,7 @@ package com.unciv.logic.automation.unit
 
 import com.unciv.Constants
 import com.unciv.logic.automation.WaterBodies
+import com.unciv.logic.automation.civilization.DealResourceValues
 import com.unciv.logic.automation.civilization.PlotShape
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.strategy.StrengthLevel
@@ -50,9 +51,6 @@ class CitySiteEvaluator(private val civ: Civilization, private val ignorePlots: 
         const val RESOURCES = 6
         const val STRATEGIC = 7
         private const val FACTORS = 8
-
-        /** Happiness of a luxury resource (Resources.Happiness of every BNW luxury; Unciv's happiness per unique luxury) */
-        private const val LUXURY_HAPPINESS = 4
 
         /** The civilization-specific fertility boosts (the constructor of CvSiteEvaluatorForSettler) */
         private const val BRAZIL_MULTIPLIER = 1000
@@ -530,7 +528,7 @@ class CitySiteEvaluator(private val civ: Civilization, private val ignorePlots: 
         var tradeable = 0
         if (resource != null) {
             val notOwned = (ownedResources[resource.name] ?: 0) <= 0
-            if (resource.resourceType == ResourceType.Luxury) happiness = LUXURY_HAPPINESS
+            if (resource.resourceType == ResourceType.Luxury) happiness = DealResourceValues.luxuryHappiness(civ)
             if (notOwned) happiness *= 5
             if (resource.resourceType == ResourceType.Luxury || resource.resourceType == ResourceType.Strategic) {
                 tradeable = (if (resource.resourceType == ResourceType.Strategic) tile.resourceAmount else 1) * flavorMultipliers[RESOURCES]

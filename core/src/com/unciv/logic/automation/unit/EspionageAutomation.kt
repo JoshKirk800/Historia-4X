@@ -385,7 +385,7 @@ class EspionageAutomation(private val civInfo: Civilization) {
                 val approach = ai.minorCivApproaches[cityState.civID] ?: MinorCivApproach.Ignore
                 if (approach == MinorCivApproach.Friendly) {
                     val trait = cityState.cityStateType.name
-                    if (trait == MARITIME && civInfo.getHappiness() >= 0)
+                    if (trait == MARITIME && !civInfo.isEmpireUnhappy())
                         value += rules.define(AiDefine.MC_GIFT_WEIGHT_MARITIME_GROWTH).toLong() * growthFlavor * maxOf(1, civInfo.cities.size / 3)
                     if (trait == MILITARISTIC && !ai.isGoingForWorldConquest())
                         value += rules.define(AiDefine.MC_GIFT_WEIGHT_MILITARISTIC)

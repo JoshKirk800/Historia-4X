@@ -2,6 +2,7 @@ package com.unciv.logic.automation.city
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
+import com.unciv.logic.automation.strategy.EconomicMilitaryStrategyTests
 import com.unciv.logic.automation.strategy.ProductionAi
 import com.unciv.logic.automation.strategy.ProductionSanityAi
 import com.unciv.logic.city.City
@@ -61,7 +62,7 @@ object CitizenAutomation {
             else if (cityShouldEmphasizeProduction(city)) city.setCityFocus(CityFocus.ProductionFocus)
             else {
                 city.setCityFocus(if (isCultureBlocked(civ)) CityFocus.CultureFocus else specializationFocus(city, needFood))
-                city.avoidGrowth = false
+                if (civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) updateGrowthLock(city) else city.avoidGrowth = false
             }
         }
 
@@ -109,8 +110,39 @@ object CitizenAutomation {
         }
     }
 
-    /** CvCityCitizens::IsAvoidGrowth: the empire is unhappy, or the city avoids growth */
-    fun isAvoidGrowth(city: City): Boolean = city.civ.getHappiness() < 0 || city.avoidGrowth
+    /**
+     *  CvCityCitizens::IsAvoidGrowth. Without the needs model: the empire is unhappy, or the city avoids growth. With it (Vox Populi): an AI player that is
+     *  very unhappy avoids growth in every city, any player that is unhappy in a city whose delta is under -1 (the comfort rule), or the city avoids growth
+     *  ([City.avoidGrowth] is m_bForceAvoidGrowth).
+     */
+    fun isAvoidGrowth(city: City): Boolean {
+        val civ = city.civ
+        if (!civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) return civ.getHappiness() < 0 || city.avoidGrowth
+        if (!civ.isHuman() && civ.isEmpireVeryUnhappy()) return true
+        if (civ.isEmpireUnhappy() && city.cityStats.needs.delta < -1) return true
+        return city.avoidGrowth
+    }
+
+    /**
+     *  The lock of the end of CvCityCitizens::DoTurn, with the needs model: a city that would add unhappy citizens when it grows (the four needs, less the
+     *  happiness the growth brings) while the empire is unhappy avoids growth if that takes the approval rating to the threshold of the moment (the unhappy
+     *  threshold while the empire is in its early expansion, else the very unhappy one) and the city's delta is under 1; else it does not. Departure
+     *  from the source: there a locked city is unlocked only when `unlockedGrowthAnywhereThisTurn` is already set (the condition is not negated), which
+     *  nothing sets first, so a lock stays; here a city is unlocked as soon as the lock's condition no longer holds, which the next turn checks again.
+     */
+    private fun updateGrowthLock(city: City) {
+        val civ = city.civ
+        val needs = city.cityStats.needs
+        val potentialUnhappiness = needs.potentialUnhappinessWithGrowth() - needs.happinessWithGrowth()
+        if (potentialUnhappiness <= 0 || !civ.isEmpireUnhappy()) {
+            city.avoidGrowth = false
+            return
+        }
+        val constants = civ.gameInfo.ruleset.modOptions.constants.needs
+        val threshold = if (civ.ai.isEconomicStrategyActive(EconomicMilitaryStrategyTests.EARLY_EXPANSION)) constants.unhappyThreshold
+            else constants.veryUnhappyThreshold
+        city.avoidGrowth = civ.getApproval() - potentialUnhappiness <= threshold && needs.delta < 1
+    }
 
     /**
      *  The yield values of CvCityCitizens::GetPlotValue and GetSpecialistValue for one city, with the city's surplus food ([excessFood],
@@ -136,8 +168,45 @@ object CitizenAutomation {
         val isHalfSpecialistFood = hasSpecialistUnique(UniqueType.FoodConsumptionByPopulation)
         /** CvPlayer::isHalfSpecialistUnhappiness */
         val isHalfSpecialistUnhappiness = hasSpecialistUnique(UniqueType.UnhappinessFromPopulationTypePercentageChange)
+        private val needsModel = city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
         private val specialistHappinessValue =
-            if (!isHalfSpecialistUnhappiness) 0 else if (city.civ.getHappiness() < 0) 10 else 5
+            if (needsModel || !isHalfSpecialistUnhappiness) 0 else if (city.civ.getHappiness() < 0) 10 else 5
+
+        /**
+         *  The part of CvCityCitizens::ScoreYieldChange that scores the unhappiness one more specialist adds to the city (with the needs model; 0 without):
+         *  for each unhappy citizen it adds, in the empire as it would be then (the citizens' happiness over their unhappiness, as a percentage of the
+         *  approval rating): AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_VERY_UNHAPPY when the approval would be at most the very unhappy threshold, ..._EMPIRE_UNHAPPY
+         *  when it would be within 5 of the unhappy threshold or the happiness would not exceed the unhappiness by 5, ..._CITY_UNHAPPY when the empire is fine
+         *  but the city has more unhappy citizens than happiness, else ..._EMPIRE_HAPPY. Only the unhappiness of the specialists is scored, not what the
+         *  tiles' and specialists' yields do to the four needs (the source scores that too).
+         */
+        private fun specialistUnhappinessValue(): Int {
+            if (!needsModel) return 0
+            val needs = city.cityStats.needs
+            val count = city.population.getNumberOfSpecialists()
+            val change = needs.specialistUnhappiness(count + 1) - needs.specialistUnhappiness(count)
+            if (change <= 0) return 0
+            val constants = city.civ.gameInfo.ruleset.modOptions.constants.needs
+            val civNeeds = city.civ.stats.needs
+            val happiness = civNeeds.happyCitizens
+            var unhappiness = civNeeds.unhappyCitizens
+            var localUnhappiness = needs.aggregated
+            val localHappiness = needs.localHappiness()
+            var score = 0
+            repeat(change) {
+                unhappiness++
+                localUnhappiness++
+                val percent = happiness * 100 / maxOf(1, unhappiness) / 2
+                score += when {
+                    percent <= constants.veryUnhappyThreshold -> rules.define(AiDefine.AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_VERY_UNHAPPY)
+                    percent <= constants.unhappyThreshold + 5 || happiness - unhappiness < 5 ->
+                        rules.define(AiDefine.AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_UNHAPPY)
+                    localUnhappiness > localHappiness -> rules.define(AiDefine.AI_CITIZEN_UNHAPPINESS_VALUE_CITY_UNHAPPY)
+                    else -> rules.define(AiDefine.AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_HAPPY)
+                }
+            }
+            return score
+        }
 
         /** Surplus food (getYieldRateTimes100(YIELD_FOOD) - foodConsumption() * 100, in whole food) */
         var excessFood = city.cityStats.excessFood
@@ -158,7 +227,7 @@ object CitizenAutomation {
         fun specialistValue(specialist: Specialist, stats: Stats): Int {
             val food = stats.food.roundToInt() + if (isHalfSpecialistFood) 1 else 0
             val greatPersonValue = specialist.greatPersonPoints.sumValues() * 3
-            return value(food, stats, true) + greatPersonValue + specialistHappinessValue
+            return value(food, stats, true) + greatPersonValue + specialistHappinessValue + specialistUnhappinessValue()
         }
 
         private fun value(food: Int, stats: Stats, useAllowGrowthFlag: Boolean): Int {

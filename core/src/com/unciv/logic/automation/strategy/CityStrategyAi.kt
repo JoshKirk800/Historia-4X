@@ -3,6 +3,7 @@ package com.unciv.logic.automation.strategy
 import com.unciv.Constants
 import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.city.City
+import com.unciv.logic.city.CityNeeds
 import com.unciv.logic.city.GreatPersonPointsBreakdown
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.tile.ImprovementBuildingProblem
@@ -539,5 +540,25 @@ object CityStrategyAi {
         tests.registerCity(ENOUGH_SETTLERS) { city, _ -> isEnoughSettlers(city) }
         tests.registerCity(NEW_CONTINENT_FEEDER) { city, def -> isNewContinentFeeder(city, def) }
         tests.registerCity("AICITYSTRATEGY_POCKET_CITY") { city, _ -> isPocketCity(city) }
+        registerNeeds(tests)
+    }
+
+    /**
+     *  The city strategies of Vox Populi's needs (IsTestCityStrategy_NeedHappinessCulture ... NeedHappinessStarve): a city of a major civilization runs one
+     *  while the matching need makes citizens unhappy (Boredom, Illiteracy, Distress, Poverty, Isolation, pillaged tiles, religious unrest, famine), only with the needs
+     *  model ([com.unciv.models.ModConstants.cityNeedsLikeVp]). A ruleset gives them their flavors; one that does not define them never reads them.
+     */
+    private fun registerNeeds(tests: StrategyTests) {
+        fun need(name: String, unhappy: (CityNeeds) -> Int) = tests.registerCity(name) { city, _ ->
+            city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp && city.civ.isMajorCiv && unhappy(city.cityStats.needs) > 0
+        }
+        need("AICITYSTRATEGY_NEED_HAPPINESS_CULTURE") { it.boredom }
+        need("AICITYSTRATEGY_NEED_HAPPINESS_SCIENCE") { it.illiteracy }
+        need("AICITYSTRATEGY_NEED_HAPPINESS_DEFENSE") { it.distress }
+        need("AICITYSTRATEGY_NEED_HAPPINESS_GOLD") { it.poverty }
+        need("AICITYSTRATEGY_NEED_HAPPINESS_CONNECTION") { it.isolation }
+        need("AICITYSTRATEGY_NEED_HAPPINESS_PILLAGE") { it.pillaged }
+        need("AICITYSTRATEGY_NEED_HAPPINESS_RELIGION") { it.religiousUnrest }
+        need("AICITYSTRATEGY_NEED_HAPPINESS_STARVE") { it.famine }
     }
 }

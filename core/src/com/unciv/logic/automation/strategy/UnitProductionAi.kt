@@ -417,7 +417,7 @@ object UnitProductionAi {
 
     /** CvCity::IsOccupied and not IsNoOccupiedUnhappiness: a conquered city (not a puppet) without a building that removes the annexed unhappiness */
     private fun isOccupied(city: City): Boolean =
-        city.matchesFilter("Annexed") && !city.cityConstructions.builtBuildingUniqueMap.hasUnique(UniqueType.RemovesAnnexUnhappiness, city.state)
+        city.isOccupied() && !city.cityConstructions.builtBuildingUniqueMap.hasUnique(UniqueType.RemovesAnnexUnhappiness, city.state)
 
     /** CvPlayer::GetPlayersAtWarWith: the living civilizations (city-states included, barbarians not) we are at war with */
     private fun enemiesOf(civ: Civilization): List<Civilization> =

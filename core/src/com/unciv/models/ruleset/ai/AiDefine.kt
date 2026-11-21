@@ -300,6 +300,13 @@ enum class AiDefine(val default: Float) {
     AI_CITIZEN_VALUE_SCIENCE(7f),
     AI_CITIZEN_VALUE_CULTURE(15f),
     AI_CITIZEN_VALUE_FAITH(5f),
+    // CvCityCitizens::ScoreYieldChange with the needs model (Vox Populi, CoreDefineChanges.sql): what one more unhappy citizen is worth to the governor, by how the empire is doing
+    AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_VERY_UNHAPPY(-50000f),
+    AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_UNHAPPY(-15000f),
+    AI_CITIZEN_UNHAPPINESS_VALUE_CITY_UNHAPPY(-5000f),
+    AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_HAPPY(-2000f),
+    /** CvPlayerAI::AI_conquerCity with the needs model: an approval rating under this is unhappy enough to puppet a conquest instead of annexing it (a buffer above the unhappy threshold) */
+    AI_MOSTLY_HAPPY_THRESHOLD(40f),
 
     // CvPlayerAI Great People directives (GreatPersonAutomation)
     AI_TACTICAL_RECRUIT_RANGE(8f),

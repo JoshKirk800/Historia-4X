@@ -173,8 +173,19 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Triggerable
 
-??? example  "Gain [amount] [civWideStat]"
-	Example: "Gain [3] [Gold]"
+??? example  "Gain [amount] [stat]"
+	Gold, Science, Culture and Faith go to the civilization (Culture also fills the border culture of the city of the trigger, if there is one). Food and Production go to a city: the one of the trigger, else the capital (Food is added to its stored food, which does not fall under 0; Production to its current construction while that is unfinished, else to its overflow, and never lowers either under 0), and without a city the unique does nothing. Happiness can not be gained this way. With `(modified by game speed)` the amount is multiplied by the speed's `statCostModifiers` entry, or, with the ModConstants `instantYieldsUseInstantYieldPercent`, by the speed's `instantYieldModifier`, and cut off at the whole number (Vox Populi's `CvPlayer::doInstantYield`)
+
+	Example: "Gain [3] [Culture]"
+
+	This unique's effect can be modified with &lt;(modified by game speed)&gt;
+
+	Applicable to: Triggerable
+
+??? example  "Gain [relativeAmount]% of the triggering amount as [stat]"
+	For triggers that carry an amount: the citizens a city gains (`upon population growth`), the price paid (`upon buying something with [stat]`), the production cost of a completed unit (`upon completing a [baseUnitFilter] unit`), the strength of the defeated unit (`upon defeating a [mapUnitFilter] unit`), the new luxuries (`upon gaining a luxury resource`). The amount is multiplied by the percentage and cut off at the whole number (Vox Populi's `amount x percent / 100`), then handled as `Gain [amount] [stat]` is. Does nothing for a trigger without an amount
+
+	Example: "Gain [+20]% of the triggering amount as [Culture]"
 
 	This unique's effect can be modified with &lt;(modified by game speed)&gt;
 
@@ -4864,6 +4875,54 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: TriggerCondition
 
+??? example  "&lt;upon population growth&gt;"
+	When a city's population grows above the highest it ever had (a city that starves and regrows gets nothing, nor does a city in resistance or on the turn it was founded), whether by food, by a unique or by a building. The triggering amount is the citizens gained (`Gain [relativeAmount]% of the triggering amount as [stat]`, `<for every [Triggering amount]>`) (`CvCity::setPopulation`, `INSTANT_YIELD_TYPE_BIRTH`)
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon acquiring a [tileFilter] tile through [tileAcquisition]&gt;"
+	Once for each tile that a city of this civilization takes in that way (`INSTANT_YIELD_TYPE_BORDERS`, `..._CULTURE_BOMB`, the `Trait_YieldFromTile...` tables). The filter is checked on the tile, so `[Hill]` or `[Desert]` pick the terrain. When the culture of a city is enough for a new tile but it has none left to take, it still gets the yield once for each tile it would have taken, for `border growth` and the tile filter `[All]` only
+
+	Example: "&lt;upon acquiring a [Farm] tile through [border growth]&gt;"
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon buying something with [stat]&gt;"
+	When a city buys a building or a unit with that stat, after the price is paid. The triggering amount is the price (`Gain [relativeAmount]% of the triggering amount as [stat]`). With `in this city` the unique of a building fires for the buying city only (`INSTANT_YIELD_TYPE_PURCHASE`, `..._FAITH_PURCHASE`)
+
+	Example: "&lt;upon buying something with [Culture]&gt;"
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon completing a [baseUnitFilter] unit&gt;"
+	When a city completes the unit with its production, not when it buys it. The triggering amount is the unit's production cost (`INSTANT_YIELD_TYPE_U_PROD`)
+
+	Example: "&lt;upon completing a [Melee] unit&gt;"
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon pillaging a tile&gt;"
+	When a unit pillages an improvement in the territory of another civilization. The city of the event is the city that made the unit, else the capital (`CvUnit::pillage`, `INSTANT_YIELD_TYPE_PILLAGE`, `..._PILLAGE_GLOBAL`)
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon We Love The King Day starting&gt;"
+	In the city that starts celebrating (`CvCity::ChangeWeLoveTheKingDayCounter`, `INSTANT_YIELD_TYPE_WLTKD_START`)
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon gaining a luxury resource&gt;"
+	When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon defeating a [mapUnitFilter] unit&gt;"
+	Does not apply to units destroyed by nuclear explosions, which do not count as combat defeats. Also usable on the uniques of nations, buildings, policies and beliefs: they fire when a unit or a city of the civilization defeats the unit, in the city the unit was made in (else the capital), and the triggering amount is the strength of the defeated unit (the higher of melee and ranged), as Vox Populi's `CvPlayer::DoYieldsFromKill` takes the yields from kills
+
+	Example: "&lt;upon defeating a [Wounded] unit&gt;"
+
+	Applicable to: TriggerCondition, UnitTriggerCondition
+
 ??? example  "&lt;upon expending a [mapUnitFilter] unit&gt;"
 	Example: "&lt;upon expending a [Wounded] unit&gt;"
 
@@ -4899,11 +4958,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: UnitTriggerCondition
 
 ??? example  "&lt;upon defeating a [mapUnitFilter] unit&gt;"
-	Does not apply to units destroyed by nuclear explosions, which do not count as combat defeats.
+	Does not apply to units destroyed by nuclear explosions, which do not count as combat defeats. Also usable on the uniques of nations, buildings, policies and beliefs: they fire when a unit or a city of the civilization defeats the unit, in the city the unit was made in (else the capital), and the triggering amount is the strength of the defeated unit (the higher of melee and ranged), as Vox Populi's `CvPlayer::DoYieldsFromKill` takes the yields from kills
 
 	Example: "&lt;upon defeating a [Wounded] unit&gt;"
 
-	Applicable to: UnitTriggerCondition
+	Applicable to: TriggerCondition, UnitTriggerCondition
 
 ??? example  "&lt;upon being defeated&gt;"
 	Does not apply to units destroyed by nuclear explosions, which do not count as combat defeats.
@@ -5154,6 +5213,7 @@ There is a conversion affecting dashes and leading/trailing blanks. Please make 
 *[stockpiledResource]: The name of any stockpiled resource.
 *[tech]: The name of any tech.
 *[terrainFeature]: The name of any terrain that is a terrain feature according to the json file.
+*[tileAcquisition]: One of `border growth`, `purchase`, `settling`, `conquest`, `culture bomb` or `stolen by culture bomb`.
 *[tileFilter]: Anything that can be used either in an improvementFilter or in a terrainFilter can be used here, plus 'unimproved'
 *[tourismRelation]: One of `Shared Religion`, `Open Borders`, `Trade Route`, `Lower Happiness`, `Common Enemies`, `Shared Ideology` or `Different Ideologies`.
 *[tradeRouteFilter]: A trade route matches if its unit is of that domain (`Land` or `Water`), if it is of that kind (`International`, `Domestic`, `Food` or `Production`), or if the civilization on the other end matches a civ filter. `All` matches every route.

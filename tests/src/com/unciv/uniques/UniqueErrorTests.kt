@@ -110,8 +110,11 @@ class UniqueErrorTests {
     }
 
     @Test
-    fun testOneTimeGainStatRejectsNonCivWideStats() {
-        assertOnlyCivWideStatsError("Gain [10] [Food]", "Food")
+    fun testOneTimeGainStatAcceptsEveryStat() {
+        // widened from the civ-wide stats for the instant yields of cities (InstantYields): Food and Production go to a city
+        Assert.assertEquals(RulesetErrorSeverity.OK, validateUnique("Gain [10] [Food]").getFinalSeverity())
+        Assert.assertEquals(RulesetErrorSeverity.OK, validateUnique("Gain [10] [Production]").getFinalSeverity())
+        Assert.assertEquals(RulesetErrorSeverity.OK, validateUnique("Gain [10] [Gold]").getFinalSeverity())
     }
 
     @Test

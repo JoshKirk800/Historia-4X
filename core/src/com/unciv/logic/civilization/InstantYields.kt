@@ -99,6 +99,7 @@ object InstantYields {
             UniqueTriggerActivation.triggerUnique(unique, civ, creditedTo, context.unit, tile,
                 triggerNotificationText = triggerNotificationText, triggeringAmount = amount)
         }
+        civ.instantYieldNotices.flush(civ) // one notification for the event, see InstantYieldNotices
     }
 
     /**
@@ -206,6 +207,6 @@ object InstantYields {
 
     /** The name of the trigger condition's unique type that [unique] has as a modifier, for [InstantYieldTotals]; [InstantYieldTotals.DIRECT] if it has none */
     @Readonly
-    private fun eventOf(unique: Unique): String =
+    fun eventOf(unique: Unique): String =
         unique.modifiers.firstOrNull { it.type?.targetTypes?.contains(UniqueTarget.TriggerCondition) == true }?.type?.name ?: InstantYieldTotals.DIRECT
 }

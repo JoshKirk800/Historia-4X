@@ -1671,17 +1671,24 @@ object UniqueTriggerActivation {
             val statAmount = InstantYields.scaleBySpeed(unique, stat, amount, civInfo.gameInfo)
             InstantYields.gain(civInfo, if (stat == Stat.Culture) triggerCity else stateCity, stat, statAmount, unique)
 
-            val stats = Stats().add(stat, statAmount.toFloat())
-            val filledNotification = if (notification != null && notification.hasPlaceholderParameters())
-                notification.fillPlaceholders(statAmount.tr())
-            else notification
+            // Vox Populi's instant yields tell one notification for an event, with its sources (InstantYieldNotices), not one for every unique
+            val event = InstantYields.eventOf(unique)
+            if (notification.isNullOrEmpty() && InstantYieldNotices.tellsEvent(civInfo, event)) {
+                val namesCity = stat.isCityWide || unique.sourceObjectType == UniqueTarget.Building || unique.sourceObjectType == UniqueTarget.Wonder
+                civInfo.instantYieldNotices.add(event, unique, if (namesCity) triggerCity ?: stateCity else null, stat, statAmount, tile?.position)
+            } else {
+                val stats = Stats().add(stat, statAmount.toFloat())
+                val filledNotification = if (notification != null && notification.hasPlaceholderParameters())
+                    notification.fillPlaceholders(statAmount.tr())
+                else notification
 
-            val notificationText = getNotificationText(
-                filledNotification, triggerNotificationText,
-                "Gained [${stats.toStringForNotifications()}]"
-            )
-            if (notificationText != null)
-                civInfo.addNotification(notificationText, LocationAction(tile?.position), NotificationCategory.General, stat.notificationIcon)
+                val notificationText = getNotificationText(
+                    filledNotification, triggerNotificationText,
+                    "Gained [${stats.toStringForNotifications()}]"
+                )
+                if (notificationText != null)
+                    civInfo.addNotification(notificationText, LocationAction(tile?.position), NotificationCategory.General, stat.notificationIcon)
+            }
             true
         }
     }

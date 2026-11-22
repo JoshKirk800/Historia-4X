@@ -8,6 +8,8 @@ import com.unciv.models.ruleset.INonPerpetualConstruction
 import com.unciv.models.ruleset.RejectionReason
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.stats.Stat
+import com.unciv.ui.screens.NeedsRow
+import com.unciv.ui.screens.cityscreen.ConstructionPurchaseRows
 import yairm210.purity.annotations.Readonly
 
 class CityConstructionsView(private val cityConstructions: CityConstructions, gameView: GameView,
@@ -52,6 +54,15 @@ class CityConstructionsView(private val cityConstructions: CityConstructions, ga
         cityConstructions.isConstructionPurchaseAllowed(construction, stat, cost)
     @Readonly fun isConstructionPurchaseBlockedByUnit(construction: INonPerpetualConstruction): Boolean =
         cityConstructions.isConstructionPurchaseBlockedByUnit(construction)
+    /** The investment, cooldown and requirement lines under the selected construction, empty without those rules */
+    @Readonly fun getPurchaseRows(construction: INonPerpetualConstruction): List<NeedsRow> =
+        ConstructionPurchaseRows.rows(cityConstructions.city, construction)
+    /** Why the purchase rules of the economy (investment, cooldown, required building) keep the city from buying [construction] with [stat], null if they do not */
+    @Readonly fun getPurchaseBlockReason(construction: INonPerpetualConstruction, stat: Stat): String? =
+        ConstructionPurchaseRows.blockReason(cityConstructions.city, construction, stat)
+    /** Whether buying [construction] with [stat] is an investment in a building */
+    @Readonly fun isInvestment(construction: INonPerpetualConstruction, stat: Stat): Boolean =
+        ConstructionPurchaseRows.isInvestment(cityConstructions.city, construction, stat)
 
     // Actions
     fun purchaseConstruction(construction: INonPerpetualConstruction, queuePosition: Int, stat: Stat, tileView: TileView?): Boolean =

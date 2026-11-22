@@ -267,6 +267,7 @@ class Unique(val text: String, val sourceObjectType: UniqueTarget? = null, val s
 
     @Readonly
     fun getDisplayText(): String = when {
+        InstantYieldTexts.appliesTo(this) -> InstantYieldTexts.displayText(this)
         modifiers.none { it.isHiddenToUsers() } -> text
         modifiers.all { it.isHiddenToUsers() } -> text.removeConditionals()
         else -> text.removeConditionals() + modifiers.filter { !it.isHiddenToUsers() }.joinToString(" ", prefix = " ") { "<${it.text}>" }

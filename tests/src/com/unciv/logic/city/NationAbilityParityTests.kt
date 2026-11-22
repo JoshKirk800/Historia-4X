@@ -54,9 +54,9 @@ class NationAbilityParityTests {
         }
         assertFalse(TradeEvaluation().isTradeValid(trade, assyria, owner))
         // A normal researched technology is still eligible to trade.
-        assyria.tech.addTechnology("Archery")
+        assyria.tech.addTechnology("Military Strategy")
         trade.ourOffers.clear()
-        trade.ourOffers.add(TradeOffer("Archery", TradeOfferType.Technology, speed = game.gameInfo.speed))
+        trade.ourOffers.add(TradeOffer("Military Strategy", TradeOfferType.Technology, speed = game.gameInfo.speed))
         assertTrue(TradeEvaluation().isTradeValid(trade, assyria, owner))
 
         CityConquestFunctions(second).puppetCity(assyria)

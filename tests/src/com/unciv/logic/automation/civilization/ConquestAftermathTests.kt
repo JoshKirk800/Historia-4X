@@ -205,7 +205,7 @@ class ConquestAftermathTests {
     private fun annexer(): Civilization {
         val civ = neutralCiv()
         game.addCity(civ, tile(-3, -4))
-        civ.tech.addTechnology("Mathematics")
+        civ.tech.addTechnology("Philosophy")   // the technology of the Courthouse in Vox Populi (Brave New World: Mathematics)
         civ.stats.happiness = 5
         return civ
     }
@@ -253,7 +253,7 @@ class ConquestAftermathTests {
         game.addCity(unlearned, tile(-2, 6))
         unlearned.stats.happiness = 5
         val unlearnedPuppet = puppet(unlearned, HexCoord(2, -4), 3f)
-        assertNull("no Mathematics: no courthouse", CityConquestAutomation.considerAnnex(unlearned))
+        assertNull("no Philosophy: no courthouse", CityConquestAutomation.considerAnnex(unlearned))
         assertTrue(unlearnedPuppet.isPuppet)
 
         val occupied = annexed(civ, HexCoord(2, 4))

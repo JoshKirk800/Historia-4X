@@ -22,21 +22,18 @@ class CultureRulesetTests {
     }
 
     @Test
-    fun `hotels and the National Visitor Center turn landmarks and Great Works into tourism`() {
-        val greatWorks = "Tourism from Great Works [in this city]"
-        for ((name, percent) in listOf("Hotel" to 50, "Airport" to 50, "National Visitor Center" to 100)) {
-            val uniques = bnw.buildings[name]!!.uniques
-            assertTrue("$name: $percent% more from Great Works", "[+$percent]% $greatWorks" in uniques)
-            assertTrue("$name: $percent% of landmark culture", "[$percent]% of the Culture from wonders, natural wonders and improved tiles becomes Tourism [in this city]" in uniques)
-        }
-        val center = bnw.buildings["National Visitor Center"]!!
-        assertTrue(center.isNationalWonder)
-        assertTrue("Only available <if [Hotel] is constructed in all [non-[Puppeted]] cities>" in center.uniques)
+    fun `the Hotel turns landmarks and Great Works into tourism`() {
+        // Vox Populi's Hotel: 25% (Brave New World: 50%, and the Airport and the National Visitor Center did the same; the Airport makes no tourism in Vox Populi and
+        // the National Visitor Center is not in the ruleset, see BuildingYieldContentTests)
+        val uniques = bnw.buildings["Hotel"]!!.uniques
+        assertTrue("[+25]% Tourism from Great Works [in this city]" in uniques)
+        assertTrue("[25]% of the Culture from wonders, natural wonders and improved tiles becomes Tourism [in this city]" in uniques)
+        assertFalse("National Visitor Center" in bnw.buildings)
     }
 
     @Test
-    fun `the Internet doubles tourism unless the target has the Great Firewall`() {
-        assertTrue("[+100]% Tourism [in all cities] unless the target has a [Great Firewall]" in bnw.technologies["The Internet"]!!.uniques)
+    fun `the Internet adds half to tourism unless the target has the Great Firewall`() {
+        assertTrue("[+50]% Tourism [in all cities] unless the target has a [Great Firewall]" in bnw.technologies["The Internet"]!!.uniques)
         assertTrue("Great Firewall" in bnw.buildings)
     }
 
@@ -79,8 +76,9 @@ class CultureRulesetTests {
     }
 
     @Test
-    fun `the Eiffel Tower and the Mughal Fort make tourism once their technology is known`() {
-        assertTrue("[+12] Tourism [in this city] <after discovering [Radio]>" in bnw.buildings["Eiffel Tower"]!!.uniques)
-        assertTrue("[+2] Tourism [in this city] <after discovering [Flight]>" in bnw.buildings["Mughal Fort"]!!.uniques)
+    fun `the Eiffel Tower and the Mughal Fort of the original make no tourism in Vox Populi's data`() {
+        // Vox Populi's Eiffel Tower has no tourism row (Brave New World's made 12 after Radio) and the Mughal Fort is not in the ruleset
+        assertTrue(bnw.buildings["Eiffel Tower"]!!.uniques.none { "Tourism" in it })
+        assertFalse("Mughal Fort" in bnw.buildings)
     }
 }

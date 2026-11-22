@@ -203,7 +203,7 @@ class TacticalMapTests {
     @Test
     fun `in a water zone ships count, land units only when they attack at range and at half`() {
         val first = city.getCenterTile().neighbors.first()
-        enemy.tech.addTechnology("Optics")
+        enemy.tech.addTechnology("Fishing")   // Vox Populi's technology that enables embarking (the original's Optics)
         val second = first.neighbors.first { it != city.getCenterTile() && it.aerialDistanceTo(city.getCenterTile()) == 1 }
         game.setTileTerrain(first.position, "Coast")
         game.setTileTerrain(second.position, "Coast")

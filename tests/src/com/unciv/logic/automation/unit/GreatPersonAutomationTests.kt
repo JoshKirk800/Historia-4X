@@ -123,7 +123,10 @@ class GreatPersonAutomationTests {
 
     @Test
     fun `engineer hurries a wonder whenever the flavor-weighted wonder AI wants one`() {
-        civ.tech.addTechnology("Calendar") // Stonehenge: Religion 75, Wonder 25, GreatPeople 10
+        civ.tech.addTechnology("The Wheel") // Stonehenge (Vox Populi: The Wheel, Brave New World: Calendar): Religion 75, Wonder 25, GreatPeople 10
+        // Vox Populi's Stonehenge costs 150 (Brave New World's 100), which a city of no production takes so many turns for that its weight falls to 0: give the city some
+        city.cityConstructions.addBuilding(game.createBuilding("[+30 Production] [in all cities]"))
+        city.cityStats.update()
         val engineer = greatPerson("Great Engineer")
         assertEquals("no flavor for any wonder: no wonder wanted", GreatPeopleDirective.None, GreatPersonAutomation.directiveEngineer(engineer))
         civ.ai.setPersonalityFlavor(Flavor.Religion, 4)

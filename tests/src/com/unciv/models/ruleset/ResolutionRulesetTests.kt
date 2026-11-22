@@ -93,9 +93,11 @@ class ResolutionRulesetTests {
     }
 
     @Test
-    fun `the Printing Press and the Forbidden Palace give the Congress its start and delegates`() {
+    fun `the Printing Press gives the Congress its start and the Consulate delegates`() {
         assertTrue(bnw.technologies["Printing Press"]!!.hasUnique(UniqueType.AllowsWorldCongress))
-        assertTrue(bnw.buildings["Forbidden Palace"]!!.hasUnique(UniqueType.WorldCongressDelegates))
+        // Vox Populi's ExtraLeagueVotes: the Forbidden Palace has none any more (Brave New World: 2), the Consulate 8
+        assertFalse(bnw.buildings["Forbidden Palace"]!!.hasUnique(UniqueType.WorldCongressDelegates))
+        assertTrue(bnw.buildings["Consulate"]!!.hasUnique(UniqueType.WorldCongressDelegates))
     }
 
     @Test

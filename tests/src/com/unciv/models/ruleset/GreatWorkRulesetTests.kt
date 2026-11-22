@@ -49,13 +49,14 @@ class GreatWorkRulesetTests {
 
     @Test
     fun `buildings have the slots of the original`() {
+        // The Museum, Hermitage and Oxford University of the original are not in the ruleset (the Vox Populi buildings have replaced them, see BuildingYieldContentTests)
         fun slots(name: String) = ruleset.buildings[name]!!.greatWorkSlotTypes
         val art = GreatWorkSlotType.ArtArtifact
         assertEquals(List(4) { art }, slots("The Louvre"))
-        assertEquals(List(2) { art }, slots("Museum"))
-        assertEquals(List(3) { art }, slots("Hermitage"))
+        assertEquals(List(3) { art }, slots("Uffizi"))
+        assertEquals(List(2) { art }, slots("Sistine Chapel"))
         assertEquals(List(3) { GreatWorkSlotType.Music }, slots("Broadway"))
-        assertEquals(List(2) { GreatWorkSlotType.Literature }, slots("Oxford University"))
+        assertEquals(List(2) { GreatWorkSlotType.Literature }, slots("Globe Theatre"))
         assertEquals(listOf(art), slots("Palace"))
     }
 

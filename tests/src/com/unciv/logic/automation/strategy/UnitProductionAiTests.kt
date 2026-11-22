@@ -160,8 +160,9 @@ class UnitProductionAiTests {
         assertEquals(city, water.getCity())
         assertEquals(ProductionSanityAi.SR_USELESS, ProductionSanityAi.unitSanity(city, unit("Work Boats"), 100, false))
         water.setTileResource("Fish")
-        // 1 boat x (population 1 + era 0) x 1000 on top of sqrti(1000) = 31, less 300 for a civilian water unit without a navy (no ships, no effective coastal city)
-        assertEquals(31 + 1000 - 300, ProductionSanityAi.unitSanity(city, unit("Work Boats"), 100, false))
+        // 1 boat x (population 1 + era 1: Vox Populi's Sailing is a Classical technology) x 1000 on top of sqrti(1000) = 31, less 300 for a civilian water unit without a navy
+        // (no ships, no effective coastal city)
+        assertEquals(31 + 2000 - 300, ProductionSanityAi.unitSanity(city, unit("Work Boats"), 100, false))
     }
 
     @Test

@@ -43,13 +43,13 @@ class ProductionChoiceTests {
     fun `building weight is the XML flavors times the city flavors, negative city flavors as 0`() {
         civ.ai.setPersonalityFlavor(Flavor.Culture, 7)
         civ.ai.setPersonalityFlavor(Flavor.GreatPeople, 3)
-        // Building_Flavors: Writers' Guild CULTURE 90; Amphitheater CULTURE 20, GREAT_PEOPLE 2
+        // Building_Flavors: Writers' Guild CULTURE 90; the Library SCIENCE 40, GREAT_PEOPLE 2 (here: Arena CULTURE 20, PRODUCTION 10 of Vox Populi's)
         assertEquals(90 * 7, ProductionAi.buildingWeight(city, game.ruleset.buildings["Writers' Guild"]!!))
-        assertEquals(20 * 7 + 2 * 3, ProductionAi.buildingWeight(city, game.ruleset.buildings["Amphitheater"]!!))
+        assertEquals(20 * 7, ProductionAi.buildingWeight(city, game.ruleset.buildings["Arena"]!!))
         // The settler pump has CULTURE -4: city culture 3 - 4 = -1 counts 0, not -20
         civ.ai.setPersonalityFlavor(Flavor.Culture, 3)
         city.ai.changeSpecialization("CITYSPECIALIZATION_SETTLER_PUMP")
-        assertEquals(2 * 3, ProductionAi.buildingWeight(city, game.ruleset.buildings["Amphitheater"]!!))
+        assertEquals(0, ProductionAi.buildingWeight(city, game.ruleset.buildings["Arena"]!!))
     }
 
     @Test

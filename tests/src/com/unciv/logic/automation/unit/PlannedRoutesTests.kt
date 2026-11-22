@@ -194,8 +194,9 @@ class PlannedRoutesTests {
         fun capitalConnections() = PlannedRoutes(civ).let { routes -> routes.plannedRoutes().filter { RoutePurpose.ConnectCapital in routes.purposesOf(it) } }
         assertTrue("setup: without a link the capital reaches no city by road", capitalConnections().isEmpty())
 
-        capital.cityConstructions.addBuilding("Harbor")
-        port.cityConstructions.addBuilding("Harbor")
+        // Vox Populi's building that connects cities over water is the Lighthouse (AllowsWaterRoutes), not the Harbor
+        capital.cityConstructions.addBuilding("Lighthouse")
+        port.cityConstructions.addBuilding("Lighthouse")
         assertEquals(listOf(port), CapitalConnectionsFinder(civ).harborNeighbors(capital))
         assertEquals(listOf(capital), CapitalConnectionsFinder(civ).harborNeighbors(port))
         assertTrue(CapitalConnectionsFinder(civ).harborNeighbors(inland).isEmpty())

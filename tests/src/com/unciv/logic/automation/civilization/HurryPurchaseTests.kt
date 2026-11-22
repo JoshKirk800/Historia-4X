@@ -23,7 +23,7 @@ class HurryPurchaseTests {
         civ.ai.setPersonalityFlavor(Flavor.Culture, 10)
         civ.addGold(5000)
         civ.ai.economic.doTurnAfterStrategies(civ)
-        assertTrue(city.cityConstructions.isBuilt("Monument"))
+        assertTrue(city.cityConstructions.isInvestedIn("Monument"))   // buying a building is an investment under Vox Populi's rules
         assertTrue(civ.gold < 5000)
     }
 

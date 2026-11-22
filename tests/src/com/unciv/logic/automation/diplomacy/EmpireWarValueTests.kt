@@ -18,7 +18,7 @@ class EmpireWarValueTests {
         game.makeHexagonalMap(5, Constants.grassland)
         val civ = game.addCiv()
         game.addCity(civ, game.tileMap[HexCoord(0, 0)], initialPopulation = 3)
-        civ.tech.addTechnology("Archery")
+        civ.tech.addTechnology("Military Strategy")
         civ.tech.addTechnology("Sailing")
         val units = mapOf("Warrior" to 1, "Archer" to 2, "Trireme" to 4, "Fighter" to 0, "Great General" to 3)
         game.setTileTerrain(HexCoord(4, 0), Constants.coast)

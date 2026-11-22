@@ -100,10 +100,11 @@ class CitizenAutomationTests {
             valuation(city, focus, 2f).specialistValue(specialists[name]!!, city.cityStats.getStatsOfSpecialist(name))
         assertEquals(3 * 15 + 3 * 3, value("Writer", CityFocus.NoFocus))
         assertEquals(3 * 7 + 9, value("Scientist", CityFocus.NoFocus))
-        assertEquals(2 * 12 + 9, value("Engineer", CityFocus.NoFocus))
-        assertEquals(2 * 8 + 9, value("Merchant", CityFocus.NoFocus))
+        // Vox Populi's specialist yields: the Engineer makes 4 production (2 in Brave New World), the Merchant 5 gold (2)
+        assertEquals(4 * 12 + 9, value("Engineer", CityFocus.NoFocus))
+        assertEquals(5 * 8 + 9, value("Merchant", CityFocus.NoFocus))
         assertEquals(3 * 15 * 3 + 9, value("Writer", CityFocus.CultureFocus))
-        assertEquals(2 * 12 * 3 + 9, value("Engineer", CityFocus.ProductionFocus))
+        assertEquals(4 * 12 * 3 + 9, value("Engineer", CityFocus.ProductionFocus))
     }
 
     @Test

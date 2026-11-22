@@ -69,7 +69,8 @@ class NuclearMightTests {
     fun `bomb shelters reduce the might against their owner`() {
         nuke("Atomic Bomb")
         val unprotected = NuclearMight.of(a, b)
-        b.cities.first().cityConstructions.addBuilding("Bomb Shelter")
+        // Vox Populi's Strategic Defense System has the Bomb Shelter's 75% (the Bomb Shelter is not in the ruleset)
+        b.cities.first().cityConstructions.addBuilding("Strategic Defense System")
         val shelters = NuclearMight.Shelters.of(b)
         assertEquals(NuclearMight.Shelters(100, 75, 0), shelters)
         assertTrue(NuclearMight.of(a, b) < unprotected)

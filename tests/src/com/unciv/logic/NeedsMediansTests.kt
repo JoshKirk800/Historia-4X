@@ -85,7 +85,7 @@ class NeedsMediansTests {
     fun `the median of the technologies is the upper median of what the civilizations know and is not smoothed`() {
         val other = game.addCiv()
         game.addCity(other, game.getTile(2, 2), initialPopulation = 3)
-        for (tech in listOf("Agriculture", "Pottery", "Archery")) other.tech.addTechnology(tech)
+        for (tech in listOf("Agriculture", "Pottery", "Military Strategy")) other.tech.addTechnology(tech)
         city(3, production = 900)
         medians.techs = 99
         updateMedians()

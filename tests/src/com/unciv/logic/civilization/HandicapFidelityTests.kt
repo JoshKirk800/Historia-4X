@@ -37,12 +37,12 @@ class HandicapFidelityTests {
         val monument = game.ruleset.buildings["Monument"]!!
 
         assertEquals("warrior base cost 40", 40, warrior.getProductionCost(human, city))
-        assertEquals("monument base cost 40", 40, monument.getProductionCost(human, city))
+        assertEquals("monument base cost 65 (Vox Populi's)", 65, monument.getProductionCost(human, city))
     }
 
     @Test
     fun `a human on Settler pays half the building maintenance of a human on Prince`() {
-        city.cityConstructions.addBuilding("Courthouse") // 4 gold maintenance
+        city.cityConstructions.addBuilding("Factory") // 6 gold maintenance (Vox Populi's; the Courthouse's 3 would halve to a fraction that the stats round)
 
         city.cityStats.update()
         val settlerMaintenance = kotlin.math.abs(city.cityStats.finalStatList["Maintenance"]?.gold ?: 0f)
@@ -51,8 +51,8 @@ class HandicapFidelityTests {
         city.cityStats.update()
         val princeMaintenance = kotlin.math.abs(city.cityStats.finalStatList["Maintenance"]?.gold ?: 0f)
 
-        assertEquals("Prince maintenance", 4f, princeMaintenance, 0.001f)
-        assertEquals("Settler maintenance is halved", 2f, settlerMaintenance, 0.001f)
+        assertEquals("Prince maintenance", 6f, princeMaintenance, 0.001f)
+        assertEquals("Settler maintenance is halved", 3f, settlerMaintenance, 0.001f)
     }
 
     @Test

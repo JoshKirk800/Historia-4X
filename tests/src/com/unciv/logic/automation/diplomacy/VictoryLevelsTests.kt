@@ -34,7 +34,7 @@ class VictoryLevelsTests {
     private lateinit var b: Civilization
     private lateinit var c: Civilization
     private lateinit var d: Civilization
-    private val ancientTechs = listOf("Pottery", "Animal Husbandry", "Archery", "Mining", "Masonry", "Sailing")
+    private val ancientTechs = listOf("Pottery", "Animal Husbandry", "Military Strategy", "Mining", "Masonry", "Sailing")
     private val branches = listOf("Tradition", "Liberty", "Honor", "Piety", "Patronage")
 
     @Before

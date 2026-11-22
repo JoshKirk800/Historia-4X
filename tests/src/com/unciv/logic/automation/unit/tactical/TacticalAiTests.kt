@@ -185,11 +185,12 @@ class TacticalAiTests {
 
     private fun gold(amount: Int) {
         setGold(amount)
-        civ.tech.addTechnology("Masonry")
-        civ.tech.addTechnology("Archery")
+        civ.tech.addTechnology("Construction")   // Vox Populi's technology of the Walls (the original's Masonry)
+        civ.tech.addTechnology("Military Strategy")
     }
 
-    private fun archers() = civ.units.getCivUnits().count { it.name == "Archer" }
+    // the ranged unit that the AI recommends once Construction is known: Archer is obsolete then (Vox Populi's Composite Bowman needs only Construction)
+    private fun archers() = civ.units.getCivUnits().count { it.name == "Archer" || it.name == "Composite Bowman" }
 
     @Test
     fun `an own city with enemies near that we do not dominate buys its walls first and then a ranged unit`() {
@@ -199,7 +200,7 @@ class TacticalAiTests {
         val zone = civ.ai.tactical.map.zoneOf(city.getCenterTile())!!
         assertNotEquals("the scenario has us under pressure", TacticalDominance.Friendly, zone.dominance)
         run()
-        assertTrue(city.cityConstructions.isBuilt("Walls"))
+        assertTrue(city.cityConstructions.isInvestedIn("Walls"))   // buying a building is an investment under Vox Populi's rules
         assertEquals(1, archers())
         assertTrue(civ.gold < 5000)
     }
@@ -211,7 +212,7 @@ class TacticalAiTests {
         val walls = game.ruleset.buildings["Walls"]!!
         setGold(walls.getStatBuyCost(city, Stat.Gold)!!)
         run()
-        assertTrue(city.cityConstructions.isBuilt("Walls"))
+        assertTrue(city.cityConstructions.isInvestedIn("Walls"))   // buying a building is an investment under Vox Populi's rules
         assertEquals(0, archers())
         assertEquals(0, civ.gold)
     }
@@ -227,7 +228,7 @@ class TacticalAiTests {
         assertEquals(TacticalDominance.Friendly, zone.dominance)
         assertEquals(1, zone.totalEnemyUnitCount)
         run()
-        assertFalse(city.cityConstructions.isBuilt("Walls"))
+        assertFalse(city.cityConstructions.isInvestedIn("Walls"))
         assertEquals(0, archers())
         assertEquals(5000, civ.gold)
     }
@@ -237,7 +238,7 @@ class TacticalAiTests {
         val city = game.addCity(civ, tile(0))
         gold(5000)
         run()
-        assertFalse(city.cityConstructions.isBuilt("Walls"))
+        assertFalse(city.cityConstructions.isInvestedIn("Walls"))
         assertEquals(5000, civ.gold)
     }
 
@@ -252,7 +253,7 @@ class TacticalAiTests {
         assertEquals(0, zone.totalEnemyUnitCount)
         assertEquals(TacticalDominance.Friendly, zone.dominance)
         run()
-        assertFalse(city.cityConstructions.isBuilt("Walls"))
+        assertFalse(city.cityConstructions.isInvestedIn("Walls"))
         assertEquals(0, archers())
         assertEquals(5000, civ.gold)
     }
@@ -265,7 +266,7 @@ class TacticalAiTests {
         see()
         assertTrue("the scenario has attackers that can take the city", highPriorityTargets().isNotEmpty())
         run()
-        assertFalse(doomed.cityConstructions.isBuilt("Walls"))
+        assertFalse(doomed.cityConstructions.isInvestedIn("Walls"))
         assertEquals(0, archers())
         assertEquals(5000, civ.gold)
         assertTrue("the capital was not the city given up", capital.isCapital())
@@ -278,7 +279,7 @@ class TacticalAiTests {
         see()
         assertTrue(highPriorityTargets().isNotEmpty())
         run()
-        assertTrue(capital.cityConstructions.isBuilt("Walls"))
+        assertTrue(capital.cityConstructions.isInvestedIn("Walls"))
         assertEquals(1, archers())
     }
 

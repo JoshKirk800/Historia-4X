@@ -125,7 +125,7 @@ class OperationTests {
         civ.ai.setPersonalityFlavor(Flavor.Offense, 4)
         developCity()
         civ.ai.military.requestArmy(bySea = false)
-        civ.tech.addTechnology("Archery")
+        civ.tech.addTechnology("Military Strategy")
         val unit = MilitaryOperations.unitForArmy(city)!!
         assertEquals("Archer", unit.name)
         val buildables = ConstructionAutomation(city.cityConstructions).getBuildables()
@@ -135,7 +135,7 @@ class OperationTests {
 
     @Test
     fun `only the muster city offers a slot, takes it off the list, and gives it back when it builds something else`() {
-        civ.tech.addTechnology("Archery")
+        civ.tech.addTechnology("Military Strategy")
         val second = game.addCity(civ, game.getTile(HexCoord(4, 0)))
         val operation = army()
         assertEquals(2, operation.slotsToBuild.size)
@@ -164,7 +164,7 @@ class OperationTests {
 
     @Test
     fun `the unit a city trained for a slot joins the army with the slot's unit AI, and the last one starts the gathering`() {
-        civ.tech.addTechnology("Archery")
+        civ.tech.addTechnology("Military Strategy")
         val operation = army()
         for (index in 0 until 2) {
             val offer = ops.nextUnitForOperationSlot(city)!!

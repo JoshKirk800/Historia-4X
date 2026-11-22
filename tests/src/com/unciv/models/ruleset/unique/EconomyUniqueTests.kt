@@ -100,14 +100,10 @@ class EconomyUniqueTests {
     }
 
     @Test
-    fun `the Brave New World ruleset uses none of the new fields`() {
+    fun `the Brave New World ruleset has no data yet for the unit purchase cooldowns and the speed hurry modifier`() {
+        // The constants, the eras and the buildings' costs are Vox Populi's since content flip A (BuildingYieldContentTests); units are not flipped yet
         val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
-        assertEquals(ModConstants.PurchaseConstants(), game.ruleset.modOptions.constants.purchase)
-        assertEquals(false, game.ruleset.modOptions.constants.buildingInvestments)
-        assertEquals(emptyList<Int>(), game.ruleset.modOptions.constants.worldWonderCostIncrease)
-        assertEquals(false, game.ruleset.modOptions.constants.purchaseCooldownEnabled)
         assertTrue(game.ruleset.speeds.values.all { it.hurryModifier == 1f })
-        assertTrue(game.ruleset.eras.values.all { it.laterEraBuildingConstructMod == 0 })
         assertTrue(game.ruleset.units.values.all { it.purchaseCooldown == 0 && it.globalFaithPurchaseCooldown == 0 && it.localFaithPurchaseCooldown == 0 })
         assertTrue(game.ruleset.buildings.values.all { it.purchaseCooldownReduction == 0 && it.purchaseCooldownReductionCivilian == 0 })
     }

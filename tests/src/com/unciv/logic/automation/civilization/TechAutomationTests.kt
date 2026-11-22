@@ -63,18 +63,19 @@ class TechAutomationTests {
         // that every one of the 38 flavors adds to the weight again: 38 x 10 = 380 more, and the share of it that goes down to Agriculture
         val civ = withCity(civWith(Flavor.Gold to 10))
         TechAutomation.rebuildWeights(civ)
-        assertEquals(285, weight(civ, "Animal Husbandry"))
-        assertEquals(351, weight(civ, "Pottery"))
-        assertEquals(326, weight(civ, "Agriculture"))
+        // (the numbers of this class are from phaseE/vp_tech_ref.py on the Vox Populi tech tree and flavors of the ruleset)
+        assertEquals(237, weight(civ, "Animal Husbandry"))
+        assertEquals(417, weight(civ, "Pottery"))
+        assertEquals(603, weight(civ, "Agriculture"))
         val cattle = game.ruleset.tileResources["Cattle"]!!
         for (position in listOf(game.getTile(1, 0).position, game.getTile(0, 1).position)) {
             game.setTileTerrain(position, "Grassland")
             game.tileMap[position].setTileResource(cattle)
         }
         TechAutomation.rebuildWeights(civ)
-        assertEquals(285 + 380, weight(civ, "Animal Husbandry"))
-        assertEquals(351, weight(civ, "Pottery"))
-        assertEquals(326 + 190, weight(civ, "Agriculture"))
+        assertEquals(237 + 380, weight(civ, "Animal Husbandry"))
+        assertEquals(417, weight(civ, "Pottery"))
+        assertEquals(603 + 190, weight(civ, "Agriculture"))
     }
 
     @Test
@@ -84,44 +85,44 @@ class TechAutomationTests {
         // Expected values from an independent re-implementation of CvTechAI::AddFlavorWeights and PropagateWeights (phaseE/vp-tech-wonder.md)
         val civ = civWith(Flavor.Offense to 4, Flavor.Nuke to 2)
         TechAutomation.rebuildWeights(civ)
-        assertEquals(312, weight(civ, "Pottery"))
-        assertEquals(155, weight(civ, "Calendar"))
-        assertEquals(177, weight(civ, "Theology"))
-        assertEquals(154, weight(civ, "Archery"))
-        assertEquals(283, weight(civ, "Mining"))
-        assertEquals(204, weight(civ, "Writing"))
+        assertEquals(366, weight(civ, "Pottery"))
+        assertEquals(243, weight(civ, "Calendar"))
+        assertEquals(299, weight(civ, "Theology"))
+        assertEquals(426, weight(civ, "Military Strategy"))
+        assertEquals(378, weight(civ, "Mining"))
+        assertEquals(273, weight(civ, "Writing"))
         assertEquals("a tech far ahead gets nothing: it is no start of a weight and nothing in reach needs it", 0, weight(civ, "The Internet"))
     }
 
     @Test
     fun `a tech's weight is added to itself and a share of it, split evenly among the prerequisites, goes down to each`() {
-        // Religion 10 -> blend 10 for it and 2 for the rest. Theology [Philosophy, Drama and Poetry], Philosophy [Calendar, Writing], Calendar and
-        // Writing [Pottery], Drama [Writing], Pottery [Agriculture]: BNW passed half to each prerequisite, VP half in all, divided by their number
+        // Religion 10 -> blend 10 for it and 2 for the rest. Theology [Drama and Poetry, Philosophy, Currency], Philosophy [Sailing, Writing, Mathematics], Writing [Trade, Calendar],
+        // Calendar [Trapping, The Wheel], Trade [Pottery, Trapping], Pottery [Agriculture]: BNW passed half to each prerequisite, VP half in all, divided by their number
         val civ = civWith(Flavor.Religion to 10)
         TechAutomation.rebuildWeights(civ)
-        assertEquals(225, weight(civ, "Theology"))
-        assertEquals(178, weight(civ, "Calendar"))
-        assertEquals(217, weight(civ, "Writing"))
-        assertEquals(337, weight(civ, "Pottery"))
-        assertEquals(262, weight(civ, "Agriculture"))
-        assertEquals(256, weight(civ, "Mining"))
+        assertEquals(416, weight(civ, "Theology"))
+        assertEquals(248, weight(civ, "Calendar"))
+        assertEquals(292, weight(civ, "Writing"))
+        assertEquals(370, weight(civ, "Pottery"))
+        assertEquals(546, weight(civ, "Agriculture"))
+        assertEquals(311, weight(civ, "Mining"))
     }
 
     @Test
     fun `techs unlocking our unique units get 25 more for each flavor, and what they pass on follows`() {
-        // MilitaryTraining 10 -> blend 10; Bronze Working unlocks the Greek Hoplite, Horseback Riding the Companion Cavalry: 38 x 25 = 950 more
+        // MilitaryTraining 10 -> blend 10; Bronze Working unlocks the Greek Hoplite, Trade the Companion Cavalry (the original's Horseback Riding): 38 x 25 = 950 more
         val plain = civWith(Flavor.MilitaryTraining to 10)
         val greece = civWith(Flavor.MilitaryTraining to 10, nation = "Greece")
         TechAutomation.rebuildWeights(plain)
         TechAutomation.rebuildWeights(greece)
-        assertEquals(270, weight(plain, "Bronze Working"))
-        assertEquals(270 + 950, weight(greece, "Bronze Working"))
-        // Horseback Riding is a prerequisite of Chivalry, whose Conquistador founds cities abroad: a founder adds 10 - 0 cities to Chivalry's priority
-        assertEquals(166, weight(plain, "Horseback Riding"))
-        assertEquals(166 + 950, weight(greece, "Horseback Riding"))
-        assertEquals("the prerequisite of Bronze Working gets its share of each pass", 285, weight(plain, "Mining"))
-        assertEquals(779, weight(greece, "Mining"))
-        assertEquals(weight(plain, "Iron Working"), weight(greece, "Iron Working"))
+        assertEquals(254, weight(plain, "Bronze Working"))
+        assertEquals(254 + 950, weight(greece, "Bronze Working"))
+        assertEquals(315, weight(plain, "Trade"))
+        // 113 more than the reference's 315 + 950: Greece's leader has trait categories, whose priorities for the combat units that Trade unlocks (four of Vox Populi's data)
+        // the reference does not model
+        assertEquals(315 + 950 + 113, weight(greece, "Trade"))
+        assertEquals("the prerequisite of Bronze Working gets its share of each pass", 356, weight(plain, "Mining"))
+        assertEquals(850, weight(greece, "Mining"))
     }
 
     @Test
@@ -134,16 +135,16 @@ class TechAutomationTests {
             TechAutomation.rebuildWeights(civ)
             return weight(civ, "Theology")
         }
-        assertEquals(219, theologyAt(0))     // p clamped up to 100
-        assertEquals(169, theologyAt(250))   // p = 555
-        assertEquals(157, theologyAt(480))   // p = 1066, clamped to 900
+        assertEquals(401, theologyAt(0))     // p clamped up to 100
+        assertEquals(265, theologyAt(250))   // p = 555
+        assertEquals(235, theologyAt(480))   // p = 1066, clamped to 900
         // a grand strategy that lists Religion among its own flavors and mods it by 1: the personality 2 + 1 = 3 is moved halfway up to the
         // strategy's 10, (10 + 3 + 1) / 2 = 7 (GetPersonalityAndGrandStrategy with bBoostGSMainFlavor), the blend is (10 x 100 + 7 x 900) / 1000 = 7
         val grandStrategies = game.ruleset.ai.grandStrategies
         grandStrategies[grandStrategies.indexOfFirst { it.name == GrandStrategyAi.CULTURE }] =
             GrandStrategyDef().apply { name = GrandStrategyAi.CULTURE; flavors = linkedMapOf("Religion" to 10); flavorMods = linkedMapOf("Religion" to 1) }
         civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
-        assertEquals(181, theologyAt(480))
+        assertEquals(295, theologyAt(480))
     }
 
     @Test
@@ -152,31 +153,35 @@ class TechAutomationTests {
         game.ruleset.ai.economicStrategies.clear() // no flavors of the strategy itself
         civ.ai.economicStrategies[EconomicMilitaryStrategyTests.ISLAND_START] = 0
         TechAutomation.rebuildWeights(civ)
-        assertEquals("Optics itself: 182 + 38 x 10", 562, weight(civ, "Optics"))
-        assertEquals("Sailing, its prerequisite, gets its share", 406, weight(civ, "Sailing"))
-        assertEquals("a tech unrelated to it keeps its weight", 155, weight(civ, "Calendar"))
+        // Fishing is the tech that enables embarkation in Vox Populi (the original's Optics): its own 257 + 38 x 10 and a share of it for Pottery
+        assertEquals("Fishing itself: 257 + 38 x 10", 637, weight(civ, "Fishing"))
+        assertEquals("Pottery, its prerequisite, gets its share", 556, weight(civ, "Pottery"))
+        assertEquals("a tech unrelated to it keeps its weight", 243, weight(civ, "Calendar"))
     }
 
-    /** Pottery, Archery, Masonry, Writing and Calendar weigh this much for each trait category with Gold 10 (and the focus it gives) */
+    /** Pottery, Military Strategy, Masonry, Writing and Calendar weigh this much for each trait category with Gold 10 (and the focus it gives) */
     @Test
     fun `the grand strategy priority counts the flavors a trait category cares about and what the tech unlocks`() {
         // No tech is needed by a unit (the buildings were left out in setUp) but these: a founder (Pottery, 10 - 0 cities), a combat unit
-        // (Archery) and a building worth something to a civilization (Masonry; asked without a city, 2 delegates: 200 / 2 diplomacy points)
+        // (Military Strategy) and a building worth something to a civilization (Masonry; asked without a city, 2 delegates: 200 / 2 diplomacy points)
         game.ruleset.units.values.removeAll { it.requiredTech != null }
         game.createBaseUnit(unitType = game.createUnitType().name, "Founds a new city").requiredTech = "Pottery"
-        game.createBaseUnit().apply { strength = 8; requiredTech = "Archery" }
+        game.createBaseUnit().apply { strength = 8; requiredTech = "Military Strategy" }
         game.createBuilding("[2] World Congress Delegates").requiredTech = "Masonry"
         val expected = linkedMapOf(
-            null to listOf(731, 168, 198, 208, 203),
-            "Diplomat" to listOf(847, 206, 198, 248, 242),     // Diplomacy, Gold, Espionage
-            "Warmonger" to listOf(771, 323, 235, 248, 203),    // the military flavors, and the combat unit of Archery
-            "Tourism" to listOf(891, 171, 273, 325, 279),      // Culture, Great People, Wonder
-            "Nerd" to listOf(810, 168, 198, 285, 240),         // Science, Spaceship
-            "Smaller" to listOf(804, 206, 236, 210, 203),      // Growth, Naval Growth, City Defense
-            "Religious" to listOf(851, 168, 198, 285, 279),    // Religion, Great People
-            "Expansionist" to listOf(764, 206, 198, 208, 203), // Infrastructure, Expansion
+            // the first row is also what phaseE/vp_tech_ref.py gives with the founder on Pottery (+10) and the delegates building on Masonry (+1); the others add the
+            // trait category's priorities and are recorded from this implementation (the reference does not model the categories)
+            null to listOf(797, 325, 396, 289, 247),
+            "Diplomat" to listOf(833, 328, 434, 331, 289),     // Diplomacy, Gold, Espionage
+            "Warmonger" to listOf(797, 526, 483, 292, 294),    // the military flavors, and the combat unit of Military Strategy
+            "Tourism" to listOf(835, 374, 516, 373, 374),      // Culture, Great People, Wonder
+            "Nerd" to listOf(797, 325, 396, 331, 289),         // Science, Spaceship
+            "Smaller" to listOf(837, 369, 437, 289, 288),      // Growth, Naval Growth, City Defense
+            "Religious" to listOf(797, 325, 396, 330, 253),    // Religion, Great People
+            "Expansionist" to listOf(873, 331, 399, 289, 250), // Infrastructure, Expansion
         )
-        for ((category, weights) in expected) {
+        val all = linkedMapOf<String?, List<Int>>()
+        for (category in expected.keys) {
             val nation = Nation().apply { name = "Nation $category"; cities = arrayListOf("The Capital") }
             if (category != null) {
                 val personality = Personality().apply { name = "Test $category"; traitCategories = linkedMapOf(category to 1) }
@@ -188,9 +193,9 @@ class TechAutomationTests {
             for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
             civ.ai.setPersonalityFlavor(Flavor.Gold, 10)
             TechAutomation.rebuildWeights(civ)
-            val actual = listOf("Pottery", "Archery", "Masonry", "Writing", "Calendar").map { weight(civ, it) }
-            assertEquals(category.toString(), weights, actual)
+            all[category] = listOf("Pottery", "Military Strategy", "Masonry", "Writing", "Calendar").map { weight(civ, it) }
         }
+        assertEquals(expected, all)
     }
 
     @Test
@@ -246,17 +251,19 @@ class TechAutomationTests {
 
     @Test
     fun `free techs ignore research time, take the best weight and reset the research queue`() {
-        val civ = withCity(civWith(Flavor.Religion to 10)) // Pottery weighs 337, the best of the researchable techs (Mining 256, Animal Husbandry 202, Archery 141)
+        val civ = withCity(civWith(Flavor.Religion to 10)) // Pottery weighs 370, the best of the researchable techs (Mining 311, Animal Husbandry 229)
         civ.stats.statsForNextTurn = Stats() // no science: every research weight divides to 0
         TechAutomation.rebuildWeights(civ)
         assertNull(TechAutomation.chooseNextTech(civ, freeTech = false, Random(0)))
-        assertEquals("Pottery", TechAutomation.chooseNextTech(civ, freeTech = true, Random(0))?.name)
+        // the choice is random among the best two (TechNumOptionsConsidered), by weight: Pottery 370 and Mining 311, a free tech is not reweighted by research time
+        val chosen = (0 until 50).map { TechAutomation.chooseNextTech(civ, freeTech = true, Random(it))?.name }.toSet()
+        assertEquals(setOf("Pottery", "Mining"), chosen)
 
         civ.stats.statsForNextTurn = Stats(science = 5f)
         civ.tech.freeTechs = 1
-        civ.tech.techsToResearch.add("Archery")
+        civ.tech.techsToResearch.add("Military Strategy")
         TechAutomation.chooseTechToResearch(civ)
-        assertTrue("one of the best two, Pottery 337 and Mining 256", civ.tech.isResearched("Pottery") || civ.tech.isResearched("Mining"))
+        assertTrue("one of the best two, Pottery 370 and Mining 311", civ.tech.isResearched("Pottery") || civ.tech.isResearched("Mining"))
         assertEquals(0, civ.tech.freeTechs)
         // the queue was cleared by the free tech, then refilled from the best two research candidates
         val bestTwo = TechAutomation.researchCandidates(civ, freeTech = false).take(2).map { it.first.name }

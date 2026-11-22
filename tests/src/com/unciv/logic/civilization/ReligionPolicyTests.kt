@@ -83,7 +83,8 @@ class ReligionPolicyTests {
         val civ = game.addCiv(game.ruleset.nations["Indonesia"]!!)
         val other = game.addCiv()
         val city = game.addCity(civ, game.getTile(0, 0), initialPopulation = 6)
-        city.cityConstructions.addBuilding(game.ruleset.buildings["Candi"]!!)
+        // Brave New World's Candi: Vox Populi's has no such row (a flat 2 faith), so the unique is tested on a building of its own
+        city.cityConstructions.addBuilding(game.createBuilding("[+2 Faith] for each major religion with followers in the city [in this city]"))
         val first = game.addReligion(civ)
         val second = game.addReligion(other)
         first.addBeliefs(listOf(game.ruleset.beliefs["Church Property"]!!))

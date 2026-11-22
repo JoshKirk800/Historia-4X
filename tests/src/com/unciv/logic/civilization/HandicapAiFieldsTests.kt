@@ -50,13 +50,13 @@ class HandicapAiFieldsTests {
         val ai = civWithCity(x = 2)
         val monument = game.ruleset.buildings["Monument"]!!
         val ancientCost = monument.getProductionCost(ai, null)
-        assertEquals(20, ancientCost)
+        assertEquals(32, ancientCost)   // Vox Populi's 65 at half
 
         ai.tech.addTechnology("Philosophy") // classical, with its prerequisites not needed for the era
         val era = ai.getEraNumber()
         assertTrue("the civ is in a later era now", era >= 1)
 
-        assertEquals((20 * (1 - 0.05f * era)).toInt(), monument.getProductionCost(ai, null))
+        assertEquals((32 * (1 - 0.05f * era)).toInt(), monument.getProductionCost(ai, null))
     }
 
     @Test

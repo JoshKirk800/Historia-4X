@@ -190,12 +190,12 @@ class CityAccessorStrategyTests {
     @Test
     fun `need tourism building needs more than 10 culture from world wonders`() {
         val city = colony(1)
-        // Oracle 3, Louvre 2, Hanging Gardens, Pyramids, Great Wall, Colossus, Chichen Itza 1 each: 10
-        addWonders(city, "The Oracle", "The Louvre", "Hanging Gardens", "The Pyramids", "Great Wall", "Colossus", "Chichen Itza")
+        // Louvre 2, Oracle, Hanging Gardens, Pyramids, Great Wall, Colossus, Chichen Itza, Terracotta Army, Stonehenge 1 each: 10 (Vox Populi's culture of the wonders)
+        addWonders(city, "The Oracle", "The Louvre", "Hanging Gardens", "The Pyramids", "Great Wall", "Colossus", "Chichen Itza", "Terracotta Army", "Stonehenge")
         assertEquals(10, civ.culture.getCultureOfWonders(city))
         assertEquals(0, civ.culture.getCityTourism(city))
         assertFalse(CityStrategyAi.needTourismBuilding(city))
-        addWonders(city, "Terracotta Army")
+        addWonders(city, "Statue of Zeus")
         assertEquals(11, civ.culture.getCultureOfWonders(city))
         assertTrue(CityStrategyAi.needTourismBuilding(city))
     }
@@ -203,20 +203,20 @@ class CityAccessorStrategyTests {
     @Test
     fun `need tourism building adds the base tourism of the city to the culture`() {
         val city = colony(1)
-        // Parthenon 4 (it comes with a Great Work: 2 tourism), Oracle 3, Louvre 2
+        // Parthenon 4 (it comes with a Great Work: 2 tourism), Oracle 1, Louvre 2, Petra 2
         addWonders(city, "Parthenon", "The Oracle")
-        assertEquals(7, civ.culture.getCultureOfWonders(city))
+        assertEquals(5, civ.culture.getCultureOfWonders(city))
         assertEquals(2, civ.culture.getCityTourism(city))
         assertFalse(CityStrategyAi.needTourismBuilding(city))
-        addWonders(city, "The Louvre")
+        addWonders(city, "The Louvre", "Petra")
         assertTrue(CityStrategyAi.needTourismBuilding(city))
     }
 
     @Test
     fun `need tourism building does not count national wonders`() {
         val city = colony(1)
-        addWonders(city, "The Oracle", "The Louvre", "Hanging Gardens", "The Pyramids", "Great Wall", "Colossus", "Chichen Itza")
-        for (name in listOf("Oxford University", "National College", "Heroic Epic")) {
+        addWonders(city, "The Oracle", "The Louvre", "Hanging Gardens", "The Pyramids", "Great Wall", "Colossus", "Chichen Itza", "Terracotta Army", "Stonehenge")
+        for (name in listOf("School of Philosophy", "Consulate", "Heroic Epic")) {
             assertTrue(name, game.ruleset.buildings[name]!!.isNationalWonder)
             city.cityConstructions.addBuilding(name)
         }
@@ -233,9 +233,9 @@ class CityAccessorStrategyTests {
         game.createPolicyBranch(policy = policy)
         civ.policies.adopt(policy)
         city.cityStats.update()
-        // 3 + 2 + 1 + 3 x 3
-        assertEquals(15, civ.culture.getCultureOfWonders(city))
-        assertEquals(15, civ.culture.getCityTourism(city))
+        // 1 + 2 + 1 + 3 x 3
+        assertEquals(13, civ.culture.getCultureOfWonders(city))
+        assertEquals(13, civ.culture.getCityTourism(city))
         assertTrue(CityStrategyAi.needTourismBuilding(city))
     }
 }

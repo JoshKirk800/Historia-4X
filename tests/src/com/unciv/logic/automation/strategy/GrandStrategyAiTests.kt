@@ -266,8 +266,8 @@ class GrandStrategyAiTests {
         civ.policies.storedCulture = 9000 // times 100 / 3000
         // Military Caste: Culture 10, Happiness 10; Amphitheater: Culture and more
         civ.policies.getAdoptedPolicies().add("Military Caste")
-        val flavors = game.ruleset.ai.flavorsOf(game.ruleset.buildings["Amphitheater"]!!)
-        city.cityConstructions.addBuilding("Amphitheater")
+        val flavors = game.ruleset.ai.flavorsOf(game.ruleset.buildings["Arena"]!!)
+        city.cityConstructions.addBuilding("Arena")
         val buildingSum = flavors[Flavor.GreatPeople.ordinal] + flavors[Flavor.Culture.ordinal] + flavors[Flavor.Wonder.ordinal] + flavors[Flavor.Happiness.ordinal]
         assertTrue(buildingSum > 0)
         // somebody else is alive, so we are not influential over everybody: not close to a culture victory; culture and tourism behind: -100

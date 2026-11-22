@@ -7,6 +7,7 @@ import com.unciv.logic.civilization.managers.ReligionManager
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.Belief
+import com.unciv.models.ruleset.BeliefType
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -41,14 +42,15 @@ class BuildingValueTests {
     fun `the Faith step multiplies the religion value so far by half the era modifier, then the sum by the modifier`() {
         val religion = game.addReligion(civ)
         religion.addBelief(belief("[+1 Culture] from every [Shrine]"))
-        religion.addBelief(belief("[+1 Faith] from every [Amphitheater] <in cities with at least [3] [Followers of this Religion]>"))
+        // Liturgical Drama of the original (on the Amphitheater) is not in the ruleset: the same effect on the Arena, made for the test
+        religion.addBelief(game.createBelief(BeliefType.Follower, "[+1 Faith] from every [Arena] <in cities with at least [3] [Followers of this Religion]>"))
         setPantheon()
         // 15 eras left, doubled while a religion can still be founded after a pantheon
         val modifier = if (civ.religionManager.remainingFoundableReligions() > 0) 30 else 15
         // the Faith step multiplies by half the modifier whatever the earlier yields added (the original's loop order): the Shrine's
-        // Culture too, the Amphitheater's Faith; the value is then times the modifier
+        // Culture too, the Arena's Faith; the value is then times the modifier
         assertEquals(1 * (modifier / 2) * modifier, BuildingValueAi.religionValue(city, game.ruleset.buildings["Shrine"]!!))
-        assertEquals(1 * (modifier / 2) * modifier, BuildingValueAi.religionValue(city, game.ruleset.buildings["Amphitheater"]!!))
+        assertEquals(1 * (modifier / 2) * modifier, BuildingValueAi.religionValue(city, game.ruleset.buildings["Arena"]!!))
         assertEquals(0, BuildingValueAi.religionValue(city, game.ruleset.buildings["Monument"]!!))
     }
 

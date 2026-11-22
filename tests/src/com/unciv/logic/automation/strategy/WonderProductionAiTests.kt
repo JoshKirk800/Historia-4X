@@ -33,7 +33,7 @@ class WonderProductionAiTests {
         for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
         stonehenge = game.ruleset.buildings["Stonehenge"]!!
         game.addCity(civ, game.tileMap[0, 0])
-        civ.tech.addTechnology("Calendar")
+        civ.tech.addTechnology("The Wheel")   // Stonehenge's technology in Vox Populi (Brave New World: Calendar)
         StrategyTests.register("TEST_STRATEGY_WONDER_BROADCAST") { _, _ -> shouldBeActive }
         game.ruleset.ai.economicStrategies.clear()
         game.ruleset.ai.militaryStrategies.clear()

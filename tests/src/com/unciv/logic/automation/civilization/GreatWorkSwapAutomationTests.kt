@@ -7,6 +7,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.GreatWorkInstance
 import com.unciv.models.ruleset.GreatWorkType
+import com.unciv.models.ruleset.ThemingBonus
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -25,7 +26,42 @@ class GreatWorkSwapAutomationTests {
     private lateinit var city: City
     private lateinit var secondCity: City
 
-    private fun building(name: String): Building = game.ruleset.buildings[name]!!
+    /** The Museum, the Hermitage and the Amphitheater of the original (Brave New World's database): the ruleset has Vox Populi's buildings instead (no building
+     *  of these names, and none with these theming bonuses), the swapping works on any building with slots and theming bonuses, so the tests add these three */
+    private fun building(name: String): Building = game.ruleset.buildings.getOrPut(name) { original(name) }
+
+    private fun bonus(name: String, bonus: Int, priority: Int, init: ThemingBonus.() -> Unit) =
+        ThemingBonus().apply { this.name = name; this.bonus = bonus; aiPriority = priority; init() }
+
+    private fun original(name: String): Building = Building().apply {
+        this.name = name
+        ruleset = game.ruleset
+        when (name) {
+            "Museum" -> {
+                uniques.add("Has [2] [Art/Artifact] Great Work slots")
+                themingBonuses.addAll(listOf(
+                    bonus("Museum of [era] [civ] Art", 2, 2) { sameEra = true; mustBeArt = true; requiresOwner = true },
+                    bonus("Museum of [era] [civ] Art", 2, 2) { sameEra = true; mustBeArt = true; requiresAnyButOwner = true },
+                    bonus("Museum of [era] [civ] Warfare", 2, 2) { sameEra = true; mustBeArtifact = true; requiresOwner = true },
+                    bonus("Museum of [era] [civ] Warfare", 2, 2) { sameEra = true; mustBeArtifact = true; requiresAnyButOwner = true },
+                    bonus("Museum of [era] Art", 1, 1) { sameEra = true; mustBeArt = true },
+                    bonus("Museum of [era] Warfare", 1, 1) { sameEra = true; mustBeArtifact = true },
+                    bonus("[civ] Museum of the [era] Era", 1, 1) { sameEra = true; requiresOwner = true },
+                    bonus("World Museum of the [era] Era", 1, 1) { sameEra = true; requiresAnyButOwner = true },
+                    bonus("Collection of [civ] Art", 1, 1) { mustBeArt = true; requiresOwner = true },
+                    bonus("Collection of [civ] Art", 1, 1) { mustBeArt = true; requiresAnyButOwner = true },
+                    bonus("Collection of [civ] Warfare", 1, 1) { mustBeArtifact = true; requiresOwner = true },
+                    bonus("Collection of [civ] Warfare", 1, 1) { mustBeArtifact = true; requiresAnyButOwner = true },
+                ))
+            }
+            "Hermitage" -> {
+                uniques.add("Has [3] [Art/Artifact] Great Work slots")
+                themingBonuses.add(bonus("Museum of World Art", 3, 4) { uniqueEras = true; mustBeArt = true; requiresUniquePlayers = true })
+            }
+            "Amphitheater" -> uniques.add("Has [1] [Literature] Great Work slots")
+            else -> throw IllegalArgumentException(name)
+        }
+    }
 
     @Before
     fun setUp() {

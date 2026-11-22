@@ -41,8 +41,8 @@ import kotlin.math.roundToInt
  *  the traits' expansion WLTKD and artifact yields, the archaeological dig tourism of policies, the German unit gifts, the trade route
  *  priorities of VP's trade route ranking ([com.unciv.logic.automation.unit.TradeRouteAutomation] is not VP's) and the
  *  MOD_AI_UNIT_PRODUCTION strategies (off in VP's
- *  database). The purchase terms are those of bForPurchase; VP's unit purchase cooldown and unit investments (MOD_BALANCE_UNIT_INVESTMENTS)
- *  have no BNW counterpart.
+ *  database). The purchase terms are those of bForPurchase, with the purchase cooldown of units in CvCity::IsCanPurchase
+ *  ([com.unciv.logic.city.PurchaseRules]); unit investments (MOD_BALANCE_UNIT_INVESTMENTS, off in Vox Populi, no constant in the engine) are none.
  */
 object UnitProductionAi {
 
@@ -99,7 +99,8 @@ object UnitProductionAi {
      *    cities likewise; under siege combat +500 else -500; ERADICATE_BARBARIANS +250 (_CRITICAL +500) for combat units; combat units: +100
      *    (+50 outside war) for what the city is already building, -100 when it builds another combat unit;
      *  - [forPurchase] (bForPurchase): first SR_IMPOSSIBLE unless the city may buy the unit for gold now (CvCity::IsCanPurchase: puppet,
-     *    resistance, no room, not trainable, no price, too little gold); no puppet or fewer-than-2-buildings refusal; the city's current
+     *    resistance, no room, not trainable, no price, too little gold, the purchase cooldown of the unit's kind, the building it needs to be bought:
+     *    [com.unciv.logic.city.PurchaseRules.isBlocked]); no puppet or fewer-than-2-buildings refusal; the city's current
      *    construction is neither taken out of the unit counts nor weighed; the work boat count includes the city itself and the bonus uses the
      *    capital's population less the steps to the nearest boat tile; a combat unit in a city under siege +250;
      *  - at the end a negative bonus is SR_UNKNOWN, else the weight plus the bonus, a fifth of it in an occupied city without a courthouse

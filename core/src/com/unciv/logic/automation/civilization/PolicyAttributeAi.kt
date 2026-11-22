@@ -9,6 +9,7 @@ import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.PolicyAttributesDef
 import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
 
 /**
@@ -103,6 +104,7 @@ object PolicyAttributeAi {
         val yields = IntArray(AttributeYield.entries.size)
         if (!inputs.hasCapital) return yields
         if (inputs.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) weighNeedUniques(policy, inputs, yields)
+        weighEventUniques(policy, inputs, yields)
         val def = inputs.civ.gameInfo.ruleset.ai.policyAttributesOf(policy.name) ?: return yields
         weighColumns(def, inputs, yields)
         weighRows(def, inputs, yields)
@@ -153,6 +155,58 @@ object PolicyAttributeAi {
     }
 
     private val CAPITAL_FILTERS = setOf("in capital", "Capital")
+
+    /** The columns of the policy table whose yield the ruleset's AI.json already weighs through [weighColumns], so a unique that is the same yield is not weighed twice */
+    private val KILL_COLUMNS = listOf("GoldFromKills", "CultureFromBarbarianKills")
+
+    /**
+     *  The instant yield tables of the policy (Policy_YieldFromBirth ... Policy_FounderYield, Policy_YieldFromKills), which are uniques with a trigger condition of
+     *  the instant yield events ([com.unciv.logic.civilization.InstantYields]) (CvPolicyAI::WeightPolicyAttributes, V:CvPolicyAI.cpp:4290-4465): the yield of the
+     *  gain gets the amount (the percentage of a ratio unique: the table value) times
+     *  - birth (`upon population growth`): 2 x cities for an expansionist, else the cities; border growth (`upon acquiring a tile through border growth`): the same;
+     *  - construction (`upon constructing [buildingFilter]`): 4 x cities for an expansionist, else 2 x cities; of a world wonder (the filter `World Wonder`):
+     *    5 x max(2, our wonders / 2) for a tourism or smaller civilization, else max(2, wonders / 4);
+     *  - technology (`upon discovering a technology`): 15 for a nerd or smaller civilization, else 10; expending a great person: 2 for a smaller civilization, else 1;
+     *    founding a city: 3 for an expansionist, else 1; completing a unit: 2 for a warmonger, else 1;
+     *  - kills (`upon defeating a unit`, and the existing `Earn [n]% of killed [unit]'s [strength] as [stat]` when the AI.json of the ruleset does not weigh
+     *    the policy's kill columns already): 5 for a warmonger, else 1.
+     *  What the original weighs per citizen of the capital, per retroactive count and by the policy unlock has no unique in the engine yet.
+     */
+    private fun weighEventUniques(policy: Policy, inputs: Inputs, yields: IntArray) {
+        val columns = inputs.civ.gameInfo.ruleset.ai.policyAttributesOf(policy.name)?.values
+        val killsWeighedByColumns = columns != null && KILL_COLUMNS.any { (columns[it] ?: 0) != 0 }
+        fun weigh(stat: String, weight: Int) {
+            val yield = AttributeYield.entries.firstOrNull { it.name == stat } ?: return
+            yields[yield.ordinal] += weight
+        }
+        with(inputs) {
+            for (type in listOf(UniqueType.OneTimeGainStat, UniqueType.OneTimeGainStatOfTriggeringAmount))
+                for (unique in policy.getMatchingUniques(type, GameContext.IgnoreConditionals)) {
+                    val amount = unique.params[0].toInt()
+                    if (amount == 0) continue
+                    val event = unique.modifiers.firstOrNull { it.type?.targetTypes?.contains(UniqueTarget.TriggerCondition) == true } ?: continue
+                    val factor = when (event.type) {
+                        UniqueType.TriggerUponPopulationGrowth, UniqueType.TriggerUponAcquiringTile ->
+                            if (event.type == UniqueType.TriggerUponAcquiringTile && event.params[1] != "border growth") 0
+                            else if (expansionist) 2 * numCities else numCities
+                        UniqueType.TriggerUponConstructingBuilding, UniqueType.TriggerUponConstructingBuildingCityFilter ->
+                            if (event.params[0] == "World Wonder") {
+                                if (tourism || smaller) 5 * maxOf(2, numWonders / 2) else maxOf(2, numWonders / 4)
+                            } else if (expansionist) 4 * numCities else 2 * numCities
+                        UniqueType.TriggerUponResearch -> if (nerd || smaller) 15 else 10
+                        UniqueType.TriggerUponExpendingUnit -> if (smaller) 2 else 1
+                        UniqueType.TriggerUponFoundingCity -> if (expansionist) 3 else 1
+                        UniqueType.TriggerUponCompletingUnit -> if (warmonger) 2 else 1
+                        UniqueType.TriggerUponDefeatingUnit -> if (warmonger) 5 else 1
+                        else -> 0
+                    }
+                    if (factor != 0) weigh(unique.params[1], amount * factor)
+                }
+            if (!killsWeighedByColumns)
+                for (unique in policy.getMatchingUniques(UniqueType.KillUnitPlunder, GameContext.IgnoreConditionals))
+                    weigh(unique.params[3], unique.params[0].toInt() * if (warmonger) 5 else 1)
+        }
+    }
 
     /** The Policies columns, in the order of the original (its lines 1097-2860) */
     private fun weighColumns(def: PolicyAttributesDef, inputs: Inputs, yields: IntArray) {

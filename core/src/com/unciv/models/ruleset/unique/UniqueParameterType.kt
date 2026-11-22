@@ -612,6 +612,14 @@ enum class UniqueParameterType(
         override val staticKnownValues = com.unciv.logic.city.NeedType.entries.map { it.label }.toSet()
     },
 
+    /** The ways a city gets a tile, used by [UniqueType.TriggerUponAcquiringTile], see [com.unciv.logic.civilization.TileAcquisition] */
+    TileAcquisition("tileAcquisition", "border growth",
+        "One of `border growth`, `purchase`, `settling`, `conquest`, `culture bomb` or `stolen by culture bomb`", "Tile Acquisitions",
+        severityDefault = UniqueType.UniqueParameterErrorSeverity.RulesetInvariant
+    ) {
+        override val staticKnownValues = com.unciv.logic.civilization.TileAcquisition.entries.map { it.label }.toSet()
+    },
+
     /** The name of a work in GreatWorks.json */
     GreatWorkName("greatWork", "Mona Lisa", "The name of any Great Work") {
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = ruleset.greatWorks.keys

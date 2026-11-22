@@ -9,6 +9,7 @@ import com.unciv.logic.automation.Automation
 import com.unciv.logic.automation.city.ConstructionAutomation
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.CivilopediaAction
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.LocationAction
 import com.unciv.logic.civilization.MapUnitAction
 import com.unciv.logic.civilization.NotificationCategory
@@ -27,6 +28,7 @@ import com.unciv.models.ruleset.RejectionReasonType
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
@@ -101,6 +103,10 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     //region Serialized Fields
 
     var builtBuildings = HashSet<String>()
+
+    /** CvCityBuildings::m_paiFirstTimeBuilding: the buildings this city has ever had, sold or not. A building's instant yields ([InstantYields.isGain]) are only
+     *  given the first time it is built here (V:CvCity.cpp:14836); [setTransients] adds the built buildings, which is what a saved game from before this was kept has */
+    var everBuilt = HashSet<String>()
     val inProgressConstructions = HashMap<String, Int>()
     var currentConstructionIsUserSet = false
     @Volatile
@@ -119,6 +125,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     fun clone(): CityConstructions {
         val toReturn = CityConstructions()
         toReturn.builtBuildings.addAll(builtBuildings)
+        toReturn.everBuilt.addAll(everBuilt)
         toReturn.inProgressConstructions.putAll(inProgressConstructions)
         toReturn.currentConstructionIsUserSet = currentConstructionIsUserSet
         toReturn.constructionQueue = ArrayList(constructionQueue)
@@ -372,6 +379,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     //region state changing functions
 
     fun setTransients() {
+        everBuilt.addAll(builtBuildings)
         builtBuildingObjects = ArrayList(builtBuildings.map {
             city.getRuleset().buildings[it]
                     ?: throw java.lang.Exception("Building $it is not found!")
@@ -696,6 +704,12 @@ class CityConstructions : IsPartOfGameInfoSerialization {
                     pediaAction, NotificationCategory.General, NotificationIcon.Construction, buildingIcon)
             }
         }
+
+        // CvCity::produce(UnitTypes): INSTANT_YIELD_TYPE_U_PROD, with the unit's production cost
+        if (construction is BaseUnit)
+            InstantYields.fire(UniqueType.TriggerUponCompletingUnit, city.civ, city, construction.getProductionCost(city.civ, city), city.state,
+                "due to completing a [${construction.name}]",
+                triggerFilter = { construction.matchesFilter(it.params[0], city.state) })
         return true
     }
 
@@ -717,6 +731,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         }
         builtBuildingObjects = builtBuildingObjects.withItem(building)
         builtBuildings.add(buildingName)
+        val firstTimeInCity = everBuilt.add(buildingName)
         if (building.hasUnique(UniqueType.EnablesConstructionOfSpaceshipParts, GameContext.IgnoreConditionals))
             civ.ai.apolloProgramBuilt = true
 
@@ -725,7 +740,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         /** Support for [UniqueType.CreatesOneImprovement] */
         applyCreateOneImprovement(building)
 
-        triggerNewBuildingUniques(building)
+        triggerNewBuildingUniques(building, firstTimeInCity)
 
         if (building.hasUnique(UniqueType.EnemyUnitsSpendExtraMovement))
             civ.cache.updateHasActiveEnemyMovementPenalty()
@@ -769,26 +784,30 @@ class CityConstructions : IsPartOfGameInfoSerialization {
             city.civ.civConstructions.tryAddFreeBuildings()
     }
 
-    fun triggerNewBuildingUniques(building: Building) {
+    /**
+     *  What a new [building] does: its own uniques that have no trigger, and the uniques whose trigger is `upon constructing` it ([InstantYields.fire]: those of the
+     *  buildings of this city that say `in this city`, of its religion, and of the civilization). The instant yields among them ([InstantYields.isGain]) are only given
+     *  the first time the building is built in the city ([firstTimeInCity]) and not in a city in resistance or being razed (CvCity::processBuilding,
+     *  V:CvCity.cpp:14830-14853, which also leaves out a building bought with gold, `IsPurchased`, that no caller sets); a free unit or population is still given.
+     */
+    fun triggerNewBuildingUniques(building: Building, firstTimeInCity: Boolean = true) {
         val stateForConditionals = city.state
         val triggerNotificationText ="due to constructing [${building.name}]"
+        val givesYields = firstTimeInCity && !city.isInResistance() && !city.isBeingRazed
+        val allowed = { unique: Unique -> givesYields || !InstantYields.isGain(unique) }
 
         for (unique in building.uniqueObjects) {
-            if (unique.hasTriggerConditional() || !unique.conditionalsApply(stateForConditionals)) continue
+            if (unique.hasTriggerConditional() || !unique.conditionalsApply(stateForConditionals) || !allowed(unique)) continue
             repeat(unique.getUniqueMultiplier(city.state)) {
                 UniqueTriggerActivation.triggerUnique(unique, city, triggerNotificationText = triggerNotificationText)
             }
         }
 
-        city.forEachTriggeredUnique(UniqueType.TriggerUponConstructingBuilding, stateForConditionals,
-                { building.matchesFilter(it.params[0], stateForConditionals) }) { unique ->
-            UniqueTriggerActivation.triggerUnique(unique, city, triggerNotificationText = triggerNotificationText)
-        }
+        InstantYields.fire(UniqueType.TriggerUponConstructingBuilding, city.civ, city, 0, stateForConditionals, triggerNotificationText,
+            triggerFilter = { building.matchesFilter(it.params[0], stateForConditionals) }, effectFilter = allowed)
 
-        city.forEachTriggeredUnique(UniqueType.TriggerUponConstructingBuildingCityFilter, stateForConditionals,
-                { building.matchesFilter(it.params[0], stateForConditionals) && city.matchesFilter(it.params[1]) }) { unique ->
-            UniqueTriggerActivation.triggerUnique(unique, city, triggerNotificationText = triggerNotificationText)
-        }
+        InstantYields.fire(UniqueType.TriggerUponConstructingBuildingCityFilter, city.civ, city, 0, stateForConditionals, triggerNotificationText,
+            triggerFilter = { building.matchesFilter(it.params[0], stateForConditionals) && city.matchesFilter(it.params[1]) }, effectFilter = allowed)
     }
 
     fun removeBuilding(buildingName: String) {
@@ -919,6 +938,11 @@ class CityConstructions : IsPartOfGameInfoSerialization {
                     city.gainStockpiledResource(resource, -amount)
                 }
             }
+
+            // CvCity::Purchase: INSTANT_YIELD_TYPE_PURCHASE and ..._FAITH_PURCHASE, with the price paid
+            if (constructionCost > 0)
+                InstantYields.fire(UniqueType.TriggerUponBuying, city.civ, city, constructionCost, city.state,
+                    "due to buying [${construction.name}]", triggerFilter = { it.params[0] == stat.name })
         }
 
         if (queuePosition >= 0) removeFromQueue(queuePosition, automatic)

@@ -1135,7 +1135,17 @@ enum class UniqueType(
     OneTimeProvideResources("Instantly provides [positiveAmount] [stockpiledResource]", UniqueTarget.Triggerable),
     OneTimeSetStockpile("Set [stockpile] to [countable]", UniqueTarget.Triggerable, flags = setOf(UniqueFlag.AcceptsSpeedModifier)),
     OneTimeGainResource("Instantly gain [amount] [stockpile]", UniqueTarget.Triggerable, flags = setOf(UniqueFlag.AcceptsSpeedModifier)),
-    OneTimeGainStat("Gain [amount] [civWideStat]", UniqueTarget.Triggerable, flags = setOf(UniqueFlag.AcceptsSpeedModifier)),
+    OneTimeGainStat("Gain [amount] [stat]", UniqueTarget.Triggerable, flags = setOf(UniqueFlag.AcceptsSpeedModifier),
+        docDescription = "Gold, Science, Culture and Faith go to the civilization (Culture also fills the border culture of the city of the trigger, if there is one). " +
+            "Food and Production go to a city: the one of the trigger, else the capital (Food is added to its stored food, which does not fall under 0; " +
+            "Production to its current construction while that is unfinished, else to its overflow, and never lowers either under 0), and without a city the unique does nothing. " +
+            "Happiness can not be gained this way. With `(modified by game speed)` the amount is multiplied by the speed's `statCostModifiers` entry, or, with the ModConstants " +
+            "`instantYieldsUseInstantYieldPercent`, by the speed's `instantYieldModifier`, and cut off at the whole number (Vox Populi's `CvPlayer::doInstantYield`)"),
+    OneTimeGainStatOfTriggeringAmount("Gain [relativeAmount]% of the triggering amount as [stat]", UniqueTarget.Triggerable, flags = setOf(UniqueFlag.AcceptsSpeedModifier),
+        docDescription = "For triggers that carry an amount: the citizens a city gains (`upon population growth`), the price paid (`upon buying something with [stat]`), " +
+            "the production cost of a completed unit (`upon completing a [baseUnitFilter] unit`), the strength of the defeated unit (`upon defeating a [mapUnitFilter] unit`), " +
+            "the new luxuries (`upon gaining a luxury resource`). The amount is multiplied by the percentage and cut off at the whole number (Vox Populi's `amount x percent / 100`), " +
+            "then handled as `Gain [amount] [stat]` is. Does nothing for a trigger without an amount"),
     OneTimeGainStatRange("Gain [amount]-[amount] [civWideStat]", UniqueTarget.Triggerable, flags = setOf(UniqueFlag.AcceptsSpeedModifier)),
     OneTimeGainGoldenAgePoints("Gain [positiveAmount] Golden Age points", UniqueTarget.Triggerable,
         docDescription = "Added to the progress towards the next Golden Age (not changed by the game speed, as in the original's league project rewards)"),
@@ -1246,6 +1256,31 @@ enum class UniqueType(
     TriggerUponProjectTier("upon reaching contribution tier [positiveAmount] of a World Congress project", UniqueTarget.TriggerCondition,
         docDescription = "Only used on the resolutions that are projects (`projectCostPerPlayer` in Resolutions.json): the effect is triggered for every civilization that completes the project with this contribution tier or a higher one"),
 
+    // The events of Vox Populi's CvPlayer::doInstantYield, see InstantYields: a building's unique with `in this city` fires only for the event of its own city,
+    // any other unique of a building, of a policy, a belief, a nation, a tech or an era fires once and is credited to the city of the event, else to the capital.
+    // Minor civilizations and barbarians receive none of these
+    TriggerUponPopulationGrowth("upon population growth", UniqueTarget.TriggerCondition,
+        docDescription = "When a city's population grows above the highest it ever had (a city that starves and regrows gets nothing, nor does a city in resistance or on the turn it was founded), " +
+            "whether by food, by a unique or by a building. The triggering amount is the citizens gained (`Gain [relativeAmount]% of the triggering amount as [stat]`, `<for every [Triggering amount]>`) " +
+            "(`CvCity::setPopulation`, `INSTANT_YIELD_TYPE_BIRTH`)"),
+    TriggerUponAcquiringTile("upon acquiring a [tileFilter] tile through [tileAcquisition]", UniqueTarget.TriggerCondition,
+        docDescription = "Once for each tile that a city of this civilization takes in that way (`INSTANT_YIELD_TYPE_BORDERS`, `..._CULTURE_BOMB`, the `Trait_YieldFromTile...` tables). " +
+            "The filter is checked on the tile, so `[Hill]` or `[Desert]` pick the terrain. When the culture of a city is enough for a new tile but it has none left to take, it still gets " +
+            "the yield once for each tile it would have taken, for `border growth` and the tile filter `[All]` only"),
+    TriggerUponBuying("upon buying something with [stat]", UniqueTarget.TriggerCondition,
+        docDescription = "When a city buys a building or a unit with that stat, after the price is paid. The triggering amount is the price (`Gain [relativeAmount]% of the triggering amount as [stat]`). " +
+            "With `in this city` the unique of a building fires for the buying city only (`INSTANT_YIELD_TYPE_PURCHASE`, `..._FAITH_PURCHASE`)"),
+    TriggerUponCompletingUnit("upon completing a [baseUnitFilter] unit", UniqueTarget.TriggerCondition,
+        docDescription = "When a city completes the unit with its production, not when it buys it. The triggering amount is the unit's production cost (`INSTANT_YIELD_TYPE_U_PROD`)"),
+    TriggerUponPillaging("upon pillaging a tile", UniqueTarget.TriggerCondition,
+        docDescription = "When a unit pillages an improvement in the territory of another civilization. The city of the event is the city that made the unit, else the capital " +
+            "(`CvUnit::pillage`, `INSTANT_YIELD_TYPE_PILLAGE`, `..._PILLAGE_GLOBAL`)"),
+    TriggerUponWltkdStart("upon We Love The King Day starting", UniqueTarget.TriggerCondition,
+        docDescription = "In the city that starts celebrating (`CvCity::ChangeWeLoveTheKingDayCounter`, `INSTANT_YIELD_TYPE_WLTKD_START`)"),
+    TriggerUponGainingLuxury("upon gaining a luxury resource", UniqueTarget.TriggerCondition,
+        docDescription = "When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is " +
+            "how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)"),
+
     //endregion
 
 
@@ -1254,8 +1289,10 @@ enum class UniqueType(
     TriggerUponCombat("upon entering combat", UniqueTarget.UnitTriggerCondition),
     TriggerUponDamagingUnit("upon damaging a [mapUnitFilter] unit", UniqueTarget.UnitTriggerCondition,
         docDescription = "Can apply triggers to to damaged unit by setting the first parameter to 'Target Unit'"),
-    TriggerUponDefeatingUnit("upon defeating a [mapUnitFilter] unit", UniqueTarget.UnitTriggerCondition,
-        docDescription = NUCLEAR_EXCLUSION_EXPLANATION),
+    TriggerUponDefeatingUnit("upon defeating a [mapUnitFilter] unit", UniqueTarget.UnitTriggerCondition, UniqueTarget.TriggerCondition,
+        docDescription = NUCLEAR_EXCLUSION_EXPLANATION + " Also usable on the uniques of nations, buildings, policies and beliefs: they fire when a unit or a city of the civilization " +
+            "defeats the unit, in the city the unit was made in (else the capital), and the triggering amount is the strength of the defeated unit (the higher of melee and ranged), " +
+            "as Vox Populi's `CvPlayer::DoYieldsFromKill` takes the yields from kills"),
     TriggerUponExpendingUnit("upon expending a [mapUnitFilter] unit", UniqueTarget.TriggerCondition),
     TriggerUponDefeat("upon being defeated", UniqueTarget.UnitTriggerCondition,
         docDescription = NUCLEAR_EXCLUSION_EXPLANATION),

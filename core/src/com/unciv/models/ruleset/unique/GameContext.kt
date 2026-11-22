@@ -36,6 +36,10 @@ data class GameContext(
         (otherCiv?.gameInfo),
 
     val ignoreConditionals: Boolean = false,
+
+    /** What the event that triggered this carries: the citizens a growing city gained, a price, the strength of a defeated unit... (countable [Countables.TriggeringAmount]),
+     *  0 when there is none. Not part of [hashCode], which only seeds [stateBasedRandom]: the same event with another amount rolls the same dice */
+    val amount: Int = 0,
 ) {
     constructor(city: City) : this(city.civ, city, tile = city.getCenterTileOrNull(), gameInfo = city.civ.gameInfo)
     constructor(unit: MapUnit) : this(unit.civ, unit = unit, tile = if (unit.hasTile()) unit.getTile() else null, gameInfo = unit.civ.gameInfo)

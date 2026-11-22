@@ -4,7 +4,9 @@ import com.unciv.Constants
 import com.unciv.logic.automation.unit.SettleAreas
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.Proximity
+import com.unciv.logic.civilization.TileAcquisition
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.HexCoord
@@ -103,6 +105,10 @@ class CityFounder {
         
         city.resetDisabledConstructions()
         city.resetSpecialistsControl()
+
+        // CvCity::init: INSTANT_YIELD_TYPE_FOUND, which Vox Populi's traits pay for each tile of the new city by its terrain
+        if (InstantYields.hasHandlers(civInfo, UniqueType.TriggerUponAcquiringTile))
+            for (cityTile in city.getTiles().toList()) InstantYields.tileAcquired(city, cityTile, TileAcquisition.Settling)
 
         civInfo.forEachTriggeredUnique(UniqueType.TriggerUponFoundingCity,
             GameContext(civInfo, city, unit), ignoreCities = false

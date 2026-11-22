@@ -10,8 +10,10 @@ import com.unciv.logic.city.City.Companion.pseudoRandomId
 import com.unciv.logic.city.CityFlags
 import com.unciv.logic.city.CityFocus
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
+import com.unciv.logic.civilization.TileAcquisition
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.map.mapunit.UnitPromotions
 import com.unciv.logic.trade.TradeLogic
@@ -206,6 +208,13 @@ class CityConquestFunctions(val city: City) {
         conquerCity(conqueringCiv, oldCiv, conqueringCiv)
         makePuppet()
         city.cityStats.update()
+
+        // CvPlayer::acquireCity: INSTANT_YIELD_TYPE_F_CONQUEST pays Vox Populi's traits for each tile of the conquered city by its terrain
+        // (CountAllOwnedTerrain), in the capital's pass; that is the city it is credited to
+        if (InstantYields.hasHandlers(conqueringCiv, UniqueType.TriggerUponAcquiringTile)) {
+            val creditedCity = conqueringCiv.getCapital() ?: city
+            for (cityTile in city.getTiles().toList()) InstantYields.tileAcquired(creditedCity, cityTile, TileAcquisition.Conquest)
+        }
     }
 
     private fun makePuppet(){

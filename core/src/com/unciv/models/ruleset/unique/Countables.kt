@@ -451,6 +451,25 @@ enum class Countables(
             gameContext.civInfo?.getEraNumber()
     },
 
+    EraScaler("Era scaler", shortDocumentation = "The number that Vox Populi multiplies most instant yields by: the era's number, but at least 1") {
+        override val documentationStrings = listOf(
+            "`Era number` is zero-based, so the Ancient and the Classical era both give 1, the Medieval era 2, and so on (`max(1, GetCurrentEra())` of `CvPlayer::doInstantYield`).",
+            "It is never more than the `lastEra` of the ruleset's AI.json (7 in the Civ V rulesets: the original's last era has the number 7, Unciv's ninth era, the Future era, would be 8).",
+            "Meant for `<for every [Era scaler]>` on a gain that fires from a trigger."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext) =
+            gameContext.civInfo?.getAiEraNumber()?.coerceAtLeast(1)
+    },
+    TriggeringAmount("Triggering amount", shortDocumentation = "The amount the event that triggers this unique carries") {
+        override val documentationStrings = listOf(
+            "The citizens a city gains for `upon population growth`, the price for `upon buying something with [stat]`, " +
+                "the production cost for `upon completing a [baseUnitFilter] unit`, the strength of the defeated unit for `upon defeating a [mapUnitFilter] unit`, " +
+                "the number of new luxuries for `upon gaining a luxury resource`; 0 for any other trigger.",
+            "Meant for `<for every [Triggering amount]>`, which applies the unique that many times."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext) = gameContext.amount
+    },
+
     GameSpeedModifier("Speed modifier for [stat]", shortDocumentation = "A game speed modifier for a specific Stat, as percentage") {
         override val documentationStrings = listOf(
             "Chooses an appropriate field from the Speeds.json entry the player has chosen.",

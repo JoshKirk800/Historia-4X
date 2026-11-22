@@ -59,7 +59,8 @@ object UniqueTriggerActivation {
     }
 
     /** @return whether an action was successfully performed
-     * Assumes that conditional check has already been performed */
+     * Assumes that conditional check has already been performed
+     * @param triggeringAmount what the event that triggers [unique] carries (see [GameContext.amount]), for [UniqueType.OneTimeGainStatOfTriggeringAmount] */
     fun triggerUnique(
         unique: Unique,
         civInfo: Civilization,
@@ -67,9 +68,10 @@ object UniqueTriggerActivation {
         unit: MapUnit? = null,
         tile: Tile? = city?.getCenterTile() ?: unit?.currentTile,
         notification: String? = null,
-        triggerNotificationText: String? = null
+        triggerNotificationText: String? = null,
+        triggeringAmount: Int = 0
     ): Boolean {
-        val function = getTriggerFunction(unique, civInfo, city, unit, tile, notification, triggerNotificationText) ?: return false
+        val function = getTriggerFunction(unique, civInfo, city, unit, tile, notification, triggerNotificationText, triggeringAmount) ?: return false
         return function.invoke()
     }
 
@@ -84,7 +86,8 @@ object UniqueTriggerActivation {
         unit: MapUnit? = null,
         tile: Tile? = city?.getCenterTile() ?: unit?.currentTile,
         notification: String? = null,
-        triggerNotificationText: String? = null
+        triggerNotificationText: String? = null,
+        triggeringAmount: Int = 0
     ): (()->Boolean)? {
 
         val relevantCity by lazy {
@@ -926,30 +929,18 @@ object UniqueTriggerActivation {
 
             UniqueType.OneTimeGainStat -> {
                 val stat = Stat.safeValueOf(unique.params[1]) ?: return null
+                val baseAmount = unique.params[0].toIntOrNull() ?: return null
+                return getGainStatFunction(unique, civInfo, stat, baseAmount, city,
+                    relevantCity?.takeIf { it.civ == civInfo }, tile, notification, triggerNotificationText)
+            }
 
-                if (stat !in Stat.statsWithCivWideField
-                    || unique.params[0].toIntOrNull() == null
-                ) return null
-
-                return {
-                    var statAmount = unique.params[0].toInt()
-                    if (unique.isModifiedByGameSpeed()) statAmount = (statAmount * civInfo.gameInfo.speed.statCostModifiers[stat]!!).roundToInt()
-
-                    val stats = Stats().add(stat, statAmount.toFloat())
-                    civInfo.addStats(stats)
-
-                    val filledNotification = if (notification != null && notification.hasPlaceholderParameters())
-                        notification.fillPlaceholders(statAmount.tr())
-                    else notification
-
-                    val notificationText = getNotificationText(
-                        filledNotification, triggerNotificationText,
-                        "Gained [${stats.toStringForNotifications()}]"
-                    )
-                    if (notificationText != null)
-                        civInfo.addNotification(notificationText, LocationAction(tile?.position), NotificationCategory.General, stat.notificationIcon)
-                    true
-                }
+            UniqueType.OneTimeGainStatOfTriggeringAmount -> {
+                val stat = Stat.safeValueOf(unique.params[1]) ?: return null
+                val percent = unique.params[0].toIntOrNull() ?: return null
+                if (triggeringAmount == 0) return null
+                // CvPlayer::doInstantYield's `amount x percent / 100` in whole numbers, truncated towards 0 as C++'s integer division
+                return getGainStatFunction(unique, civInfo, stat, (triggeringAmount.toLong() * percent / 100).toInt(), city,
+                    relevantCity?.takeIf { it.civ == civInfo }, tile, notification, triggerNotificationText)
             }
 
             UniqueType.OneTimeGainStatRange -> {
@@ -1231,6 +1222,8 @@ object UniqueTriggerActivation {
                         for (i in 1..positiveAmount) {
                             val tileToOwn = applicableCity.expansion.chooseNewTileToOwn() ?: break
                             applicableCity.expansion.takeOwnership(tileToOwn)
+                            // CvPlayer::DoFreeTiles: the instant yields of a tile that no one owned (INSTANT_YIELD_TYPE_CULTURE_BOMB)
+                            InstantYields.tileAcquired(applicableCity, tileToOwn, TileAcquisition.CultureBomb)
                         }
                     }
                     if (notification != null)
@@ -1543,6 +1536,9 @@ object UniqueTriggerActivation {
                             }
                         }
                         cityToAddTo.expansion.takeOwnership(tileToTakeOver)
+                        // CvUnit::PerformCultureBomb: a tile of another owner, or one that no one owned (INSTANT_YIELD_TYPE_CULTURE_BOMB)
+                        InstantYields.tileAcquired(cityToAddTo, tileToTakeOver,
+                            if (otherCiv != null) TileAcquisition.StolenByCultureBomb else TileAcquisition.CultureBomb)
                     }
 
                     // CvUnit::PerformCultureBomb: each city-state of which tiles were taken loses its influence once
@@ -1656,6 +1652,37 @@ object UniqueTriggerActivation {
             for (triggerFunction in triggerFunctions)
                 if (triggerFunction()) anyTriggered = true
             anyTriggered
+        }
+    }
+
+    /**
+     *  The function of [UniqueType.OneTimeGainStat] and [UniqueType.OneTimeGainStatOfTriggeringAmount]: gives [amount], changed by the game speed if [unique] says so
+     *  ([InstantYields.scaleBySpeed]), of [stat] by [InstantYields.gain]. Food and Production go to the city of the state ([stateCity]: the city of the trigger, or the one that owns
+     *  the tile), so there is no function without one; Culture also fills the border culture of the city the trigger was given ([triggerCity], not one found by the tile, so that
+     *  ruins found in our borders keep giving the civilization only).
+     */
+    private fun getGainStatFunction(
+        unique: Unique, civInfo: Civilization, stat: Stat, amount: Int,
+        triggerCity: City?, stateCity: City?, tile: Tile?, notification: String?, triggerNotificationText: String?
+    ): (()->Boolean)? {
+        if (stat.isCityWide && stateCity == null) return null
+
+        return {
+            val statAmount = InstantYields.scaleBySpeed(unique, stat, amount, civInfo.gameInfo)
+            InstantYields.gain(civInfo, if (stat == Stat.Culture) triggerCity else stateCity, stat, statAmount, unique)
+
+            val stats = Stats().add(stat, statAmount.toFloat())
+            val filledNotification = if (notification != null && notification.hasPlaceholderParameters())
+                notification.fillPlaceholders(statAmount.tr())
+            else notification
+
+            val notificationText = getNotificationText(
+                filledNotification, triggerNotificationText,
+                "Gained [${stats.toStringForNotifications()}]"
+            )
+            if (notificationText != null)
+                civInfo.addNotification(notificationText, LocationAction(tile?.position), NotificationCategory.General, stat.notificationIcon)
+            true
         }
     }
 

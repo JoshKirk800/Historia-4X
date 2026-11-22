@@ -109,6 +109,9 @@ class UnitManager(val civInfo: Civilization) {
         // Must happen before the triggers or else things like "[This Unit] loses the [promotionName] promotion"
         //    will trigger *before* the unit actually has the promotion, and then will get the promotion anyway.
         copiedFrom?.copyStatisticsTo(unit)
+        // CvUnit::init: the city whose territory the unit is created in is its origin city, unless it comes from one that had its own (CvUnit::convert)
+        if (unit.originCityId.isEmpty())
+            unit.originCityId = unit.getTile().getCity()?.takeIf { it.civ == civInfo }?.id ?: ""
 
         // CvUnit::init: military units of an AI start with the difficulty's free experience
         if (copiedFrom == null && !civInfo.isHuman() && unit.baseUnit.isMilitary)

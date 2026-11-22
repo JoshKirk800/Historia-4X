@@ -4,6 +4,7 @@ import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.CivilopediaAction
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.PopupAlert
 import com.unciv.models.ModConstants
@@ -84,9 +85,8 @@ class GoldenAgeManager : IsPartOfGameInfoSerialization {
             NotificationCategory.General, "StatIcons/Happiness")
         civInfo.popupAlerts.add(PopupAlert(AlertType.GoldenAge, ""))
 
-        civInfo.forEachTriggeredUnique(UniqueType.TriggerUponEnteringGoldenAge, ignoreCities = false) { unique ->
-            UniqueTriggerActivation.triggerUnique(unique, civInfo)
-        }
+        // INSTANT_YIELD_TYPE_GOLDEN_AGE_START (V:CvPlayer.cpp:25123)
+        InstantYields.fire(UniqueType.TriggerUponEnteringGoldenAge, civInfo, null, 0, civInfo.state)
         //Golden Age can happen mid turn with Great Artist effects
         for (city in civInfo.cities)
             city.cityStats.update()

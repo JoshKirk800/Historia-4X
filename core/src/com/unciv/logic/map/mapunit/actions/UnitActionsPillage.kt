@@ -1,5 +1,6 @@
 package com.unciv.logic.map.mapunit.actions
 
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.map.mapunit.MapUnit
@@ -7,6 +8,7 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UnitAction
 import com.unciv.models.UnitActionConfirmation
 import com.unciv.models.UnitActionType
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
@@ -54,6 +56,11 @@ object UnitActionsPillage {
                 pillageLooting(tile, unit)
                 tile.setPillaged()  // Also triggers reassignPopulation
                 if (tile.resource != null) tile.getOwner()?.cache?.updateCivResources()    // this might take away a resource
+
+                // CvUnit::pillage: INSTANT_YIELD_TYPE_PILLAGE and ..._PILLAGE_GLOBAL, only in the territory of another civilization, in the city that made the unit (else the capital)
+                if (tile.getOwner() != null)
+                    InstantYields.fire(UniqueType.TriggerUponPillaging, unit.civ, unit.getOriginCity() ?: unit.civ.getCapital(),
+                        context = GameContext(civInfo = unit.civ, unit = unit, tile = tile), triggerNotificationText = "due to pillaging a [$pillagedImprovement]")
 
                 val freePillage = unit.hasUnique(UniqueType.NoMovementToPillage, checkCivInfoUniques = true)
                 if (!freePillage) unit.useMovementPoints(1f)

@@ -347,6 +347,17 @@ object Battle {
             civUnit.getCivInfo().addGameResource(resource, yieldAmount)
         }
 
+        // CvPlayer::DoYieldsFromKill, V:CvPlayer.cpp:18409-18447: INSTANT_YIELD_TYPE_VICTORY (the city is the winner's origin city, the capital for a unit
+        // that has none) and ..._VICTORY_GLOBAL, with the strength of the defeated unit as the amount; the winner's own uniques are triggered by triggerVictoryUniques
+        val winnerCiv = civUnit.getCivInfo()
+        val cityOfVictory = when (civUnit) {
+            is CityCombatant -> civUnit.city
+            is MapUnitCombatant -> civUnit.unit.getOriginCity() ?: winnerCiv.getCapital()
+            else -> null
+        }
+        InstantYields.fire(UniqueType.TriggerUponDefeatingUnit, winnerCiv, cityOfVictory, unitStr, GameContext(civUnit, defeatedUnit),
+            "due to defeating a [${defeatedUnit.getName()}]", triggerFilter = { defeatedUnit.unit.matchesFilter(it.params[0]) })
+
         // CS friendship from killing barbarians
         if (defeatedUnit.getCivInfo().isBarbarian && !defeatedUnit.isCivilian() && civUnit.getCivInfo().isMajorCiv) {
             for (cityState in defeatedUnit.getCivInfo().gameInfo.getAliveCityStates()) {

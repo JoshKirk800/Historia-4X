@@ -3,6 +3,7 @@ package com.unciv.logic.civilization.managers
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.CivFlags
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.Policy.PolicyBranchType
@@ -301,9 +302,9 @@ class PolicyManager : IsPartOfGameInfoSerialization {
             }
         }
 
-        civInfo.forEachTriggeredUnique(UniqueType.TriggerUponAdoptingPolicyOrBelief, triggerFilter = { it.params[0] == policy.name }) { unique ->
-            UniqueTriggerActivation.triggerUnique(unique, civInfo, triggerNotificationText = triggerNotificationText)
-        }
+        // INSTANT_YIELD_TYPE_POLICY_UNLOCK (V:CvPolicyClasses.cpp:5167)
+        InstantYields.fire(UniqueType.TriggerUponAdoptingPolicyOrBelief, civInfo, null, 0, civInfo.state, triggerNotificationText,
+            triggerFilter = { it.params[0] == policy.name })
 
         civInfo.religionManager.checkReformationBelief() // a policy with "bonus Reformation belief"
 

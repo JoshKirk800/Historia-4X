@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.UncivGame
 import com.unciv.logic.MultiFilter
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.ImprovementFunctions
@@ -251,9 +252,11 @@ object UnitActionsFromUniques {
                         val stat = unique.params[1]
                         val modifier = unit.civ.gameInfo.speed.statCostModifiers[Stat.safeValueOf(stat)]
                             ?: unit.civ.gameInfo.speed.modifier
-                        UniqueType.OneTimeGainStat.placeholderText.fillPlaceholders(
-                            (unique.params[0].toInt() * modifier).toInt().tr(), stat
-                        )
+                        val statObject = Stat.safeValueOf(stat)
+                        val amount = if (statObject != null && unit.civ.modConstants.instantYieldsUseInstantYieldPercent)
+                                InstantYields.scaleBySpeed(unique, statObject, unique.params[0].toInt(), unit.civ.gameInfo)
+                            else (unique.params[0].toInt() * modifier).toInt()
+                        UniqueType.OneTimeGainStat.placeholderText.fillPlaceholders(amount.tr(), stat)
                     }
                     else unique.text.removeConditionals()
                 }

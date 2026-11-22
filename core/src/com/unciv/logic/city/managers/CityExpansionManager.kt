@@ -3,9 +3,11 @@ package com.unciv.logic.city.managers
 import com.unciv.logic.automation.diplomacy.DiplomacyEvents
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.LocationAction
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
+import com.unciv.logic.civilization.TileAcquisition
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.tile.ResourceType
@@ -121,6 +123,7 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
         city.civ.addGold(-goldCost)
         city.civ.plotsBought++ // CvCity::BuyPlot: CvPlayer::ChangeNumPlotsBought
         acquireTile(tile)
+        InstantYields.tileAcquired(city, tile, TileAcquisition.Purchase)
         // CvCity::BuyPlot: only a tile that cost gold is noted by the foreign cities near it
         if (goldCost > 0) DiplomacyEvents.onPlotBought(city.civ, tile)
 
@@ -480,6 +483,12 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
         tile.history.recordTakeOwnership(tile)
     }
 
+    /**
+     *  A city whose culture is enough for a tile takes one, and fires `upon acquiring a [tileFilter] tile through [border growth]` for it
+     *  (CvCity::DoJONSCultureLevelIncrease, V:CvCity.cpp:17176-17304). With no tile left to take the original still spends the culture and raises the level,
+     *  and still pays the yields (with the filter `[All]`, there is no tile): that is done here only if some unique of the civilization has the trigger,
+     *  because a city that keeps its culture when it can not expand is how this port always played (an unchanged game stays unchanged).
+     */
     fun nextTurn(culture: Float) {
         cultureStored += culture.toInt()
         if (cultureStored >= getCultureToNextTile()) {
@@ -488,6 +497,11 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
                 val locations = LocationAction(location, city.location)
                 city.civ.addNotification("[${city.name}] has expanded its borders!", locations,
                     NotificationCategory.Cities, NotificationIcon.Culture)
+                InstantYields.tileAcquired(city, city.tileMap[location], TileAcquisition.BorderGrowth)
+            } else if (InstantYields.hasHandlers(city.civ, UniqueType.TriggerUponAcquiringTile)) {
+                cultureStored -= getCultureToNextTile()
+                cultureLevel = (if (cultureLevel >= 0) cultureLevel else tilesClaimed()) + 1
+                InstantYields.tileAcquired(city, null, TileAcquisition.BorderGrowth)
             }
         }
     }

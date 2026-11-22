@@ -99,6 +99,10 @@ class MapUnit : IsPartOfGameInfoSerialization {
     /** The game turn this unit was created (CvUnit::getGameTurnCreated); 0 for units of saves made before it was kept */
     var turnCreated = 0
 
+    /** [City.id] of CvUnit::m_iOriginCity: the city of its civilization in whose territory the unit came into being (the one that built or bought it), "" for none or
+     *  in a save from before it was kept; an upgraded unit keeps it. The city of the instant yields a unit earns ([getOriginCity]) */
+    var originCityId = ""
+
     /** AI: where this Great Person's trade mission or concert tour goes once started (the target plot of the original's
      *  MERCHANT_DELEGATION / CONCERT_TOUR operation), null if none */
     var greatPersonTarget: HexCoord? = null
@@ -256,6 +260,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
         toReturn.religion = religion
         toReturn.religiousStrengthLost = religiousStrengthLost
         toReturn.turnCreated = turnCreated
+        toReturn.originCityId = originCityId
         toReturn.greatPersonTarget = greatPersonTarget
         toReturn.movementMemories = movementMemories.copy()
         val newStatusMap = HashMap<String, UnitStatus>((statusMap.size * 4 + 2) / 3)
@@ -286,6 +291,9 @@ class MapUnit : IsPartOfGameInfoSerialization {
         return format.format(currentMovement) + "/" + format.format(getMaxMovement())
     }
 
+
+    /** CvUnit::getOriginCity: the city that made this unit if its civilization still has it, else null */
+    @Readonly fun getOriginCity(): City? = if (originCityId.isEmpty()) null else civ.cities.firstOrNull { it.id == originCityId }
 
     @Readonly fun getTile(): Tile = currentTile
 
@@ -883,6 +891,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
     }
 
     fun copyStatisticsTo(newUnit: MapUnit) {
+        newUnit.originCityId = originCityId // CvUnit::convert
         newUnit.health = health
         newUnit.instanceName = instanceName
         newUnit.currentMovement = currentMovement

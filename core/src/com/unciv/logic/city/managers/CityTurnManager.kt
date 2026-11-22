@@ -5,11 +5,13 @@ import com.unciv.logic.city.City
 import com.unciv.logic.city.CityFlags
 import com.unciv.logic.automation.city.CitizenAutomation
 import com.unciv.logic.civilization.CityAction
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.LocationAction
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.civilization.OverviewAction
 import com.unciv.models.ruleset.tile.ResourceType
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.ui.screens.overviewscreen.EmpireOverviewCategories
@@ -80,6 +82,9 @@ class CityTurnManager(val city: City) {
         city.civ.addNotification(
             "Because they have [${city.demandedResource}], the citizens of [${city.name}] are celebrating We Love The King Day!",
             CityAction.withLocation(city), NotificationCategory.General, NotificationIcon.City, NotificationIcon.Happiness)
+        // CvCity::ChangeWeLoveTheKingDayCounter: INSTANT_YIELD_TYPE_WLTKD_START
+        InstantYields.fire(UniqueType.TriggerUponWltkdStart, city.civ, city, 0, GameContext(city),
+            "due to [${city.name}] celebrating We Love The King Day")
     }
 
     // cf DiplomacyManager nextTurnFlags

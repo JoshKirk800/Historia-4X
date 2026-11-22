@@ -4,9 +4,11 @@ import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.city.CitizenAutomation
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.city.City
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.models.Counter
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.ui.components.extensions.toPercent
 import com.unciv.utils.withItem
@@ -137,9 +139,16 @@ class CityPopulationManager : IsPartOfGameInfoSerialization {
             NotificationCategory.Cities, NotificationIcon.Growth)
     }
 
+    /**
+     *  Changes the population by [count], not below 1. A growth above [City.highestPopulation] pays the instant yields of `upon population growth`
+     *  (CvCity::setPopulation, V:CvCity.cpp:16595-16618), with the citizens gained as the triggering amount, unless the city is in resistance or was acquired
+     *  this turn (the original's `GetGameTurnFounded`: the turn it was founded, here [City.turnAcquired]); a city that starves and regrows gets nothing.
+     */
     fun addPopulation(count: Int) {
         val changedAmount = count.coerceAtLeast(1 - population)
         population += changedAmount
+        val grewBeyondHighest = population > city.highestPopulation
+        if (grewBeyondHighest) city.highestPopulation = population
         val freePopulation = getFreePopulation()
         if (freePopulation < 0) {
             unassignExtraPopulation()
@@ -150,6 +159,10 @@ class CityPopulationManager : IsPartOfGameInfoSerialization {
 
         if (city.civ.gameInfo.isReligionEnabled())
             city.religion.updatePressureOnPopulationChange(changedAmount)
+
+        if (grewBeyondHighest && !city.isInResistance() && city.civ.gameInfo.turns > city.turnAcquired)
+            InstantYields.fire(UniqueType.TriggerUponPopulationGrowth, city.civ, city, changedAmount, GameContext(city),
+                "due to the growth of [${city.name}]")
     }
 
     fun setPopulation(count: Int) {

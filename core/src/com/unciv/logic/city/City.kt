@@ -95,6 +95,9 @@ class City : IsPartOfGameInfoSerialization, INamed {
 
 
     var population = CityPopulationManager()
+    /** CvCity::m_iHighestPopulation: the most citizens this city ever had; only growth above it pays the instant yields of `upon population growth` (see
+     *  [CityPopulationManager.addPopulation]). 0 in a saved game from before it was kept: [setTransients] then takes the population */
+    var highestPopulation = 0
     var cityConstructions = CityConstructions()
     var expansion = CityExpansionManager()
     var religion = CityReligionManager()
@@ -212,6 +215,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
         toReturn.damageTakenThisTurn = damageTakenThisTurn
         toReturn.damageTakenLastTurn = damageTakenLastTurn
         toReturn.population = population.clone()
+        toReturn.highestPopulation = highestPopulation
         toReturn.cityConstructions = cityConstructions.clone()
         toReturn.expansion = expansion.clone()
         toReturn.religion = religion.clone()
@@ -462,6 +466,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
         state = GameContext(this)
         tilesInRange = getCenterTile().getTilesInDistance(getWorkRange()).toHashSet()
         population.city = this
+        if (highestPopulation < population.population) highestPopulation = population.population // saved game from before it was kept
         expansion.city = this
         expansion.setTransients()
         cityConstructions.city = this

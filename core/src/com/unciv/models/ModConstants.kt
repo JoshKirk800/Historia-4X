@@ -184,6 +184,11 @@ class ModConstants {
     // that is handed to the cities, and the approval rating (happy citizens against unhappy ones) decides the empire's effects. The stat Happiness is
     // then the approval rating less [NeedsConstants.unhappyThreshold].
     var cityNeedsLikeVp = false
+    // What "Gain [amount] [stat] <(modified by game speed)>" is multiplied by. false: the speed's statCostModifiers entry of the stat, rounded (as before).
+    // true: Vox Populi's instant yields (CvPlayer::doInstantYield): the speed's instantYieldModifier (the original's InstantYieldPercent: 75, 100, 150 and 200 percent
+    // for Quick, Standard, Epic and Marathon), cut off at the whole number. The events that the original does not scale (purchases, unit production, refunds, quest rewards,
+    // bullying, combat experience, research agreements) are the uniques that do not have the modifier
+    var instantYieldsUseInstantYieldPercent = false
     // Whether a unit with the unique "Before engaging in combat performs an extra ranged attack with [amount]% of melee combat strength" gets
     // no combat bonus for being fortified. false: it does. true: CvUnit::fortifyModifier returns 0 for a unit with ranged support fire (the Impi).
     var rangedSupportFireUnitsGetNoFortification = false

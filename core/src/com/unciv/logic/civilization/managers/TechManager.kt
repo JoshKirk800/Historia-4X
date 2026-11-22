@@ -370,9 +370,9 @@ class TechManager : IsPartOfGameInfoSerialization {
             }
         }
 
-        civInfo.forEachTriggeredUnique(UniqueType.TriggerUponResearch, triggerFilter = { newTech.matchesFilter(it.params[0], civInfo.state) }) { unique ->
-            UniqueTriggerActivation.triggerUnique(unique, civInfo, triggerNotificationText = triggerNotificationText)
-        }
+        // INSTANT_YIELD_TYPE_TECH (V:CvTeam.cpp:8251): a building's uniques that say `in this city` in each city, the rest once, in the capital
+        InstantYields.fire(UniqueType.TriggerUponResearch, civInfo, null, 0, civInfo.state, triggerNotificationText,
+            triggerFilter = { newTech.matchesFilter(it.params[0], civInfo.state) })
 
 
         val revealedResources = getRuleset().tileResources.values.filter { techName == it.revealedBy }
@@ -515,18 +515,13 @@ class TechManager : IsPartOfGameInfoSerialization {
                 }
             }
             
-            civInfo.forEachTriggeredUnique(UniqueType.TriggerUponEnteringEra, triggerFilter = { it.params[0] == era.name }) { unique ->
-                UniqueTriggerActivation.triggerUnique(unique, civInfo, triggerNotificationText = "due to entering the [${era.name}]")
-            }
+            // INSTANT_YIELD_TYPE_ERA_UNLOCK (V:CvTeam.cpp:6847)
+            InstantYields.fire(UniqueType.TriggerUponEnteringEra, civInfo, null, 0, civInfo.state, "due to entering the [${era.name}]",
+                triggerFilter = { it.params[0] == era.name })
         }
 
         // The unfiltered version
-        civInfo.forEachTriggeredUnique(UniqueType.TriggerUponEnteringEraUnfiltered, ignoreCities = false) { unique ->
-            UniqueTriggerActivation.triggerUnique(
-                unique,
-                civInfo,
-                triggerNotificationText = "due to entering the [${currentEra.name}]")
-        }
+        InstantYields.fire(UniqueType.TriggerUponEnteringEraUnfiltered, civInfo, null, 0, civInfo.state, "due to entering the [${currentEra.name}]")
     }
 
     /** Recomputes [era] from the researched technologies; [addTechnology] does it itself, for techs given in bulk (the barbarians') */

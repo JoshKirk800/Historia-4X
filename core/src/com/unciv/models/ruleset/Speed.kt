@@ -19,6 +19,9 @@ class Speed : RulesetObject() {
     var scienceCostModifier: Float = modifier
     var cultureCostModifier: Float = modifier
     var faithCostModifier: Float = modifier
+    /** What `Gain [amount] [stat] <(modified by game speed)>` is multiplied by under [com.unciv.models.ModConstants.instantYieldsUseInstantYieldPercent]
+     *  (the original's `InstantYieldPercent` of the game speed, Vox Populi's CvPlayer::doInstantYield: 75, 100, 150 and 200 percent for Quick, Standard, Epic and Marathon) */
+    var instantYieldModifier: Float = modifier
     var goldGiftModifier: Float = modifier
     var cityStateTributeScalingInterval: Float = 6.5f
     var barbarianModifier: Float = modifier
@@ -103,6 +106,8 @@ class Speed : RulesetObject() {
         add("Science cost modifier: [${scienceCostModifier * 100}]%${Fonts.science}")
         add("Culture cost modifier: [${cultureCostModifier * 100}]%${Fonts.culture}")
         add("Faith cost modifier: [${faithCostModifier * 100}]%${Fonts.faith}")
+        if (ruleset.modOptions.constants.instantYieldsUseInstantYieldPercent)
+            add("Instant yield modifier: [${instantYieldModifier * 100}]%${Fonts.gold}")
         add("Improvement build length modifier: [${improvementBuildLengthModifier * 100}]%${Fonts.turn}")
         add("Diplomatic deal duration: [$dealDuration] turns${Fonts.turn}")
         add("Gold gift influence gain modifier: [${goldGiftModifier * 100}]%${Fonts.gold}")

@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.logic.automation.NeedsAiScenarios
 import com.unciv.logic.automation.diplomacy.AiThreat
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -110,9 +111,19 @@ class DealAiCityValueTests {
     fun `an unhappy buyer buys no foreign city, and a new city is not sold`() {
         val city = cityNearB()
         assertNotNull(DealAi.getCityValueForDeal(city, b))
-        b.stats.happiness = -1
+        // Unhappy with the needs model: 30 specialists in its capital are 30 unhappy citizens, against the happiness of its pool, which is far less
+        val capital = b.getCapital()!!
+        val originalPopulation = capital.population.population
+        capital.population.setPopulation(30)
+        capital.population.specialistAllocations.clear()
+        capital.population.specialistAllocations.add("Scientist", 30)
+        NeedsAiScenarios.refresh(b)
+        assertTrue(b.isEmpireUnhappy())
         assertNull(DealAi.getCityValueForDeal(city, b))
-        b.stats.happiness = 0
+        capital.population.specialistAllocations.clear()
+        capital.population.setPopulation(originalPopulation)
+        NeedsAiScenarios.refresh(b)
+        assertTrue(!b.isEmpireUnhappy())
         game.gameInfo.turns = 10
         assertNull("founded or taken 10 turns ago", DealAi.getCityValueForDeal(city, b))
     }

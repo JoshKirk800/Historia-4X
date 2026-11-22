@@ -30,6 +30,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -94,14 +95,15 @@ class DealAiTests {
         civ.cache.updateCivResources()
     }
 
-    private fun luxuryBase(owner: Civilization, turns: Int) =
-        (4 + owner.getDifficulty().extraHappinessPerLuxury.toInt() + DiplomacyTurn.gameEraNumber(owner)) * turns / 2
+    /** A luxury's happiness: 2 in Vox Populi (Resources.Happiness of the luxuries, CvPlayer::GetHappinessFromLuxury), which the Brave New World ruleset plays; the original's was 4 */
+    private fun luxuryBase(owner: Civilization, turns: Int, luxuryHappiness: Int = 2) =
+        (luxuryHappiness + owner.getDifficulty().extraHappinessPerLuxury.toInt() + DiplomacyTurn.gameEraNumber(owner)) * turns / 2
 
     @Test
     fun `a luxury we receive is worth its owner's happiness plus the era, times the turns over two`() {
         val silk = game.ruleset.tileResources["Silk"]!!
         giveLuxury(b, "Silk")
-        // (4 + extra happiness per luxury + era) x 30 / 2, and the quarter of sqrt(net gold / 4) of our own income
+        // (2 + extra happiness per luxury + era) x 30 / 2, and the quarter of sqrt(net gold / 4) of our own income
         assertEquals(withGoldSurcharge(luxuryBase(b, 30), DealAi.goldRate(a), 4.0), DealAi.getResourceValue(a, b, silk, 1, 30, false))
     }
 
@@ -117,6 +119,8 @@ class DealAiTests {
 
     @Test
     fun `an unhappy empire keeps its last copy of a luxury`() {
+        // The original's happiness model ([OriginalHappinessModel]): the one number of happiness; the needs model's approval rating is tested in the last region
+        OriginalHappinessModel.use(game.ruleset)
         val silk = game.ruleset.tileResources["Silk"]!!
         giveLuxury(a, "Silk")
         a.stats.happiness = -1
@@ -127,6 +131,8 @@ class DealAiTests {
 
     @Test
     fun `a luxury an unhappy empire receives is worth twice as much, three times when very unhappy`() {
+        // The original's happiness model ([OriginalHappinessModel]); the needs model's tiers, with a fourth for a super unhappy buyer, are tested in the last region
+        OriginalHappinessModel.use(game.ruleset)
         val silk = game.ruleset.tileResources["Silk"]!!
         giveLuxury(b, "Silk")
         val content = DealAi.getResourceValue(a, b, silk, 1, 30, false)
@@ -692,6 +698,23 @@ class DealAiTests {
         assertEquals(3, DealResourceValues.happinessFromLuxury(seller, resource))
         world.constants.cityNeedsLikeVp = false
         assertEquals("BNW's own", 4, DealResourceValues.happinessFromLuxury(seller, resource))
+    }
+
+    @Test
+    fun `an unhappy empire keeps its last copy of a luxury, with the needs model too`() {
+        val world = NeedsTestWorld()
+        val buyer = world.game.addCiv()
+        NeedsAiScenarios.addEmpireCity(world, world.civ, 6, 10)
+        val resource = giveLuxury(world, world.civ)
+        NeedsAiScenarios.refresh(world.civ)
+        // 6 + 2 from the luxury against 10: approval 40
+        assertEquals(40, world.civ.getApproval())
+        assertTrue(world.civ.isEmpireUnhappy())
+        assertEquals(null, DealResourceValues.luxuryValue(world.civ, buyer, resource, 30, fromMe = true, netGoldOfReceiver = 0))
+
+        giveLuxury(world, world.civ)
+        NeedsAiScenarios.refresh(world.civ)
+        assertTrue("not the last copy", DealResourceValues.luxuryValue(world.civ, buyer, resource, 30, fromMe = true, netGoldOfReceiver = 0) != null)
     }
 
     @Test

@@ -17,6 +17,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -41,6 +42,9 @@ class ConquestAftermathTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // The tests outside of the last region set the happiness of the one number of the original's model ([OriginalHappinessModel]), which the key-off
+        // branches of CityConquestAutomation read; the needs model's approval rating decides in the tests of the last region, on their own games
+        OriginalHappinessModel.use(game.ruleset)
         game.makeHexagonalMap(8, Constants.grassland)
         attacker = neutralCiv()
         defender = neutralCiv()
@@ -480,6 +484,60 @@ class ConquestAftermathTests {
             assertEquals("with $happiness happiness", expectedRazed.map { if (it == "big") big else small }, razed)
             if (expectedRazed.isEmpty()) assertFalse("not very unhappy: nothing to do", civ.isEmpireVeryUnhappy())
         }
+    }
+
+    @Test
+    fun `with the needs model a city with a world wonder is kept however little it is worth, and puppeted below an approval rating of 40`() {
+        var e = NeedsConquest(20, 10) // approval 100
+        e.worth(0)
+        e.target.cityConstructions.addBuilding(e.world.game.createWonder())
+        e.target.cityStats.currentCityStats.production = 0f
+        assertEquals(ConquestChoice.Annex, e.choice())
+
+        e = NeedsConquest(7, 9) // 38
+        e.worth(0)
+        e.target.cityConstructions.addBuilding(e.world.game.createWonder())
+        e.target.cityStats.currentCityStats.production = 0f
+        assertEquals("kept, but puppeted for the unhappiness", ConquestChoice.Puppet, e.choice())
+    }
+
+    /**
+     *  A capital with [happiness] happiness and three occupied cities of 4, 3 and 2 citizens (their citizens are unhappy, they give no happiness), the big one
+     *  with a courthouse if [bigCourthouse] (it costs no unhappiness then, so burning it gains nothing), the small one in danger if [smallInDanger]
+     *  (an enemy at war with us has a city 4 tiles away and the small city took damage last turn). The cities considerRaze burns, by name.
+     */
+    private fun burnt(happiness: Int, bigCourthouse: Boolean, smallInDanger: Boolean): List<String> {
+        val world = NeedsTestWorld()
+        val civ = world.game.addCiv().also { neutralize(it) }
+        val defender = world.game.addCiv().also { neutralize(it) }
+        NeedsAiScenarios.addEmpireCity(world, civ, happiness, 0)
+        world.addCity(3, of = defender)
+        val big = occupied(world, civ, defender, HexCoord(0, -5), 4)
+        val medium = occupied(world, civ, defender, HexCoord(-5, 0), 3)
+        val small = occupied(world, civ, defender, HexCoord(5, 0), 2)
+        if (bigCourthouse) world.build(big, "Removes extra unhappiness from annexed cities")
+        if (smallInDanger) {
+            val enemy = world.game.addCiv().also { neutralize(it) }
+            world.game.addCity(enemy, world.game.getTile(HexCoord(5, 4)))
+            civ.diplomacyFunctions.makeCivilizationsMeet(enemy)
+            civ.getDiplomacyManager(enemy)!!.diplomaticStatus = DiplomaticStatus.War
+            enemy.getDiplomacyManager(civ)!!.diplomaticStatus = DiplomaticStatus.War
+            small.damageTakenLastTurn = 1000
+        }
+        NeedsAiScenarios.refresh(civ)
+        assertTrue(civ.isEmpireVeryUnhappy())
+        val names = mapOf(big to "big", medium to "medium", small to "small")
+        return CityConquestAutomation.considerRaze(civ).map { names[it]!! }
+    }
+
+    @Test
+    fun `with the needs model cities without a courthouse burn before those with one, and cities in danger before those that are not`() {
+        // 3 happiness against 9 unhappy citizens: approval 16, to be brought to 35. The big city's loss gains the most (to 30), the medium one's next (to 75)
+        assertEquals(listOf("big", "medium"), burnt(3, bigCourthouse = false, smallInDanger = false))
+        // With a courthouse the big city costs nothing, so there is nothing to gain from burning it: 5 unhappy citizens, approval 30; the medium one's loss is enough
+        assertEquals(listOf("medium"), burnt(3, bigCourthouse = true, smallInDanger = false))
+        // The small city is about to fall to an enemy at war with us: it goes first, though it gains the least
+        assertEquals(listOf("small", "big"), burnt(3, bigCourthouse = false, smallInDanger = true))
     }
 
     //endregion

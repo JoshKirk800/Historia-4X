@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.diplomacy
 
+import com.unciv.logic.automation.NeedsAiScenarios
 import com.unciv.logic.automation.civilization.CityConquestAutomation
 import com.unciv.logic.automation.strategy.WarState
 import com.unciv.logic.city.City
@@ -70,6 +71,15 @@ class LiberationTests {
         return city
     }
 
+    /** An unhappy empire (needs model): 30 specialists in the capital are 30 unhappy citizens, against the happiness of the civilization's pool, which is far less */
+    private fun makeUnhappy(civ: Civilization) {
+        val capital = civ.getCapital()!!
+        capital.population.setPopulation(30)
+        capital.population.specialistAllocations.add("Scientist", 30)
+        NeedsAiScenarios.refresh(civ)
+        assertTrue(civ.isEmpireUnhappy())
+    }
+
     private fun wants(founder: Civilization = b, of: City = city) = LiberationAi.wantsToLiberateMajor(a, of, founder)
 
     private fun feel(opinion: MajorCivOpinion, approach: MajorCivApproach? = null, other: Civilization = b) {
@@ -120,7 +130,7 @@ class LiberationTests {
 
     @Test
     fun `an unhappy empire gives the city to a friend, not to a neutral`() {
-        a.stats.happiness = -5
+        makeUnhappy(a)
         feel(MajorCivOpinion.Neutral)
         assertFalse(wants())
         feel(MajorCivOpinion.Friend)
@@ -262,7 +272,7 @@ class LiberationTests {
 
     @Test
     fun `an unhappy empire gives the city to a friend instead of razing it`() {
-        a.stats.happiness = -5
+        makeUnhappy(a)
         assertTrue(choice() != CityConquestAutomation.ConquestChoice.Liberate)
         feel(MajorCivOpinion.Friend)
         assertEquals(CityConquestAutomation.ConquestChoice.Liberate, choice())

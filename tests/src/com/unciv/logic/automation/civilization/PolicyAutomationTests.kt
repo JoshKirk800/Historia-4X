@@ -7,12 +7,14 @@ import com.unciv.logic.city.NeedsTestWorld
 import com.unciv.logic.civilization.CivFlags
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.InfluenceLevel
+import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.PolicyBranch
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -31,6 +33,9 @@ class PolicyAutomationTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // The tests outside of the last region set the happiness of the one number of the original's model ([OriginalHappinessModel]); the needs model's
+        // approval rating is tested in the last region, on games of their own
+        OriginalHappinessModel.use(game.ruleset)
         game.makeHexagonalMap(8)
         game.gameInfo.gameParameters.victoryTypes = ArrayList(game.ruleset.victories.keys)
         civ = neutralCiv()
@@ -350,6 +355,146 @@ class PolicyAutomationTests {
         assertEquals(7, world.needsOf(city).delta)
         val gap = PolicyAttributeAi.AttributeYield.GoldenAgePoints.ordinal
         assertEquals(7 * 40 / 100, needsWeights(world, "[40]% golden age points from happiness")[gap])
+    }
+
+    /** An AI civilization of [world] with flavors of zero and a capital of [population] citizens, [unhappy] of them unhappy, and [happy] happiness (approval min(200, happy x 100 / unhappy) / 2) */
+    private fun needsAi(world: NeedsTestWorld, happy: Int, unhappy: Int, population: Int = maxOf(unhappy, 3)): Civilization {
+        val ai = world.game.addCiv()
+        for (flavor in Flavor.entries) ai.ai.setPersonalityFlavor(flavor, 0)
+        NeedsAiScenarios.addEmpireCity(world, ai, happy, unhappy, population)
+        return ai
+    }
+
+    private fun needsWeight(world: NeedsTestWorld, civ: Civilization, name: String) =
+        PolicyAutomation.policyWeight(civ, world.game.ruleset.policies[name]!!)
+
+    @Test
+    fun `with the needs model an empire with an approval rating under 50 counts happiness 5 more`() {
+        var world = NeedsTestWorld()
+        var ai = needsAi(world, 8, 10) // approval 40
+        assertTrue(ai.isEmpireUnhappy())
+        PolicyAutomation.flavorUpdate(ai)
+        // Landed Elite: HAPPINESS 20
+        assertEquals(100, needsWeight(world, ai, "Landed Elite"))
+
+        world = NeedsTestWorld()
+        ai = needsAi(world, 10, 10) // 50
+        assertFalse(ai.isEmpireUnhappy())
+        PolicyAutomation.flavorUpdate(ai)
+        assertEquals(0, needsWeight(world, ai, "Landed Elite"))
+    }
+
+    @Test
+    fun `with the needs model weights stay those of the last flavor change until the strategies change`() {
+        val world = NeedsTestWorld()
+        val ai = needsAi(world, 4, 0, population = 12) // approval 100
+        PolicyAutomation.flavorUpdate(ai)
+        world.addSpecialists(ai.cities.first(), 12)
+        NeedsAiScenarios.refresh(ai)
+        assertTrue(ai.isEmpireUnhappy()) // 4 happiness against 12 unhappy citizens: 16
+        assertEquals("not recomputed for the unhappiness alone", 0, needsWeight(world, ai, "Landed Elite"))
+        ai.ai.setPersonalityFlavor(Flavor.Offense, 0) // any change of the flavors
+        assertEquals(100, needsWeight(world, ai, "Landed Elite"))
+    }
+
+    /** [ai] follows Freedom (turn 200: never switched counts from turn -1) and a dominant Autocracy makes 20 public opinion unhappiness (60 citizens / 3) */
+    private fun needsFreedomWithAutocracyDominant(world: NeedsTestWorld, happy: Int): Civilization {
+        val ruleset = world.game.ruleset
+        world.game.gameInfo.gameParameters.victoryTypes = ArrayList(ruleset.victories.keys)
+        val ai = needsAi(world, happy, 0, population = 60)
+        world.game.gameInfo.turns = 200
+        ai.tech.addTechnology(ruleset.technologies.values.first { it.era() == "Modern era" }.name)
+        ai.policies.adopt(ruleset.policyBranches["Freedom"]!!)
+        val autocrat = world.game.addCiv()
+        world.game.addCity(autocrat, world.game.getTile(HexCoord(0, 6)), replacePalace = true)
+        ai.diplomacyFunctions.makeCivilizationsMeet(autocrat)
+        ai.totalCultureForContests = 100
+        autocrat.policies.adopt(ruleset.policyBranches["Autocracy"]!!)
+        autocrat.culture.addInfluence(ai, 200)
+        ai.culture.publicOpinion.update()
+        assertEquals(20, ai.culture.publicOpinion.unhappiness)
+        NeedsAiScenarios.refresh(ai)
+        return ai
+    }
+
+    @Test
+    fun `with the needs model a super unhappy AI changes to the ideology its people prefer when that ends the super unhappiness`() {
+        // 10 happiness against the 20 unhappy citizens of the opinion: approval 25, very unhappy but no revolt is coming
+        var world = NeedsTestWorld()
+        var ai = needsFreedomWithAutocracyDominant(world, 10)
+        assertEquals(25, ai.getApproval())
+        assertTrue(ai.isEmpireVeryUnhappy() && !ai.isEmpireSuperUnhappy())
+        assertFalse(PolicyAutomation.considerIdeologySwitch(ai))
+
+        // 6 against 20: 15, super unhappy; without the opinion's unhappy citizens the rating would be far above the threshold
+        world = NeedsTestWorld()
+        ai = needsFreedomWithAutocracyDominant(world, 6)
+        assertTrue(ai.isEmpireSuperUnhappy())
+        assertTrue(PolicyAutomation.considerIdeologySwitch(ai))
+        assertEquals("Autocracy", ai.getIdeology()!!.name)
+    }
+
+    @Test
+    fun `with the needs model there is no switch within 30 turns of the last one`() {
+        val world = NeedsTestWorld()
+        val ai = needsFreedomWithAutocracyDominant(world, 6)
+        ai.culture.publicOpinion.turnIdeologySwitch = world.game.gameInfo.turns - 30
+        assertFalse(PolicyAutomation.considerIdeologySwitch(ai))
+        ai.culture.publicOpinion.turnIdeologySwitch = world.game.gameInfo.turns - 31
+        assertTrue(PolicyAutomation.considerIdeologySwitch(ai))
+    }
+
+    @Test
+    fun `with the needs model a very unhappy AI switches only with a city revolt coming, and not to the ideology a clear victory preference rules out`() {
+        val world = NeedsTestWorld()
+        val ai = needsFreedomWithAutocracyDominant(world, 10) // approval 25
+        fun setPriorities(conquest: Int, unitedNations: Int, spaceship: Int, culture: Int) {
+            ai.ai.grandStrategyPriorities[GrandStrategyAi.CONQUEST] = conquest
+            ai.ai.grandStrategyPriorities[GrandStrategyAi.UNITED_NATIONS] = unitedNations
+            ai.ai.grandStrategyPriorities[GrandStrategyAi.SPACESHIP] = spaceship
+            ai.ai.grandStrategyPriorities[GrandStrategyAi.CULTURE] = culture
+        }
+        val anarchy = world.constants.ideologyAnarchyTurns
+        ai.addFlag(CivFlags.CityRevoltCountdown.name, 2 + anarchy)
+        assertFalse("a revolt ${2 + anarchy} turns away", PolicyAutomation.considerIdeologySwitch(ai))
+        ai.addFlag(CivFlags.CityRevoltCountdown.name, 3 + anarchy)
+        setPriorities(100, 100, 126, 100) // science more than 25% ahead of each: not Autocracy
+        assertFalse(PolicyAutomation.considerIdeologySwitch(ai))
+        setPriorities(100, 100, 125, 100) // not more than 25%
+        assertTrue(PolicyAutomation.considerIdeologySwitch(ai))
+    }
+
+    @Test
+    fun `with the needs model the public opinion an ideology would bring counts against it`() {
+        val world = NeedsTestWorld()
+        val ruleset = world.game.ruleset
+        val ai = needsAi(world, 10, 0, population = 25)
+        val autocrat = world.game.addCiv()
+        world.game.addCity(autocrat, world.game.getTile(HexCoord(0, 6)), replacePalace = true)
+        ai.diplomacyFunctions.makeCivilizationsMeet(autocrat)
+        ai.totalCultureForContests = 100
+        autocrat.policies.adopt(ruleset.policyBranches["Autocracy"]!!)
+        autocrat.culture.addInfluence(ai, 200)
+        assertEquals(InfluenceLevel.Dominant, autocrat.culture.getInfluenceLevel(ai))
+        // dissatisfaction 5 (Dominant over Unknown): 4 per city or 1 per 3 citizens
+        assertEquals(8, ai.culture.publicOpinion.hypotheticalUnhappiness(ruleset.policyBranches["Freedom"]!!))
+        assertEquals(0, ai.culture.publicOpinion.hypotheticalUnhappiness(ruleset.policyBranches["Autocracy"]!!))
+        for (priority in listOf(GrandStrategyAi.CONQUEST, GrandStrategyAi.UNITED_NATIONS, GrandStrategyAi.SPACESHIP, GrandStrategyAi.CULTURE))
+            ai.ai.grandStrategyPriorities[priority] = 0
+        // Two civilizations each holding its capital are both close to world conquest, which moves the approach set at contact;
+        // a neutral one leaves the ideology scores to the public opinion
+        ai.ai.diplomacy.memoryOf(autocrat).approach = MajorCivApproach.Neutral
+        ai.culture.publicOpinion.update()
+        NeedsAiScenarios.refresh(ai)
+        assertFalse(ai.isEmpireUnhappy())
+        val ideologies = PolicyAutomation.ideologiesOf(ruleset)!!
+        val content = PolicyAutomation.scoreIdeologies(ai, ideologies)
+        world.addSpecialists(ai.cities.first(), 25)
+        NeedsAiScenarios.refresh(ai)
+        assertTrue(ai.isEmpireUnhappy()) // 10 happiness against 25 specialists: 20 (the civilization follows no ideology of its own, so the opinion costs no unhappiness yet)
+        val unhappy = PolicyAutomation.scoreIdeologies(ai, ideologies)
+        // Unhappy and not the first ideology: (250 - the unhappiness it would bring) x 10
+        assertEquals(listOf(242 * 10, 250 * 10, 242 * 10), unhappy.indices.map { unhappy[it] - content[it] })
     }
 
     //endregion

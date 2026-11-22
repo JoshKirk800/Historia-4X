@@ -11,6 +11,7 @@ import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.stats.Stat
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -20,7 +21,7 @@ import org.junit.runner.RunWith
 
 /**
  *  CvBuilderTaskingAI::ScorePlotBuild and GetResourceWeight ([PlotBuildScorer], [resourceWeight]) with Vox Populi's prices
- *  (food 180, production 180, gold 90, science 240, culture 240, faith 240) and the BNW rules of our ruleset (luxury happiness 4).
+ *  (food 180, production 180, gold 90, science 240, culture 240, faith 240) and the rules of our ruleset (luxury happiness 2, Vox Populi's: `Resources.Happiness` of the luxuries).
  */
 @RunWith(GdxTestRunner::class)
 class PlotBuildScorerTests {
@@ -108,11 +109,17 @@ class PlotBuildScorerTests {
     }
 
     @Test
-    fun `a puppet city has its science and culture priced down by a quarter`() {
+    fun `a puppet city has its science and culture priced down by a quarter in the original's rules, not in Vox Populi's`() {
         val city = game.addCity(civ, tile(0, 0))
         val scorer = scorer()
         assertEquals(100, scorer.yieldCityModifierTimes100(city, Stat.Science))
         city.isPuppet = true
+        // Vox Populi: PUPPET_SCIENCE_MODIFIER and PUPPET_CULTURE_MODIFIER are 0 (-25 in Community Patch), the 30 percent of a puppet's yields is not counted
+        // by GetYieldCityModifierTimes100 (CvBuilderTaskingAI.cpp)
+        assertEquals(100, scorer.yieldCityModifierTimes100(city, Stat.Science))
+        assertEquals(100, scorer.yieldCityModifierTimes100(city, Stat.Culture))
+        // The original's rules (OriginalHappinessModel): -25 percent
+        OriginalHappinessModel.use(game.ruleset)
         assertEquals(75, scorer.yieldCityModifierTimes100(city, Stat.Science))
         assertEquals(75, scorer.yieldCityModifierTimes100(city, Stat.Culture))
         assertEquals(100, scorer.yieldCityModifierTimes100(city, Stat.Food))
@@ -152,7 +159,7 @@ class PlotBuildScorerTests {
         val plot = tile(1, 0).also { it.setTileResource("Wine"); it.resourceAmount = 1 }
         val plantation = improvement("Plantation")
         val build = Build(plantation)
-        val weight = 4 * 750 * 1
+        val weight = 2 * 750 * 1
 
         val none = scorer().scorePlotBuild(plot, plantation, build)
         assertEquals(0, civ.getResourceAmount("Wine"))
@@ -185,7 +192,7 @@ class PlotBuildScorerTests {
         val keep = scorer().scorePlotBuild(plot, plantation, null)
         // The same weight in the base score and nothing moved to the potential, though one wine is available
         assertEquals(before.potentialScore, keep.potentialScore)
-        assertTrue(keep.score >= 4 * 750)
+        assertTrue(keep.score >= 2 * 750)
     }
 
     @Test
@@ -225,7 +232,7 @@ class PlotBuildScorerTests {
     fun `the weight of a luxury is its happiness times 750 times the quantity, a strategic one quantity plus one times 250`() {
         research("Bronze Working")
         fun resource(name: String) = game.ruleset.tileResources[name]!!
-        assertEquals(4 * 750 * 2, resourceWeight(civ, resource("Gems"), 2))
+        assertEquals(2 * 750 * 2, resourceWeight(civ, resource("Gems"), 2))
         assertEquals("iron, an ancient resource", (3 + 1) * 250, resourceWeight(civ, resource("Iron"), 3))
         assertEquals("coal is revealed in the Industrial era: ten times", (1 + 1) * 250 * 10, resourceWeight(civ, resource("Coal"), 1))
         assertEquals("a bonus resource is worth nothing", 0, resourceWeight(civ, resource("Wheat"), 1))
@@ -237,7 +244,7 @@ class PlotBuildScorerTests {
         league.activeResolutions.add(ActiveResolution(1, "Ban Luxury", null, "Gems", 0))
         league.setTransients(game.gameInfo)
         assertEquals(0, resourceWeight(civ, game.ruleset.tileResources["Gems"]!!, 2))
-        assertEquals(4 * 750, resourceWeight(civ, game.ruleset.tileResources["Wine"]!!, 1))
+        assertEquals(2 * 750, resourceWeight(civ, game.ruleset.tileResources["Wine"]!!, 1))
     }
 
     @Test

@@ -214,7 +214,8 @@ class LeagueProjectTests {
         game.addCity(cityState, game.tileMap.tileList[7 * nextCell++], replacePalace = true)
         a.diplomacyFunctions.makeCivilizationsMeet(cityState)
         val influenceBefore = cityState.getDiplomacyManager(a)!!.getInfluence()
-        val happinessBefore = { a.updateStatsForNextTurn(); a.getHappiness() }()
+        // With the needs model the happiness is the empire's pool and its approval rating is a ratio of it to the unhappy citizens, so the +6 is read in the pool
+        val poolBefore = { a.updateStatsForNextTurn(); a.stats.getHappinessBreakdown().values.sum() }()
         val policiesBefore = a.policies.freePolicies
 
         val project = start(games)
@@ -227,7 +228,7 @@ class LeagueProjectTests {
         assertEquals(listOf(-1, -1), a.temporaryUniques.filter { it.unique == "[+3 Happiness]" }.map { it.turnsLeft })
         assertEquals(1, a.temporaryUniques.count { it.unique.startsWith("[+100]% Tourism") && it.turnsLeft == 20 })
         a.updateStatsForNextTurn()
-        assertEquals(happinessBefore + 6, a.getHappiness())
+        assertEquals(poolBefore + 6, a.stats.getHappinessBreakdown().values.sum(), 0.01f)
 
         repeat(30) { a.temporaryUniques.endTurn() }
         assertEquals("the happiness is kept, the tourism is not", 2, a.temporaryUniques.size)

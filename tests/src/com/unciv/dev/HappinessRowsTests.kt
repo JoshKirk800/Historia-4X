@@ -61,9 +61,13 @@ class HappinessRowsTests {
     fun `a city row holds its population, local happiness and the unhappiness of its size, and the civ row sums them`() {
         val civ = game.addCiv()
         val city = game.addCity(civ, game.getTile(HexCoord.Zero), initialPopulation = 4)
+        // With the needs model (CvCity::GetUnhappinessAggregated) the city's unhappiness is its sources, here three specialists, the first of them free in
+        // a capital (the Palace's NoUnhappfromXSpecialists); the medians of the game are 0, so no yield need
+        city.population.specialistAllocations.add("Scientist", 3)
         city.cityStats.update()
         civ.updateStatsForNextTurn()
-        val unhappiness = -(city.cityStats.happinessList["Cities"]!! + city.cityStats.happinessList["Population"]!!)
+        val unhappiness = 2f
+        assertEquals(unhappiness, city.cityStats.needs.aggregated.toFloat(), 0.01f)
 
         val text = HappinessColumns.rows(game.gameInfo, 30).lines().filter { it.isNotEmpty() }.map { it.split('\t') }
         val cityRow = text.single { it[0] == "AI_CITYHAPPY" }

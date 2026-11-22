@@ -11,6 +11,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -80,8 +81,12 @@ class CitizenAutomationTests {
         val small = city(HexCoord.Zero, Constants.desert, false, 3)
         assertEquals(14 * 2 / 2 * 4 + nonFoodValue, valuation(small, CityFocus.NoFocus, 2f).plotValue(mixedTile, true))
 
-        val large = city(HexCoord(6, 0), Constants.desert, false, 6)
-        val unhappy = valuation(large, CityFocus.NoFocus, 0f, happiness = -1)
+        // An unhappy empire (needs model, CvCityCitizens::IsAvoidGrowth): approval 0 for 6 unhappy specialists and no happiness, so the city's delta is below -1
+        val world = NeedsTestWorld()
+        val large = NeedsAiScenarios.addEmpireCity(world, world.civ, 0, 6, population = 6)
+        assertTrue(world.civ.isEmpireUnhappy())
+        large.setCityFocus(CityFocus.NoFocus)
+        val unhappy = CitizenAutomation.Valuation(large).also { it.excessFood = 0f }
         assertEquals(nonFoodValue, unhappy.plotValue(mixedTile, true))
         // Looking for the worst worked tile ignores the growth wish: food keeps its base value
         assertEquals(14 * 2 + nonFoodValue, unhappy.plotValue(mixedTile, false))
@@ -103,6 +108,8 @@ class CitizenAutomationTests {
 
     @Test
     fun `half specialist unhappiness adds 5 to a specialist, 10 while the empire is unhappy`() {
+        // The original's happiness model ([OriginalHappinessModel]); with the needs model the unhappiness a specialist adds is scored by its citizens (see below)
+        OriginalHappinessModel.use(game.ruleset)
         val owner = game.addCiv("[+20 Happiness] [in all cities]", "[-50]% Unhappiness from [Specialists] [in all cities]")
         val city = city(HexCoord.Zero, Constants.desert, false, 6, owner)
         val writer = game.ruleset.specialists["Writer"]!!

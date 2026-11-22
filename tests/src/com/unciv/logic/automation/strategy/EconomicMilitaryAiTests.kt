@@ -20,6 +20,7 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.ai.PlayerStrategyDef
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.SettleTestLand
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -312,6 +313,8 @@ class EconomicMilitaryAiTests {
 
     @Test
     fun `need happiness uses half the happiness personality as margin, critical a fixed -3`() {
+        // The original's happiness model ([OriginalHappinessModel]); the needs model's reading of the approval rating is in the test below
+        OriginalHappinessModel.use(game.ruleset)
         val civ = neutralCiv()
         civ.ai.setPersonalityFlavor(Flavor.Happiness, 8)
         game.addCity(civ, tile(0, 0), initialPopulation = 3).cityStats.update()
@@ -330,6 +333,8 @@ class EconomicMilitaryAiTests {
 
     @Test
     fun `need happiness needs some unhappiness as well as population`() {
+        // The original's happiness model ([OriginalHappinessModel]): the unhappiness of the cities is the entries of their happiness lists
+        OriginalHappinessModel.use(game.ruleset)
         val civ = neutralCiv()
         val city = game.addCity(civ, tile(0, 0), initialPopulation = 3)
         val need = economicDef("ECONOMICAISTRATEGY_NEED_HAPPINESS")

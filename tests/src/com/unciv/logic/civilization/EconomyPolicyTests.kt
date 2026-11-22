@@ -2,6 +2,7 @@ package com.unciv.logic.civilization
 
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -70,8 +71,10 @@ class EconomyPolicyTests {
     }
 
     @Test
-    fun `Universal Suffrage removes half of the specialist unhappiness rounded up`() {
-        val suffrage = game.ruleset.policies["Universal Suffrage"]!!.uniques.single { "Unhappiness from" in it }
+    fun `the unique that halves the specialist unhappiness removes half of it rounded up`() {
+        // Universal Suffrage had it in the original's model (HalfSpecialistUnhappiness); Vox Populi's row of the policy is 0, so the ruleset has it no more
+        OriginalHappinessModel.use(game.ruleset)
+        val suffrage = "[-50]% Unhappiness from [Specialists (rounded up to even)] [in all cities]"
         val plain = populationUnhappiness(specialists = 3)
         // 3 specialists: (3 + 1) / 2 = 2 citizens stop causing unhappiness, 6 -> 4
         assertEquals(plain * 4 / 6, populationUnhappiness(suffrage, specialists = 3), 0.001f)

@@ -4,6 +4,7 @@ import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.PublicOpinionType
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -184,6 +185,7 @@ class PublicOpinionTests {
 
     @Test
     fun `the unhappiness is part of the happiness of a human, and of an AI changed by the difficulty`() {
+        OriginalHappinessModel.use(game.ruleset)   // with the needs model it is the empire's unhappiness that the cities share, not an entry of the pool
         adopt(me, "Freedom")
         influence(autocracyCiv, me, InfluenceLevel.Familiar)
         updateOpinion()

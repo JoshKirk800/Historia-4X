@@ -3,6 +3,7 @@ package com.unciv.logic.city
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -10,12 +11,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** CvPlayer::GetUnhappinessFromOccupiedCities: a citizen of an occupied city costs UNHAPPINESS_PER_OCCUPIED_POPULATION (1.34), nothing else per city */
+/** CvPlayer::GetUnhappinessFromOccupiedCities: a citizen of an occupied city costs UNHAPPINESS_PER_OCCUPIED_POPULATION (1.34), nothing else per city.
+ *  The original's model ([OriginalHappinessModel]): the needs model has its own occupation unhappiness (CityNeedsTests). */
 @RunWith(GdxTestRunner::class)
 class AnnexedCityUnhappinessTests {
     private val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
 
     private fun conqueredCity(population: Int): City {
+        OriginalHappinessModel.use(game.ruleset)
         game.makeHexagonalMap(3)
         val founder = game.addCiv()
         val conqueror = game.addCiv()

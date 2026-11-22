@@ -6,6 +6,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
 import com.unciv.testing.BaseTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,17 +16,21 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.math.min
 
-/** Brave New World: an unhappy empire fights, produces and earns 2% less per point of unhappiness, at most 40% less
- *  (CvUnit::GetUnhappinessCombatPenalty, CvCity::getHappinessModifier). Growth stops at -10 or less, not below it. */
+/** The original's happiness model (Brave New World before Vox Populi's needs, see [OriginalHappinessModel]): an unhappy empire fights, produces and earns
+ *  2% less per point of unhappiness, at most 40% less (CvUnit::GetUnhappinessCombatPenalty, CvCity::getHappinessModifier). Growth stops at -10 or less,
+ *  not below it. The ruleset's own GlobalUniques.json has no such uniques since it plays the needs, so the test gives them to its game. */
 @RunWith(BaseTestRunner::class)
 class UnhappinessEffectsTests {
-    private val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+    private val game = TestGame(*OriginalHappinessModel.globalUniques, baseRuleset = BaseRuleset.Civ_V_BNW)
     private lateinit var civ: Civilization
 
     @Before
     fun setUp() {
+        OriginalHappinessModel.use(game.ruleset)
         game.makeHexagonalMap(3)
-        civ = game.addCiv()
+        // a human: the AI's own level has no base happiness of its own any more (Vox Populi's AIHappinessDefault is added by the needs model only), so an AI's
+        // happiness would be recalculated below 0 whenever something refreshes the stats
+        civ = game.addCiv(isPlayer = true)
         game.addCity(civ, game.getTile(0, 0))
     }
 

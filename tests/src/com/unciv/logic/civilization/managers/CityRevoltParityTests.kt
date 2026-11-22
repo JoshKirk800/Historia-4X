@@ -9,6 +9,7 @@ import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.testing.GdxTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,7 +31,9 @@ class CityRevoltParityTests {
 
     @Before
     fun setUp() {
-        game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // The original's happiness model ([OriginalHappinessModel]): five turns, public opinion, the happiness of the one number
+        game = TestGame(*OriginalHappinessModel.globalUniques, baseRuleset = BaseRuleset.Civ_V_BNW)
+        OriginalHappinessModel.use(game.ruleset)
         game.makeHexagonalMap(12)
         UncivGame.Current.files = UncivFiles(Gdx.files)
         owner = game.addCiv(isPlayer = true)

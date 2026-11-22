@@ -13,6 +13,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.testing.BaseTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -274,6 +275,7 @@ class CivNeedsTests {
     @Test
     fun `without the key the empire is unhappy below happiness 0, very unhappy at -10, super unhappy at -20`() {
         val oldGame = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        OriginalHappinessModel.use(oldGame.ruleset)   // Brave New World plays the needs now
         val old = oldGame.addCiv()
         for ((happiness, expected) in listOf(0 to Triple(false, false, false), -1 to Triple(true, false, false), -9 to Triple(true, false, false),
             -10 to Triple(true, true, false), -19 to Triple(true, true, false), -20 to Triple(true, true, true))) {

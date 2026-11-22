@@ -5,6 +5,7 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.BaseTestRunner
+import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,10 +15,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /** CvPlayer::DoUpdateUprisings, DoResetUprisingCounter: the counter winds down only while the empire is very unhappy (below -19 in this port),
- *  keeps its value otherwise, is seeded with half the length the first time and with the full length after an uprising. Brave New World ruleset. */
+ *  keeps its value otherwise, is seeded with half the length the first time and with the full length after an uprising. The original's happiness model
+ *  ([OriginalHappinessModel]) on the Brave New World ruleset; with the needs model the empire is rebellious by its approval rating (CivNeedsTests). */
 @RunWith(BaseTestRunner::class)
 class UprisingCounterTests {
-    private val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+    private val game = TestGame(*OriginalHappinessModel.globalUniques, baseRuleset = BaseRuleset.Civ_V_BNW)
     private lateinit var civ: Civilization
     private lateinit var barbarians: Civilization
     private lateinit var manager: TurnManager
@@ -28,6 +30,7 @@ class UprisingCounterTests {
 
     @Before
     fun setUp() {
+        OriginalHappinessModel.use(game.ruleset)
         game.makeHexagonalMap(5)
         barbarians = game.addBarbarianCiv()
         civ = game.addCiv()

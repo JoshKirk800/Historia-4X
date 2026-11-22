@@ -3997,6 +3997,29 @@
     },
     {
       "kind": "Building",
+      "name": "Opera House",
+      "flavors": {
+        "Culture": 35,
+        "GreatPeople": 2
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Museum",
+      "flavors": {
+        "Culture": 40,
+        "GreatPeople": 5
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Broadcast Tower",
+      "flavors": {
+        "Culture": 50
+      }
+    },
+    {
+      "kind": "Building",
       "name": "Barracks",
       "flavors": {
         "MilitaryTraining": 20
@@ -4548,6 +4571,17 @@
         "GreatPeople": 10,
         "Wonder": 10,
         "Religion": 15
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "CN Tower",
+      "flavors": {
+        "Growth": 50,
+        "Culture": 30,
+        "Happiness": 30,
+        "GreatPeople": 10,
+        "Wonder": 30
       }
     },
     {
@@ -8308,75 +8342,6 @@
         "CityDefense": 20,
         "Growth": 10,
         "Religion": 20
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Trader Sid's Headquarters",
-      "flavors": {
-        "Gold": 100,
-        "Diplomacy": 100
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Centaurus Extractors Headquarters",
-      "flavors": {
-        "NavalTileImprovement": 60,
-        "Production": 60,
-        "Science": 60,
-        "Culture": 60
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Hexxon Refineries Headquarters",
-      "flavors": {
-        "MilitaryTraining": 100,
-        "Expansion": 40,
-        "Production": 100
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Giorgio Armeier Headquarters",
-      "flavors": {
-        "Culture": 100,
-        "GreatPeople": 100
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Firaxite Materials Headquarters",
-      "flavors": {
-        "Production": 100,
-        "Science": 100
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "TwoKay Foods Headquarters",
-      "flavors": {
-        "Growth": 100,
-        "Happiness": 50
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Civilized Jewelers Headquarters",
-      "flavors": {
-        "Gold": 80,
-        "Culture": 40,
-        "Diplomacy": 80
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Populi Medicine Headquarters",
-      "flavors": {
-        "Happiness": 80,
-        "Religion": 100,
-        "Diplomacy": 50
       }
     }
   ],

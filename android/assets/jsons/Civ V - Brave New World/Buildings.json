@@ -311,7 +311,8 @@
 			"[+1 Food] from [Ocean] tiles [in this city]",
 			"[+1 Food] from [Coast] tiles [in this city]",
 			"[+1 Food] from [Fish] tiles [in this city]",
-			"[+1 Production] from [Water resource] tiles [in this city]"
+			"[+1 Production] from [Water resource] tiles [in this city]",
+			"Connects trade routes over water"
 		],
 		"requiredTech": "Sailing"
 	},
@@ -936,6 +937,18 @@
 		"cost": 200
 	},
 	{
+		"name": "Opera House",
+		"culture": 1,
+		"hurryCostModifier": 10,
+		"maintenance": 1,
+		"requiredTech": "Acoustics",
+		"uniques": [
+			"Destroyed when the city is captured",
+			"Has [1] [Music] Great Work slots"
+		],
+		"cost": 200
+	},
+	{
 		"name": "Ceilidh Hall",
 		"replaces": "Circus",
 		"uniqueTo": "Celts",
@@ -1275,6 +1288,110 @@
 		"quote": "'The Kremlin is constantly changing the rules of the game to suit its purposes. We are not playing chess, we're playing roulette.' - Garry Kasparov"
 	},
 	{
+		"name": "Museum",
+		"themingBonuses": [
+			{
+				"name": "Museum of [era] [civ] Art",
+				"bonus": 2,
+				"aiPriority": 2,
+				"sameEra": true,
+				"mustBeArt": true,
+				"requiresOwner": true
+			},
+			{
+				"name": "Museum of [era] [civ] Art",
+				"bonus": 2,
+				"aiPriority": 2,
+				"sameEra": true,
+				"mustBeArt": true,
+				"requiresAnyButOwner": true
+			},
+			{
+				"name": "Museum of [era] [civ] Warfare",
+				"bonus": 2,
+				"aiPriority": 2,
+				"sameEra": true,
+				"mustBeArtifact": true,
+				"requiresOwner": true
+			},
+			{
+				"name": "Museum of [era] [civ] Warfare",
+				"bonus": 2,
+				"aiPriority": 2,
+				"sameEra": true,
+				"mustBeArtifact": true,
+				"requiresAnyButOwner": true
+			},
+			{
+				"name": "Museum of [era] Art",
+				"bonus": 1,
+				"aiPriority": 1,
+				"sameEra": true,
+				"mustBeArt": true
+			},
+			{
+				"name": "Museum of [era] Warfare",
+				"bonus": 1,
+				"aiPriority": 1,
+				"sameEra": true,
+				"mustBeArtifact": true
+			},
+			{
+				"name": "[civ] Museum of the [era] Era",
+				"bonus": 1,
+				"aiPriority": 1,
+				"sameEra": true,
+				"requiresOwner": true
+			},
+			{
+				"name": "World Museum of the [era] Era",
+				"bonus": 1,
+				"aiPriority": 1,
+				"sameEra": true,
+				"requiresAnyButOwner": true
+			},
+			{
+				"name": "Collection of [civ] Art",
+				"bonus": 1,
+				"aiPriority": 1,
+				"mustBeArt": true,
+				"requiresOwner": true
+			},
+			{
+				"name": "Collection of [civ] Art",
+				"bonus": 1,
+				"aiPriority": 1,
+				"mustBeArt": true,
+				"requiresAnyButOwner": true
+			},
+			{
+				"name": "Collection of [civ] Warfare",
+				"bonus": 1,
+				"aiPriority": 1,
+				"mustBeArtifact": true,
+				"requiresOwner": true
+			},
+			{
+				"name": "Collection of [civ] Warfare",
+				"bonus": 1,
+				"aiPriority": 1,
+				"mustBeArtifact": true,
+				"requiresAnyButOwner": true
+			}
+		],
+		"culture": 1,
+		"requiredBuilding": "Opera House",
+		"maintenance": 1,
+		"hurryCostModifier": 0,
+		"requiredTech": "Archaeology",
+		"uniques": [
+			"Reduces [Boredom] by [1] [in this city]",
+			"Destroyed when the city is captured",
+			"Has [2] [Art/Artifact] Great Work slots"
+		],
+		"cost": 300
+	},
+	{
 		"name": "The Louvre",
 		"themingBonuses": [
 			{
@@ -1407,6 +1524,22 @@
 		"requiredBuilding": "Zoo",
 		"maintenance": 2,
 		"requiredTech": "Refrigeration",
+		"cost": 500
+	},
+	{
+		"name": "Broadcast Tower",
+		"culture": 1,
+		"percentStatBonus": {
+			"culture": 33
+		},
+		"requiredBuilding": "Museum",
+		"maintenance": 3,
+		"requiredTech": "Radio",
+		"uniques": [
+			"Reduces [Boredom] by [1] [in this city]",
+			"Destroyed when the city is captured",
+			"Has [1] [Music] Great Work slots"
+		],
 		"cost": 500
 	},
 	{
@@ -1673,6 +1806,21 @@
 			"Only available <when espionage is enabled>",
 			"[+10 Science] from every [Research Lab]"
 		]
+	},
+	{
+		"name": "CN Tower",
+		"isWonder": true,
+		"greatPersonPoints": {
+			"Great Merchant": 1
+		},
+		"uniques": [
+			"[+1] population [in all cities]",
+			"[+1 Happiness] [in all cities]",
+			"Gain a free [Broadcast Tower] [in all cities]"
+		],
+		"requiredTech": "Telecommunications",
+		"quote": "'Nothing travels faster than light with the possible exception of bad news, which obeys its own special rules.' - Douglas Adams",
+		"cost": 1250
 	},
 	{
 		"name": "Hubble Space Telescope",
@@ -2433,142 +2581,6 @@
 			"Unbuildable",
 			"[+25]% Natural religion spread [in this city]",
 			"Reduces [Distress] by [1] [in this city]"
-		]
-	},
-	{
-		"name": "Trader Sid's Headquarters",
-		"isWonder": true,
-		"cost": 1300,
-		"maintenance": 4,
-		"culture": 1,
-		"quote": "'Merchandising, merchandising, where the real money from the movie is made.' - Yogurt"
-	},
-	{
-		"name": "Centaurus Extractors Headquarters",
-		"isWonder": true,
-		"cost": 1300,
-		"maintenance": 4,
-		"culture": 1,
-		"quote": "'Lesson number one: Don't underestimate the other guy's greed.' - Frank Lopez"
-	},
-	{
-		"name": "Hexxon Refineries Headquarters",
-		"isWonder": true,
-		"cost": 1300,
-		"maintenance": 4,
-		"culture": 1,
-		"quote": "'I just want to say one word to you. Just one word: Plastics.' - Mr. McGuire"
-	},
-	{
-		"name": "Giorgio Armeier Headquarters",
-		"isWonder": true,
-		"cost": 1300,
-		"maintenance": 4,
-		"culture": 1,
-		"quote": "'Fashion is about dreaming and making other people dream.' - Donatella Versace"
-	},
-	{
-		"name": "Firaxite Materials Headquarters",
-		"isWonder": true,
-		"cost": 1300,
-		"maintenance": 4,
-		"culture": 1,
-		"quote": "'Whatever good things we build end up building us.' - Jim Rohn"
-	},
-	{
-		"name": "TwoKay Foods Headquarters",
-		"isWonder": true,
-		"cost": 1300,
-		"maintenance": 4,
-		"culture": 1,
-		"quote": "'There is no love sincerer than the love of food.' - George Bernard Shaw"
-	},
-	{
-		"name": "Civilized Jewelers Headquarters",
-		"isWonder": true,
-		"cost": 1300,
-		"maintenance": 4,
-		"culture": 1,
-		"quote": "'Will the people in the cheaper seats clap your hands? And the rest of you, if you'll just rattle your jewelry.' - John Lennon"
-	},
-	{
-		"name": "Populi Medicine Headquarters",
-		"isWonder": true,
-		"cost": 1300,
-		"maintenance": 4,
-		"culture": 1,
-		"quote": "'Giving up smoking is the easiest thing in the world! I know because I've done it thousands of times.' - Mark Twain"
-	},
-	{
-		"name": "Trader Sid's Franchise",
-		"cost": 0,
-		"maintenance": 6,
-		"uniques": [
-			"Unbuildable",
-			"Destroyed when the city is captured"
-		]
-	},
-	{
-		"name": "Centaurus Extractors Franchise",
-		"cost": 0,
-		"maintenance": 6,
-		"uniques": [
-			"Unbuildable",
-			"Destroyed when the city is captured"
-		]
-	},
-	{
-		"name": "Hexxon Refineries Franchise",
-		"cost": 0,
-		"maintenance": 6,
-		"uniques": [
-			"Unbuildable",
-			"Destroyed when the city is captured"
-		]
-	},
-	{
-		"name": "Giorgio Armeier Franchise",
-		"cost": 0,
-		"maintenance": 6,
-		"uniques": [
-			"Unbuildable",
-			"Destroyed when the city is captured"
-		]
-	},
-	{
-		"name": "Firaxite Materials Franchise",
-		"cost": 0,
-		"maintenance": 6,
-		"uniques": [
-			"Unbuildable",
-			"Destroyed when the city is captured"
-		]
-	},
-	{
-		"name": "TwoKay Foods Franchise",
-		"cost": 0,
-		"maintenance": 6,
-		"uniques": [
-			"Unbuildable",
-			"Destroyed when the city is captured"
-		]
-	},
-	{
-		"name": "Civilized Jewelers Franchise",
-		"cost": 0,
-		"maintenance": 6,
-		"uniques": [
-			"Unbuildable",
-			"Destroyed when the city is captured"
-		]
-	},
-	{
-		"name": "Populi Medicine Franchise",
-		"cost": 0,
-		"maintenance": 6,
-		"uniques": [
-			"Unbuildable",
-			"Destroyed when the city is captured"
 		]
 	},
 	{

@@ -333,7 +333,10 @@
             {
                 "name": "Cultural Centers",
                 "uniques": [
-                    "[+50]% Production when constructing [Monument] buildings [in all cities]"
+                    "[+50]% Production when constructing [Monument] buildings [in all cities]",
+                    "[+50]% Production when constructing [Opera House] buildings [in all cities]",
+                    "[+50]% Production when constructing [Museum] buildings [in all cities]",
+                    "[+50]% Production when constructing [Broadcast Tower] buildings [in all cities]"
                 ],
                 "row": 1,
                 "column": 2
@@ -735,6 +738,8 @@
                 "name": "Media Culture",
                 "uniques": [
                     "Tenet Level 3",
+                    "[+34]% Tourism [in all cities] <in cities with a [Broadcast Tower]>",
+                    "[+1 Happiness] from every [Broadcast Tower]",
                     "Only available <when number of [[Adopted [Tenet Level 2] Policies] - [Adopted [Tenet Level 3] Policies]] is more than [1]>"
                 ],
                 "row": 3,

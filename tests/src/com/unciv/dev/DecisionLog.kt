@@ -36,6 +36,12 @@ import java.io.File
  * Public Opinion and Transportation Upkeep are in neither sum); a city's delta is its localHappiness less its localUnhappiness.
  * With the needs model ([com.unciv.models.ModConstants.cityNeedsLikeVp], the Brave New World ruleset's) localUnhappinessSum is the sum of the cities' unhappy
  * citizens ([com.unciv.logic.city.CityNeeds.aggregated], CvCity::GetUnhappinessAggregated) and localHappiness includes the city's share of the pool.
+ * Economy rows every 10 turns (columns in [EconomyColumns], the header line names them): AI_YIELD per living major civilization, AI_INSTANT per event and
+ * stat of what its instant yields have given it (only the non-zero totals, cumulative):
+ *     AI_YIELD    turn  name  gold  goldPerTurn  sciencePerTurn  culturePerTurn  faith  production  food  techs  era  policies  wonders  buildings
+ *     AI_INSTANT  turn  name  event  stat  amount
+ * The columns the original's observer wrote for the same measures (`tools/bnw_cap/snap.lua` civRow: gold, `CalculateGoldRate`, `GetScience`,
+ * `GetTotalJONSCulturePerTurn`, `GetFaith`, techs, era) are the reference of the economy measures of `tools/clone_compare.py`.
  * Written once per turn after the turn has been played, so a row for turn N is the state the original's observer sees at the start of turn N+1.
  */
 class DecisionLog(private val game: GameInfo, private val file: File) {
@@ -45,7 +51,8 @@ class DecisionLog(private val game: GameInfo, private val file: File) {
                 "# AI_PAIR\tturn\tname\tother\tatWar\tmajorCivApproach\tlandDispute\tvictoryDispute\twarmongerThreat\tnumWarsFought\tdoF\topinion\twantsDoF\ttooEarly\tproximity\tminCityDistance\n" +
                 "# AI_CITY\tturn\tname\tcolumn\trow\tpopulation\tisCapital\n" +
                 "# AI_ECON\tturn\tname\tgold\tgoldPerTurn\tsoftSupplyCap\tunitSupply\tunitsToSupply\trecommendedLand\trecommendedNavy\tnumLandUnits\tnumNavalUnits\tgoldBySource\n" +
-                HappinessColumns.header()
+                HappinessColumns.header() +
+                EconomyColumns.header()
         )
     }
 
@@ -61,6 +68,7 @@ class DecisionLog(private val game: GameInfo, private val file: File) {
         val majors = HappinessColumns.livingMajors(game)
         val text = StringBuilder()
         if (turn % HappinessColumns.EVERY_TURNS == 0) text.append(HappinessColumns.rows(game, turn))
+        if (turn % EconomyColumns.EVERY_TURNS == 0) text.append(EconomyColumns.rows(game, turn))
         for (civ in majors) {
             text.append("AI_CIV\t$turn\t${civ.civName}\t${civ.cities.size}\t${civ.ai.militaryMight()}\t")
                 .append(civ.units.getCivUnits().count { it.isMilitary() }).append('\n')

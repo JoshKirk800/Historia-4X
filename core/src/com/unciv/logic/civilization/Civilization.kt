@@ -241,6 +241,9 @@ class Civilization : IsPartOfGameInfoSerialization {
     var citiesCreated = 0
     /** The tiles this civilization has bought with gold (CvPlayer::m_iNumPlotsBought); each one raises the price of the next by 5 under plotAcquisitionLikeCivV */
     var plotsBought = 0
+    /** CvPlayer::m_paiHighestResourceQuantity of the luxury resources, by name: the most of each this civilization ever had of its own (without what it imports),
+     *  which `upon gaining a luxury resource` is paid for exceeding ([InstantYields.checkLuxuryGains]) */
+    var highestLuxuryAmounts = HashMap<String, Int>()
     /** Landmasses where the founded-city luxury trait has already granted a resource. */
     var uniqueLuxuryAreas = HashSet<Int>()
     /** Landmass of the original capital, even if that city is later captured. */
@@ -382,6 +385,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.notificationCountAtStartTurn = notificationCountAtStartTurn
         toReturn.citiesCreated = citiesCreated
         toReturn.plotsBought = plotsBought
+        toReturn.highestLuxuryAmounts.putAll(highestLuxuryAmounts)
         toReturn.uniqueLuxuryAreas.addAll(uniqueLuxuryAreas)
         toReturn.originalLuxuryArea = originalLuxuryArea
         toReturn.popupAlerts.addAll(popupAlerts)
@@ -518,6 +522,10 @@ class Civilization : IsPartOfGameInfoSerialization {
 
     @Transient
     val cache = CivInfoTransientCache(this)
+
+    /** The instant yields this civilization has gained since the game was loaded, for the decision log only: not saved, not cloned */
+    @Transient
+    val instantYieldTotals = InstantYieldTotals()
 
     fun updateStatsForNextTurn(): Unit = timeThis<Unit>("Civilization.updateStatsForNextTurn") {
         val previousHappiness = stats.happiness

@@ -404,6 +404,12 @@ class ModConstants {
     // The lowest sum of the percentages of the upgrade cost uniques, only used with unitUpgradeCostModsAreSummed (GlobalDefines UNIT_UPGRADE_COST_DISCOUNT_MAX)
     var unitUpgradeCostDiscountMax = -75
 
+    // How the gold price of a unit upgrade is made. false: [unitUpgradeCost] (base + gold per production of the cost difference, times the game speed), as before.
+    // true: Vox Populi's option BALANCE_UNIT_UPGRADE_COST (GetBaseUnitUpgradeCost, V:CvGameCoreUtils.cpp:1361-1379): the difference of the gold purchase prices of the two units
+    // ([PurchaseConstants] curve of their production costs with the game speed's and the start era's training percentages, the game speed's hurry percentage once; half the new
+    // price if the old unit costs nothing), 0 at the least; [unitUpgradeCost]'s base, per production and era multiplier are not read, its exponent and rounding are
+    var unitUpgradeCostFromPurchasePrice = false
+
     // NaturalWonderGenerator uses these to determine the number of Natural Wonders to spawn for a given map size.
     // With these values, radius * mul + add gives a 1-2-3-4-5 progression for Unciv predefined map sizes and a 2-3-4-5-6-7 progression for the original Civ5 map sizes.
     // 0.124 = (Civ5.Huge.getHexagonalRadiusForArea(w*h) - Civ5.Duel.getHexagonalRadiusForArea(w*h)) / 5 (if you do not round in the radius function)

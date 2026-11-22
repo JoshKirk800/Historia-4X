@@ -60,7 +60,11 @@
         "buildingSaleDivisor": 4,
         // CvPlayer::SetUnitUpgradeCostMod, CvUnit::upgradePrice: UNIT_UPGRADE_COST_DISCOUNT_MAX
         "unitUpgradeCostModsAreSummed": true,
-        "unitUpgradeCostDiscountMax": -75,
+        // UNIT_UPGRADE_COST_DISCOUNT_MAX -99 ((2) Vox Populi/Database Changes/DefineChanges.sql:212, CvPlayer.cpp:24176). Vox Populi's option BALANCE_UNIT_UPGRADE_COST is on
+        // (CustomModOptionChanges.sql:32): an upgrade costs the difference of the two units' purchase prices (CvGameCoreUtils.cpp:1361-1379), so UNIT_UPGRADE_COST_PER_PRODUCTION
+        // 1.25 (DefineChanges.sql:209) is not read
+        "unitUpgradeCostDiscountMax": -99,
+        "unitUpgradeCostFromPurchasePrice": true,
         // CvTeam::DoMinorCivTech: MINOR_CIV_TECH_PERCENT
         "minorCivTechPercent": 40,
         // CvCity::doCheckProduction, CvCity::popOrder: MAXED_UNIT_GOLD_PERCENT, MAXED_BUILDING_GOLD_PERCENT

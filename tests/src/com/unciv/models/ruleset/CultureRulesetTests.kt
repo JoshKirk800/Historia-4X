@@ -59,7 +59,7 @@ class CultureRulesetTests {
             assertTrue(unique, unique in digging.uniques)
 
         val archaeologist = bnw.units["Archaeologist"]!!
-        assertEquals(200, archaeologist.cost)
+        assertEquals(450, archaeologist.cost)   // Vox Populi's Units.Cost (Brave New World: 200)
         assertEquals("Archaeology", archaeologist.requiredTech)
         assertTrue("Can build [Archaeological Dig] improvements on tiles" in archaeologist.uniques)
         assertTrue("Only available <in cities with a [University]>" in archaeologist.uniques)

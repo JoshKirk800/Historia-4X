@@ -11,6 +11,8 @@ import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.PolicyBranch
+import com.unciv.models.ruleset.nation.Nation
+import com.unciv.models.ruleset.nation.Personality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.testing.GdxTestRunner
@@ -346,6 +348,75 @@ class PolicyAutomationTests {
         world.addCity(5)
         assertEquals(20, needsWeights(world, "The first [2] specialists cause no unhappiness [in all cities]")[food])
         assertEquals(50, needsWeights(world, "The first [2] specialists cause no unhappiness [in capital]")[food])
+    }
+
+    /** A civilization of a nation whose personality has the trait category [category] (null: none), with a capital */
+    private fun categoryCiv(game: TestGame, category: String?, capitalAt: HexCoord): Civilization {
+        val nation = Nation().apply { name = "Nation $category"; cities = arrayListOf("The Capital") }
+        if (category != null) {
+            val personality = Personality().apply { name = "Test $category"; traitCategories = linkedMapOf(category to 1) }
+            game.ruleset.personalities[personality.name] = personality
+            nation.personality = personality.name
+        }
+        game.ruleset.nations[nation.name] = nation
+        val civ = game.addCiv(nation)
+        for (flavor in Flavor.entries) civ.ai.setPersonalityFlavor(flavor, 0)
+        game.addCity(civ, game.getTile(capitalAt), replacePalace = true)
+        return civ
+    }
+
+    private fun yieldOf(civ: Civilization, game: TestGame, stat: PolicyAttributeAi.AttributeYield, vararg uniques: String) =
+        PolicyAttributeAi.weightPolicyAttributes(game.createPolicy(*uniques), PolicyAttributeAi.Inputs(civ))[stat.ordinal]
+
+    @Test
+    fun `a policy with kill yields is weighted for a warmonger`() {
+        val world = NeedsTestWorld()
+        val gold = PolicyAttributeAi.AttributeYield.Gold
+        val plunder = "Earn [100]% of killed [Military] unit's [Strength] as [Gold]"
+        val ratio = "Gain [50]% of the triggering amount as [Gold] <upon defeating a [Military] unit>"
+        val peaceful = categoryCiv(world.game, null, HexCoord(0, 3))
+        val warmonger = categoryCiv(world.game, "Warmonger", HexCoord(0, -3))
+        assertEquals(100, yieldOf(peaceful, world.game, gold, plunder))
+        assertEquals(500, yieldOf(warmonger, world.game, gold, plunder))
+        assertEquals(50, yieldOf(peaceful, world.game, gold, ratio))
+        assertEquals(250, yieldOf(warmonger, world.game, gold, ratio))
+    }
+
+    @Test
+    fun `kill yields that the AI json weighs by column are not weighed twice`() {
+        val world = NeedsTestWorld()
+        val warmonger = categoryCiv(world.game, "Warmonger", HexCoord(0, -3))
+        val peaceful = categoryCiv(world.game, null, HexCoord(0, 3))
+        val gold = PolicyAttributeAi.AttributeYield.Gold.ordinal
+        val kills = world.game.ruleset.policies.values.first { policy ->
+            policy.uniques.any { it == "Earn [100]% of killed [Military] unit's [Strength] as [Gold]" } &&
+                world.game.ruleset.ai.policyAttributesOf(policy.name)?.values?.get("GoldFromKills") == 100
+        }
+        fun weight(civ: Civilization) = PolicyAttributeAi.weightPolicyAttributes(kills, PolicyAttributeAi.Inputs(civ))[gold]
+        assertEquals("GoldFromKills: 5 for a warmonger and 1 for the others, from the column only", 4 * 100, weight(warmonger) - weight(peaceful))
+    }
+
+    @Test
+    fun `birth, border growth, construction, technology, expending and founding yields are weighted as WeightPolicyAttributes has them`() {
+        val world = NeedsTestWorld()
+        val culture = PolicyAttributeAi.AttributeYield.Culture
+        val peaceful = categoryCiv(world.game, null, HexCoord(0, 3))
+        val expansionist = categoryCiv(world.game, "Expansionist", HexCoord(0, -3))
+        world.game.addCity(peaceful, world.game.getTile(HexCoord(3, 0)))
+        world.game.addCity(expansionist, world.game.getTile(HexCoord(-3, 0)))
+        fun weights(unique: String, civ: Civilization) = yieldOf(civ, world.game, culture, "Gain [2] [Culture] <$unique>")
+        // The cities the weights count are the AI's estimate (iNumCities: the early game expects more, an expansionist one more)
+        val n = PolicyAttributeAi.Inputs(peaceful).numCities
+        val e = PolicyAttributeAi.Inputs(expansionist).numCities
+        assertEquals("the cities", 2 * n, weights("upon population growth", peaceful))
+        assertEquals("twice the cities", 2 * 2 * e, weights("upon population growth", expansionist))
+        assertEquals("border growth likewise", 2 * n, weights("upon acquiring a [All] tile through [border growth]", peaceful))
+        assertEquals("another way to get a tile is none", 0, weights("upon acquiring a [All] tile through [purchase]", peaceful))
+        assertEquals("construction: 2 x cities, 4 x for an expansionist", 2 * 2 * n, weights("upon constructing [Buildings]", peaceful))
+        assertEquals(2 * 4 * e, weights("upon constructing [Buildings]", expansionist))
+        assertEquals("technology: 10", 2 * 10, weights("upon discovering [All] technology", peaceful))
+        assertEquals("expending a great person", 2, weights("upon expending a [Great Person] unit", peaceful))
+        assertEquals("founding a city: 3 for an expansionist", 2 * 3, weights("upon founding a city", expansionist))
     }
 
     @Test

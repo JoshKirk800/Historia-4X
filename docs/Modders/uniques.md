@@ -594,6 +594,34 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "[stats] from each [greatWorkType] Great Work [cityFilter]"
+	The stats once for each Great Work of that type that is in a building of the matching city (the original's `Building_GreatWorkYieldChanges`, `Policy_ArtYieldChanges` and the like, CvCityBuildings::GetYieldFromGreatWorksTimes100). Added to the base stats of the city, before the percentages, like `[stats] from each Great Work`
+
+	Example: "[+1 Gold, +2 Production] from each [Art] Great Work [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "Capital's [stats] per [positiveAmount] citizens in the empire"
+	In the capital only: the stats for every full second-number citizens that live in all cities of the civilization, puppets included (the original's `Policy_CapitalYieldPerPopChangeEmpire`, CvPlot::calculateYield: the empire's population times the yield per citizen, in whole numbers). Added to the base stats before the percentages
+
+	Example: "Capital's [+1 Gold, +2 Production] per [3] citizens in the empire"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% yield from processes [cityFilter]"
+	While a matching city makes Gold, Science, Culture, Faith or Food instead of a building or a unit, it converts this many percentage points more of its production than the 25% the conversion starts at (`Building_YieldFromProcessModifier` added to `Process_ProductionYields`, CvCity::GetBaseYieldRateFromProcessTimes100). It does not name the stat: it improves whichever process the city is running
+
+	Example: "[+20]% yield from processes [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount]% of [stat] [cityFilter] added to [stat]"
+	The first stat of a matching city, as the sources add it up before any percentage bonus, times the percentage, is added to the second stat after the percentage bonuses (the original's `Building_YieldFromYieldPercent`, CvCity::UpdateCityYieldFromYield, GetTotalYieldFromYieldTimes100). It is not itself changed or fed back
+
+	Example: "[+20]% of [Culture] [in all cities] added to [Culture]"
+
+	Applicable to: Global, FollowerBelief
+
 ??? example  "[relativeAmount]% Theming bonuses [cityFilter]"
 	Every such unique multiplies the theming bonuses of the matching cities by 100% plus its amount, one after the other
 
@@ -1993,6 +2021,27 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, FollowerBelief
 
+??? example  "[stats] from each [greatWorkType] Great Work [cityFilter]"
+	The stats once for each Great Work of that type that is in a building of the matching city (the original's `Building_GreatWorkYieldChanges`, `Policy_ArtYieldChanges` and the like, CvCityBuildings::GetYieldFromGreatWorksTimes100). Added to the base stats of the city, before the percentages, like `[stats] from each Great Work`
+
+	Example: "[+1 Gold, +2 Production] from each [Art] Great Work [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount]% yield from processes [cityFilter]"
+	While a matching city makes Gold, Science, Culture, Faith or Food instead of a building or a unit, it converts this many percentage points more of its production than the 25% the conversion starts at (`Building_YieldFromProcessModifier` added to `Process_ProductionYields`, CvCity::GetBaseYieldRateFromProcessTimes100). It does not name the stat: it improves whichever process the city is running
+
+	Example: "[+20]% yield from processes [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount]% of [stat] [cityFilter] added to [stat]"
+	The first stat of a matching city, as the sources add it up before any percentage bonus, times the percentage, is added to the second stat after the percentage bonuses (the original's `Building_YieldFromYieldPercent`, CvCity::UpdateCityYieldFromYield, GetTotalYieldFromYieldTimes100). It is not itself changed or fed back
+
+	Example: "[+20]% of [Culture] [in all cities] added to [Culture]"
+
+	Applicable to: Global, FollowerBelief
+
 ??? example  "[relativeAmount]% [stat]"
 	Multiple bonuses stack additively: +50% + +50% = +100%
 
@@ -2625,6 +2674,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Example: "Can be purchased for [3] [Culture] [in all cities]"
 
 	Applicable to: Building, Unit
+
+??? example  "Can only be purchased in cities with [buildingName]"
+	Buying the unit with gold needs the building (or one that replaces it) in the city; building it is not affected (the original's `Unit_BuildingClassPurchaseRequireds`, CvCity::IsCanPurchase)
+
+	Example: "Can only be purchased in cities with [Library]"
+
+	Applicable to: Unit
 
 ??? example  "Limited to [amount] per Civilization"
 	Example: "Limited to [3] per Civilization"
@@ -3684,6 +3740,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "[stats] for each adjacent [tileFilter]"
 	Example: "[+1 Gold, +2 Production] for each adjacent [Farm]"
+
+	Applicable to: Improvement
+
+??? example  "[stats] from every [positiveAmount] adjacent [tileFilter]"
+	Each matching adjacent tile counts as the stats divided by the number; all such uniques of the improvement are added up and the sum is cut off at the whole number of each stat (the original's `Improvement_YieldPerXAdjacentImprovement` and `..._YieldPerXAdjacentTerrain`, CvPlot::ComputeFractionalYieldFromAdjacentImprovement)
+
+	Example: "[+1 Gold, +2 Production] from every [3] adjacent [Farm]"
 
 	Applicable to: Improvement
 
@@ -5187,6 +5250,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 *[fraction]: Indicates a fractional number, which can be negative.
 *[greatWork]: The name of any Great Work.
 *[greatWorkSlotType]: One of `Art/Artifact`, `Literature` or `Music`.
+*[greatWorkType]: One of `Art`, `Artifact`, `Literature` or `Music`.
 *[improvementName]: The name of any improvement excluding 'Cancel improvement order'
 *[leaderTitle]: Provides a leader title that includes the leader's name in parameters.
 *[modFilter]: A Mod name, case-sensitive _or_ a simple wildcard filter beginning and ending in an Asterisk, case-insensitive.

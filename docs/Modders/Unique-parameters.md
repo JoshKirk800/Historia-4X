@@ -466,6 +466,10 @@ Allowed values:
     - `Era number` is zero-based, so the Ancient and the Classical era both give 1, the Medieval era 2, and so on (`max(1, GetCurrentEra())` of `CvPlayer::doInstantYield`).
     - It is never more than the `lastEra` of the ruleset's AI.json (7 in the Civ V rulesets: the original's last era has the number 7, Unciv's ninth era, the Future era, would be 8).
     - Meant for `<for every [Era scaler]>` on a gain that fires from a trigger.
+-   `Golden Ages` - The number of Golden Ages the civilization has had
+    - Example: `Only available <when number of [Golden Ages] is more than [0]>`
+    - The Golden Ages entered by filling the happiness meter, the one that is going on included. Golden Ages from other sources (a Great Person, a unique) are not counted, as the original's `CvPlayer::GetNumGoldenAges` counts them.
+    - Meant for `<for every [Golden Ages]>` (the original's `Building_YieldChangesPerGoldenAge`, `Trait_ResourceYieldChangesFromGoldenAge`).
 -   `Triggering amount` - The amount the event that triggers this unique carries
     - Example: `Only available <when number of [Triggering amount] is more than [0]>`
     - The citizens a city gains for `upon population growth`, the price for `upon buying something with [stat]`, the production cost for `upon completing a [baseUnitFilter] unit`, the strength of the defeated unit for `upon defeating a [mapUnitFilter] unit`, the number of new luxuries for `upon gaining a luxury resource`; 0 for any other trigger.

@@ -34,6 +34,8 @@ import java.io.File
  * the happiness breakdown (the entries before the integer truncation of happiness), localHappinessSum the cities' [com.unciv.logic.city.CityStats.localHappiness],
  * localUnhappinessSum what the cities' own entries "Cities", "Population" and "Occupied City" of the breakdown take away (the civilization-wide
  * Public Opinion and Transportation Upkeep are in neither sum); a city's delta is its localHappiness less its localUnhappiness.
+ * With the needs model ([com.unciv.models.ModConstants.cityNeedsLikeVp], the Brave New World ruleset's) localUnhappinessSum is the sum of the cities' unhappy
+ * citizens ([com.unciv.logic.city.CityNeeds.aggregated], CvCity::GetUnhappinessAggregated) and localHappiness includes the city's share of the pool.
  * Written once per turn after the turn has been played, so a row for turn N is the state the original's observer sees at the start of turn N+1.
  */
 class DecisionLog(private val game: GameInfo, private val file: File) {

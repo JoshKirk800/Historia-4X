@@ -21,8 +21,10 @@ object HappinessColumns {
     /** Entries of [com.unciv.logic.city.CityStats.happinessList] that are the city's own unhappiness, all negative */
     private val unhappinessEntries = listOf("Cities", "Population", "Occupied City")
 
+    /** With the needs model ([com.unciv.models.ModConstants.cityNeedsLikeVp]) the city's unhappy citizens, CvCity::GetUnhappinessAggregated; else the entries of the original's model */
     private fun localUnhappiness(city: City): Float =
-        -unhappinessEntries.sumOf { (city.cityStats.happinessList[it] ?: 0f).toDouble() }.toFloat()
+        if (city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) city.cityStats.needs.aggregated.toFloat()
+        else -unhappinessEntries.sumOf { (city.cityStats.happinessList[it] ?: 0f).toDouble() }.toFloat()
 
     private fun localHappiness(city: City): Float = city.cityStats.localHappiness
 

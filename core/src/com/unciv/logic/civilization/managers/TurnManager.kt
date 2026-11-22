@@ -131,6 +131,7 @@ class TurnManager(val civInfo: Civilization) {
             )
         }
 
+        civInfo.instantYieldNotices.flushDeferred(civInfo) // CvPlayer::doTurn: one notification for each instant yield event that happened again and again
         updateWinningCiv()
     }
 
@@ -595,6 +596,7 @@ class TurnManager(val civInfo: Civilization) {
 
         civInfo.resetMilitaryMightCache()
 
+        civInfo.instantYieldNotices.flushDeferred(civInfo) // what the cities' growth gave this turn, told once
         updateWinningCiv() // Maybe we did something this turn to win
         
         civInfo.lastTurnProcessedWithVersion = UncivGame.VERSION

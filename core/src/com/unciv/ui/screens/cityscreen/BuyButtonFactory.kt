@@ -62,7 +62,9 @@ class BuyButtonFactory(val cityScreen: CityScreen) {
             button.disable()
         } else {
             val constructionBuyCost = cityView.constructions.getStatBuyCost(construction, stat)!!
-            button.setText("Buy".tr() + " " + constructionBuyCost.tr() + stat.character)
+            // With the investments of Vox Populi's economy the gold of a building is an investment in it, not its purchase
+            val verb = if (cityView.constructions.isInvestment(construction, stat)) "Invest" else "Buy"
+            button.setText(verb.tr() + " " + constructionBuyCost.tr() + stat.character)
 
             button.onActivation(binding = KeyboardBinding.BuyConstruction) {
                 button.disable()
@@ -74,6 +76,10 @@ class BuyButtonFactory(val cityScreen: CityScreen) {
             preferredBuyStat = stat  // Not very intelligent, but the least common currency "wins"
             if (cityView.constructions.isConstructionPurchaseBlockedByUnit(construction)) {
                 button.addTooltip("Move unit out of city first", 26f, false)
+            } else {
+                // The cooldown, the building a unit needs, an investment already made: say why the economy's rules keep the button disabled
+                val blockReason = cityView.constructions.getPurchaseBlockReason(construction, stat)
+                if (blockReason != null) button.addTooltip(blockReason, 26f, always = true, hideIcons = true)
             }
         }
 
@@ -141,7 +147,9 @@ class BuyButtonFactory(val cityScreen: CityScreen) {
                     row()
                 }
             }
-            addGoodSizedLabel("Would you like to purchase [${construction.name}] for [$constructionStatBuyCost] [${stat.character}]?").row()
+            if (cityView.constructions.isInvestment(construction, stat))
+                addGoodSizedLabel("Would you like to invest [$constructionStatBuyCost] [${stat.character}] in [${construction.name}]? The building stays in the queue and costs less to build.").row()
+            else addGoodSizedLabel("Would you like to purchase [${construction.name}] for [$constructionStatBuyCost] [${stat.character}]?").row()
 
             addCloseButton(Constants.cancel, KeyboardBinding.Cancel) { cityScreen.updateAsync() }
             val confirmStyle = BaseScreen.skin.get("positive", TextButton.TextButtonStyle::class.java)

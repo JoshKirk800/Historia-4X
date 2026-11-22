@@ -531,6 +531,10 @@ class Civilization : IsPartOfGameInfoSerialization {
     @Transient
     val instantYieldTotals = InstantYieldTotals()
 
+    /** The instant yields gained that are not yet told in a notification ([InstantYieldNotices]): not saved, not cloned, empty for the AI */
+    @Transient
+    val instantYieldNotices = InstantYieldNotices()
+
     fun updateStatsForNextTurn(): Unit = timeThis<Unit>("Civilization.updateStatsForNextTurn") {
         val previousHappiness = stats.happiness
         // Vox Populi's model: the pool and the unhappiness are handed to the cities, and the stat Happiness is the approval rating less the unhappy threshold.

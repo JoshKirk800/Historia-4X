@@ -29,6 +29,7 @@ import com.unciv.ui.components.extensions.toCheckBox
 import com.unciv.ui.components.extensions.toTextButton
 import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.components.input.onClick
+import com.unciv.ui.components.widgets.NeedsRowsTable
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.popups.ConfirmPopup
 import com.unciv.ui.popups.closeAllPopups
@@ -106,6 +107,15 @@ class ConstructionInfoTable(val cityScreen: CityScreen) : Table() {
 
             if (construction is INonPerpetualConstruction && "require" in description)
                 tryAddShowMissingCities(cityConstructions, construction)
+
+            // The investment in the building, the cooldown of the unit, the building it needs (Vox Populi's economy; nothing without them)
+            if (construction is INonPerpetualConstruction && !cityConstructions.isBuilt(construction.name)) {
+                val purchaseRows = cityConstructions.getPurchaseRows(construction)
+                if (purchaseRows.isNotEmpty()) {
+                    row()
+                    add(NeedsRowsTable(purchaseRows)).colspan(2).padTop(5f).left()
+                }
+            }
 
             if (cityConstructions.isBuilt(construction.name)) {
                 showSellButton(construction)

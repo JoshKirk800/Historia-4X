@@ -333,11 +333,7 @@
             {
                 "name": "Cultural Centers",
                 "uniques": [
-                    "[+50]% Production when constructing [Monument] buildings [in all cities]",
-                    "[+50]% Production when constructing [Amphitheater] buildings [in all cities]",
-                    "[+50]% Production when constructing [Opera House] buildings [in all cities]",
-                    "[+50]% Production when constructing [Museum] buildings [in all cities]",
-                    "[+50]% Production when constructing [Broadcast Tower] buildings [in all cities]"
+                    "[+50]% Production when constructing [Monument] buildings [in all cities]"
                 ],
                 "row": 1,
                 "column": 2
@@ -431,7 +427,7 @@
                 "name": "Mercantilism",
                 "uniques": [
                     "[Gold] cost of purchasing items in cities [-25]%",
-                    "[+1 Science] from every [Mint]",
+                    "[+1 Science] from every [Customs House]",
                     "[+1 Science] from every [Market]",
                     "[+1 Science] from every [Bank]",
                     "[+1 Science] from every [Stock Exchange]"
@@ -491,7 +487,7 @@
                     "[+1 Gold] from every [Harbor]",
                     "[+1 Gold] from every [Seaport]",
                     "[+1 Gold] from every [Lighthouse]",
-                    "[+4 Production, +4 Culture] from every [East India Company]"
+                    "[+4 Production, +4 Culture] from every [Chartered Company]"
                 ],
                 "requires": ["Naval Tradition", "Maritime Infrastructure"],
                 "row": 2,
@@ -639,15 +635,12 @@
                     "Tenet Level 1",
                     "[+1 Happiness] from every [Palace]",
                     "[+1 Happiness] from every [Heroic Epic]",
-                    "[+1 Happiness] from every [National Epic]",
                     "[+1 Happiness] from every [Circus Maximus]",
-                    "[+1 Happiness] from every [East India Company]",
-                    "[+1 Happiness] from every [National College]",
+                    "[+1 Happiness] from every [Chartered Company]",
+                    "[+1 Happiness] from every [School of Philosophy]",
                     "[+1 Happiness] from every [Ironworks]",
-                    "[+1 Happiness] from every [Oxford University]",
-                    "[+1 Happiness] from every [Hermitage]",
                     "[+1 Happiness] from every [National Intelligence Agency]",
-                    "[+1 Happiness] from every [Grand Temple]", "[+1 Happiness] from every [National Visitor Center]"],
+                    "[+1 Happiness] from every [Grand Temple]"],
                 "row": 1,
                 "column": 7
             },
@@ -742,8 +735,6 @@
                 "name": "Media Culture",
                 "uniques": [
                     "Tenet Level 3",
-                    "[+34]% Tourism [in all cities] <in cities with a [Broadcast Tower]>",
-                    "[+1 Happiness] from every [Broadcast Tower]",
                     "Only available <when number of [[Adopted [Tenet Level 2] Policies] - [Adopted [Tenet Level 3] Policies]] is more than [1]>"
                 ],
                 "row": 3,
@@ -841,15 +832,12 @@
                     "Tenet Level 1",
                     "[+1 Happiness] from every [Palace]",
                     "[+1 Happiness] from every [Heroic Epic]",
-                    "[+1 Happiness] from every [National Epic]",
                     "[+1 Happiness] from every [Circus Maximus]",
-                    "[+1 Happiness] from every [East India Company]",
-                    "[+1 Happiness] from every [National College]",
+                    "[+1 Happiness] from every [Chartered Company]",
+                    "[+1 Happiness] from every [School of Philosophy]",
                     "[+1 Happiness] from every [Ironworks]",
-                    "[+1 Happiness] from every [Oxford University]",
-                    "[+1 Happiness] from every [Hermitage]",
                     "[+1 Happiness] from every [National Intelligence Agency]",
-                    "[+1 Happiness] from every [Grand Temple]", "[+1 Happiness] from every [National Visitor Center]"],
+                    "[+1 Happiness] from every [Grand Temple]"],
                 "row": 1,
                 "column": 7
             },
@@ -1034,10 +1022,7 @@
                 "uniques": [
                     "Tenet Level 1",
                     "[+1 Happiness] from every [Workshop]",
-                    "[+1 Happiness] from every [Factory]",
-                    "[+1 Happiness] from every [Solar Plant]",
-                    "[+1 Happiness] from every [Nuclear Plant]",
-                    "[+1 Happiness] from every [Hydro Plant]"
+                    "[+1 Happiness] from every [Factory]"
                 ],
                 "row": 1,
                 "column": 5
@@ -1048,15 +1033,12 @@
                     "Tenet Level 1",
                     "[+1 Happiness] from every [Palace]",
                     "[+1 Happiness] from every [Heroic Epic]",
-                    "[+1 Happiness] from every [National Epic]",
                     "[+1 Happiness] from every [Circus Maximus]",
-                    "[+1 Happiness] from every [East India Company]",
-                    "[+1 Happiness] from every [National College]",
+                    "[+1 Happiness] from every [Chartered Company]",
+                    "[+1 Happiness] from every [School of Philosophy]",
                     "[+1 Happiness] from every [Ironworks]",
-                    "[+1 Happiness] from every [Oxford University]",
-                    "[+1 Happiness] from every [Hermitage]",
                     "[+1 Happiness] from every [National Intelligence Agency]",
-                    "[+1 Happiness] from every [Grand Temple]", "[+1 Happiness] from every [National Visitor Center]"],
+                    "[+1 Happiness] from every [Grand Temple]"],
                 "row": 1,
                 "column": 7
             },

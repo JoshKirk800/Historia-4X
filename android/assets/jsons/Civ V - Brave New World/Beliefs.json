@@ -170,11 +170,6 @@
         "uniques": ["May buy [{pre-[Industrial era]} {Military} {Land}] units with [Faith] for [2] times their normal Production cost <in [in cities following this religion] cities>"]
     },
     {
-        "name": "Liturgical Drama",
-        "type": "Follower",
-        "uniques": ["[+1 Faith] from every [Amphitheater] <in cities with at least [3] [Followers of this Religion]>"]
-    },
-    {
         "name": "Monasteries",
         "type": "Follower",
         "uniques": ["May buy [Monastery] buildings for [150] [Faith] [in cities following this religion]"]
@@ -193,11 +188,6 @@
         "name": "Peace Gardens",
         "type": "Follower",
         "uniques": ["[+2 Happiness] from every [Garden]"]
-    },
-    {
-        "name": "Religious Art",
-        "type": "Follower",
-        "uniques": ["[+5 Culture] from every [Hermitage]", "[+5] Tourism [in this city] <in cities with a [Hermitage]>"]
     },
     {
         "name": "Religious Center",

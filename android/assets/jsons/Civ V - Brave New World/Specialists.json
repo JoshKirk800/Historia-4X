@@ -1,43 +1,83 @@
 [
 	{
-		"name":"Scientist",
-		"science":3,
-		"greatPersonPoints": {"Great Scientist":3},
-		"color": [0,0,255]
+		"name": "Laborer",
+		"production": 1,
+		"color": [
+			128,
+			128,
+			128
+		]
 	},
 	{
-		"name":"Merchant",
-		"gold":2,
-		"greatPersonPoints": {"Great Merchant":3},
-		"color": [255,215,0]
+		"name": "Writer",
+		"culture": 3,
+		"greatPersonPoints": {
+			"Great Writer": 3
+		},
+		"color": [
+			255,
+			140,
+			0
+		]
 	},
 	{
-		"name":"Artist",
-		"culture":3,
-		"greatPersonPoints": {"Great Artist":3},
-		"color": [160,32,240]
+		"name": "Artist",
+		"culture": 3,
+		"greatPersonPoints": {
+			"Great Artist": 3
+		},
+		"color": [
+			160,
+			32,
+			240
+		]
 	},
 	{
-		"name":"Engineer",
-		"production":2,
-		"greatPersonPoints": {"Great Engineer":3},
-		"color": [139,69,19]
+		"name": "Musician",
+		"culture": 5,
+		"greatPersonPoints": {
+			"Great Musician": 3
+		},
+		"color": [
+			0,
+			191,
+			255
+		]
 	},
 	{
-		"name":"Writer",
-		"culture":3,
-		"greatPersonPoints": {"Great Writer":3},
-		"color": [255,140,0]
+		"name": "Scientist",
+		"science": 3,
+		"greatPersonPoints": {
+			"Great Scientist": 3
+		},
+		"color": [
+			0,
+			0,
+			255
+		]
 	},
 	{
-		"name":"Musician",
-		"culture":3,
-		"greatPersonPoints": {"Great Musician":3},
-		"color": [0,191,255]
+		"name": "Merchant",
+		"gold": 5,
+		"greatPersonPoints": {
+			"Great Merchant": 3
+		},
+		"color": [
+			255,
+			215,
+			0
+		]
 	},
 	{
-		"name":"Unemployed Citizen",
-		"production":1,
-		"color": [128,128,128]
+		"name": "Engineer",
+		"production": 4,
+		"greatPersonPoints": {
+			"Great Engineer": 3
+		},
+		"color": [
+			139,
+			69,
+			19
+		]
 	}
 ]

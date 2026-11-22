@@ -1798,7 +1798,7 @@
       "checkTriggerTurnCount": 10,
       "minimumNumTurnsExecuted": 25,
       "weightThreshold": 50,
-      "techPrereq": "Optics",
+      "techPrereq": "Sailing",
       "playerFlavors": {
         "Offense": -10,
         "Defense": -10,
@@ -2327,7 +2327,7 @@
       "name": "MILITARYAISTRATEGY_NEED_RANGED_EARLY",
       "noMinorCivs": true,
       "checkTriggerTurnCount": 5,
-      "techObsolete": "Archery",
+      "techObsolete": "Military Strategy",
       "playerFlavors": {
         "Ranged": 100
       },
@@ -3829,32 +3829,6 @@
     },
     {
       "kind": "Building",
-      "name": "Floating Gardens",
-      "flavors": {
-        "NavalGrowth": 10,
-        "Growth": 30,
-        "Production": 5,
-        "Science": 10
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Mughal Fort",
-      "flavors": {
-        "CityDefense": 25,
-        "Culture": 25
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Krepost",
-      "flavors": {
-        "MilitaryTraining": 20,
-        "Expansion": 20
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Longhouse",
       "flavors": {
         "Expansion": 10,
@@ -3887,36 +3861,11 @@
     },
     {
       "kind": "Building",
-      "name": "Paper Maker",
-      "flavors": {
-        "MilitaryTraining": 10,
-        "Gold": 10,
-        "Science": 35
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Wat",
       "flavors": {
         "Science": 35,
         "Culture": 40,
         "GreatPeople": 5
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Mud Pyramid Mosque",
-      "flavors": {
-        "Culture": 20,
-        "Religion": 20
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Burial Tomb",
-      "flavors": {
-        "Happiness": 20,
-        "Religion": 20
       }
     },
     {
@@ -3974,29 +3923,6 @@
     },
     {
       "kind": "Building",
-      "name": "Hydro Plant",
-      "flavors": {
-        "Growth": 10,
-        "Production": 70
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Solar Plant",
-      "flavors": {
-        "Growth": 10,
-        "Production": 70
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Mint",
-      "flavors": {
-        "Gold": 100
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Observatory",
       "flavors": {
         "Science": 35
@@ -4039,15 +3965,6 @@
     },
     {
       "kind": "Building",
-      "name": "Colosseum",
-      "flavors": {
-        "Expansion": 5,
-        "Growth": 3,
-        "Happiness": 50
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Zoo",
       "flavors": {
         "Expansion": 6,
@@ -4076,29 +3993,6 @@
       "name": "Temple",
       "flavors": {
         "Religion": 40
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Opera House",
-      "flavors": {
-        "Culture": 35,
-        "GreatPeople": 2
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Museum",
-      "flavors": {
-        "Culture": 40,
-        "GreatPeople": 5
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Broadcast Tower",
-      "flavors": {
-        "Culture": 50
       }
     },
     {
@@ -4201,14 +4095,6 @@
     },
     {
       "kind": "Building",
-      "name": "Nuclear Plant",
-      "flavors": {
-        "Growth": 4,
-        "Production": 60
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Spaceship Factory",
       "flavors": {
         "Production": 20,
@@ -4299,22 +4185,6 @@
     },
     {
       "kind": "Building",
-      "name": "National College",
-      "flavors": {
-        "Science": 100,
-        "Wonder": 20
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "National Epic",
-      "flavors": {
-        "GreatPeople": 50,
-        "Wonder": 20
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Circus Maximus",
       "flavors": {
         "Happiness": 100,
@@ -4323,35 +4193,9 @@
     },
     {
       "kind": "Building",
-      "name": "East India Company",
-      "flavors": {
-        "Gold": 25,
-        "Wonder": 25,
-        "I_TradeOrigin": 25,
-        "I_TradeDestination": 25
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Ironworks",
       "flavors": {
         "Production": 50,
-        "Wonder": 20
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Oxford University",
-      "flavors": {
-        "Science": 50,
-        "Wonder": 20
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Hermitage",
-      "flavors": {
-        "Culture": 50,
         "Wonder": 20
       }
     },
@@ -4542,15 +4386,6 @@
     },
     {
       "kind": "Building",
-      "name": "Big Ben",
-      "flavors": {
-        "Gold": 25,
-        "GreatPeople": 20,
-        "Wonder": 25
-      }
-    },
-    {
-      "kind": "Building",
       "name": "The Louvre",
       "flavors": {
         "Culture": 75,
@@ -4667,14 +4502,6 @@
     },
     {
       "kind": "Building",
-      "name": "Amphitheater",
-      "flavors": {
-        "Culture": 20,
-        "GreatPeople": 2
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Shrine",
       "flavors": {
         "Religion": 25
@@ -4686,13 +4513,6 @@
       "flavors": {
         "Air": 25,
         "Spaceship": 50
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Bomb Shelter",
-      "flavors": {
-        "Defense": 25
       }
     },
     {
@@ -4732,17 +4552,6 @@
     },
     {
       "kind": "Building",
-      "name": "CN Tower",
-      "flavors": {
-        "Growth": 50,
-        "Culture": 30,
-        "Happiness": 30,
-        "GreatPeople": 10,
-        "Wonder": 30
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Hubble Space Telescope",
       "flavors": {
         "GreatPeople": 60,
@@ -4756,15 +4565,6 @@
       "flavors": {
         "GreatPeople": 50,
         "Wonder": 20
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "Great Mosque of Djenne",
-      "flavors": {
-        "GreatPeople": 10,
-        "Wonder": 15,
-        "Religion": 50
       }
     },
     {
@@ -4835,14 +4635,6 @@
     },
     {
       "kind": "Building",
-      "name": "Coffee House",
-      "flavors": {
-        "Production": 50,
-        "GreatPeople": 40
-      }
-    },
-    {
-      "kind": "Building",
       "name": "Stele",
       "flavors": {
         "Culture": 10,
@@ -4855,13 +4647,6 @@
       "flavors": {
         "Wonder": 20,
         "Religion": 50
-      }
-    },
-    {
-      "kind": "Building",
-      "name": "National Visitor Center",
-      "flavors": {
-        "Culture": 50
       }
     },
     {
@@ -6170,730 +5955,6 @@
       }
     },
     {
-      "kind": "Technology",
-      "name": "Agriculture",
-      "flavors": {
-        "Growth": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Pottery",
-      "flavors": {
-        "Growth": 4,
-        "Religion": 1
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Animal Husbandry",
-      "flavors": {
-        "Mobile": 4,
-        "TileImprovement": 1,
-        "Gold": 3
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Archery",
-      "flavors": {
-        "Offense": 1,
-        "Ranged": 4
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Mining",
-      "flavors": {
-        "TileImprovement": 2,
-        "Production": 5,
-        "Happiness": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Sailing",
-      "flavors": {
-        "Naval": 3,
-        "NavalRecon": 2,
-        "NavalTileImprovement": 3,
-        "Gold": 3,
-        "Happiness": 3,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Calendar",
-      "flavors": {
-        "TileImprovement": 5,
-        "Gold": 6,
-        "Happiness": 2,
-        "Wonder": 2,
-        "Religion": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Writing",
-      "flavors": {
-        "MilitaryTraining": 4,
-        "Science": 6,
-        "Wonder": 2,
-        "Diplomacy": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Trapping",
-      "flavors": {
-        "TileImprovement": 2,
-        "Gold": 8,
-        "Happiness": 3
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "The Wheel",
-      "flavors": {
-        "Ranged": 2,
-        "Mobile": 2,
-        "Growth": 2,
-        "Infrastructure": 4,
-        "Gold": 6
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Masonry",
-      "flavors": {
-        "CityDefense": 4,
-        "TileImprovement": 2,
-        "Happiness": 2,
-        "Wonder": 4
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Bronze Working",
-      "flavors": {
-        "Defense": 8,
-        "MilitaryTraining": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Optics",
-      "flavors": {
-        "Naval": 5,
-        "NavalGrowth": 5,
-        "Expansion": 5,
-        "Growth": 5,
-        "Science": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Horseback Riding",
-      "flavors": {
-        "Offense": 5,
-        "Mobile": 10,
-        "Production": 3
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Mathematics",
-      "flavors": {
-        "Offense": 4,
-        "Ranged": 8,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Construction",
-      "flavors": {
-        "Defense": 2,
-        "Ranged": 6,
-        "TileImprovement": 5,
-        "Production": 6,
-        "Happiness": 20,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Philosophy",
-      "flavors": {
-        "Science": 3,
-        "Culture": 6,
-        "Wonder": 2,
-        "Religion": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Drama and Poetry",
-      "flavors": {
-        "Culture": 6,
-        "GreatPeople": 3
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Currency",
-      "flavors": {
-        "Gold": 20,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Engineering",
-      "flavors": {
-        "Defense": 2,
-        "Growth": 10,
-        "Infrastructure": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Iron Working",
-      "flavors": {
-        "Offense": 12,
-        "Defense": 6,
-        "MilitaryTraining": 3
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Theology",
-      "flavors": {
-        "GreatPeople": 3,
-        "Wonder": 4,
-        "Religion": 6
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Civil Service",
-      "flavors": {
-        "Defense": 10,
-        "Growth": 20,
-        "Science": 10,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Guilds",
-      "flavors": {
-        "Gold": 20,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Metal Casting",
-      "flavors": {
-        "Offense": 3,
-        "Defense": 3,
-        "MilitaryTraining": 3,
-        "Production": 25,
-        "Wonder": 3
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Compass",
-      "flavors": {
-        "Naval": 10,
-        "Production": 3,
-        "Gold": 6,
-        "WaterConnection": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Education",
-      "flavors": {
-        "Science": 12,
-        "Wonder": 4,
-        "Diplomacy": 4
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Chivalry",
-      "flavors": {
-        "Offense": 3,
-        "CityDefense": 3,
-        "Mobile": 8,
-        "Wonder": 2,
-        "Diplomacy": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Machinery",
-      "flavors": {
-        "Defense": 3,
-        "Ranged": 8,
-        "Infrastructure": 4,
-        "Production": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Physics",
-      "flavors": {
-        "Offense": 5,
-        "Ranged": 10,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Steel",
-      "flavors": {
-        "Offense": 20,
-        "MilitaryTraining": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Astronomy",
-      "flavors": {
-        "Recon": 5,
-        "Naval": 5,
-        "NavalRecon": 15,
-        "Expansion": 10,
-        "Science": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Acoustics",
-      "flavors": {
-        "Culture": 8,
-        "Wonder": 4
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Banking",
-      "flavors": {
-        "Expansion": 5,
-        "Gold": 20,
-        "Happiness": 5,
-        "Wonder": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Printing Press",
-      "flavors": {
-        "Happiness": 12,
-        "GreatPeople": 2,
-        "Wonder": 4
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Gunpowder",
-      "flavors": {
-        "Offense": 6,
-        "Defense": 12,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Navigation",
-      "flavors": {
-        "Naval": 14,
-        "Production": 4
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Architecture",
-      "flavors": {
-        "Science": 12,
-        "Wonder": 12
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Economics",
-      "flavors": {
-        "Production": 8,
-        "Gold": 12
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Metallurgy",
-      "flavors": {
-        "Offense": 4,
-        "Defense": 4,
-        "CityDefense": 3,
-        "Mobile": 8
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Chemistry",
-      "flavors": {
-        "Offense": 6,
-        "Defense": 3,
-        "Ranged": 10,
-        "Production": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Archaeology",
-      "flavors": {
-        "Culture": 25,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Scientific Theory",
-      "flavors": {
-        "Science": 20
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Industrialization",
-      "flavors": {
-        "Production": 20,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Rifling",
-      "flavors": {
-        "Offense": 10,
-        "Defense": 10,
-        "CityDefense": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Military Science",
-      "flavors": {
-        "Offense": 4,
-        "MilitaryTraining": 5,
-        "Mobile": 10,
-        "Wonder": 1
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Fertilizer",
-      "flavors": {
-        "Growth": 20,
-        "Gold": 8,
-        "Science": 15,
-        "GreatPeople": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Biology",
-      "flavors": {
-        "Offense": 25,
-        "Defense": 10,
-        "Mobile": 10,
-        "Naval": 12,
-        "Air": 25,
-        "Growth": 10,
-        "TileImprovement": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Electricity",
-      "flavors": {
-        "Offense": 5,
-        "Gold": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Steam Power",
-      "flavors": {
-        "Naval": 15
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Dynamite",
-      "flavors": {
-        "Offense": 10,
-        "Defense": 8,
-        "Ranged": 12
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Refrigeration",
-      "flavors": {
-        "Offense": 10,
-        "Naval": 10,
-        "NavalTileImprovement": 4,
-        "Air": 5,
-        "Production": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Radio",
-      "flavors": {
-        "Air": 2,
-        "Culture": 15,
-        "Wonder": 4
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Replaceable Parts",
-      "flavors": {
-        "Defense": 15,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Flight",
-      "flavors": {
-        "Air": 15,
-        "Antiair": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Railroads",
-      "flavors": {
-        "Infrastructure": 10,
-        "Production": 10,
-        "Wonder": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Plastics",
-      "flavors": {
-        "Defense": 10,
-        "Production": 5,
-        "Science": 5,
-        "Spaceship": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Electronics",
-      "flavors": {
-        "Offense": 5,
-        "Naval": 10,
-        "AirCarrier": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Ballistics",
-      "flavors": {
-        "Offense": 10,
-        "Defense": 10,
-        "Antiair": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Combustion",
-      "flavors": {
-        "Offense": 15,
-        "Mobile": 5,
-        "Naval": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Pharmaceuticals",
-      "flavors": {
-        "Growth": 10,
-        "Gold": 2,
-        "Science": 2
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Atomic Theory",
-      "flavors": {
-        "Offense": 10,
-        "Nuke": 25
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Radar",
-      "flavors": {
-        "Offense": 5,
-        "Air": 15,
-        "Antiair": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Combined Arms",
-      "flavors": {
-        "Offense": 10,
-        "Defense": 5,
-        "Mobile": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Ecology",
-      "flavors": {
-        "Production": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Nuclear Fission",
-      "flavors": {
-        "Offense": 5,
-        "Production": 10,
-        "Nuke": 30
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Rocketry",
-      "flavors": {
-        "Ranged": 10,
-        "Mobile": 5,
-        "Air": 5,
-        "Spaceship": 30
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Computers",
-      "flavors": {
-        "Naval": 5,
-        "Air": 5,
-        "Nuke": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Telecommunications",
-      "flavors": {
-        "Defense": 5,
-        "Wonder": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Mobile Tactics",
-      "flavors": {
-        "Defense": 10,
-        "Mobile": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Advanced Ballistics",
-      "flavors": {
-        "Spaceship": 10,
-        "Nuke": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Satellites",
-      "flavors": {
-        "Science": 6,
-        "Wonder": 2,
-        "Spaceship": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Robotics",
-      "flavors": {
-        "Naval": 4,
-        "Spaceship": 25
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Lasers",
-      "flavors": {
-        "Offense": 5,
-        "Mobile": 5,
-        "Air": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "The Internet",
-      "flavors": {
-        "Culture": 50
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Globalization",
-      "flavors": {
-        "Diplomacy": 50
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Particle Physics",
-      "flavors": {
-        "Spaceship": 20
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Nuclear Fusion",
-      "flavors": {
-        "Offense": 15,
-        "Nuke": 5
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Nanotechnology",
-      "flavors": {
-        "Spaceship": 20
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Stealth",
-      "flavors": {
-        "Air": 10
-      }
-    },
-    {
-      "kind": "Technology",
-      "name": "Future Tech",
-      "flavors": {
-        "Science": 10
-      }
-    },
-    {
       "kind": "Policy",
       "name": "Liberty",
       "flavors": {
@@ -8068,6 +7129,1254 @@
       "name": "Citrus",
       "flavors": {
         "Happiness": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Agriculture",
+      "flavors": {
+        "Growth": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Pottery",
+      "flavors": {
+        "NavalTileImprovement": 5,
+        "Expansion": 25,
+        "Growth": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Animal Husbandry",
+      "flavors": {
+        "Ranged": 5,
+        "Mobile": 5,
+        "TileImprovement": 15
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Military Strategy",
+      "flavors": {
+        "Offense": 15,
+        "CityDefense": 5,
+        "MilitaryTraining": 15,
+        "Mobile": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Mining",
+      "flavors": {
+        "TileImprovement": 15,
+        "Production": 10,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Fishing",
+      "flavors": {
+        "Naval": 15,
+        "NavalTileImprovement": 25,
+        "Expansion": 5
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Calendar",
+      "flavors": {
+        "Growth": 5,
+        "TileImprovement": 15,
+        "Production": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Writing",
+      "flavors": {
+        "Science": 15,
+        "Wonder": 10,
+        "Diplomacy": 15
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Trapping",
+      "flavors": {
+        "Ranged": 10,
+        "Growth": 10,
+        "TileImprovement": 15
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "The Wheel",
+      "flavors": {
+        "TileImprovement": 5,
+        "Infrastructure": 10,
+        "Science": 10,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Construction",
+      "flavors": {
+        "CityDefense": 20,
+        "TileImprovement": 15,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Bronze Working",
+      "flavors": {
+        "Offense": 5,
+        "Defense": 10,
+        "TileImprovement": 10,
+        "Production": 10,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Sailing",
+      "flavors": {
+        "Recon": 10,
+        "Naval": 15,
+        "NavalGrowth": 15,
+        "Wonder": 10,
+        "WaterConnection": 20,
+        "I_SeaTradeRoute": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Trade",
+      "flavors": {
+        "Gold": 25,
+        "Wonder": 10,
+        "I_LandTradeRoute": 25
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Mathematics",
+      "flavors": {
+        "Ranged": 10,
+        "Mobile": 10,
+        "Wonder": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Masonry",
+      "flavors": {
+        "Offense": 10,
+        "Ranged": 10,
+        "Growth": 5,
+        "Production": 15,
+        "Culture": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Philosophy",
+      "flavors": {
+        "Naval": 15,
+        "Science": 10,
+        "Wonder": 10,
+        "Religion": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Drama and Poetry",
+      "flavors": {
+        "Culture": 25,
+        "GreatPeople": 10,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Currency",
+      "flavors": {
+        "Ranged": 10,
+        "TileImprovement": 15,
+        "Gold": 15,
+        "Wonder": 10,
+        "I_LandTradeRoute": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Engineering",
+      "flavors": {
+        "Defense": 10,
+        "Growth": 15,
+        "Infrastructure": 10,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Iron Working",
+      "flavors": {
+        "Offense": 15,
+        "MilitaryTraining": 10,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Theology",
+      "flavors": {
+        "GreatPeople": 10,
+        "Wonder": 20,
+        "Religion": 15
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Civil Service",
+      "flavors": {
+        "Growth": 10,
+        "TileImprovement": 10,
+        "Production": 10,
+        "Wonder": 5,
+        "Diplomacy": 15
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Guilds",
+      "flavors": {
+        "Naval": 15,
+        "TileImprovement": 10,
+        "Gold": 15,
+        "Culture": 25,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Metal Casting",
+      "flavors": {
+        "TileImprovement": 15,
+        "Production": 15,
+        "Gold": 15,
+        "Culture": 10,
+        "Espionage": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Compass",
+      "flavors": {
+        "Recon": 10,
+        "Naval": 15,
+        "NavalRecon": 20,
+        "NavalGrowth": 10,
+        "NavalTileImprovement": 10,
+        "I_SeaTradeRoute": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Education",
+      "flavors": {
+        "Science": 25,
+        "Wonder": 5,
+        "Diplomacy": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Chivalry",
+      "flavors": {
+        "Offense": 15,
+        "CityDefense": 20,
+        "Mobile": 10,
+        "Production": 5,
+        "Wonder": 5
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Machinery",
+      "flavors": {
+        "Ranged": 10,
+        "TileImprovement": 5,
+        "Production": 10,
+        "Happiness": 10,
+        "Wonder": 10,
+        "I_LandTradeRoute": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Physics",
+      "flavors": {
+        "Offense": 10,
+        "Ranged": 20,
+        "Mobile": 10,
+        "Culture": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Steel",
+      "flavors": {
+        "Offense": 15,
+        "Defense": 15,
+        "MilitaryTraining": 15,
+        "Production": 5,
+        "Science": 5
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Astronomy",
+      "flavors": {
+        "NavalRecon": 20,
+        "Expansion": 5,
+        "Science": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Acoustics",
+      "flavors": {
+        "Culture": 25,
+        "Wonder": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Banking",
+      "flavors": {
+        "Expansion": 15,
+        "Gold": 15,
+        "Science": 5,
+        "Diplomacy": 10,
+        "Espionage": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Printing Press",
+      "flavors": {
+        "Science": 5,
+        "Culture": 5,
+        "Wonder": 10,
+        "Diplomacy": 25
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Gunpowder",
+      "flavors": {
+        "Offense": 20,
+        "Defense": 10,
+        "Ranged": 10,
+        "TileImprovement": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Navigation",
+      "flavors": {
+        "CityDefense": 20,
+        "Naval": 30,
+        "NavalTileImprovement": 5,
+        "Gold": 10,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Architecture",
+      "flavors": {
+        "Culture": 15,
+        "Wonder": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Economics",
+      "flavors": {
+        "Offense": 20,
+        "Mobile": 10,
+        "Growth": 5,
+        "TileImprovement": 5,
+        "Production": 20,
+        "Gold": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Metallurgy",
+      "flavors": {
+        "Ranged": 20,
+        "Mobile": 10,
+        "TileImprovement": 5,
+        "Wonder": 5
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Chemistry",
+      "flavors": {
+        "Growth": 15,
+        "TileImprovement": 10,
+        "Happiness": 10,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Archaeology",
+      "flavors": {
+        "TileImprovement": 5,
+        "Culture": 35,
+        "Wonder": 5
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Scientific Theory",
+      "flavors": {
+        "Science": 30,
+        "Culture": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Industrialization",
+      "flavors": {
+        "Naval": 15,
+        "TileImprovement": 10,
+        "Production": 25,
+        "Wonder": 5,
+        "Diplomacy": 15
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Rifling",
+      "flavors": {
+        "Offense": 20,
+        "Defense": 10,
+        "Ranged": 10,
+        "TileImprovement": 5,
+        "Espionage": 15
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Military Science",
+      "flavors": {
+        "MilitaryTraining": 15,
+        "Ranged": 10,
+        "Mobile": 10,
+        "Culture": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Fertilizer",
+      "flavors": {
+        "Growth": 5,
+        "TileImprovement": 10,
+        "Production": 5,
+        "Gold": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Biology",
+      "flavors": {
+        "Growth": 15,
+        "GreatPeople": 25,
+        "Wonder": 5
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Electricity",
+      "flavors": {
+        "Gold": 30,
+        "Wonder": 10,
+        "Espionage": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Steam Power",
+      "flavors": {
+        "MilitaryTraining": 5,
+        "NavalTileImprovement": 10,
+        "TileImprovement": 20,
+        "Production": 15,
+        "Gold": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Dynamite",
+      "flavors": {
+        "Ranged": 10,
+        "Naval": 15,
+        "TileImprovement": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Refrigeration",
+      "flavors": {
+        "NavalTileImprovement": 20,
+        "TileImprovement": 5,
+        "Culture": 20,
+        "Diplomacy": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Radio",
+      "flavors": {
+        "Naval": 30,
+        "Culture": 35,
+        "Wonder": 5,
+        "Diplomacy": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Replaceable Parts",
+      "flavors": {
+        "Offense": 10,
+        "Defense": 10,
+        "Science": 15,
+        "Culture": 5,
+        "Wonder": 5,
+        "Diplomacy": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Flight",
+      "flavors": {
+        "Offense": 10,
+        "Air": 25,
+        "Wonder": 5
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Railroads",
+      "flavors": {
+        "Mobile": 10,
+        "Expansion": 15,
+        "TileImprovement": 5,
+        "Infrastructure": 10,
+        "Production": 15,
+        "Gold": 10,
+        "Culture": 15,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Plastics",
+      "flavors": {
+        "Naval": 15,
+        "TileImprovement": 10,
+        "Science": 20,
+        "Culture": 5,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Electronics",
+      "flavors": {
+        "Naval": 15,
+        "TileImprovement": 5,
+        "Happiness": 15,
+        "Wonder": 10,
+        "Espionage": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Ballistics",
+      "flavors": {
+        "Offense": 10,
+        "Ranged": 30,
+        "Mobile": 10,
+        "Antiair": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Combustion",
+      "flavors": {
+        "Offense": 20,
+        "CityDefense": 20,
+        "Mobile": 10,
+        "TileImprovement": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Pharmaceuticals",
+      "flavors": {
+        "Offense": 5,
+        "Growth": 25,
+        "Science": 5
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Atomic Theory",
+      "flavors": {
+        "TileImprovement": 10,
+        "Diplomacy": 15,
+        "Nuke": 25
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Radar",
+      "flavors": {
+        "Offense": 10,
+        "CityDefense": 20,
+        "Air": 25,
+        "Culture": 10,
+        "Espionage": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Combined Arms",
+      "flavors": {
+        "Offense": 15,
+        "Defense": 5,
+        "Mobile": 15,
+        "Wonder": 5
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Alternative Energy",
+      "flavors": {
+        "NavalTileImprovement": 20,
+        "TileImprovement": 20,
+        "Production": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Nuclear Fission",
+      "flavors": {
+        "CityDefense": 5,
+        "Naval": 30,
+        "Nuke": 30
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Rocketry",
+      "flavors": {
+        "Air": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Computers",
+      "flavors": {
+        "Offense": 10,
+        "Naval": 10,
+        "Culture": 5,
+        "Wonder": 5,
+        "Espionage": 20,
+        "AirCarrier": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Telecommunications",
+      "flavors": {
+        "Culture": 20,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Mobile Tactics",
+      "flavors": {
+        "Offense": 10,
+        "Defense": 10,
+        "Ranged": 20,
+        "Mobile": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Advanced Ballistics",
+      "flavors": {
+        "Offense": 30,
+        "Ranged": 10,
+        "Mobile": 10,
+        "Naval": 15,
+        "Air": 10,
+        "Antiair": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Satellites",
+      "flavors": {
+        "Science": 20,
+        "Culture": 10,
+        "Wonder": 10,
+        "Spaceship": 75
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Robotics",
+      "flavors": {
+        "Offense": 25,
+        "Mobile": 20,
+        "Naval": 25,
+        "Air": 10,
+        "TileImprovement": 10,
+        "Wonder": 10,
+        "Spaceship": 50
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Lasers",
+      "flavors": {
+        "Offense": 10,
+        "Naval": 15,
+        "Air": 15,
+        "Production": 15,
+        "Nuke": 30
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "The Internet",
+      "flavors": {
+        "Gold": 15,
+        "Culture": 55
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Globalization",
+      "flavors": {
+        "Diplomacy": 20,
+        "Spaceship": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Particle Physics",
+      "flavors": {
+        "Wonder": 10,
+        "Spaceship": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Nuclear Fusion",
+      "flavors": {
+        "Science": 15,
+        "Spaceship": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Nanotechnology",
+      "flavors": {
+        "Spaceship": 20
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Stealth",
+      "flavors": {
+        "Naval": 15,
+        "Air": 15
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Future Tech",
+      "flavors": {
+        "Happiness": 10
+      }
+    },
+    {
+      "kind": "Technology",
+      "name": "Corporations",
+      "flavors": {
+        "Growth": 30,
+        "Production": 30,
+        "Gold": 30,
+        "Science": 30,
+        "Culture": 30
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Tabya",
+      "flavors": {
+        "Production": 40,
+        "Gold": 10,
+        "I_LandTradeRoute": 5,
+        "I_SeaTradeRoute": 5
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Customs House",
+      "flavors": {
+        "Gold": 25,
+        "GreatPeople": 2,
+        "I_TradeOrigin": 25,
+        "I_TradeDestination": 25
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Arena",
+      "flavors": {
+        "Production": 10,
+        "Culture": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "School of Philosophy",
+      "flavors": {
+        "Science": 100,
+        "Wonder": 10
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Chartered Company",
+      "flavors": {
+        "Gold": 50,
+        "Wonder": 10,
+        "I_TradeOrigin": 25,
+        "I_TradeDestination": 25
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "International Space Station",
+      "flavors": {
+        "Science": 50,
+        "Wonder": 25,
+        "Spaceship": 100
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Strategic Defense System",
+      "flavors": {
+        "CityDefense": 25
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "University of Sankore",
+      "flavors": {
+        "Science": 25,
+        "Culture": 25,
+        "GreatPeople": 25,
+        "Wonder": 20,
+        "Religion": 10
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Neuschwanstein",
+      "flavors": {
+        "CityDefense": 20,
+        "Gold": 20,
+        "Culture": 20,
+        "Happiness": 10,
+        "Wonder": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Council",
+      "flavors": {
+        "Science": 35
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Well",
+      "flavors": {
+        "Growth": 15,
+        "Production": 25
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Grocer",
+      "flavors": {
+        "Growth": 25,
+        "Happiness": 25
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Bastion Fort",
+      "flavors": {
+        "CityDefense": 25,
+        "MilitaryTraining": 5,
+        "Happiness": 5
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Agribusiness",
+      "flavors": {
+        "Growth": 30,
+        "Production": 10,
+        "Gold": 10
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Mine Field",
+      "flavors": {
+        "CityDefense": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Refinery",
+      "flavors": {
+        "Production": 30
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Lamassu Gate",
+      "flavors": {
+        "CityDefense": 30,
+        "MilitaryTraining": 20,
+        "Happiness": 5,
+        "Religion": 10
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Schützenstand",
+      "flavors": {
+        "MilitaryTraining": 50,
+        "Science": 10,
+        "Culture": 10
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Andelsbevægelse",
+      "flavors": {
+        "Growth": 40,
+        "Production": 20,
+        "Gold": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Steam Mill",
+      "flavors": {
+        "Production": 80,
+        "GreatPeople": 10
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Harappan Reservoir",
+      "flavors": {
+        "Growth": 40,
+        "Production": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Siege Foundry",
+      "flavors": {
+        "MilitaryTraining": 30,
+        "Ranged": 20,
+        "Production": 25,
+        "Science": 25,
+        "GreatPeople": 2
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Barbican",
+      "flavors": {
+        "CityDefense": 30,
+        "MilitaryTraining": 25
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Marae",
+      "flavors": {
+        "Growth": 10,
+        "Gold": 10,
+        "Science": 35,
+        "Culture": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Pogost",
+      "flavors": {
+        "Production": 20,
+        "Gold": 35,
+        "GreatPeople": 2,
+        "I_TradeOrigin": 30,
+        "I_TradeDestination": 30
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Tophet",
+      "flavors": {
+        "Growth": 10,
+        "Gold": 10,
+        "Culture": 10,
+        "Religion": 25
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Huey Teocalli",
+      "flavors": {
+        "Growth": 30,
+        "Gold": 20,
+        "Wonder": 10,
+        "Religion": 60
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Great Cothon",
+      "flavors": {
+        "Naval": 25,
+        "Production": 25,
+        "Gold": 75,
+        "Culture": 25,
+        "I_TradeOrigin": 75,
+        "I_TradeDestination": 75
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Karlstejn",
+      "flavors": {
+        "MilitaryTraining": 20,
+        "Wonder": 20,
+        "Religion": 50
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Soho Foundry",
+      "flavors": {
+        "Production": 75,
+        "Wonder": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "The Motherland Calls",
+      "flavors": {
+        "MilitaryTraining": 40,
+        "Gold": 40,
+        "Wonder": 20,
+        "Espionage": 30
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "CERN",
+      "flavors": {
+        "Science": 75,
+        "Wonder": 20,
+        "Diplomacy": 50
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Grand Canal",
+      "flavors": {
+        "Naval": 30,
+        "Gold": 15,
+        "Wonder": 15
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Crystal Palace",
+      "flavors": {
+        "Production": 40,
+        "Science": 40,
+        "Wonder": 25
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Consulate",
+      "flavors": {
+        "Diplomacy": 100
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Mandir",
+      "flavors": {
+        "Growth": 6,
+        "Production": 2,
+        "Gold": 2,
+        "Science": 2,
+        "Culture": 2,
+        "Religion": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Synagogue",
+      "flavors": {
+        "Production": 10,
+        "Science": 4,
+        "Culture": 6,
+        "Religion": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Order",
+      "flavors": {
+        "Offense": 8,
+        "MilitaryTraining": 15,
+        "Gold": 8,
+        "Religion": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Teocalli",
+      "flavors": {
+        "Offense": 10,
+        "Religion": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Gurdwara",
+      "flavors": {
+        "CityDefense": 20,
+        "Growth": 10,
+        "Religion": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Trader Sid's Headquarters",
+      "flavors": {
+        "Gold": 100,
+        "Diplomacy": 100
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Centaurus Extractors Headquarters",
+      "flavors": {
+        "NavalTileImprovement": 60,
+        "Production": 60,
+        "Science": 60,
+        "Culture": 60
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Hexxon Refineries Headquarters",
+      "flavors": {
+        "MilitaryTraining": 100,
+        "Expansion": 40,
+        "Production": 100
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Giorgio Armeier Headquarters",
+      "flavors": {
+        "Culture": 100,
+        "GreatPeople": 100
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Firaxite Materials Headquarters",
+      "flavors": {
+        "Production": 100,
+        "Science": 100
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "TwoKay Foods Headquarters",
+      "flavors": {
+        "Growth": 100,
+        "Happiness": 50
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Civilized Jewelers Headquarters",
+      "flavors": {
+        "Gold": 80,
+        "Culture": 40,
+        "Diplomacy": 80
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Populi Medicine Headquarters",
+      "flavors": {
+        "Happiness": 80,
+        "Religion": 100,
+        "Diplomacy": 50
       }
     }
   ],
@@ -11648,13 +11957,19 @@
       ]
     },
     {
-      "name": "Animal Husbandry",
+      "name": "Trapping",
       "prereqs": [
         "Agriculture"
       ]
     },
     {
-      "name": "Archery",
+      "name": "The Wheel",
+      "prereqs": [
+        "Agriculture"
+      ]
+    },
+    {
+      "name": "Animal Husbandry",
       "prereqs": [
         "Agriculture"
       ]
@@ -11666,39 +11981,36 @@
       ]
     },
     {
-      "name": "Sailing",
+      "name": "Fishing",
       "prereqs": [
         "Pottery"
+      ]
+    },
+    {
+      "name": "Trade",
+      "prereqs": [
+        "Pottery",
+        "Trapping"
       ]
     },
     {
       "name": "Calendar",
       "prereqs": [
-        "Pottery"
+        "Trapping",
+        "The Wheel"
       ]
     },
     {
-      "name": "Writing",
+      "name": "Construction",
       "prereqs": [
-        "Pottery"
-      ]
-    },
-    {
-      "name": "Trapping",
-      "prereqs": [
+        "The Wheel",
         "Animal Husbandry"
       ]
     },
     {
-      "name": "The Wheel",
+      "name": "Military Strategy",
       "prereqs": [
         "Animal Husbandry",
-        "Archery"
-      ]
-    },
-    {
-      "name": "Masonry",
-      "prereqs": [
         "Mining"
       ]
     },
@@ -11709,392 +12021,420 @@
       ]
     },
     {
-      "name": "Optics",
+      "name": "Sailing",
       "prereqs": [
-        "Sailing"
+        "Fishing",
+        "Trade"
       ]
     },
     {
-      "name": "Horseback Riding",
+      "name": "Writing",
       "prereqs": [
-        "The Wheel",
-        "Trapping"
+        "Trade",
+        "Calendar"
       ]
     },
     {
       "name": "Mathematics",
       "prereqs": [
-        "The Wheel"
-      ]
-    },
-    {
-      "name": "Construction",
-      "prereqs": [
-        "Masonry",
-        "The Wheel"
-      ]
-    },
-    {
-      "name": "Philosophy",
-      "prereqs": [
         "Calendar",
-        "Writing"
+        "Construction"
+      ]
+    },
+    {
+      "name": "Masonry",
+      "prereqs": [
+        "Construction",
+        "Military Strategy"
+      ]
+    },
+    {
+      "name": "Iron Working",
+      "prereqs": [
+        "Military Strategy",
+        "Bronze Working"
       ]
     },
     {
       "name": "Drama and Poetry",
       "prereqs": [
+        "Sailing",
         "Writing"
+      ]
+    },
+    {
+      "name": "Philosophy",
+      "prereqs": [
+        "Sailing",
+        "Writing",
+        "Mathematics"
       ]
     },
     {
       "name": "Currency",
       "prereqs": [
-        "Mathematics"
+        "Writing",
+        "Mathematics",
+        "Masonry"
       ]
     },
     {
       "name": "Engineering",
       "prereqs": [
         "Mathematics",
-        "Construction"
-      ]
-    },
-    {
-      "name": "Iron Working",
-      "prereqs": [
-        "Bronze Working"
-      ]
-    },
-    {
-      "name": "Theology",
-      "prereqs": [
-        "Philosophy",
-        "Drama and Poetry"
-      ]
-    },
-    {
-      "name": "Civil Service",
-      "prereqs": [
-        "Drama and Poetry",
-        "Horseback Riding",
-        "Currency"
-      ]
-    },
-    {
-      "name": "Guilds",
-      "prereqs": [
-        "Currency"
+        "Masonry",
+        "Iron Working"
       ]
     },
     {
       "name": "Metal Casting",
       "prereqs": [
-        "Engineering",
+        "Masonry",
         "Iron Working"
-      ]
-    },
-    {
-      "name": "Compass",
-      "prereqs": [
-        "Optics",
-        "Theology"
       ]
     },
     {
       "name": "Education",
       "prereqs": [
-        "Theology",
-        "Civil Service"
+        "Drama and Poetry",
+        "Philosophy"
+      ]
+    },
+    {
+      "name": "Theology",
+      "prereqs": [
+        "Drama and Poetry",
+        "Philosophy",
+        "Currency"
       ]
     },
     {
       "name": "Chivalry",
       "prereqs": [
-        "Civil Service",
-        "Guilds"
-      ]
-    },
-    {
-      "name": "Machinery",
-      "prereqs": [
-        "Engineering",
-        "Guilds"
+        "Philosophy",
+        "Currency",
+        "Engineering"
       ]
     },
     {
       "name": "Physics",
       "prereqs": [
+        "Currency",
+        "Engineering",
         "Metal Casting"
       ]
     },
     {
       "name": "Steel",
       "prereqs": [
+        "Engineering",
         "Metal Casting"
       ]
     },
     {
-      "name": "Astronomy",
-      "prereqs": [
-        "Compass",
-        "Education"
-      ]
-    },
-    {
-      "name": "Acoustics",
-      "prereqs": [
-        "Education"
-      ]
-    },
-    {
-      "name": "Banking",
+      "name": "Civil Service",
       "prereqs": [
         "Education",
-        "Chivalry"
+        "Theology"
       ]
     },
     {
-      "name": "Printing Press",
+      "name": "Guilds",
       "prereqs": [
-        "Machinery",
-        "Physics",
+        "Theology",
         "Chivalry"
       ]
     },
     {
-      "name": "Gunpowder",
+      "name": "Compass",
+      "prereqs": [
+        "Chivalry",
+        "Physics"
+      ]
+    },
+    {
+      "name": "Machinery",
       "prereqs": [
         "Physics",
         "Steel"
       ]
     },
     {
-      "name": "Navigation",
+      "name": "Banking",
       "prereqs": [
-        "Astronomy"
+        "Civil Service"
+      ]
+    },
+    {
+      "name": "Printing Press",
+      "prereqs": [
+        "Civil Service",
+        "Guilds"
+      ]
+    },
+    {
+      "name": "Astronomy",
+      "prereqs": [
+        "Guilds",
+        "Compass"
+      ]
+    },
+    {
+      "name": "Gunpowder",
+      "prereqs": [
+        "Compass",
+        "Machinery"
+      ]
+    },
+    {
+      "name": "Chemistry",
+      "prereqs": [
+        "Machinery"
       ]
     },
     {
       "name": "Architecture",
-      "prereqs": [
-        "Acoustics",
-        "Banking"
-      ]
-    },
-    {
-      "name": "Economics",
       "prereqs": [
         "Banking",
         "Printing Press"
       ]
     },
     {
-      "name": "Metallurgy",
+      "name": "Acoustics",
       "prereqs": [
-        "Gunpowder",
-        "Printing Press"
+        "Banking",
+        "Printing Press",
+        "Astronomy"
       ]
     },
     {
-      "name": "Chemistry",
+      "name": "Economics",
       "prereqs": [
+        "Printing Press",
+        "Astronomy",
         "Gunpowder"
       ]
     },
     {
-      "name": "Archaeology",
+      "name": "Navigation",
       "prereqs": [
-        "Navigation",
-        "Architecture"
+        "Astronomy",
+        "Gunpowder",
+        "Chemistry"
+      ]
+    },
+    {
+      "name": "Metallurgy",
+      "prereqs": [
+        "Gunpowder",
+        "Chemistry"
       ]
     },
     {
       "name": "Scientific Theory",
       "prereqs": [
-        "Economics",
-        "Architecture"
+        "Architecture",
+        "Acoustics"
       ]
     },
     {
-      "name": "Industrialization",
+      "name": "Railroads",
       "prereqs": [
+        "Acoustics",
         "Economics"
+      ]
+    },
+    {
+      "name": "Steam Power",
+      "prereqs": [
+        "Economics",
+        "Navigation"
       ]
     },
     {
       "name": "Rifling",
       "prereqs": [
-        "Economics",
+        "Navigation",
         "Metallurgy"
       ]
     },
     {
-      "name": "Military Science",
+      "name": "Archaeology",
       "prereqs": [
-        "Chemistry",
-        "Metallurgy"
+        "Scientific Theory"
       ]
     },
     {
       "name": "Fertilizer",
       "prereqs": [
-        "Chemistry"
+        "Scientific Theory",
+        "Railroads"
+      ]
+    },
+    {
+      "name": "Industrialization",
+      "prereqs": [
+        "Railroads",
+        "Steam Power"
+      ]
+    },
+    {
+      "name": "Dynamite",
+      "prereqs": [
+        "Steam Power",
+        "Rifling"
+      ]
+    },
+    {
+      "name": "Military Science",
+      "prereqs": [
+        "Rifling"
       ]
     },
     {
       "name": "Biology",
       "prereqs": [
         "Archaeology",
-        "Scientific Theory"
+        "Fertilizer"
       ]
     },
     {
       "name": "Electricity",
       "prereqs": [
-        "Scientific Theory"
+        "Archaeology",
+        "Fertilizer",
+        "Industrialization"
       ]
     },
     {
-      "name": "Steam Power",
-      "prereqs": [
-        "Rifling",
-        "Industrialization",
-        "Scientific Theory"
-      ]
-    },
-    {
-      "name": "Dynamite",
+      "name": "Corporations",
       "prereqs": [
         "Fertilizer",
-        "Military Science"
-      ]
-    },
-    {
-      "name": "Refrigeration",
-      "prereqs": [
-        "Electricity",
-        "Biology"
-      ]
-    },
-    {
-      "name": "Radio",
-      "prereqs": [
-        "Electricity"
+        "Industrialization",
+        "Dynamite"
       ]
     },
     {
       "name": "Replaceable Parts",
       "prereqs": [
-        "Steam Power",
-        "Electricity"
-      ]
-    },
-    {
-      "name": "Flight",
-      "prereqs": [
-        "Steam Power"
-      ]
-    },
-    {
-      "name": "Railroads",
-      "prereqs": [
-        "Steam Power",
-        "Dynamite"
-      ]
-    },
-    {
-      "name": "Plastics",
-      "prereqs": [
-        "Radio",
-        "Replaceable Parts"
-      ]
-    },
-    {
-      "name": "Electronics",
-      "prereqs": [
-        "Replaceable Parts",
-        "Flight"
-      ]
-    },
-    {
-      "name": "Ballistics",
-      "prereqs": [
-        "Railroads",
-        "Flight"
+        "Industrialization",
+        "Dynamite",
+        "Military Science"
       ]
     },
     {
       "name": "Combustion",
       "prereqs": [
-        "Railroads"
+        "Dynamite",
+        "Military Science"
+      ]
+    },
+    {
+      "name": "Plastics",
+      "prereqs": [
+        "Biology",
+        "Electricity"
+      ]
+    },
+    {
+      "name": "Radio",
+      "prereqs": [
+        "Electricity",
+        "Corporations"
+      ]
+    },
+    {
+      "name": "Flight",
+      "prereqs": [
+        "Corporations",
+        "Replaceable Parts"
+      ]
+    },
+    {
+      "name": "Ballistics",
+      "prereqs": [
+        "Replaceable Parts",
+        "Combustion"
       ]
     },
     {
       "name": "Pharmaceuticals",
       "prereqs": [
-        "Refrigeration",
         "Plastics"
+      ]
+    },
+    {
+      "name": "Refrigeration",
+      "prereqs": [
+        "Plastics",
+        "Radio"
       ]
     },
     {
       "name": "Atomic Theory",
       "prereqs": [
-        "Plastics",
-        "Electronics"
+        "Radio",
+        "Flight"
       ]
     },
     {
-      "name": "Radar",
+      "name": "Rocketry",
       "prereqs": [
-        "Electronics",
+        "Flight",
         "Ballistics"
       ]
     },
     {
       "name": "Combined Arms",
       "prereqs": [
-        "Ballistics",
-        "Combustion"
+        "Ballistics"
       ]
     },
     {
-      "name": "Ecology",
+      "name": "Electronics",
       "prereqs": [
-        "Atomic Theory",
-        "Pharmaceuticals"
+        "Pharmaceuticals",
+        "Refrigeration"
+      ]
+    },
+    {
+      "name": "Computers",
+      "prereqs": [
+        "Refrigeration",
+        "Atomic Theory"
       ]
     },
     {
       "name": "Nuclear Fission",
       "prereqs": [
         "Atomic Theory",
-        "Radar"
+        "Rocketry"
       ]
     },
     {
-      "name": "Rocketry",
+      "name": "Radar",
       "prereqs": [
-        "Radar"
-      ]
-    },
-    {
-      "name": "Computers",
-      "prereqs": [
-        "Radar",
+        "Rocketry",
         "Combined Arms"
+      ]
+    },
+    {
+      "name": "Alternative Energy",
+      "prereqs": [
+        "Electronics"
       ]
     },
     {
       "name": "Telecommunications",
       "prereqs": [
-        "Ecology"
+        "Electronics",
+        "Computers"
       ]
     },
     {
-      "name": "Mobile Tactics",
+      "name": "Satellites",
       "prereqs": [
-        "Ecology",
+        "Computers",
         "Nuclear Fission"
       ]
     },
@@ -12102,78 +12442,80 @@
       "name": "Advanced Ballistics",
       "prereqs": [
         "Nuclear Fission",
-        "Rocketry"
+        "Radar"
       ]
     },
     {
-      "name": "Satellites",
+      "name": "Mobile Tactics",
       "prereqs": [
-        "Rocketry"
+        "Radar"
       ]
     },
     {
       "name": "Robotics",
       "prereqs": [
-        "Rocketry",
-        "Computers"
-      ]
-    },
-    {
-      "name": "Lasers",
-      "prereqs": [
-        "Computers"
+        "Alternative Energy",
+        "Telecommunications"
       ]
     },
     {
       "name": "The Internet",
       "prereqs": [
-        "Telecommunications"
-      ]
-    },
-    {
-      "name": "Globalization",
-      "prereqs": [
-        "Telecommunications"
-      ]
-    },
-    {
-      "name": "Particle Physics",
-      "prereqs": [
         "Telecommunications",
-        "Mobile Tactics",
-        "Advanced Ballistics"
+        "Satellites"
       ]
     },
     {
-      "name": "Nuclear Fusion",
+      "name": "Lasers",
       "prereqs": [
-        "Advanced Ballistics",
         "Satellites",
-        "Robotics"
-      ]
-    },
-    {
-      "name": "Nanotechnology",
-      "prereqs": [
-        "Robotics"
+        "Advanced Ballistics"
       ]
     },
     {
       "name": "Stealth",
       "prereqs": [
+        "Advanced Ballistics",
+        "Mobile Tactics"
+      ]
+    },
+    {
+      "name": "Nanotechnology",
+      "prereqs": [
         "Robotics",
+        "The Internet"
+      ]
+    },
+    {
+      "name": "Particle Physics",
+      "prereqs": [
+        "Robotics",
+        "The Internet",
         "Lasers"
+      ]
+    },
+    {
+      "name": "Globalization",
+      "prereqs": [
+        "The Internet",
+        "Lasers",
+        "Stealth"
+      ]
+    },
+    {
+      "name": "Nuclear Fusion",
+      "prereqs": [
+        "Lasers",
+        "Stealth"
       ]
     },
     {
       "name": "Future Tech",
       "prereqs": [
-        "The Internet",
-        "Globalization",
+        "Nanotechnology",
         "Particle Physics",
         "Nuclear Fusion",
-        "Nanotechnology",
-        "Stealth"
+        "Globalization"
       ]
     }
   ],

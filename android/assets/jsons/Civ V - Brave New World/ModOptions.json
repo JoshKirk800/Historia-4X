@@ -114,6 +114,22 @@
         // It replaces the strategic parts of the placement above (the major deposits per terrain, the small deposits at 23 tiles, the oil in the sea at 1 in 4, the top-ups)
         "strategicPlacementLikeVoxPopuli": true,
         "naturalWondersLikeCivV": true,
-        "ancientRuinsLikeCivV": true
+        "ancientRuinsLikeCivV": true,
+        // Vox Populi's gold purchases: GOLD_PURCHASE_GOLD_PER_PRODUCTION 4 ((2) Vox Populi/Database Changes/DefineChanges.sql:214), HURRY_GOLD_PRODUCTION_EXPONENT 0.88 (:215),
+        // GOLD_PURCHASE_VISIBLE_DIVISOR 10 (the unchanged default, CvCity.cpp:11904, 12205, 12269-12273)
+        "purchase": { "goldPerProduction": 4.0, "exponent": 0.88, "visibleDivisor": 10 },
+        // Building investments: option BALANCE_BUILDING_INVESTMENTS ((2) Vox Populi/Database Changes/CustomModOptionChanges.sql:31), HURRY_GOLD_BUILDING_COST_PERCENT 50
+        // ((1) Community Patch/Database Changes/Defines/CoreDefineChanges.sql:464, used at CvCity.cpp:12261-12266) and BALANCE_BUILDING_INVESTMENT_BASELINE -50 (:465);
+        // a world wonder's share is halved (CvCity.cpp:11685-11700)
+        "buildingInvestments": true,
+        "buildingInvestmentBaseline": -50,
+        "buildingInvestmentWonderDivisor": 2,
+        "goldBuildingCostPercent": 50,
+        // Option BALANCE_WORLD_WONDER_COST_INCREASE (CustomModOptionChanges.sql:57), the BALANCE_WORLD_WONDER_*_ERA_COST_MODIFIER defines 25, 15, 10, 5 (CoreDefineChanges.sql:1076-1079)
+        "worldWonderCostIncrease": [25, 15, 10, 5],
+        // The purchase cooldowns of units (CvCity::Purchase, CvCity.cpp:2485-2503): no unit of this ruleset has one yet
+        "purchaseCooldownEnabled": true,
+        // CvPlayer::doInstantYield: the speed's InstantYieldPercent
+        "instantYieldsUseInstantYieldPercent": true
     },
 }

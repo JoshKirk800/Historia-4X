@@ -173,6 +173,7 @@ class TacticalAiTests {
 
     private fun cityWithEnemiesAround(position: Int, enemies: Int = 4, unit: String = "Swordsman"): City {
         val city = game.addCity(civ, tile(position))
+        city.cityConstructions.addBuilding("Barracks")   // Vox Populi: the Composite Bowman is bought only in a city with a Barracks
         val around = city.getCenterTile().getTilesInDistance(3).filter { it != city.getCenterTile() }.sortedBy { it.aerialDistanceTo(city.getCenterTile()) }
         for (tile in around.take(enemies)) game.addUnit(unit, enemy, tile)
         return city

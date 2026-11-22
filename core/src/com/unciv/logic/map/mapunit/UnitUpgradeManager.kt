@@ -1,5 +1,6 @@
 package com.unciv.logic.map.mapunit
 
+import com.unciv.logic.city.PurchaseRules
 import com.unciv.models.Counter
 import com.unciv.models.ruleset.RejectionReasonType
 import com.unciv.models.ruleset.unique.Unique
@@ -141,15 +142,30 @@ class UnitUpgradeManager(val unit: MapUnit) {
         if (ruleset.modOptions.constants.unitUpgradeCostModsAreSummed)
             civModifier = (100f + summedPercentage.coerceAtLeast(ruleset.modOptions.constants.unitUpgradeCostDiscountMax.toFloat())) / 100f
 
-        var cost = constants.base
-        cost += (constants.perProduction * (unitToUpgradeTo.cost - unit.baseUnit.cost)).coerceAtLeast(0f)
-        val era = unitToUpgradeTo.era(ruleset)
-        if (era != null)
-            cost *= (1f + era.eraNumber * constants.eraMultiplier)
+        val modConstants = ruleset.modOptions.constants
+        val fromPurchasePrice = modConstants.unitUpgradeCostFromPurchasePrice
+        var cost: Float
+        if (fromPurchasePrice) {
+            // V:CvGameCoreUtils.cpp:1361-1379 (BALANCE_UNIT_UPGRADE_COST): the difference of the two units' gold purchase prices (the hurry percentage of the speed is in the price)
+            fun price(unitCost: Int): Int {
+                val production = unitCost * unit.civ.gameInfo.speed.productionCostModifier * unit.civ.gameInfo.getStartingEra().trainPercent / 100f
+                return PurchaseRules.baseGoldPrice(production.toInt(), modConstants, unit.civ.gameInfo.speed).toInt()
+            }
+            val upgradedPrice = price(unitToUpgradeTo.cost)
+            var currentPrice = price(unit.baseUnit.cost)
+            if (currentPrice == 0) currentPrice = upgradedPrice / 2
+            cost = (upgradedPrice - currentPrice).coerceAtLeast(0).toFloat()
+        } else {
+            cost = constants.base
+            cost += (constants.perProduction * (unitToUpgradeTo.cost - unit.baseUnit.cost)).coerceAtLeast(0f)
+            val era = unitToUpgradeTo.era(ruleset)
+            if (era != null)
+                cost *= (1f + era.eraNumber * constants.eraMultiplier)
+        }
         if (unit.civ.receivesAiHandicap())
             cost *= unit.civ.gameInfo.getDifficulty().aiUnitUpgradeCostModifier * unit.civ.getAiPerEraFactor()
         cost = (cost * civModifier).pow(constants.exponent)
-        cost *= unit.civ.gameInfo.speed.modifier
+        if (!fromPurchasePrice) cost *= unit.civ.gameInfo.speed.modifier   // the purchase prices have the speed in them
         goldCostOfUpgrade += (cost / constants.roundTo).toInt() * constants.roundTo
 
         return goldCostOfUpgrade

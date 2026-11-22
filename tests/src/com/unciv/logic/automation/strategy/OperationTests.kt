@@ -185,6 +185,7 @@ class OperationTests {
     @Test
     fun `the final unit bought for an operation fills the last slot, not the one its city committed to`() {
         civ.tech.addTechnology("Mathematics")
+        city.cityConstructions.addBuilding("Barracks")   // Vox Populi: the siege unit of the bombard slot is bought only in a city with a Barracks
         val operation = army()
         val offer = ops.nextUnitForOperationSlot(city)!!
         // The city trains the unit of the slot it is offered, the melee one; the bombard slot is the last one left
@@ -205,6 +206,8 @@ class OperationTests {
     fun `an idle city that chooses its production while the final unit is bought does not take the slot`() {
         civ.tech.addTechnology("Mathematics")
         val other = game.addCity(civ, game.getTile(HexCoord(4, 0)))
+        city.cityConstructions.addBuilding("Barracks")   // Vox Populi: the siege unit of the bombard slot is bought only in a city with a Barracks
+        other.cityConstructions.addBuilding("Barracks")
         val operation = army()
         val offer = ops.nextUnitForOperationSlot(city)!!
         other.cityConstructions.setCurrentConstruction(offer.unit.name)

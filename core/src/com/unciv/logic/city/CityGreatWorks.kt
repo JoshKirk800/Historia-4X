@@ -98,6 +98,13 @@ class CityGreatWorks : IsPartOfGameInfoSerialization {
     @Readonly
     fun getNumWorks(type: GreatWorkSlotType): Int = getSlots().count { it.getType() == type && !it.isFree() }
 
+    /** The works of exactly [type] in the city's buildings */
+    @Readonly
+    fun getNumWorks(type: GreatWorkType): Int {
+        val ruleset = city.getRuleset()
+        return getWorks().count { ruleset.greatWorks[it.work]?.type == type }
+    }
+
     /** Puts [work] in [slot], replacing what was there. Callers make sure the slot has the right type, see [GreatWorkFunctions.fits] */
     fun place(work: GreatWorkInstance, slot: GreatWorkSlot) {
         placements.removeAll { it.building == slot.building.name && it.slot == slot.index }

@@ -6,6 +6,7 @@ import com.unciv.logic.civilization.managers.TradeRouteManager
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.models.Counter
 import com.unciv.models.ruleset.Building
+import com.unciv.models.ruleset.GreatWorkType
 import com.unciv.models.ruleset.IConstruction
 import com.unciv.models.ruleset.INonPerpetualConstruction
 import com.unciv.models.ruleset.unique.Unique
@@ -175,6 +176,10 @@ class CityStats(val city: City) {
         if (conversionUnique != null) {
             conversionRate *= conversionUnique.params[1].toPercent()
         }
+        // CvCity::GetBaseYieldRateFromProcessTimes100: the process modifier of the buildings (`Building_YieldFromProcessModifier`) adds percentage points to the conversion
+        city.forEachMatchingUnique(UniqueType.ProcessYieldPercent) { unique ->
+            if (city.matchesFilter(unique.params[1])) conversionRate += unique.params[0].toInt() / 100f
+        }
         return conversionRate
     }
 
@@ -304,7 +309,22 @@ class CityStats(val city: City) {
                 addUniqueStats(unique)
         }
 
+        // "[stats] from each [greatWorkType] Great Work [cityFilter]" (CvCityBuildings::GetYieldFromGreatWorksTimes100)
+        city.forEachMatchingUnique(UniqueType.StatsFromGreatWorkType) { unique ->
+            if (!city.matchesFilter(unique.params[2])) return@forEachMatchingUnique
+            val type = GreatWorkType.entries.firstOrNull { it.name == unique.params[1] } ?: return@forEachMatchingUnique
+            val numberOfWorks = city.greatWorks.getNumWorks(type)
+            if (numberOfWorks > 0)
+                sourceToStats.addStats(unique.stats.times(numberOfWorks.toFloat()), unique.getSourceNameForUser(), unique.sourceObjectName ?: "")
+        }
 
+        // "Capital's [stats] per [positiveAmount] citizens in the empire" (CvPlot::calculateYield, CvPlayer::GetCapitalYieldPerPopChangeEmpire):
+        // the population times the yield per citizen in whole numbers, which is the whole numbers of citizens per amount
+        if (city.isCapital()) city.forEachMatchingUnique(UniqueType.CapitalStatsPerEmpirePopulation) { unique ->
+            val steps = city.civ.cities.sumOf { it.population.population } / unique.params[1].toInt()
+            if (steps > 0)
+                sourceToStats.addStats(unique.stats.times(steps.toFloat()), unique.getSourceNameForUser(), unique.sourceObjectName ?: "")
+        }
 
         return sourceToStats
     }
@@ -709,6 +729,7 @@ class CityStats(val city: City) {
             newFinalStatList[key] = value.totalStats.clone()
 
         val statPercentBonusesSum = statPercentBonusTree.totalStats
+        val baseStatsTotal = baseStatTree.totalStats
 
         val needsModel = city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp
         val productionBeforeBonuses = if (needsModel) newFinalStatList.values.map { it.production }.sum() else 0f
@@ -746,6 +767,16 @@ class CityStats(val city: City) {
         for (entry in newFinalStatList.values) {
             entry.science *= statPercentBonusesSum.science.toPercent()
         }
+        // CvCity::GetPostModifierYieldRateTimes100: a yield converted to another is the first yield as the sources add it up, before the bonuses, and is not modified
+        // by them; the puppet's share, the growth modifiers and the food eaten (below) come after it
+        city.forEachMatchingUnique(UniqueType.StatPercentAddedToStat) { unique ->
+            val from = Stat.safeValueOf(unique.params[1]) ?: return@forEachMatchingUnique
+            val to = Stat.safeValueOf(unique.params[3]) ?: return@forEachMatchingUnique
+            if (!city.matchesFilter(unique.params[2])) return@forEachMatchingUnique
+            val amount = baseStatsTotal[from] * unique.params[0].toInt() / 100f
+            if (amount != 0f) newFinalStatList.add(unique.getSourceNameForUser(), Stats().apply { this[to] = amount })
+        }
+
         val puppetMultiplier = getPuppetYieldMultiplier()
         if (puppetMultiplier != 1f) for (entry in newFinalStatList.values) {
             entry.gold *= puppetMultiplier

@@ -600,6 +600,11 @@ enum class UniqueParameterType(
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = com.unciv.models.ruleset.GreatWorkSlotType.entries.map { it.label }.toSet()
     },
 
+    /** The kinds of Great Work of [GreatWorkType] */
+    GreatWorkType("greatWorkType", "Art", "One of `Art`, `Artifact`, `Literature` or `Music`") {
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = com.unciv.models.ruleset.GreatWorkType.entries.map { it.name }.toSet()
+    },
+
     /** The relations that change the tourism one civilization makes towards another, see [com.unciv.logic.civilization.managers.TourismRelation] */
     TourismRelation("tourismRelation", "Shared Religion", "One of `Shared Religion`, `Open Borders`, `Trade Route`, `Lower Happiness`, `Common Enemies`, `Shared Ideology` or `Different Ideologies`") {
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = com.unciv.logic.civilization.managers.TourismRelation.entries.map { it.label }.toSet()

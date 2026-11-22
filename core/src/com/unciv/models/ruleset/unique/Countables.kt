@@ -460,6 +460,14 @@ enum class Countables(
         override fun eval(parameterText: String, gameContext: GameContext) =
             gameContext.civInfo?.getAiEraNumber()?.coerceAtLeast(1)
     },
+    GoldenAges("Golden Ages", shortDocumentation = "The number of Golden Ages the civilization has had") {
+        override val documentationStrings = listOf(
+            "The Golden Ages entered by filling the happiness meter, the one that is going on included. Golden Ages from other sources (a Great Person, a unique) are not counted, as the original's `CvPlayer::GetNumGoldenAges` counts them.",
+            "Meant for `<for every [Golden Ages]>` (the original's `Building_YieldChangesPerGoldenAge`, `Trait_ResourceYieldChangesFromGoldenAge`)."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext) =
+            gameContext.civInfo?.goldenAges?.numberOfGoldenAges
+    },
     TriggeringAmount("Triggering amount", shortDocumentation = "The amount the event that triggers this unique carries") {
         override val documentationStrings = listOf(
             "The citizens a city gains for `upon population growth`, the price for `upon buying something with [stat]`, " +

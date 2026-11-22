@@ -80,6 +80,19 @@ enum class UniqueType(
         docDescription = "Counts the eras the civilization has gone through since the era of what happened on this tile, see archaeology. Nothing if it is the same era or the tile has no history"),
     StatsFromGreatWorks("[stats] from each Great Work", UniqueTarget.Global,
         docDescription = "Added to the culture a city gets from each of its Great Works (see `greatWorkBaseCulture` in ModConstants), in every city of the civilization"),
+    StatsFromGreatWorkType("[stats] from each [greatWorkType] Great Work [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "The stats once for each Great Work of that type that is in a building of the matching city (the original's `Building_GreatWorkYieldChanges`, `Policy_ArtYieldChanges` and the like, " +
+            "CvCityBuildings::GetYieldFromGreatWorksTimes100). Added to the base stats of the city, before the percentages, like `[stats] from each Great Work`"),
+    CapitalStatsPerEmpirePopulation("Capital's [stats] per [positiveAmount] citizens in the empire", UniqueTarget.Global,
+        docDescription = "In the capital only: the stats for every full second-number citizens that live in all cities of the civilization, puppets included " +
+            "(the original's `Policy_CapitalYieldPerPopChangeEmpire`, CvPlot::calculateYield: the empire's population times the yield per citizen, in whole numbers). Added to the base stats before the percentages"),
+    ProcessYieldPercent("[relativeAmount]% yield from processes [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "While a matching city makes Gold, Science, Culture, Faith or Food instead of a building or a unit, it converts this many percentage points more of its production " +
+            "than the 25% the conversion starts at (`Building_YieldFromProcessModifier` added to `Process_ProductionYields`, CvCity::GetBaseYieldRateFromProcessTimes100). " +
+            "It does not name the stat: it improves whichever process the city is running"),
+    StatPercentAddedToStat("[relativeAmount]% of [stat] [cityFilter] added to [stat]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "The first stat of a matching city, as the sources add it up before any percentage bonus, times the percentage, is added to the second stat after the percentage bonuses " +
+            "(the original's `Building_YieldFromYieldPercent`, CvCity::UpdateCityYieldFromYield, GetTotalYieldFromYieldTimes100). It is not itself changed or fed back"),
     ThemingBonusPercent("[relativeAmount]% Theming bonuses [cityFilter]", UniqueTarget.Global,
         docDescription = "Every such unique multiplies the theming bonuses of the matching cities by 100% plus its amount, one after the other"),
     UnitGoldMaintenancePercent("[relativeAmount]% unit gold maintenance", UniqueTarget.Global,
@@ -472,6 +485,9 @@ enum class UniqueType(
     CannotBePurchased("Cannot be purchased", UniqueTarget.Building, UniqueTarget.Unit),
     CanBePurchasedWithStat("Can be purchased with [stat] [cityFilter]", UniqueTarget.Building, UniqueTarget.Unit),
     CanBePurchasedForAmountStat("Can be purchased for [amount] [stat] [cityFilter]", UniqueTarget.Building, UniqueTarget.Unit),
+    CanOnlyBePurchasedInCitiesWith("Can only be purchased in cities with [buildingName]", UniqueTarget.Unit,
+        docDescription = "Buying the unit with gold needs the building (or one that replaces it) in the city; building it is not affected " +
+            "(the original's `Unit_BuildingClassPurchaseRequireds`, CvCity::IsCanPurchase)"),
     MaxNumberBuildable("Limited to [amount] per Civilization", UniqueTarget.Building, UniqueTarget.Unit),
     
     /** A special unique, as it only activates [RejectionReasonType] when it has conditionals that *do not* apply.
@@ -896,6 +912,9 @@ enum class UniqueType(
     ImprovementBuildableByFreshWater("Can also be built on tiles adjacent to fresh water", UniqueTarget.Improvement),
     ImprovementStatsOnTile("[stats] from [tileFilter] tiles", UniqueTarget.Improvement),
     ImprovementStatsForAdjacencies("[stats] for each adjacent [tileFilter]", UniqueTarget.Improvement),
+    ImprovementStatsPerAdjacent("[stats] from every [positiveAmount] adjacent [tileFilter]", UniqueTarget.Improvement,
+        docDescription = "Each matching adjacent tile counts as the stats divided by the number; all such uniques of the improvement are added up and the sum is cut off at the whole number of each stat " +
+            "(the original's `Improvement_YieldPerXAdjacentImprovement` and `..._YieldPerXAdjacentTerrain`, CvPlot::ComputeFractionalYieldFromAdjacentImprovement)"),
     EnsureMinimumStats("Ensures a minimum tile yield of [stats]", UniqueTarget.Improvement), // City center
 
     CanBuildOutsideBorders("Can be built outside your borders", UniqueTarget.Improvement),

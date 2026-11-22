@@ -15,6 +15,8 @@ import com.unciv.ui.components.extensions.toPercent
 import yairm210.purity.annotations.LocalState
 import yairm210.purity.annotations.Readonly
 import java.util.EnumMap
+import kotlin.math.ceil
+import kotlin.math.floor
 
 @Readonly
 fun List<Pair<String, Stats>>.toStats(): Stats {
@@ -320,6 +322,18 @@ class TileStatFunctions(val tile: Tile) {
                         || it.getUnpillagedRoad().name == adjacent
             }
             stats.add(unique.stats.times(numberOfBonuses.toFloat()))
+        }
+
+        // CvPlot::ComputeFractionalYieldFromAdjacentImprovement and ...Terrain: every adjacent tile adds yield / number, the sum is cut off at the whole yield
+        @LocalState val fractional = Stats()
+        improvement.forEachMatchingUnique(UniqueType.ImprovementStatsPerAdjacent, conditionalState) { unique ->
+            val numberOfAdjacent = tile.neighbors.count { it.matchesFilter(unique.params[2], observingCiv) }
+            if (numberOfAdjacent > 0)
+                fractional.add(unique.stats.times(numberOfAdjacent.toFloat() / unique.params[1].toInt()))
+        }
+        if (!fractional.isEmpty()) {
+            for ((stat, value) in fractional) // the epsilon is for 1/3 x 3 being 0.99999994 as a float
+                stats.add(stat, (if (value >= 0f) floor(value + 1e-4f) else ceil(value - 1e-4f)))
         }
 
         improvement.forEachMatchingUnique(UniqueType.ImprovementStatsOnTile, conditionalState) { unique ->

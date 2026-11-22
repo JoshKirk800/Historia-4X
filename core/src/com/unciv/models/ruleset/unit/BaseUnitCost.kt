@@ -1,6 +1,7 @@
 package com.unciv.models.ruleset.unit
 
 import com.unciv.logic.city.City
+import com.unciv.logic.city.PurchaseRules
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
@@ -97,7 +98,9 @@ class BaseUnitCost(val baseUnit: BaseUnit) {
             if (surcharge != 0) cost *= (100 + surcharge) / 100.0
         }
 
-        return (cost / 10f).toInt() * 10
+        // GOLD_PURCHASE_VISIBLE_DIVISOR
+        val divisor = PurchaseRules.visibleDivisor(city.civ.gameInfo.ruleset.modOptions.constants)
+        return (cost / divisor).toInt() * divisor
     }
 
 

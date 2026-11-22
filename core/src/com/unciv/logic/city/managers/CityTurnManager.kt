@@ -3,6 +3,7 @@ package com.unciv.logic.city.managers
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityFlags
+import com.unciv.logic.city.PurchaseRules
 import com.unciv.logic.automation.city.CitizenAutomation
 import com.unciv.logic.civilization.CityAction
 import com.unciv.logic.civilization.InstantYields
@@ -25,6 +26,7 @@ class CityTurnManager(val city: City) {
         // CvCity::flipDamageReceivedPerTurn (Vox Populi, in CvPlayer::doTurn): smooth the damage taken
         city.damageTakenLastTurn = (city.damageTakenThisTurn * 80 + city.damageTakenLastTurn * 20) / 100
         city.damageTakenThisTurn = 0
+        PurchaseRules.tickCooldowns(city) // CvCity::doTurn
         
         for (resource in city.getResourcesGeneratedByCity()) {
             if (resource.resource.isStockpiled && resource.resource.isCityWide)

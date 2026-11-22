@@ -5,6 +5,7 @@ import com.unciv.logic.MultiFilter
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityConstructions
+import com.unciv.logic.city.PurchaseRules
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.Counter
 import com.unciv.models.ruleset.tile.ResourceType
@@ -19,6 +20,7 @@ import com.unciv.ui.objectdescriptions.BuildingDescriptions.getBuildingCiviloped
 import yairm210.purity.annotations.Cache
 import yairm210.purity.annotations.LocalState
 import yairm210.purity.annotations.Readonly
+import kotlin.math.max
 
 
 class Building : RulesetStatsObject(), INonPerpetualConstruction {
@@ -49,6 +51,11 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
 
     /** Extra cost percentage when purchasing */
     override var hurryCostModifier = 0
+
+    /** Turns off the purchase cooldown of the military units, and of the civilian units, that the city buys with gold, for each of these buildings in the city
+     *  (`Buildings.PurchaseCooldownReduction` and `..._Civilian`, CvCity::processBuilding; Vox Populi has it on the Piazza San Marco only) */
+    var purchaseCooldownReduction = 0
+    var purchaseCooldownReductionCivilian = 0
     var isWonder = false
     var isNationalWonder = false
     @Readonly fun isAnyWonder() = isWonder || isNationalWonder
@@ -66,7 +73,7 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
     var quote: String = ""
     var replacementTextForUniques = ""
 
-    lateinit var ruleset: Ruleset
+    override lateinit var ruleset: Ruleset
 
     override fun getUniqueTarget() = if (isAnyWonder()) UniqueTarget.Wonder else UniqueTarget.Building
 
@@ -139,7 +146,23 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
         return stats
     }
 
+    /**
+     *  CvCity::getProductionNeeded(BuildingTypes): the cost of CvPlayer::getProductionNeeded less what an investment in the building took off
+     *  ([ModConstants.buildingInvestments][com.unciv.models.ModConstants.buildingInvestments], V:CvCity.cpp:11507-11510), at least 1
+     */
+    @Readonly
     override fun getProductionCost(civInfo: Civilization, city: City?): Int {
+        val productionCost = getProductionCostBeforeInvestment(civInfo, city)
+        val reduction = city?.cityConstructions?.getInvestmentReduction(this) ?: 0
+        return if (reduction == 0) productionCost else max(1, productionCost - reduction)
+    }
+
+    /**
+     *  CvPlayer::getProductionNeeded(BuildingTypes) (V:CvPlayer.cpp:15320-15496): the later-era discount ([PurchaseRules.laterEraCostPercent]) comes after the
+     *  starting era's percentage, the world wonder increase ([PurchaseRules.worldWonderCostPercent]) is the last factor
+     */
+    @Readonly
+    fun getProductionCostBeforeInvestment(civInfo: Civilization, city: City?): Int {
         var productionCost = cost.toFloat()
         val stateForConditionals = city?.state ?: civInfo.state
 
@@ -167,6 +190,11 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
 
         productionCost *= civInfo.gameInfo.speed.productionCostModifier
         productionCost *= civInfo.gameInfo.getStartingEra().constructPercent / 100f
+
+        val laterEraPercent = PurchaseRules.laterEraCostPercent(civInfo, this)
+        if (laterEraPercent != 0) productionCost = productionCost * (100 + laterEraPercent) / 100f
+        val wonderPercent = PurchaseRules.worldWonderCostPercent(civInfo, this)
+        if (wonderPercent != 0) productionCost = productionCost * (100 + wonderPercent) / 100f
 
         return productionCost.toInt()
     }
@@ -264,7 +292,24 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
                 cost *= unique.params[2].toPercent()
         }
 
-        return (cost / 10f).toInt() * 10
+        // CvCity::GetPurchaseCost(BuildingTypes) (V:CvCity.cpp:12261-12273): with investments the price is a share of the formula's, and the price is
+        // rounded down to the divisor and at least the divisor (Vox Populi's; Brave New World's formula never comes below it, and what costs nothing stays free).
+        // Prices that a unique sets are only rounded
+        val constants = city.civ.gameInfo.ruleset.modOptions.constants
+        val formulaPrice = stat == Stat.Gold && usesGoldPriceFormula(city)
+        if (formulaPrice && constants.buildingInvestments) cost = cost * constants.goldBuildingCostPercent / 100.0
+        val divisor = PurchaseRules.visibleDivisor(constants)
+        val price = (cost / divisor).toInt() * divisor
+        return if (formulaPrice && cost > 0.0) max(price, divisor) else price
+    }
+
+    /** Whether the gold price of the building in [city] is the formula of [getBaseGoldCost], not a price that a unique sets */
+    @Readonly
+    private fun usesGoldPriceFormula(city: City): Boolean {
+        val conditionalState = city.state
+        return getSpecificBuyCost(city, Stat.Gold) == null &&
+            getMatchingUniques(UniqueType.CanBePurchasedForAmountStat, conditionalState)
+                .none { it.params[1] == Stat.Gold.name && city.matchesFilter(it.params[2]) }
     }
 
     override fun shouldBeDisplayed(cityConstructions: CityConstructions, queue: List<String>): Boolean {

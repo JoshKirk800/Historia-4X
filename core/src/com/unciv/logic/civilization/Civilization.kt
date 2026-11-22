@@ -244,6 +244,9 @@ class Civilization : IsPartOfGameInfoSerialization {
     /** CvPlayer::m_paiHighestResourceQuantity of the luxury resources, by name: the most of each this civilization ever had of its own (without what it imports),
      *  which `upon gaining a luxury resource` is paid for exceeding ([InstantYields.checkLuxuryGains]) */
     var highestLuxuryAmounts = HashMap<String, Int>()
+    /** CvPlayer::m_iFaithPurchaseCooldown: the turns until this civilization may buy a unit with a global faith cooldown with faith again, only with
+     *  [com.unciv.models.ModConstants.purchaseCooldownEnabled]; falls by one at the start of each turn (see [com.unciv.logic.city.PurchaseRules]) */
+    var faithPurchaseCooldown = 0
     /** Landmasses where the founded-city luxury trait has already granted a resource. */
     var uniqueLuxuryAreas = HashSet<Int>()
     /** Landmass of the original capital, even if that city is later captured. */
@@ -386,6 +389,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.citiesCreated = citiesCreated
         toReturn.plotsBought = plotsBought
         toReturn.highestLuxuryAmounts.putAll(highestLuxuryAmounts)
+        toReturn.faithPurchaseCooldown = faithPurchaseCooldown
         toReturn.uniqueLuxuryAreas.addAll(uniqueLuxuryAreas)
         toReturn.originalLuxuryArea = originalLuxuryArea
         toReturn.popupAlerts.addAll(popupAlerts)

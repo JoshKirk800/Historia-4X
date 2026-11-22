@@ -107,6 +107,10 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     /** CvCityBuildings::m_paiFirstTimeBuilding: the buildings this city has ever had, sold or not. A building's instant yields ([InstantYields.isGain]) are only
      *  given the first time it is built here (V:CvCity.cpp:14836); [setTransients] adds the built buildings, which is what a saved game from before this was kept has */
     var everBuilt = HashSet<String>()
+
+    /** CvCity::m_abBuildingInvestment and m_aiBuildingCostInvestmentReduction: the buildings that gold was invested in
+     *  ([com.unciv.models.ModConstants.buildingInvestments]) with the production that the investment took off each one's cost. A saved game from before them has none */
+    val investedBuildings = HashMap<String, Int>()
     val inProgressConstructions = HashMap<String, Int>()
     var currentConstructionIsUserSet = false
     @Volatile
@@ -126,6 +130,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         val toReturn = CityConstructions()
         toReturn.builtBuildings.addAll(builtBuildings)
         toReturn.everBuilt.addAll(everBuilt)
+        toReturn.investedBuildings.putAll(investedBuildings)
         toReturn.inProgressConstructions.putAll(inProgressConstructions)
         toReturn.currentConstructionIsUserSet = currentConstructionIsUserSet
         toReturn.constructionQueue = ArrayList(constructionQueue)
@@ -206,6 +211,16 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     @Readonly fun getCurrentConstruction(): IConstruction = getConstruction( currentConstructionName())
 
     @Readonly fun isBuilt(buildingName: String): Boolean = builtBuildings.contains(buildingName)
+
+    /** CvCity::IsBuildingInvestment */
+    @Readonly fun isInvestedIn(buildingName: String): Boolean = investedBuildings.containsKey(buildingName)
+
+    /** The production that an investment took off the cost of [building] (CvCity::GetBuildingCostInvestmentReduction), 0 if there is none or the ruleset has no investments */
+    @Readonly
+    fun getInvestmentReduction(building: Building): Int {
+        if (investedBuildings.isEmpty() || !city.getRuleset().modOptions.constants.buildingInvestments) return 0
+        return investedBuildings[building.name] ?: 0
+    }
 
     // Note: There was a isEnqueued here functionally identical to isBeingConstructedOrEnqueued,
     // which was calling both isEnqueued and isBeingConstructed - BUT:  currentConstructionName() is just a
@@ -731,6 +746,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         }
         builtBuildingObjects = builtBuildingObjects.withItem(building)
         builtBuildings.add(buildingName)
+        investedBuildings.remove(buildingName) // finished: what it cost is not read any more, and a sold building starts without (CvCity::SetBuildingInvestment)
         val firstTimeInCity = everBuilt.add(buildingName)
         if (building.hasUnique(UniqueType.EnablesConstructionOfSpaceshipParts, GameContext.IgnoreConditionals))
             civ.ai.apolloProgramBuilt = true
@@ -818,6 +834,8 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     fun removeBuilding(building: Building) {
         builtBuildingObjects = builtBuildingObjects.withoutItem(building)
         builtBuildings.remove(building.name)
+        // CvCityBuildings::SetNumRealBuildingTimed: a building that is gone takes its investment with it
+        investedBuildings.remove(building.name)
         city.greatWorks.onBuildingRemoved(building)
         
         if (building.hasCreateOneImprovementUnique()){
@@ -903,6 +921,10 @@ class CityConstructions : IsPartOfGameInfoSerialization {
             // postBuildEvent does the rest by calling cityConstructions.applyCreateOneImprovement
         }
 
+        // CvCity::PurchaseBuilding with MOD_BALANCE_BUILDING_INVESTMENTS: the gold is an investment in the building, which stays in the queue (V:CvCity.cpp:31308-31321)
+        if (construction is Building && stat == Stat.Gold && city.getRuleset().modOptions.constants.buildingInvestments)
+            return investInBuilding(construction)
+
         if (construction is Building) construction.construct(this)
         else if (construction is BaseUnit) {
             construction.construct(this, stat, useToSatisfyOperation)
@@ -939,11 +961,11 @@ class CityConstructions : IsPartOfGameInfoSerialization {
                 }
             }
 
-            // CvCity::Purchase: INSTANT_YIELD_TYPE_PURCHASE and ..._FAITH_PURCHASE, with the price paid
-            if (constructionCost > 0)
-                InstantYields.fire(UniqueType.TriggerUponBuying, city.civ, city, constructionCost, city.state,
-                    "due to buying [${construction.name}]", triggerFilter = { it.params[0] == stat.name })
+            fireBuyingYields(construction, stat, constructionCost)
         }
+
+        // CvCity::Purchase (V:CvCity.cpp:31100, 31121-31135): a bought unit sets the cooldowns of its kind
+        if (construction is BaseUnit) PurchaseRules.afterPurchase(city, construction, stat)
 
         if (queuePosition >= 0) removeFromQueue(queuePosition, automatic)
         validateConstructionQueue()
@@ -955,6 +977,33 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     }
 
 
+    /** CvCity::Purchase: INSTANT_YIELD_TYPE_PURCHASE and ..._FAITH_PURCHASE, with the price paid */
+    private fun fireBuyingYields(construction: INonPerpetualConstruction, stat: Stat, price: Int) {
+        if (price > 0)
+            InstantYields.fire(UniqueType.TriggerUponBuying, city.civ, city, price, city.state,
+                "due to buying [${construction.name}]", triggerFilter = { it.params[0] == stat.name })
+    }
+
+    /**
+     *  Pays for an investment in [building] ([com.unciv.models.ModConstants.buildingInvestments]): the building is not built, but its cost falls
+     *  ([PurchaseRules.investmentReduction]) and it is put at the front of the queue if it is not in it (CvCity::PurchaseBuilding, V:CvCity.cpp:31302-31321).
+     *  The price is the one before the investment, as the source reads it first.
+     */
+    private fun investInBuilding(building: Building): Boolean {
+        var price = 0
+        if (!city.civ.gameInfo.gameParameters.godMode) {
+            price = building.getStatBuyCost(city, Stat.Gold) ?: return false
+            city.addStat(Stat.Gold, -price)
+        }
+        investedBuildings[building.name] = PurchaseRules.investmentReduction(city, building)
+        if (!isBeingConstructedOrEnqueued(building.name)) {
+            editQueue { add(0, building.name) }
+            currentConstructionIsUserSet = true
+        }
+        fireBuyingYields(building, Stat.Gold, price)
+        return true
+    }
+
     /** This is the *one true test* of "can we buy this construction"
      * This tests whether the buy button should be _enabled_ */
     @Readonly
@@ -965,6 +1014,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
             !construction.isPurchasable(city.cityConstructions) -> false    // checks via 'rejection reason'
             construction is BaseUnit && !city.canPlaceNewUnit(construction) -> false
             !construction.canBePurchasedWithStat(city, stat) -> false
+            PurchaseRules.isBlocked(city, construction, stat) -> false // investments, cooldowns, the building a unit needs
             city.civ.gameInfo.gameParameters.godMode -> true
             constructionBuyCost == 0 -> true
             else -> city.getStatReserve(stat) >= constructionBuyCost

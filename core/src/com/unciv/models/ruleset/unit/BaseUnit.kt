@@ -40,6 +40,15 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
 
     override var cost: Int = -1
     override var hurryCostModifier: Int = 0
+
+    /** Turns a city cannot buy another unit of this kind (military if the unit has a combat strength, else civilian) with gold after buying this one, less the
+     *  city's reduction ([com.unciv.models.ruleset.Building.purchaseCooldownReduction]); `Units.PurchaseCooldown`. Only with
+     *  [com.unciv.models.ModConstants.purchaseCooldownEnabled], see [com.unciv.logic.city.PurchaseRules] */
+    var purchaseCooldown: Int = 0
+    /** Turns the civilization cannot buy a unit that has this with faith after buying this one, in game speed's production cost percent (`Units.GlobalFaithPurchaseCooldown`) */
+    var globalFaithPurchaseCooldown: Int = 0
+    /** As [globalFaithPurchaseCooldown] but of the city and the kind of unit only (`Units.LocalFaithPurchaseCooldown`) */
+    var localFaithPurchaseCooldown: Int = 0
     var movement: Int = 0
     var strength: Int = 0
     var rangedStrength: Int = 0
@@ -71,7 +80,7 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
     @Transient
     val costFunctions = BaseUnitCost(this)
 
-    lateinit var ruleset: Ruleset
+    final override lateinit var ruleset: Ruleset
         private set
 
     fun setRuleset(ruleset: Ruleset) {

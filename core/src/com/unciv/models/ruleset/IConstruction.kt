@@ -2,6 +2,7 @@ package com.unciv.models.ruleset
 
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityConstructions
+import com.unciv.logic.city.PurchaseRules
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.Counter
 import com.unciv.models.ruleset.unique.IHasUniques
@@ -32,6 +33,7 @@ interface IConstruction : INamed {
 interface INonPerpetualConstruction : IConstruction, INamed, IHasUniques {
     var cost: Int
     val hurryCostModifier: Int
+    val ruleset: Ruleset
     // Future development should not increase the role of requiredTech, and should reduce it when possible.
     // https://yairm210.github.io/Unciv/Developers/Translations%2C-mods%2C-and-modding-freedom-in-Open-Source#filters
     var requiredTech: String?
@@ -96,13 +98,16 @@ interface INonPerpetualConstruction : IConstruction, INamed, IHasUniques {
     @Readonly
     fun getCivilopediaGoldCost(): Int {
         // Same as getBaseGoldCost, but without game-specific modifiers
-        return ((30.0 * cost.toFloat()).pow(0.75) * hurryCostModifier.toPercent() / 10).toInt() * 10
+        val constants = ruleset.modOptions.constants
+        val divisor = PurchaseRules.visibleDivisor(constants)
+        return ((constants.purchase.goldPerProduction * cost.toFloat()).pow(constants.purchase.exponent) * hurryCostModifier.toPercent() / divisor).toInt() * divisor
     }
 
     @Readonly
     fun getBaseGoldCost(civInfo: Civilization, city: City?): Double {
         // https://forums.civfanatics.com/threads/rush-buying-formula.393892/
-        return (30.0 * getProductionCost(civInfo, city)).pow(0.75) * hurryCostModifier.toPercent()
+        return PurchaseRules.baseGoldPrice(getProductionCost(civInfo, city), civInfo.gameInfo.ruleset.modOptions.constants, civInfo.gameInfo.speed) *
+            hurryCostModifier.toPercent()
     }
 
     @Readonly

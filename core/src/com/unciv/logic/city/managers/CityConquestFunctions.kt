@@ -9,6 +9,7 @@ import com.unciv.logic.city.City.Companion.NO_ID
 import com.unciv.logic.city.City.Companion.pseudoRandomId
 import com.unciv.logic.city.CityFlags
 import com.unciv.logic.city.CityFocus
+import com.unciv.logic.city.PurchaseCooldowns
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
@@ -376,6 +377,9 @@ class CityConquestFunctions(val city: City) {
         city.greatPersonProgress.clear()
         // Likewise the new city's CvCityStrategyAI starts without strategies or specialization
         city.ai.reset()
+        // ... and without the investments in its buildings (CvCity::m_abBuildingInvestment) and the cooldowns of its purchases
+        city.cityConstructions.investedBuildings.clear()
+        city.purchaseCooldowns = PurchaseCooldowns()
 
         // now that the tiles have changed, we need to reassign population
         for (tile in city.getWorkedTiles().filter { it.position !in city.tiles }.toList()) {

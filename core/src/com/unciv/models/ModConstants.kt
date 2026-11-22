@@ -360,6 +360,44 @@ class ModConstants {
     )
     var needs = NeedsConstants()
 
+    /**
+     *  The gold price of a construction from its production cost (CvGameCoreUtils.cpp: GetBasePurchaseCostFromProduction): `(production x [goldPerProduction]) ^ [exponent]`
+     *  times the speed's `hurryModifier`. The defaults are Brave New World's GlobalDefines (`GOLD_PURCHASE_GOLD_PER_PRODUCTION` 30, `HURRY_GOLD_PRODUCTION_EXPONENT` 0.75);
+     *  Vox Populi has 4 and 0.88 (DEF-VP `(2) Vox Populi/Database Changes/DefineChanges.sql:214-215`). Prices of buildings and units are rounded down
+     *  to a multiple of [visibleDivisor] (`GOLD_PURCHASE_VISIBLE_DIVISOR`). Can only be modded all-or-nothing.
+     *
+     *  Departure: the source truncates the power to a whole number before the speed's percentage, this keeps the fraction (as Unciv always has),
+     *  which changes a price by less than one gold before it is rounded down to [visibleDivisor].
+     */
+    data class PurchaseConstants(
+        val goldPerProduction: Double = 30.0,
+        val exponent: Double = 0.75,
+        val visibleDivisor: Int = 10,
+    )
+    var purchase = PurchaseConstants()
+
+    // Whether buying a building with gold is an investment (CvCity::PurchaseBuilding with MOD_BALANCE_BUILDING_INVESTMENTS, Vox Populi sets it). false: the building is built at once.
+    // true: the gold price is [goldBuildingCostPercent] percent, the building stays in the queue (at the front if it was not in it) and its production cost falls
+    // ([com.unciv.logic.city.PurchaseRules.investmentReduction]) to (100 + [buildingInvestmentBaseline]) percent of itself, with the percentage divided by
+    // [buildingInvestmentWonderDivisor] for a world wonder, and never to less than one more production than the city has put into it. A building that is
+    // invested in cannot be invested in again, and not when it is finished next turn anyway
+    var buildingInvestments = false
+    var buildingInvestmentBaseline = -50
+    var buildingInvestmentWonderDivisor = 2
+    // Percent of the gold price of a building that the investment costs, with [buildingInvestments] (HURRY_GOLD_BUILDING_COST_PERCENT, V:CvCity.cpp:12262-12266)
+    var goldBuildingCostPercent = 100
+
+    // The percent the production cost of a world wonder rises by for every world wonder the civilization has, by how many eras ago its technology's era was: the first
+    // entry for the current era, the second for one era ago ... and the last entry for all earlier eras (CvPlayer::getProductionNeeded with
+    // MOD_BALANCE_WORLD_WONDER_COST_INCREASE, BALANCE_WORLD_WONDER_SAME_ERA_COST_MODIFIER 25, ..._PREVIOUS_ERA_ 15, ..._SECOND_PREVIOUS_ERA_ 10, ..._EARLIER_ERA_ 5
+    // in Vox Populi). Empty: no increase. A wonder without a technology does not count
+    var worldWonderCostIncrease: List<Int> = emptyList()
+
+    // Whether buying a unit sets a cooldown (CvCity::Purchase, V:CvCity.cpp:2485-2503, 31100): the unit's `purchaseCooldown` (less the city's
+    // reduction from its buildings, [com.unciv.models.ruleset.Building.purchaseCooldownReduction]) for gold, its `globalFaithPurchaseCooldown` and
+    // `localFaithPurchaseCooldown` (times the game speed's production cost percentage) for faith, during which that kind of unit cannot be bought
+    var purchaseCooldownEnabled = false
+
     // How the "[relativeAmount]% Gold cost of upgrading" uniques of a civilization combine. false: they are multiplied (-33% twice gives x0.4489).
     // true: as in Civ V (CvPlayer::SetUnitUpgradeCostMod, CvUnit::upgradePrice) the percentages are summed (-33% twice gives x0.34) and the sum is at least [unitUpgradeCostDiscountMax]
     var unitUpgradeCostModsAreSummed = false

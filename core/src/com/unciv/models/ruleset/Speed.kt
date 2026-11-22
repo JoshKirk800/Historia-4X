@@ -22,6 +22,9 @@ class Speed : RulesetObject() {
     /** What `Gain [amount] [stat] <(modified by game speed)>` is multiplied by under [com.unciv.models.ModConstants.instantYieldsUseInstantYieldPercent]
      *  (the original's `InstantYieldPercent` of the game speed, Vox Populi's CvPlayer::doInstantYield: 75, 100, 150 and 200 percent for Quick, Standard, Epic and Marathon) */
     var instantYieldModifier: Float = modifier
+    /** What the gold price of a construction is multiplied by (the original's `HurryPercent` of the game speed, CvGameCoreUtils.cpp: GetBasePurchaseCostFromProduction;
+     *  100 percent on every speed in Brave New World and Vox Populi, so unlike the other modifiers it does not default to [modifier]) */
+    var hurryModifier: Float = 1f
     var goldGiftModifier: Float = modifier
     var cityStateTributeScalingInterval: Float = 6.5f
     var barbarianModifier: Float = modifier

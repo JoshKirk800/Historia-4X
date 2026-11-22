@@ -98,6 +98,8 @@ class City : IsPartOfGameInfoSerialization, INamed {
     /** CvCity::m_iHighestPopulation: the most citizens this city ever had; only growth above it pays the instant yields of `upon population growth` (see
      *  [CityPopulationManager.addPopulation]). 0 in a saved game from before it was kept: [setTransients] then takes the population */
     var highestPopulation = 0
+    /** The turns until this city may buy a unit with gold or faith again, only with [com.unciv.models.ModConstants.purchaseCooldownEnabled] (see [PurchaseRules]) */
+    var purchaseCooldowns = PurchaseCooldowns()
     var cityConstructions = CityConstructions()
     var expansion = CityExpansionManager()
     var religion = CityReligionManager()
@@ -216,6 +218,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
         toReturn.damageTakenLastTurn = damageTakenLastTurn
         toReturn.population = population.clone()
         toReturn.highestPopulation = highestPopulation
+        toReturn.purchaseCooldowns = purchaseCooldowns.clone()
         toReturn.cityConstructions = cityConstructions.clone()
         toReturn.expansion = expansion.clone()
         toReturn.religion = religion.clone()

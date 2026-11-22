@@ -43,6 +43,7 @@ class TurnManager(val civInfo: Civilization) {
             civInfo.gainStockpiledResource(stockpiledResource.resource, stockpiledResource.amount)
 
         civInfo.civConstructions.startTurn()
+        if (civInfo.faithPurchaseCooldown > 0) civInfo.faithPurchaseCooldown-- // CvPlayer::doTurn
         civInfo.attacksSinceTurnStart.clear()
         civInfo.updateStatsForNextTurn() // for things that change when turn passes e.g. golden age, city state influence
 

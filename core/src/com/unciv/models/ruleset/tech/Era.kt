@@ -64,6 +64,10 @@ class Era : RulesetObject() {
     var buildPercent = 100
     /** Gold maintenance of buildings */
     var buildingMaintenancePercent = 100
+    /** Percent the production cost of a building changes by for every era the civilization has gone through since the era of the building's technology, summed over
+     *  the eras from the building's to the civilization's (the original's `LaterEraBuildingConstructMod`, CvPlayer::getProductionNeeded; 0 in Brave New World, -2 in
+     *  Vox Populi). A building without a technology uses every era before the civilization's. See [com.unciv.models.ruleset.Building.getProductionCost] */
+    var laterEraBuildingConstructMod = 0
     var citySound = "cityClassical"
 
     var friendBonus = HashMap<String, List<String>>()

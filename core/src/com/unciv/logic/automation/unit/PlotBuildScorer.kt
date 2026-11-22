@@ -60,8 +60,9 @@ class SBuilderState(changed: Map<Tile, TileImprovement?> = emptyMap(), extra: Ma
  *  - Connecting a resource: its [resourceWeight] to the base score, ⅔ of it (⅓ with exactly one available) moved to the potential score when
  *    the resource is already available more than once (once); resources the old improvement connects do not count as available, those the
  *    assignment pass plans to connect do ([SBuilderState.extraResources]).
- *  - Adjacency (CvBuilderTaskingAI::ScorePlotBuild's planned adjacency, with the one adjacency rule BNW has: ImprovementStatsForAdjacencies naming
- *    an improvement, the Moai's culture): the improvement's own yield changes by the planned improvements of its neighbours that differ from what
+ *  - Adjacency (CvBuilderTaskingAI::ScorePlotBuild's planned adjacency, with the adjacency rules that name an improvement: BNW's
+ *    ImprovementStatsForAdjacencies, the Moai's culture, and Vox Populi's YieldPerXAdjacentImprovement, [UniqueType.ImprovementStatsPerAdjacent], 1/n of the stats for
+ *    each adjacent one): the improvement's own yield changes by the planned improvements of its neighbours that differ from what
  *    they have; the neighbours' planned improvements that gain from this one add their yield to the secondary score (worked plot) or to the
  *    potential score (not worked); the best improvement still to be planned beside it that would give or take such a yield counts ⅔ of it in the
  *    potential score ([potentialAdjacentImprovements]).
@@ -83,7 +84,7 @@ class SBuilderState(changed: Map<Tile, TileImprovement?> = emptyMap(), extra: Ma
  *
  *  Not ported (none-inputs, the rules BNW lacks or later branches): the tile claim (NewOwner), BlockTileSteal (a theft bonus for an improvement
  *  that blocks tile theft), Great Person rate (GreatPersonRateModifier), domain production and experience, the planned features of
- *  [SBuilderState] (mChangedPlotFeatures), the adjacency yields of Vox Populi's own rules (YieldPerXAdjacentImprovement/Terrain, AdjacentTerrain/Feature/ResourceYieldChanges), WLTKD and
+ *  [SBuilderState] (mChangedPlotFeatures), the adjacent terrain, feature and resource yields (YieldPerXAdjacentTerrain, AdjacentTerrain/Feature/ResourceYieldChanges: they do not change with what is planned, and the tile stats of a plot hold them), WLTKD and
  *  golden age improvement yields, resource monopolies, the canal term (MakesPassable), CvPlot::IsChokePoint, CvPlot::IsStealBlockedByImprovement
  *  and embassy improvements,
  *  improvement maintenance (0 in the rules), spawned resources, IMPROVEMENTS_EXTENSIONS and the vanilla Celts block (inactive in Vox Populi).
@@ -414,10 +415,17 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
 
     private val adjacencyBonusCache = HashMap<TileImprovement, List<AdjacencyBonus>>()
 
+    /** The whole yield of a sum of fractions, cut off as the engine does ([com.unciv.logic.map.tile.TileStatFunctions]: the epsilon is for 1/3 x 3 being 0.99999994 as a float) */
+    private fun wholeYield(value: Float): Int = (if (value >= 0f) value + 1e-4f else value - 1e-4f).toInt()
+
     /** The adjacency bonuses [improvement] gets from other improvements (the Moai's culture for each adjacent Moai) */
     private fun adjacencyBonuses(improvement: TileImprovement): List<AdjacencyBonus> = adjacencyBonusCache.getOrPut(improvement) {
+        // YieldPerXAdjacentImprovement (V:CvBuilderTaskingAI.cpp:3612-3616, 3744-3750) is `[stats] from every [n] adjacent [improvement]`: each adjacent one gives 1/n of the stats.
+        // The same unique with a terrain or feature as its filter does not depend on what is planned, and is in the stats of the plot already
         improvement.getMatchingUniques(UniqueType.ImprovementStatsForAdjacencies, GameContext.IgnoreConditionals)
-            .filter { it.params[1] in ruleset.tileImprovements }.map { AdjacencyBonus(it.params[1], it.stats) }.toList()
+            .filter { it.params[1] in ruleset.tileImprovements }.map { AdjacencyBonus(it.params[1], it.stats) }.toList() +
+            improvement.getMatchingUniques(UniqueType.ImprovementStatsPerAdjacent, GameContext.IgnoreConditionals)
+                .filter { it.params[2] in ruleset.tileImprovements }.map { AdjacencyBonus(it.params[2], it.stats.times(1f / it.params[1].toInt())) }.toList()
     }
 
     /** For each improvement name, the improvements that gain from an adjacent one of that name, with what they gain */
@@ -449,7 +457,7 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
                 for ((i, stat) in YIELDS.withIndex()) sum[i] += bonus.stats[stat] * change
             }
         }
-        return delta?.let { sum -> IntArray(YIELDS.size) { sum[it].toInt() } }
+        return delta?.let { sum -> IntArray(YIELDS.size) { wholeYield(sum[it]) } }
     }
 
     /**
@@ -467,7 +475,7 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
             if (gains.isEmpty()) continue
             val worked = city.isWorked(neighbour)
             for ((i, stat) in YIELDS.withIndex()) {
-                val delta = gains.sumOf { it.second[stat].toDouble() }.toFloat().toInt()
+                val delta = wholeYield(gains.sumOf { it.second[stat].toDouble() }.toFloat())
                 if (delta == 0) continue
                 val value = delta * yieldBaseModifierTimes100(stat) * yieldCityModifierTimes100(city, stat) / 100
                 val sums = result ?: Pair(IntArray(YIELDS.size), IntArray(YIELDS.size)).also { result = it }

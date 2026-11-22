@@ -45,7 +45,8 @@ import kotlin.math.min
  *  None, because VP's input is not in BNW: the free resources of a wonder (trait), the defense per wonder, accomplishments, the happiness
  *  of the VP rules (happiness per war, median modifiers: no data in Vox Populi; the needs and the empire size modifier are read with the needs model), the building
  *  columns of VP (supply, ranged strike range and indirect fire, border obstacles of water and land, damage reduction, air and
- *  industrial routes, fresh water, units trainable, great work experience, corporations, marriages, themes, investments), the plots a
+ *  industrial routes, fresh water, units trainable, great work experience, corporations, marriages, themes; the investment of a building is read,
+ *  [Check.investment]), the plots a
  *  building claims (VP's Building_ResourceClaim: BNW has no such building, so the claimed plots' terms and the refusal to take a major's
  *  plots that [com.unciv.logic.automation.diplomacy.TheftAi.isBadTheftTarget] (culture bomb) gives are not reached; a ruleset with such
  *  buildings reads that function there),
@@ -155,6 +156,7 @@ object BuildingProductionAi {
             resources()?.let { return it }
             happinessTerms()
             defense()?.let { return it }
+            investment()
             courthouse()
             unlocks()
             militaryExperience()
@@ -410,6 +412,16 @@ object BuildingProductionAi {
             defense /= 100
             bonus += defense
             return null
+        }
+
+        /**
+         *  A building that gold has been invested in ([com.unciv.models.ModConstants.buildingInvestments]) is "virtually forced": +1000, unless the
+         *  situational terms are ignored (CvBuildingProductionAI::CheckBuildingBuildSanity, V:CvBuildingProductionAI.cpp:828-835). The queue has put it
+         *  at the front already ([com.unciv.logic.city.CityConstructions.purchaseConstruction]); this keeps the choice from dropping it.
+         */
+        private fun investment() {
+            if (ignoreSituational || !ruleset.modOptions.constants.buildingInvestments) return
+            if (city.cityConstructions.isInvestedIn(building.name)) bonus += 1000
         }
 
         /** Courthouse? Let's get it ASAP. */

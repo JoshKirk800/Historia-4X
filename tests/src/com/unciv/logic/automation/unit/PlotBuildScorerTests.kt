@@ -267,6 +267,27 @@ class PlotBuildScorerTests {
     }
 
     @Test
+    fun `an improvement that gains a third of its yield from each adjacent moai gains it from a planned one, truncated to whole yields`() {
+        val city = game.addCity(civ, tile(0, 0))
+        val here = tile(1, 0).also { city.expansion.takeOwnership(it) }
+        val next = tile(2, 0).also { city.expansion.takeOwnership(it) }
+        val other = tile(1, 1).also { city.expansion.takeOwnership(it) }
+        val moai = improvement("Moai")
+        val garden = game.createTileImprovement("[+3 Culture] from every [3] adjacent [Moai]")
+        val culture = PlotBuildScorer(civ).yieldBaseModifierTimes100(Stat.Culture)
+        city.workOnly(next)
+        val scorer = scorer()
+        val alone = scorer.scorePlotBuild(here, garden, Build(garden))
+        val one = scorer.scorePlotBuild(here, garden, Build(garden), SBuilderState(mapOf(next to moai)))
+        assertEquals("a third of 3 culture for one moai: 1 culture", alone.score + culture, one.score)
+        val two = scorer.scorePlotBuild(here, garden, Build(garden), SBuilderState(mapOf(next to moai, other to moai)))
+        assertEquals("two thirds of 3 culture are 2", alone.score + 2 * culture, two.score)
+        val halfWay = game.createTileImprovement("[+1 Culture] from every [2] adjacent [Moai]")
+        val aloneHalf = scorer.scorePlotBuild(here, halfWay, Build(halfWay))
+        assertEquals("half a culture is cut off at the whole number", aloneHalf.score, scorer.scorePlotBuild(here, halfWay, Build(halfWay), SBuilderState(mapOf(next to moai))).score)
+    }
+
+    @Test
     fun `a planned moai next to a plot gives a moai there its culture and the planned one the culture of this one`() {
         val city = game.addCity(civ, tile(0, 0))
         val here = tile(1, 0).also { city.expansion.takeOwnership(it) }

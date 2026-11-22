@@ -121,7 +121,11 @@ object UseGoldAutomation {
     /**
      * CvEconomicAI::DoHurry (Vox Populi): reserve twice the other savings requests, choose one purchase per eligible city, and
      * attempt them highest value first while above the treasury cushion. Threat ordering uses the raw city threat, including zero.
-     * VP investments, cooldowns and diplomat purchases have no BNW counterpart; purchases use existing game rules.
+     * Investments (a building bought with gold when [com.unciv.models.ModConstants.buildingInvestments] is on), purchase cooldowns and the building a unit needs
+     * are rules of [com.unciv.logic.city.PurchaseRules] that [com.unciv.logic.city.CityConstructions.isConstructionPurchaseAllowed] applies, so a unit on cooldown is
+     * not a candidate ([HurryChoice]), a building already invested in or finished next turn is not, and [com.unciv.logic.city.CityConstructions.purchaseConstruction]
+     * invests instead of building: the turns left weigh into the price (two turns left: twice, three: half, four: a fifth, one: no investment) and a world
+     * wonder has no such surcharge. Diplomat purchases (P4) and unit investments (MOD_BALANCE_UNIT_INVESTMENTS, off in Vox Populi) are not ported.
      */
     fun doHurry(civ: Civilization) {
         val buffer = treasuryBuffer(civ)
@@ -152,6 +156,8 @@ object UseGoldAutomation {
                     4 -> cost / 5
                     else -> 0
                 }
+                // "if wonder, investing late doesn't matter": a world wonder's price carries no excess valuation (V:CvEconomicAI.cpp, DoHurry, ::isWorldWonderClass)
+                if (construction.isWonder) valuation = cost
             }
             if (!savings.canWithdrawMoneyForPurchase(civ, type, valuation)) continue
             if (construction is BaseUnit &&

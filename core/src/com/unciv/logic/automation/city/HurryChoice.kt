@@ -42,8 +42,10 @@ import kotlin.math.max
  *  - the pick: the sanity weights sorted, a weighted pick among those within HandicapInfos.CityProductionChoiceCutoffThreshold % of
  *    the best ([WeightedChoice.chooseAbovePercentThreshold]); null when nothing is left.
  *
- *  Not ported (BNW has no such rule): unit and building investments (MOD_BALANCE_UNIT_INVESTMENTS, MOD_BALANCE_BUILDING_INVESTMENTS),
- *  the unit and building purchase cooldowns and the building class requirements of purchasable units, VP's NoSupply unit flag.
+ *  The purchase rules of Vox Populi's economy (building investments, the purchase cooldown of units, the building a unit needs to be bought) are in
+ *  [com.unciv.logic.city.PurchaseRules] and so in CvCity::IsCanPurchase of the candidates above: a unit on cooldown, a building that is invested in already
+ *  or finishes next turn is no candidate, which is how the original's chooser sees them. Not ported: unit investments (MOD_BALANCE_UNIT_INVESTMENTS, off in
+ *  Vox Populi), VP's NoSupply unit flag.
  *  Unciv extras kept from [ConstructionAutomation]: what a human disabled in the city, the personality's "Will not build" uniques and
  *  the ruleset's AiChoiceWeight uniques.
  *

@@ -39,13 +39,16 @@ import kotlin.math.max
  *  the city it is in). The nation's uniques are the player traits. The yield rate is the city's yield, the base modifier its percentage
  *  bonus plus 100.
  *
- *  None, because VP's input is not in BNW: the theming bonus yields, the VP yield columns (era scaling, per theme, per city strength, tech enhanced, per building,
- *  per tile, passing trade route, strategic resources of city-states, per monopoly, accomplishments, events, golden age yields, yield from
- *  yield, great work yields, allies and friends, internal and international trade route ends, the Maya long count, great person birth, victory
- *  and pillage yields, instant yields, birth yields, border growth, policy unlock, spy yields, purchase yields, unit level up, combat
- *  experience and unit production yields, golden age and WLTKD modifiers, area, process, distance to capital and religion building
- *  modifiers, the city connection yields), the yields BNW's Stats lack (tourism, golden age points, great general and admiral points, population,
- *  local culture, the JFD yields), the VP happiness flat reductions (distress, poverty, illiteracy, boredom, unrest), and from the traits: the art,
+ *  The shapes of the economy engine (instant yields of the events, birth, border growth, purchase and unit production yields, golden age start and WLTKD, process
+ *  modifiers, yield from yield, great work yields, the capital's yield per citizens of the empire) are [BuildingInstantYieldAi]; era scaling and `<for every>` multipliers
+ *  are read through [Building.getStats] and [Building.getMatchingUniques] like any other.
+ *
+ *  None, because VP's input is not in the engine: the theming bonus yields and accomplishments (P5), the yield per city strength and combat experience, level up and death
+ *  yields (P6), the trade route ends and passing trade routes (P3), strategic resources of city-states, allies and friends and the spy yields (P4), the Maya long count,
+ *  per theme, tech enhanced, per building, per tile, per monopoly, golden age yields per age, great person birth, policy unlock, area, distance to capital and religion
+ *  building modifiers, the city connection yields, the yields BNW's Stats lack (tourism, golden age points, great general and admiral points, population,
+ *  local culture, the JFD yields), the VP happiness flat reductions (distress, poverty, illiteracy, boredom, unrest: with the needs model [BuildingProductionAi] values
+ *  them per unhappy citizen), and from the traits: the art,
  *  artifact, literature and music yield changes, the world wonder yields per great work type, VP's golden age timer, great scientist rate,
  *  tech boost from capital buildings, artist golden age tech boost, unique beliefs only, new cities with the capital religion, population boost
  *  from religion, starting pantheon, prophet fervor, faith from unimproved forests, diplomatic marriage and the combat bonus against higher
@@ -186,18 +189,16 @@ object BuildingYieldAi {
         }
 
         ///////////////
-        // Instant Yields
+        // Instant Yields, and the shapes of the economy engine (events, processes, yield from yield, great work yields)
         //////////////
-        for (unique in building.getMatchingUniques(UniqueType.OneTimeGainStat, ignoreConditionals)) {
-            if (unique.params[1] != stat.name || unique.getModifiers(UniqueType.TriggerUponExpendingUnit).isEmpty()) continue
-            val amount = unique.params[0].toInt()
-            if (amount <= 0) continue
-            instant += amount * max(10, (100 + BuildingValueAi.greatPeopleRate(city)) / 10)
-        }
+        val shapes = BuildingInstantYieldAi.terms(city, building, stat)
+        flat += shapes.flat
+        instant += shapes.instant
 
         ///////////////
         // Yield Modifiers
         //////////////
+        modifier += shapes.modifier
         modifier += positive(building.getStatPercentageBonuses(city)[stat])
         for (unique in building.getMatchingUniques(UniqueType.StatPercentBonusCities, state)) {
             if (unique.params[1] != stat.name || unique.params[0].toInt() <= 0) continue

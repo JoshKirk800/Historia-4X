@@ -1,7 +1,13 @@
 [
 	{
 		"name": "Settler",
-		"baseHappiness": 15,
+		// Vox Populi's HandicapInfos: HappinessDefault, HappinessDefaultCapital, AIHappinessDefault, AIHappinessDefaultCapital, PopulationUnhappinessMod (a number of
+		// percent points added to every need), ExtraHappinessPerLuxury. The AI's pair is what an AI civilization adds when the game is played at this level.
+		"baseHappiness": 9,
+		"baseHappinessCapital": 3,
+		"aiBaseHappiness": 8,
+		"aiBaseHappinessCapital": 2,
+		"populationNeedModifier": -30,
 		"extraHappinessPerLuxury": 1,
 		"researchCostModifier": 0.9,
 		"unitCostModifier": 0.5,
@@ -42,8 +48,12 @@
 	},
 	{
 		"name": "Chieftain",
-		"baseHappiness": 12,
-		"extraHappinessPerLuxury": 1,
+		"baseHappiness": 8,
+		"baseHappinessCapital": 3,
+		"aiBaseHappiness": 8,
+		"aiBaseHappinessCapital": 2,
+		"populationNeedModifier": -15,
+		"extraHappinessPerLuxury": 0,
 		"researchCostModifier": 0.95,
 		"unitCostModifier": 0.67,
 		"unitSupplyBase": 7,
@@ -83,7 +93,10 @@
 	},
 	{
 		"name": "Warlord",
-		"baseHappiness": 12,
+		"baseHappiness": 8,
+		"baseHappinessCapital": 2,
+		"aiBaseHappiness": 8,
+		"aiBaseHappinessCapital": 2,
 		"extraHappinessPerLuxury": 0,
 		"researchCostModifier": 1,
 		"unitCostModifier": 0.85,
@@ -124,7 +137,10 @@
 	},
 	{
 		"name": "Prince",
-		"baseHappiness": 9,
+		"baseHappiness": 7,
+		"baseHappinessCapital": 2,
+		"aiBaseHappiness": 8,
+		"aiBaseHappinessCapital": 2,
 		"extraHappinessPerLuxury": 0,
 		"researchCostModifier": 1,
 		"unitCostModifier": 1,
@@ -164,7 +180,10 @@
 	},
 	{
 		"name": "King",
-		"baseHappiness": 9,
+		"baseHappiness": 7,
+		"baseHappinessCapital": 2,
+		"aiBaseHappiness": 8,
+		"aiBaseHappinessCapital": 2,
 		"extraHappinessPerLuxury": 0,
 		"researchCostModifier": 1,
 		"unitCostModifier": 1,
@@ -207,7 +226,10 @@
 	},
 	{
 		"name": "Emperor",
-		"baseHappiness": 9,
+		"baseHappiness": 7,
+		"baseHappinessCapital": 1,
+		"aiBaseHappiness": 8,
+		"aiBaseHappinessCapital": 2,
 		"extraHappinessPerLuxury": 0,
 		"researchCostModifier": 1,
 		"unitCostModifier": 1,
@@ -251,7 +273,10 @@
 	},
 	{
 		"name": "Immortal",
-		"baseHappiness": 9,
+		"baseHappiness": 6,
+		"baseHappinessCapital": 1,
+		"aiBaseHappiness": 8,
+		"aiBaseHappinessCapital": 2,
 		"extraHappinessPerLuxury": 0,
 		"researchCostModifier": 1,
 		"unitCostModifier": 1,
@@ -295,7 +320,10 @@
 	},
 	{
 		"name": "Deity",
-		"baseHappiness": 9,
+		"baseHappiness": 5,
+		"baseHappinessCapital": 1,
+		"aiBaseHappiness": 8,
+		"aiBaseHappinessCapital": 2,
 		"extraHappinessPerLuxury": 0,
 		"researchCostModifier": 1,
 		"unitCostModifier": 1,
@@ -344,7 +372,8 @@
 		// plus the level's bonus percent), the one of a city-state the cityStateUnitSupply... fields.
 		"name": "AI Default",
 		"isSelectable": false,
-		"baseHappiness": 15,
+		// HANDICAP_AI_DEFAULT: no happiness of its own, an AI civilization gets the AIHappinessDefault pair of the level the game is played at
+		"baseHappiness": 0,
 		"extraHappinessPerLuxury": 0,
 		"researchCostModifier": 0.85,
 		"unitCostModifier": 0.75,

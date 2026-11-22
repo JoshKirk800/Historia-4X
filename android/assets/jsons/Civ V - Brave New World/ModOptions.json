@@ -36,8 +36,11 @@
         "airInterceptionChanceScalesWithHealth": true,
         // CvPlayer::DoUpdateUprisings
         "uprisingCounterLikeCivV": true,
-        // CvCity::GetLocalHappiness: the happiness of buildings, per-building policies and beliefs, garrison and river is capped by the population
-        "localHappinessCappedByPopulation": true,
+        // Vox Populi's per-city needs and happiness (MOD_BALANCE_VP: CvCity::GetUnhappinessAggregated, CvCity::GetLocalHappiness, CvPlayer::DoUpdateTotalHappiness,
+        // CvPlayer::CalculateNetHappiness). The numbers of ModConstants.needs are Vox Populi's GlobalDefines, which are its defaults: the BNW defines
+        // UNHAPPINESS_PER_POPULATION, UNHAPPINESS_PER_CITY and UNHAPPINESS_PER_CAPTURED_CITY are 0 there (DefineChanges.sql) and so no longer exist as terms,
+        // UNHAPPINESS_PER_OCCUPIED_POPULATION is 1.00 (needs.unhappinessPerOccupiedPopulation), luxuries give 2 (needs.happinessPerLuxury)
+        "cityNeedsLikeVp": true,
         // CvUnit::fortifyModifier: no fortification bonus for a unit with ranged support fire (Zulu Impi)
         "rangedSupportFireUnitsGetNoFortification": true,
         // CvUnit::getMaxHurryProduction, getHurryProduction, canHurry
@@ -47,9 +50,6 @@
         "minorDepositFrequency": 23,
         // AssignStartingPlots:CanPlaceCityStateAt
         "cityStateSitesLikeCivV": true,
-        // CvPlayer::GetUnhappinessFromOccupiedCities: UNHAPPINESS_PER_OCCUPIED_POPULATION, no flat term
-        "annexedCityCitizenUnhappinessFactor": 1.34,
-        "annexedCityFlatUnhappiness": 0,
         // CvUnitCombat::ApplyNuclearExplosionDamage: NUKE_NON_COMBAT_DEATH_THRESHOLD
         "nukeCivilianDeathDamage": 6,
         // CvUnit::GetScrapGold: DISBAND_UNIT_REFUND_PERCENT

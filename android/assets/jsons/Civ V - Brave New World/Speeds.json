@@ -86,6 +86,7 @@
         "goldGiftModifier": 0.75,
         "cityStateTributeScalingInterval": 14.0,
         "goldenAgeLengthModifier": 1.25,
+        "startingHappiness": 1, // GameSpeeds.StartingHappiness of Vox Populi
         "religiousPressureAdjacentCity": 4,
         "peaceDealDuration": 15,
         "dealDuration": 45,
@@ -113,6 +114,7 @@
         "goldGiftModifier": 0.67,
         "cityStateTributeScalingInterval": 32.0,
         "goldenAgeLengthModifier": 2.0,
+        "startingHappiness": 2, // GameSpeeds.StartingHappiness of Vox Populi
         "religiousPressureAdjacentCity": 2,
         "peaceDealDuration": 30,
         "dealDuration": 90,

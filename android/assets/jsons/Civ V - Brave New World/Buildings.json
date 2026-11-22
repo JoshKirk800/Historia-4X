@@ -11,7 +11,7 @@
 		"culture": 1,
 		"cityStrength": 2.5,
 		"cost": 0,
-		"uniques": ["Indicates the capital city", "Has [1] [Art/Artifact] Great Work slots"]
+		"uniques": ["Indicates the capital city", "Has [1] [Art/Artifact] Great Work slots", "The first [1] specialists cause no unhappiness [in this city]"]
 	},
 	{
 		"name": "Monument",
@@ -71,14 +71,13 @@
 		"culture": 1,
 		"greatPersonPoints": {"Great Engineer": 1},
 		"uniques": ["[+10]% [Food] [in all cities]", "[+15]% Production when constructing [Archery] units [in this city]",
-			"[+15]% Production when constructing [Ranged Gunpowder] units [in this city]"],
+			"[+15]% Production when constructing [Ranged Gunpowder] units [in this city]", "The first [2] specialists cause no unhappiness [in this city]"],
 		"requiredTech": "Archery",
 		"quote": "'It is not so much for its beauty that the forest makes a claim upon men's hearts, as for that subtle something, that quality of air, that emanation from old trees, that so wonderfully changes and renews a weary spirit.' - Robert Louis Stevenson"
 	},
 	// Column 2
 	{
 		"name": "Stone Works",
-		"happiness": 1,
 		"production": 1,
 		"requiredNearbyImprovedResources": ["Marble", "Stone"],
 		"maintenance": 1,
@@ -100,7 +99,7 @@
 		"name": "Library",
 		"hurryCostModifier": 25,
 		"maintenance": 1,
-		"uniques": ["[+1 Science] per [2] population [in this city]"],
+		"uniques": ["Reduces [Illiteracy] by [1] [in this city]", "The first [1] specialists cause no unhappiness [in this city]", "[+1 Science] per [2] population [in this city]"],
 		"requiredTech": "Writing"
 	},
 	{
@@ -118,7 +117,7 @@
 		"uniqueTo": "Assyria",
 		"maintenance": 1,
 		"hurryCostModifier": 25,
-		"uniques": ["[+1 Science] per [2] population [in this city]", "Destroyed when the city is captured", "Has [1] [Literature] Great Work slots"],
+		"uniques": ["Reduces [Illiteracy] by [1] [in all cities]", "The first [1] specialists cause no unhappiness [in this city]", "[+1 Science] per [2] population [in this city]", "Destroyed when the city is captured", "Has [1] [Literature] Great Work slots"],
 		"requiredTech": "Writing"
 	},
 	{
@@ -137,8 +136,9 @@
 	{
 		"name": "Circus",
 		"requiredNearbyImprovedResources": ["Ivory","Horses"],
-		"happiness": 2,
+		"happiness": 1,
 		"hurryCostModifier": 25,
+		"uniques": ["Reduces [Boredom] by [1] [in this city]"],
 		"requiredTech": "Trapping"
 	},
 	{
@@ -168,7 +168,7 @@
 		"cityHealth": 50,
 		"hurryCostModifier": 25,
 		"requiredTech": "Masonry",
-		"uniques": ["Destroyed when the city is captured"]
+		"uniques": ["Reduces the empire size need modifier by [5] [in this city]", "Destroyed when the city is captured"]
 	},
 	{
 		"name": "Walls of Babylon",
@@ -179,7 +179,7 @@
 		"cityHealth": 100,
 		"hurryCostModifier": 25,
 		"requiredTech": "Masonry",
-		"uniques": ["Destroyed when the city is captured"]
+		"uniques": ["Reduces the empire size need modifier by [5] [in this city]", "Destroyed when the city is captured"]
 	},
 	{
 		"name": "The Pyramids",
@@ -204,7 +204,7 @@
 		"name": "Barracks",
 		"hurryCostModifier": 25,
 		"maintenance": 1,
-		"uniques": ["New [Military] units start with [15] XP [in this city]", "Destroyed when the city is captured"],
+		"uniques": ["Reduces [Distress] by [1] [in this city]", "New [Military] units start with [15] XP [in this city]", "Destroyed when the city is captured"],
 		"requiredTech": "Bronze Working"
 	},
 	{
@@ -213,7 +213,7 @@
 		"uniqueTo": "Russia",
 		"hurryCostModifier": 25,
 		"maintenance": 1,
-		"uniques": ["[-25]% Culture cost of natural border growth [in this city]","[-25]% Gold cost of acquiring tiles [in this city]",
+		"uniques": ["Reduces the empire size need modifier by [5] [in this city]", "[-25]% Culture cost of natural border growth [in this city]","[-25]% Gold cost of acquiring tiles [in this city]",
 			"New [Military] units start with [15] XP [in this city]", "Destroyed when the city is captured"],
 		"requiredTech": "Bronze Working"
 	},
@@ -223,14 +223,15 @@
 		"uniqueTo": "Zulus",
 		"maintenance": 1,
 		"hurryCostModifier": 25,
-		"uniques": ["New [Military] units start with [15] XP [in this city]", "All newly-trained [{Melee} {non-[Gunpowder]} {non-[Mounted]} {non-[Armored]}] units [in this city] receive the [Buffalo Horns] promotion", "Destroyed when the city is captured"],
+		"uniques": ["Reduces [Distress] by [1] [in this city]", "New [Military] units start with [15] XP [in this city]", "All newly-trained [{Melee} {non-[Gunpowder]} {non-[Mounted]} {non-[Armored]}] units [in this city] receive the [Buffalo Horns] promotion", "Destroyed when the city is captured"],
 		"requiredTech": "Bronze Working"
 	},
 	{
 		"name": "Statue of Zeus",
 		"culture": 1,
 		"isWonder": true,
-		"uniques": ["[+15]% Strength <for [All] units> <vs cities> <when attacking>", "Only available <after adopting [Honor]>"],
+		"uniques": ["[+15]% Strength <for [All] units> <vs cities> <when attacking>", "Only available <after adopting [Honor]>",
+			"Reduces [Distress] by [1] [in this city]"],
 		"requiredTech": "Bronze Working",
 		"quote": "'He spoke, the son of Kronos, and nodded his head with the dark brows, and the immortally anointed hair of the great god swept from his divine head, and all Olympos was shaken' - The Iliad"
 		// "Requires [Honor]" in BNW
@@ -290,10 +291,10 @@
 	{
 		"name": "Circus Maximus",
 		"cost": 125,
-		"happiness": 5,
+		"happiness": 2,
 		"culture": 1,
 		"isNationalWonder": true,
-		"uniques": ["Happiness from this building is not limited by the population of the city", "Only available <if [Colosseum] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city"],
+		"uniques": ["Reduces [Boredom] by [1] [in this city]", "Only available <if [Colosseum] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city"],
 		"requiredTech": "Horseback Riding"
 	},
 	{
@@ -316,7 +317,7 @@
 	{
 		"name": "Colosseum",
 		"maintenance": 1,
-		"happiness": 2,
+		"uniques": ["Reduces [Boredom] by [1] [in this city]"],
 		"hurryCostModifier": 25,
 		"requiredTech": "Construction"
 	},
@@ -335,7 +336,7 @@
 		"maintenance": 2,
 		"hurryCostModifier": 25,
 		"requiredTech": "Philosophy",
-		"uniques": ["Only available <when religion is enabled>", "Destroyed when the city is captured"]
+		"uniques": ["Reduces [Religious Unrest] by [1] [in this city]", "Only available <when religion is enabled>", "Destroyed when the city is captured"]
 	},
 	{
 		"name": "Burial Tomb",
@@ -367,7 +368,8 @@
 		"culture": 1,
 		"isNationalWonder": true,
 		"percentStatBonus": {"science": 50},
-		"uniques": ["Only available <if [Library] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city"],
+		"uniques": ["Only available <if [Library] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city",
+			"Reduces [Illiteracy] by [1] [in all cities]", "The first [1] specialists cause no unhappiness [in this city]"],
 		"requiredTech": "Philosophy"
 	},
 	{
@@ -375,7 +377,7 @@
 		"culture": 3,
 		"greatPersonPoints": {"Great Scientist": 1},
 		"isWonder": true,
-		"uniques": ["Free Social Policy"],
+		"uniques": ["Free Social Policy", "Reduces [Illiteracy] by [1] [in this city]"],
 		"requiredTech": "Philosophy",
 		"quote": "'The ancient Oracle said that I was the wisest of all the Greeks. It is because I alone, of all the Greeks, know that I know nothing' - Socrates"
 	},
@@ -411,7 +413,7 @@
 		"maintenance": 1,
 		"specialistSlots": {Writer: 2},
 		"greatPersonPoints": {"Great Writer": 1},
-		"uniques": ["Cannot be purchased", "Destroyed when the city is captured"],
+		"uniques": ["The first [1] specialists cause no unhappiness [in this city]", "Cannot be purchased", "Destroyed when the city is captured"],
 		"requiredTech": "Drama and Poetry"
 	},
 	{
@@ -441,7 +443,7 @@
 		"maintenance": 0,
 		"requiredNearbyImprovedResources": ["Gold Ore", "Silver"],
 		"hurryCostModifier": 25,
-		"uniques": ["[+2 Gold] from [Gold Ore] tiles [in this city]", "[+2 Gold] from [Silver] tiles [in this city]"],
+		"uniques": ["Reduces [Poverty] by [1] [in this city]", "[+2 Gold] from [Gold Ore] tiles [in this city]", "[+2 Gold] from [Silver] tiles [in this city]"],
 		"requiredTech": "Currency"
 	},
 	{
@@ -458,7 +460,7 @@
 		"name": "Aqueduct",
 		"maintenance": 1,
 		"hurryCostModifier": 0,
-		"uniques": ["[40]% Food is carried over after population increases [in this city]"],
+		"uniques": ["Reduces [Poverty] by [1] [in this city]", "[40]% Food is carried over after population increases [in this city]"],
 		"requiredTech": "Engineering"
 	},
 	{
@@ -498,7 +500,7 @@
 	// Column 5
 	{
 		"name": "Garden",
-		"uniques": ["[+25]% Great Person generation [in this city]", "Must be next to [Fresh water]"],
+		"uniques": ["The first [1] specialists cause no unhappiness [in this city]", "[+25]% Great Person generation [in this city]", "Must be next to [Fresh water]"],
 		"hurryCostModifier": 25,
 		"maintenance": 1,
 		"requiredTech": "Theology"
@@ -518,7 +520,7 @@
 		"maintenance": 1,
 		"faith": 2,
 		"hurryCostModifier": 25,
-		"uniques": ["[+25]% Great Person generation [in this city]", "[+2 Faith] for each major religion with followers in the city [in this city]"],
+		"uniques": ["The first [1] specialists cause no unhappiness [in this city]", "[+25]% Great Person generation [in this city]", "[+2 Faith] for each major religion with followers in the city [in this city]"],
 		"requiredTech": "Theology"
 	},
 	{
@@ -544,17 +546,17 @@
 		"cost": 125,
 		"faith": 8,
 		"uniques": ["Only available <if [Temple] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city",
-			"[+100]% Natural religion spread [in this city]", "Only available <when religion is enabled>", "Can only be built <in [Holy] cities>"],
+			"[+100]% Natural religion spread [in this city]", "Only available <when religion is enabled>", "Can only be built <in [Holy] cities>",
+			"Reduces [Religious Unrest] by [1] [in this city]", "Reduces [Religious Unrest] by [1] [in all cities]"],
 		"requiredTech": "Theology",
 		"isNationalWonder": true
 	},
 	{
 		"name": "Chichen Itza",
 		"culture": 1,
-		"happiness": 4,
 		"greatPersonPoints": {"Great Engineer": 1},
 		"isWonder": true,
-		"uniques": ["[+50]% Golden Age length"],
+		"uniques": ["[+50]% Golden Age length", "Reduces the empire size need modifier by [10] [in all cities]"],
 		"requiredTech": "Civil Service",
 		"quote": "'The katun is established at Chichen Itza. The settlement of the Itza shall take place there. The quetzal shall come, the green bird shall come. Ah Kantenal shall come. It is the word of God. The Itza shall come.' - The Books of Chilam Balam"
 	},
@@ -564,7 +566,7 @@
 		"gold": 4,
 		"isNationalWonder": true,
 		"uniques": ["Only available <if [Market] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city",
-			"[+2] Gold on incoming [International] trade routes for their origin <in this city>", "[+4] Gold from incoming [International] trade routes <in this city>"],
+			"Reduces [Poverty] by [1] [in all cities]", "[+2] Gold on incoming [International] trade routes for their origin <in this city>", "[+4] Gold from incoming [International] trade routes <in this city>"],
 		"requiredTech": "Guilds"
 	},
 	{
@@ -574,7 +576,7 @@
 		"maintenance": 1,
 		"specialistSlots": {Artist: 2},
 		"greatPersonPoints": {"Great Artist": 2},
-		"uniques": ["Cannot be purchased", "Destroyed when the city is captured"],
+		"uniques": ["The first [1] specialists cause no unhappiness [in this city]", "Cannot be purchased", "Destroyed when the city is captured"],
 		"requiredTech": "Guilds"
 	},
 	{
@@ -635,7 +637,7 @@
 		"percentStatBonus": {"science": 33},
 		"specialistSlots": {"Scientist": 2},
 		"requiredBuilding": "Library",
-		"uniques": ["[+2 Science] from [Jungle] tiles [in this city]"],
+		"uniques": ["Reduces [Illiteracy] by [1] [in this city]", "[+2 Science] from [Jungle] tiles [in this city]"],
 		"requiredTech": "Education"
 	},
 	{
@@ -648,7 +650,7 @@
 		"specialistSlots": {"Scientist": 2},
 		"culture": 3,
 		"requiredBuilding": "Library",
-		"uniques": ["[+2 Science] from [Jungle] tiles [in this city]"],
+		"uniques": ["Reduces [Religious Unrest] by [1] [in this city]", "[+2 Science] from [Jungle] tiles [in this city]"],
 		"requiredTech": "Education"
 	},
 	{
@@ -660,7 +662,8 @@
 		"science": 3,
 		"culture": 1,
 		"isNationalWonder": true,
-		"uniques": ["Only available <if [University] is constructed in all [non-[Puppeted]] cities>", "Free Technology", "Cost increases by [30] per owned city", "Has [2] [Literature] Great Work slots"],
+		"uniques": ["Only available <if [University] is constructed in all [non-[Puppeted]] cities>", "Free Technology", "Cost increases by [30] per owned city", "Has [2] [Literature] Great Work slots",
+			"Reduces [Illiteracy] by [1] [in this city]"],
 		"requiredTech": "Education"
 	},
 	{
@@ -679,7 +682,7 @@
 		"hurryCostModifier": 25,
 		"requiredBuilding": "Walls",
 		"requiredTech": "Chivalry",
-		"uniques": ["Destroyed when the city is captured"]
+		"uniques": ["Reduces the empire size need modifier by [5] [in this city]", "Destroyed when the city is captured"]
 	},
 	{
 		"name": "Mughal Fort",
@@ -691,7 +694,7 @@
 		"culture": 2,
 		"hurryCostModifier": 25,
 		"requiredBuilding": "Walls",
-		"uniques": ["Destroyed when the city is captured", "[+2] Tourism [in this city] <after discovering [Flight]>"],
+		"uniques": ["Reduces the empire size need modifier by [5] [in this city]", "Destroyed when the city is captured", "[+2] Tourism [in this city] <after discovering [Flight]>"],
 		"requiredTech": "Chivalry"
 	},
 	{
@@ -715,10 +718,9 @@
 	{
 		"name": "Notre Dame",
 		"faith": 4,
-		"happiness": 10,
+		"happiness": 1,
 		"greatPersonPoints": {"Great Merchant": 1},
 		"isWonder": true,
-		"uniques": ["Happiness from this building is not limited by the population of the city"],
 		"requiredTech": "Physics",
 		"quote": "'Architecture has recorded the great ideas of the human race. Not only every religious symbol, but every human thought has its page in that vast book.' - Victor Hugo"
 	},
@@ -727,7 +729,7 @@
 		"hurryCostModifier": 25,
 		"maintenance": 1,
 		"requiredBuilding": "Barracks",
-		"uniques": ["New [Military] units start with [15] XP [in this city]", "Destroyed when the city is captured"],
+		"uniques": ["Reduces [Distress] by [1] [in this city]", "New [Military] units start with [15] XP [in this city]", "Destroyed when the city is captured"],
 		"requiredTech": "Steel"
 	},
 
@@ -756,12 +758,12 @@
 		"replaces": "Opera House",
 		"uniqueTo": "Celts",
 		"culture": 1,
-		"happiness": 3,
+		"happiness": 1,
 		"hurryCostModifier": 10,
 		"requiredBuilding": "Amphitheater",
 		"maintenance": 1,
 		"requiredTech": "Acoustics",
-		"uniques": ["Destroyed when the city is captured", "Has [1] [Music] Great Work slots"]
+		"uniques": ["Reduces [Boredom] by [1] [in this city]", "Destroyed when the city is captured", "Has [1] [Music] Great Work slots"]
 	},
 	{
 		"name": "Sistine Chapel",
@@ -781,7 +783,7 @@
 		"maintenance": 1,
 		"specialistSlots": {Musician: 2},
 		"greatPersonPoints": {"Great Musician": 3},
-		"uniques": ["Cannot be purchased", "Destroyed when the city is captured"],
+		"uniques": ["The first [1] specialists cause no unhappiness [in this city]", "Cannot be purchased", "Destroyed when the city is captured"],
 		"requiredTech": "Acoustics"
 	},
 	{
@@ -800,7 +802,7 @@
 		"uniqueTo": "Persia",
 		"gold": 3,
 		"specialistSlots": {"Merchant": 1},
-		"happiness": 2,
+		"happiness": 1,
 		"hurryCostModifier": 15,
 		"percentStatBonus": {"gold": 25},
 		"requiredBuilding": "Market",
@@ -816,7 +818,7 @@
 		"hurryCostModifier": 15,
 		"percentStatBonus": {gold: 25},
 		"requiredBuilding": "Market",
-		"uniques": ["[+1] Gold on incoming [International] trade routes for their origin <in this city>", "[+1] Gold from incoming [International] trade routes <in this city>",
+		"uniques": ["Reduces [Poverty] by [1] [in this city]", "[+1] Gold on incoming [International] trade routes for their origin <in this city>", "[+1] Gold from incoming [International] trade routes <in this city>",
 			"[+5]% [Production] [in this city] <for every [[City-State] Trade Routes]>"],
 		"requiredTech": "Banking"
 	},
@@ -825,20 +827,20 @@
 		"cost": 160,
 		"maintenance": 1,
 		"hurryCostModifier": 25,
-		"uniques": ["Only available <when espionage is enabled>", "[-25]% enemy spy effectiveness [in this city]", "Destroyed when the city is captured"],
+		"uniques": ["Reduces [Distress] by [1] [in this city]", "Only available <when espionage is enabled>", "[-25]% enemy spy effectiveness [in this city]", "Destroyed when the city is captured"],
 		"requiredTech": "Banking"
 	},
 	{
 		"name": "Forbidden Palace",
 		"culture": 1,
 		"isWonder": true,
-		"uniques": ["[-10]% Unhappiness from [Population] [in all non-occupied cities]", "Only available <after adopting [Patronage]>", "[2] World Congress Delegates"],
+		"uniques": ["Reduces [Poverty] by [1] [in this city]", "Only available <after adopting [Patronage]>", "[2] World Congress Delegates"],
 		"requiredTech": "Banking",
 		"quote": "'Most of us can, as we choose, make of this world either a palace or a prison' - John Lubbock"
 	},
 	{
 		"name": "Zoo",
-		"happiness": 2,
+		"uniques": ["Reduces [Boredom] by [1] [in this city]"],
 		"hurryCostModifier": 10,
 		"maintenance": 2,
 		"requiredBuilding": "Colosseum",
@@ -859,7 +861,8 @@
 		],
 		"culture": 2,
 		"isWonder": true,
-		"uniques": ["Free [Great Writer] appears", "Has [2] [Literature] Great Work slots"],
+		"uniques": ["Free [Great Writer] appears", "Has [2] [Literature] Great Work slots", "Reduces [Boredom] by [1] [in this city]",
+			"The first [1] specialists cause no unhappiness [in all cities]"],
 		"requiredTech": "Printing Press",
 		"quote": "'Totus mundus agit histrionem' - Inscription above main entrance to the Globe Theatre"
 	},
@@ -892,13 +895,13 @@
 		"percentStatBonus": {"culture": 50},
 		"culture": 2,
 		"isNationalWonder": true,
-		"uniques": ["Only available <if [Opera House] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city", "Has [3] [Art/Artifact] Great Work slots"],
+		"uniques": ["Only available <if [Opera House] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city", "Has [3] [Art/Artifact] Great Work slots",
+			"Reduces [Boredom] by [1] [in all cities]"],
 		"requiredTech": "Architecture"
 	},
 	{
 		"name": "Taj Mahal",
 		"culture": 1,
-		"happiness": 4,
 		"isWonder": true,
 		"uniques": ["Empire enters golden age"],
 		"requiredTech": "Architecture",
@@ -909,7 +912,8 @@
 		"culture": 1,
 		"greatPersonPoints": {"Great Scientist": 2},
 		"isWonder": true,
-		"uniques": ["Free [Great Scientist] appears", "Science gained from research agreements [+50]%", "Only available <after adopting [Rationalism]>"],
+		"uniques": ["Free [Great Scientist] appears", "Science gained from research agreements [+50]%", "Only available <after adopting [Rationalism]>",
+			"Reduces [Illiteracy] by [1] [in this city]"],
 		"requiredTech": "Architecture",
 		"quote": "'Things always seem fairer when we look back at them, and it is out of that inaccessible tower of the past that Longing leans and beckons.' - James Russell Lowell"
 	},
@@ -920,7 +924,8 @@
 		],
 		"culture": 2,
 		"isWonder": true,
-		"uniques": ["Free [Great Artist] appears", "Only available <after adopting [Aesthetics]>", "Has [3] [Art/Artifact] Great Work slots"],
+		"uniques": ["Free [Great Artist] appears", "Only available <after adopting [Aesthetics]>", "Has [3] [Art/Artifact] Great Work slots",
+			"The first [1] specialists cause no unhappiness [in all cities]"],
 		"requiredTech": "Architecture",
 		"quote": "'The painter is not simply someone who looks and who sees. Above all, the artist is someone who exposes a personal vision by rendering it visible.' - Marcel Paquet"
 	},
@@ -953,7 +958,7 @@
 		"hurryCostModifier": 25,
 		"requiredBuilding": "Castle",
 		"requiredTech": "Metallurgy",
-		"uniques": ["Destroyed when the city is captured"]
+		"uniques": ["Reduces the empire size need modifier by [5] [in this city]", "Destroyed when the city is captured"]
 	},
 	{
 		"name": "Red Fort",
@@ -970,7 +975,8 @@
 		"cost": 1060,
 		"culture": 1,
 		"isWonder": true,
-		"uniques": ["Free Social Policy", "[+50]% Production when constructing [Armored] units [in this city]", "Only available <after adopting [Order]>"],
+		"uniques": ["Free Social Policy", "[+50]% Production when constructing [Armored] units [in this city]", "Only available <after adopting [Order]>",
+			"Reduces [Distress] by [1] [in this city]"],
 		"requiredTech": "Railroads",
 		"quote": "'The Kremlin is constantly changing the rules of the game to suit its purposes. We are not playing chess, we're playing roulette.' - Garry Kasparov"
 	},
@@ -999,7 +1005,7 @@
 		"maintenance": 1,
 		"hurryCostModifier": 0,
 		"requiredTech": "Archaeology",
-		"uniques": ["Destroyed when the city is captured", "Has [2] [Art/Artifact] Great Work slots"]
+		"uniques": ["Reduces [Boredom] by [1] [in this city]", "Destroyed when the city is captured", "Has [2] [Art/Artifact] Great Work slots"]
 	},
 	{
 		"name": "The Louvre",
@@ -1019,7 +1025,7 @@
 		"requiredBuilding": "University",
 		"maintenance": 3,
 		"hurryCostModifier": 0,
-		"uniques": ["[+1 Science] per [2] population [in this city]"],
+		"uniques": ["Reduces [Illiteracy] by [1] [in this city]", "[+1 Science] per [2] population [in this city]"],
 		"requiredTech": "Scientific Theory"
 	},
 	{
@@ -1029,6 +1035,7 @@
 		"percentStatBonus": {"production": 10},
 		"specialistSlots": {"Engineer": 2},
 		"requiredBuilding": "Workshop",
+		"uniques": ["The first [1] specialists cause no unhappiness [in this city]"],
 		"maintenance": 3,
 		"hurryCostModifier": 0,
 		"requiredResource": "Coal",
@@ -1040,7 +1047,8 @@
 		"gold": 4,
 		"greatPersonPoints": {"Great Merchant": 2},
 		"isWonder": true,
-		"uniques": ["[Gold] cost of purchasing items in cities [-15]%", "Only available <after adopting [Commerce]>"],
+		"uniques": ["[Gold] cost of purchasing items in cities [-15]%", "Only available <after adopting [Commerce]>",
+			"Reduces [Poverty] by [1] [in this city]"],
 		"requiredTech": "Industrialization",
 		"quote": "'To achieve great things, two things are needed: a plan, and not quite enough time.' - Leonard Bernstein"
 	},
@@ -1049,7 +1057,7 @@
 		"hurryCostModifier": 0,
 		"maintenance": 1,
 		"requiredBuilding": "Armory",
-		"uniques": ["New [Military] units start with [15] XP [in this city]", "Destroyed when the city is captured"],
+		"uniques": ["Reduces [Distress] by [1] [in this city]", "New [Military] units start with [15] XP [in this city]", "Destroyed when the city is captured"],
 		"requiredTech": "Military Science"
 	},
 	{
@@ -1066,6 +1074,7 @@
 		"name": "Hospital",
 		"food": 5,
 		"requiredBuilding": "Aqueduct",
+		"uniques": ["Reduces [Poverty] by [1] [in this city]", "The first [2] specialists cause no unhappiness [in this city]"],
 		"maintenance": 2,
 		"hurryCostModifier": 0,
 		"requiredTech": "Biology"
@@ -1092,7 +1101,8 @@
 		"cost": 300,
 		"maintenance": 1,
 		"hurryCostModifier": 25,
-		"uniques": ["Only available <when espionage is enabled>", "[-25]% enemy spy effectiveness [in this city]", "Destroyed when the city is captured"],
+		"uniques": ["Reduces [Distress] by [1] [in this city]", "Reduces [Poverty] by [1] [in this city]", "Reduces [Illiteracy] by [1] [in this city]", "Reduces [Boredom] by [1] [in this city]",
+			"Only available <when espionage is enabled>", "[-25]% enemy spy effectiveness [in this city]", "Destroyed when the city is captured"],
 		"requiredBuilding": "Constabulary",
 		"requiredTech": "Electricity"
 	},
@@ -1102,7 +1112,6 @@
 	// Column 11
 	{
 		"name": "Stadium",
-		"happiness": 2,
 		"requiredBuilding": "Zoo",
 		"maintenance": 2,
 		"requiredTech": "Refrigeration"
@@ -1114,15 +1123,14 @@
 		"requiredBuilding": "Museum",
 		"maintenance": 3,
 		"requiredTech": "Radio",
-		"uniques": ["Destroyed when the city is captured", "Has [1] [Music] Great Work slots"]
+		"uniques": ["Reduces [Boredom] by [1] [in this city]", "Destroyed when the city is captured", "Has [1] [Music] Great Work slots"]
 	},
 	{
 		"name": "Eiffel Tower",
 		"culture": 1,
-		"happiness": 5,
 		"greatPersonPoints": {"Great Merchant": 2},
 		"isWonder": true,
-		"uniques": ["Happiness from this building is not limited by the population of the city", "[+12] Tourism [in this city] <after discovering [Radio]>"],
+		"uniques": ["[+12] Tourism [in this city] <after discovering [Radio]>"],
 		"requiredTech": "Radio",
 		"quote": "'We live only to discover beauty, all else is a form of waiting' - Kahlil Gibran"
 	},
@@ -1180,7 +1188,7 @@
 		"hurryCostModifier": 25,
 		"requiredBuilding": "Arsenal",
 		"requiredTech": "Replaceable Parts",
-		"uniques": ["Destroyed when the city is captured"]
+		"uniques": ["Reduces [Distress] by [1] [in this city]", "Reduces the empire size need modifier by [5] [in this city]", "Destroyed when the city is captured"]
 	},
 	{
 		"name": "Statue of Liberty",
@@ -1192,15 +1200,14 @@
 	},
 	{
 		"name": "Prora",
-		"happiness": 2,
+		"happiness": 1,
 		"isWonder": true,
-		"uniques": ["Happiness from this building is not limited by the population of the city", "Must be next to [Coast]", "[+1 Happiness] per [2] social policies adopted", "Free Social Policy", "Only available <after adopting [Autocracy]>"],
+		"uniques": ["Must be next to [Coast]", "[+1 Happiness] per [2] social policies adopted", "Free Social Policy", "Only available <after adopting [Autocracy]>"],
 		"requiredTech": "Flight",
 		"quote": "'This loss (of freedom) means the fading from human life of values infinitely precious to it. There only remain ironbound conditions of employment and trivial amusements for leisure.' - A.N. Whitehead"
 	},
 	{
 		"name": "Neuschwanstein",
-		"happiness": 2,
 		"culture": 4,
 		"gold": 6,
 		"greatPersonPoints": {"Great Merchant": 1},
@@ -1218,6 +1225,7 @@
 		"specialistSlots": {"Scientist": 1},
 		"requiredBuilding": "Public School",
 		"maintenance": 3,
+		"uniques": ["Reduces [Illiteracy] by [1] [in this city]"],
 		"requiredTech": "Plastics"
 	},
 	{
@@ -1363,8 +1371,7 @@
 		"cost": 0,
 		"faith": 1,
 		"culture": 1,
-		"happiness": 1,
-		"uniques": ["Unbuildable", "Only available <when religion is enabled>", "Has [1] [Art/Artifact] Great Work slots"]
+		"uniques": ["Reduces [Poverty] by [1] [in this city]", "Unbuildable", "Only available <when religion is enabled>", "Has [1] [Art/Artifact] Great Work slots"]
 	},
 	{
 		"name": "Monastery",
@@ -1380,16 +1387,14 @@
 		"cost": 0,
 		"culture": 2,
 		"faith": 3,
-		"happiness": 1,
-		"uniques": ["Unbuildable", "Only available <when religion is enabled>"]
+		"uniques": ["Reduces [Illiteracy] by [1] [in this city]", "Unbuildable", "Only available <when religion is enabled>"]
 	},
 	{
 		"name": "Pagoda",
 		"cost": 0,
 		"culture": 2,
 		"faith": 2,
-		"happiness": 2,
-		"uniques": ["Unbuildable", "Only available <when religion is enabled>"]
+		"uniques": ["Reduces [Boredom] by [1] [in this city]", "Reduces [Religious Unrest] by [2] [in this city]", "Unbuildable", "Only available <when religion is enabled>"]
 	},
 	{
 		// The reward of the top contributor of the International Space Station project (BUILDING_INTERNATIONAL_SPACE_STATION, Cost -1 = never built by a city).

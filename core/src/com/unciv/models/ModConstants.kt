@@ -497,6 +497,68 @@ class ModConstants {
     var tradeRouteDomesticBaseYield = 3f
     var tradeRouteDomesticYieldPerEra = 0.5f
 
+    // Vox Populi's trade route model instead of Brave New World's (CvPlayerTrade::GetTradeConnectionValueTimes100, V:CvTradeClasses.cpp:3604-4247; the option BALANCE_VP and
+    // BALANCE_TRADE_ROUTE_PROXIMITY_PENALTY, BALANCE_TRADE_ROUTE_DESTINATION_RESTRICTION). false: the constants above and the rules as they are. true: the numbers of
+    // [tradeRouteVp] and the Eras' `tradeRouteFoodBonus` and `tradeRouteProductionBonus`, with the route rules of the original. Nothing reads these yet: slices T3 and T4 of
+    // phaseE/vp-trade-plan.md add the model, and they are what the flag will turn on
+    var tradeRouteModelLikeVp = false
+    /** The defines of Vox Populi's route model (DB vp `Defines`, `(1) Community Patch/Database Changes/Defines/CoreDefineChanges.sql:1007` and DEF-VP; the values of Vox Populi 5.4.8).
+     *  Can only be modded all-or-nothing. Percentages are of 100; "times 100" are hundredths */
+    data class TradeRouteVpConstants(
+        /** INTERNATIONAL_TRADE_BASE: the base of an international route is this times (era + 2), in hundredths of gold */
+        val internationalTradeBase: Int = 80,
+        /** INTERNATIONAL_TRADE_CITY_GPT_DIVISOR: each city's gold per turn times 100 divided by this is added */
+        val cityGoldDivisor: Int = 80,
+        /** TRADE_ROUTE_BASE_SEA_MODIFIER and ..._LAND_MODIFIER */
+        val seaModifier: Int = 25,
+        val landModifier: Int = 0,
+        /** TRADE_ROUTE_DIFFERENT_RESOURCE_VALUE: percent per resource that only one of the two cities has */
+        val differentResourceValue: Int = 5,
+        /** TRADE_ROUTE_SCIENCE_DIVISOR_TIMES100 and ..._CULTURE_DIVISOR_TIMES100 */
+        val scienceDivisorTimes100: Int = 125,
+        val cultureDivisorTimes100: Int = 125,
+        /** TRADE_ROUTE_BASE_FOOD_VALUE and ..._PRODUCTION_VALUE, hundredths */
+        val baseFoodValue: Int = 600,
+        val baseProductionValue: Int = 600,
+        /** TRADE_ROUTE_CS_ALLY_GOLD and ..._FRIEND_GOLD (per era), ..._CS_ALLY_SCIENCE_DELTA and ..._CULTURE_DELTA */
+        val cityStateAllyGold: Int = 2,
+        val cityStateFriendGold: Int = 1,
+        val allyScienceDelta: Int = 1,
+        val allyCultureDelta: Int = 1,
+        /** OPEN_BORDERS_MODIFIER_TRADE_GOLD: percent when both civilizations have open borders (half of it when one has) */
+        val openBordersModifier: Int = 20,
+        /** TRADE_ROUTE_RIVER_CITY_MODIFIER: percent of a land route's gold when a city is on a river */
+        val riverModifier: Int = 25,
+        /** The most the proximity reduction takes off a route's modifier, percent (V:CvTradeClasses.cpp:3372-3418) */
+        val proximityMax: Int = 50,
+        /** TRADE_ROUTE_BASE_TARGET_TURNS: before the game speed's `tradeRouteSpeedModifier` */
+        val targetTurns: Int = 30,
+    )
+    var tradeRouteVp = TradeRouteVpConstants()
+
+    /** What the route range (the unit's base range plus the traits' and techs') is multiplied by for the size of the map: the percentage of the entry with the greatest
+     *  `tiles` that the map has at least (the original's `Worlds.TradeRouteDistanceMod`, V:CvTradeClasses.cpp:5332-5390: 80 Duel and Tiny, 90 Small, 100 Standard, 130 Large,
+     *  160 Huge). Empty: 100 percent. Not read yet: slice T4 of phaseE/vp-trade-plan.md (O8: by the number of tiles until the world sizes have rule tables) */
+    data class WorldTradeRouteDistance(val tiles: Int = 0, val percent: Int = 100)
+    var worldTradeRouteDistance: List<WorldTradeRouteDistance> = emptyList()
+
+    // Rules of the deals (CvDealClasses.cpp). dealsBlockTemporaryForPermanent: a deal in which the AI gives something temporary (gold per turn, resources, open borders,
+    // pacts, agreements) and gets something permanent (gold, maps, cities, techs) is refused (BlockTemporaryForPermanentTrade, V:CvDealClasses.cpp:1368-1470), except with
+    // dealHumanPermanentForAiTemporary for a human who gives the permanent item (MOD_DEALAI_HUMAN_PERMANENT_FOR_AI_TEMPORARY, 1 in Vox Populi; only read with the rule).
+    // dealNoPeacetimeSellingFoundedCities: the founder does not sell a city it founded unless at war (MOD_DEALAI_NO_PEACETIME_SELLING_FOUNDED_CITIES, V:CvDealClasses.cpp:649).
+    // Not read yet: slice T4 of phaseE/vp-trade-plan.md
+    var dealsBlockTemporaryForPermanent = false
+    var dealHumanPermanentForAiTemporary = true
+    var dealNoPeacetimeSellingFoundedCities = false
+
+    /** The shares of the copies of a resource on the map that make a monopoly (GLOBAL_RESOURCE_MONOPOLY_THRESHOLD 50 and STRATEGIC_RESOURCE_MONOPOLY_THRESHOLD 25,
+     *  V:CvPlayer.cpp:39139-39232), in percent. Only read for resources that are `isMonopoly`. Can only be modded all-or-nothing */
+    data class MonopolyConstants(
+        val globalThreshold: Int = 50,
+        val strategicThreshold: Int = 25,
+    )
+    var monopoly = MonopolyConstants()
+
     // World Congress (CvVotingClasses.cpp, GlobalDefines.xml; the values are those of Brave New World)
     /** Civilizations that propose resolutions in a session (LEAGUE_PROPOSERS_PER_SESSION) */
     var leagueProposersPerSession = 2

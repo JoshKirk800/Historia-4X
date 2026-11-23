@@ -419,6 +419,14 @@ open class RulesetValidator protected constructor(
     protected open fun addResourceErrors(lines: RulesetErrorList) {
         for (resource in ruleset.tileResources.values) {
             uniqueValidator.checkUniques(resource, lines, reportRulesetSpecificErrors)
+            for (holder in resource.monopolyUniqueHolders)
+                uniqueValidator.checkUniques(holder, lines, reportRulesetSpecificErrors)
+            if (resource.isMonopoly && resource.globalMonopolyUniques.isEmpty() && resource.strategicMonopolyUniques.isEmpty())
+                lines.add("${resource.name} is a monopoly resource but has no globalMonopolyUniques or strategicMonopolyUniques: a monopoly gives nothing",
+                    RulesetErrorSeverity.Warning, resource)
+            if (!resource.isMonopoly && (resource.globalMonopolyUniques.isNotEmpty() || resource.strategicMonopolyUniques.isNotEmpty()))
+                lines.add("${resource.name} has monopoly uniques but is not a monopoly resource (isMonopoly): they are never applied",
+                    RulesetErrorSeverity.Warning, resource)
         }
     }
 

@@ -68,6 +68,11 @@ class Era : RulesetObject() {
      *  the eras from the building's to the civilization's (the original's `LaterEraBuildingConstructMod`, CvPlayer::getProductionNeeded; 0 in Brave New World, -2 in
      *  Vox Populi). A building without a technology uses every era before the civilization's. See [com.unciv.models.ruleset.Building.getProductionCost] */
     var laterEraBuildingConstructMod = 0
+    /** Hundredths of food and of production that a domestic trade route of a civilization in this era adds to the yield of its destination city (the original's
+     *  `Eras.TradeRouteFoodBonusTimes100` and `TradeRouteProductionBonusTimes100`, V:CvTradeClasses.cpp:3960-4140; 0, 50, 100, ... 350 in Brave New World, 0, 100, ... in Vox Populi).
+     *  Only read with [com.unciv.models.ModConstants.tradeRouteModelLikeVp]: slice T3 of `phaseE/vp-trade-plan.md` */
+    var tradeRouteFoodBonus = 0
+    var tradeRouteProductionBonus = 0
     var citySound = "cityClassical"
 
     var friendBonus = HashMap<String, List<String>>()

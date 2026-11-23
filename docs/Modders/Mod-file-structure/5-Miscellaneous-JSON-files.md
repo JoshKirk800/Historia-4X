@@ -100,6 +100,8 @@ Each era can have the following attributes:
 | buildPercent              | Integer (≥0)                           | 100             | Percentage applied for the whole game when starting in this era: Time workers need to build improvements |
 | buildingMaintenancePercent | Integer (≥0)                           | 100             | Percentage applied for the whole game when starting in this era: Gold maintenance of buildings |
 | laterEraBuildingConstructMod | Integer                             | 0               | Percent the production cost of a building changes by for each era a civilization has gone through since the era of the building's technology, the values of the eras from that one up to its own era added (a building without a technology uses every earlier era). Vox Populi: -2 |
+| tradeRouteFoodBonus       | Integer                                | 0               | Hundredths of food a domestic trade route adds in this era with the ModConstants `tradeRouteModelLikeVp` (the original's `TradeRouteFoodBonusTimes100`; not used by any rule yet) |
+| tradeRouteProductionBonus | Integer                                | 0               | The same for production (`TradeRouteProductionBonusTimes100`)  |
 | citySound                 | String                                 | "cityClassical" | Sound used when city is founded in this era                                                                                                                                                                                                     |
 | uniques                           | List of Strings | empty    | Will be treated as part of GlobalUniques when starting in this era                                                                                                                                                    |
 
@@ -126,6 +128,7 @@ Each speed can have the following attributes:
 | faithCostModifier               | Float (≥0)      | `modifier` value | Scales faith costs                                                                                          |
 | instantYieldModifier            | Float (≥0)      | `modifier` value | Scales `Gain [amount] [stat] <(modified by game speed)>` (the original's `InstantYieldPercent`: 0.75, 1, 1.5, 2). Only with the ModConstants `instantYieldsUseInstantYieldPercent` |
 | hurryModifier                   | Float (≥0)      | 1.0              | Scales the gold price of buildings and units (the original's `HurryPercent`, 100% in every speed of Brave New World and Vox Populi, so it does not default to `modifier`) |
+| tradeRouteSpeedModifier         | Float (≥0)      | 1.0              | Scales the number of turns a trade route lasts (the original's `TradeRouteSpeedMod`: 3, 1.5, 1 and 0.67 for Marathon, Epic, Standard and Quick in Vox Populi; not used by any rule yet) |
 | improvementBuildLengthModifier  | Float (≥0)      | `modifier` value | Scales the time it takes for a worker to build tile improvements                                            |
 | barbarianModifier               | Float (≥0)      | `modifier` value | Scales the time between barbarian spawns                                                                    |
 | goldGiftModifier                | Float (≥0)      | `modifier` value | Scales the influence gained from gifting gold to city-states                                                |
@@ -414,6 +417,13 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | tradeRoutePlunderGold                    | Int    | 100                           | Gold for plundering a route, more for one by water |
 | tradeRouteDomesticBaseYield              | Float  | 3                             | Food or production of a route to a city of the same civilization |
 | tradeRouteDomesticYieldPerEra            | Float  | 0.5                           | Added to the yield of a domestic route for every era of the destination civilization |
+| tradeRouteModelLikeVp                    | Boolean | false                        | Vox Populi's trade route model instead of Brave New World's (not used by any rule yet) |
+| tradeRouteVp                             | Object  | [See below](#traderoutevpconstants) | The defines of that model, only read with `tradeRouteModelLikeVp` |
+| worldTradeRouteDistance                  | List of objects | empty                | `{"tiles": n, "percent": p}`: what the route range is multiplied by on a map of at least n tiles (the entry with the greatest n that fits); empty: 100 percent |
+| dealsBlockTemporaryForPermanent          | Boolean | false                        | A deal in which the AI gives something temporary and gets something permanent is refused (not used by any rule yet) |
+| dealHumanPermanentForAiTemporary         | Boolean | true                         | With that rule: except when a human gives the permanent item |
+| dealNoPeacetimeSellingFoundedCities      | Boolean | false                        | The founder of a city does not sell it unless at war (not used by any rule yet) |
+| monopoly                                 | Object  | [See below](#monopolyconstants) | The shares of the copies of a resource on the map that make a monopoly |
 | leagueProposersPerSession                | Int    | 2                             | Civilizations that propose resolutions in a session of the World Congress |
 | leagueProposalsPerProposer               | Int    | 1                             | Resolutions each proposer proposes |
 | leagueSessionSoonWarningTurns            | Int    | 5                             | Turns ahead of a session that the player is warned |
@@ -612,6 +622,39 @@ These values are not merged individually, only the entire sub-structure is. The 
 | goldPerProduction | Float | 30 | The gold price of anything with a production cost is `(production x goldPerProduction) ^ exponent`, times the `hurryModifier` of the game speed, times the `hurryCostModifier` of the building or unit |
 | exponent | Float | 0.75 | See above |
 | visibleDivisor | Int | 10 | Prices of buildings and units are rounded down to a multiple of this, and the price of a building is at least this |
+
+#### TradeRouteVpConstants
+
+The defines of Vox Populi's trade route model (`tradeRouteModelLikeVp`; not used by any rule yet). These values are not merged individually, only the entire sub-structure is. The defaults are Vox Populi 5.4.8's.
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| internationalTradeBase | Int | 80 | The base of an international route is this times (era + 2), in hundredths of gold |
+| cityGoldDivisor | Int | 80 | The gold per turn of each end, times 100, divided by this, is added |
+| seaModifier | Int | 25 | Percent more on routes by water |
+| landModifier | Int | 0 | Percent more on routes over land |
+| differentResourceValue | Int | 5 | Percent for each resource that only one of the two cities has |
+| scienceDivisorTimes100 | Int | 125 | Divisor of the science of a route, in hundredths |
+| cultureDivisorTimes100 | Int | 125 | The same for culture |
+| baseFoodValue | Int | 600 | Hundredths of food of a domestic food route before additions |
+| baseProductionValue | Int | 600 | The same for production |
+| cityStateAllyGold | Int | 2 | Gold per era from a route to an allied City-State |
+| cityStateFriendGold | Int | 1 | The same for a friend |
+| allyScienceDelta | Int | 1 | Added to the techs difference of a route to an allied City-State |
+| allyCultureDelta | Int | 1 | The same for policies |
+| openBordersModifier | Int | 20 | Percent more when both civilizations have open borders, half of it when one has |
+| riverModifier | Int | 25 | Percent more on land routes when a city is on a river |
+| proximityMax | Int | 50 | The most percent a route between close cities loses |
+| targetTurns | Int | 30 | Turns a route lasts before the game speed's `tradeRouteSpeedModifier` |
+
+#### MonopolyConstants
+
+These values are not merged individually, only the entire sub-structure is. Only read for resources that are `isMonopoly`.
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| globalThreshold | Int | 50 | Percent of the copies of a luxury on the map that a civilization must own (more than this) for a global monopoly |
+| strategicThreshold | Int | 25 | The same for a strategic monopoly of a strategic resource |
 
 ## AI.json
 

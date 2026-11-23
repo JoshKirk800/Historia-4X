@@ -66,6 +66,13 @@ internal class BaseRulesetValidator(
         for (resource in building.getResourceRequirementsPerTurn(GameContext.IgnoreConditionals).keys)
             if (!ruleset.tileResources.containsKey(resource))
                 lines.add("${building.name} requires resource $resource which does not exist!", sourceObject = building)
+        for (resource in building.requiredMonopolyAnyOf + building.requiredMonopolies) {
+            val tileResource = ruleset.tileResources[resource]
+            if (tileResource == null)
+                lines.add("${building.name} requires a monopoly of resource $resource which does not exist!", sourceObject = building)
+            else if (!tileResource.isMonopoly)
+                lines.add("${building.name} requires a monopoly of resource $resource, which is no monopoly resource: it cannot be built", RulesetErrorSeverity.Warning, building)
+        }
         if (building.replaces != null && !ruleset.buildings.containsKey(building.replaces!!))
             lines.add("${building.name} replaces ${building.replaces} which does not exist!", sourceObject = building)
         if (building.requiredBuilding != null && !ruleset.buildings.containsKey(building.requiredBuilding!!))
@@ -371,6 +378,8 @@ internal class BaseRulesetValidator(
         for (resource in ruleset.tileResources.values) {
             if (resource.revealedBy != null && !ruleset.technologies.containsKey(resource.revealedBy!!) && !ruleset.policies.containsKey(resource.revealedBy!!))
                 lines.add("${resource.name} revealed by tech or policy ${resource.revealedBy} which does not exist!", sourceObject = resource)
+            if (resource.obsoleteBy != null && !ruleset.technologies.containsKey(resource.obsoleteBy!!) && !ruleset.policies.containsKey(resource.obsoleteBy!!))
+                lines.add("${resource.name} is obsolete with tech or policy ${resource.obsoleteBy} which does not exist!", sourceObject = resource)
             if (resource.improvement != null && !ruleset.tileImprovements.containsKey(resource.improvement!!))
                 lines.add("${resource.name} improved by improvement ${resource.improvement} which does not exist!", sourceObject = resource)
             for (improvement in resource.improvedBy)

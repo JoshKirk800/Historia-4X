@@ -7,6 +7,9 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetStatsObject
 import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.ruleset.unique.IHasUniques
+import com.unciv.models.ruleset.unique.Unique
+import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.GameResource
@@ -39,6 +42,34 @@ class TileResource : RulesetStatsObject(), GameResource {
      *  @see getImprovements
      */
     var improvedBy: List<String> = listOf()
+
+    /** Name of the Technology (or era-bound policy) that makes the resource obsolete: a team that has it no longer sees the resource and cannot trade it
+     *  (the original's `Resources.TechObsolete`: Horses with Rocketry, Paper with Agriculture). null: never. Not read yet: slice T1 of `phaseE/vp-trade-plan.md` */
+    var obsoleteBy: String? = null
+
+    /** Whether owning most of the copies on the map gives a monopoly bonus (the original's `Resources.IsMonopoly`, V:CvPlayer.cpp:38944-39266). The bonuses are the
+     *  uniques of [globalMonopolyUniques] and [strategicMonopolyUniques]; a resource that [isMonopoly] without any of them gives nothing (the validator warns).
+     *  Not read yet: slice T2 of `phaseE/vp-trade-plan.md` */
+    var isMonopoly = false
+    /** Uniques that apply to the civilization while it has a global monopoly of this resource (more than half of the copies on the map for a luxury, V:CvPlayer.cpp:39139-39232) */
+    var globalMonopolyUniques = ArrayList<String>()
+    /** Uniques that apply while it has a strategic monopoly (more than a quarter of the copies, V:CvPlayer.cpp:39173-39188) */
+    var strategicMonopolyUniques = ArrayList<String>()
+
+    /** [globalMonopolyUniques] and [strategicMonopolyUniques] as unique holders, so that the validator checks them like any other unique list of the resource */
+    @delegate:Transient
+    val monopolyUniqueHolders: List<MonopolyUniques> by lazy {
+        listOf(MonopolyUniques("$name (global monopoly)", globalMonopolyUniques), MonopolyUniques("$name (strategic monopoly)", strategicMonopolyUniques))
+    }
+
+    /** A list of monopoly uniques of one [TileResource], with the unique target of the resource */
+    class MonopolyUniques(override var name: String, override var uniques: ArrayList<String>) : IHasUniques {
+        @delegate:Transient
+        override val uniqueObjects: List<Unique> by lazy(::uniqueObjectsProvider)
+        @delegate:Transient
+        override val uniqueMap: UniqueMap by lazy(::uniqueMapProvider)
+        override fun getUniqueTarget() = UniqueTarget.Resource
+    }
 
     var majorDepositAmount: DepositAmount = DepositAmount()
     var minorDepositAmount: DepositAmount = DepositAmount()

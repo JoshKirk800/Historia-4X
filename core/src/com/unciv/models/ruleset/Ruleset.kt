@@ -670,6 +670,8 @@ class Ruleset {
         if (beliefsFile.exists())
             beliefs += createHashmap(json().fromJsonFile(Array<Belief>::class.java, beliefsFile))
 
+        // Corporations.json (phaseE/vp-trade-plan.md, slice T0/T5) is not loaded: no corporations for now (owner decision D22, O1)
+
         val religionsFile = RulesetFile.Religions.file()
         if (religionsFile.exists())
             religions += json().fromJsonFile(Array<String>::class.java, religionsFile).toList()

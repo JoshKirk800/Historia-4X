@@ -308,6 +308,29 @@ enum class UniqueType(
     TradeRouteResourceGoldPercent("[relativeAmount]% Gold from resource diversity on trade routes", UniqueTarget.Global,
         docDescription = "A route gets gold for each luxury or strategic resource that only one of its two cities has. Applies to the city the route starts in"),
     DomesticTradeRouteYieldPercent("[relativeAmount]% yields from trade routes within your civilization", UniqueTarget.Global),
+    // The shapes of Vox Populi's trade route and monopoly tables (phaseE/vp-trade-plan.md 4.3). Types only: the rules that read them come with the slices T1-T4 of that plan
+    // (`parity/vp-resources`, `-monopolies`, `-trade-yields`, `-trade-rules`), until then nothing reads them and no ruleset uses them. The corporation shapes of the
+    // plan (founding a corporation, franchises and their yields) are not here: the owner decided against corporations for now (D22, O1)
+    StatsPerTradeRouteOfCity("[stats] for each trade route that starts in this city", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Added to the city for every trade route of its owner that starts in it (Vox Populi's `Belief_YieldPerActiveTR`, `Policy_YieldChangeTradeRoute`). " +
+            "Not read yet: slice T3 of the trade plan"),
+    StatsOnTradeRouteDomain("[stats] on [tradeRouteFilter] trade routes", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Added to the yields of a trade route that matches the filter, for the city it starts in; with the modifier `<for every [Era scaler]>` it grows with the era. " +
+            "Not read yet: slice T3 of the trade plan"),
+    ResourceQuantityPercent("[relativeAmount]% quantity of [resource]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), " +
+            "as the original's `Belief_ResourceQuantityModifiers` do. Not read yet: slice T1 of the trade plan"),
+    MonopolyFlatBonus("[relativeAmount] to the flat bonus of each monopoly", UniqueTarget.Global,
+        docDescription = "Added to every flat yield, happiness or tile bonus that a global monopoly of the civilization gives (the original's `MonopolyModFlat`). " +
+            "Not read yet: slice T2 of the trade plan"),
+    MonopolyPercentBonus("[relativeAmount]% to the percentage bonus of each monopoly", UniqueTarget.Global,
+        docDescription = "Added to every percentage that a global monopoly of the civilization gives (the original's `MonopolyModPercent`). Not read yet: slice T2 of the trade plan"),
+    CityStateResourcesCountForMonopolies("City-State resources count towards monopolies", UniqueTarget.Global,
+        docDescription = "The copies of a resource that allied City-States give the civilization are owned copies when its monopolies are counted " +
+            "(the original's `CSResourcesCountForMonopolies`). Not read yet: slice T2 of the trade plan"),
+    StatsPerGlobalMonopoly("[stats] [cityFilter] for every global monopoly", UniqueTarget.Global,
+        docDescription = "Added to the matching cities once for each global monopoly the civilization has (the original's `Building_YieldChangesPerMonopoly`, " +
+            "`Policy_CityYieldPerMonopoly`). Not read yet: slice T2 of the trade plan"),
 
     /// Great Persons
     GreatPersonPointPercentage("[relativeAmount]% Great Person generation [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
@@ -533,6 +556,13 @@ enum class UniqueType(
         docDescription = "Meant to be used together with conditionals, like \"Can only be built <after adopting [policy]> <while the empire is happy>\". Only allows Building when ALL conditionals are met. Will also NOT block Upgrade and Transform actions. See also OnlyAvailable."),
 
     MustHaveOwnedWithinTiles("Must have an owned [tileFilter] within [amount] tiles", UniqueTarget.Building),
+
+    StatsOnDomesticRoutesFromCity("[stats] on domestic trade routes that start in this city", UniqueTarget.Building,
+        docDescription = "Added to the yield of every food or production route of the civilization that starts in the city, before the route's percentage modifiers " +
+            "(Vox Populi's `Building_YieldFromInternalTR`). Not read yet: slice T3 of the trade plan"),
+    StatsWhenTradeRoutePasses("[stats] while any trade route passes through this city", UniqueTarget.Building,
+        docDescription = "Added to the city every turn in which a trade unit of any civilization stands on the city's tile (Vox Populi's `Building_YieldChangesFromPassingTR`). " +
+            "Not read yet: slice T3 of the trade plan"),
 
 
     // Todo nuclear weapon and spaceship enabling requires a rethink.
@@ -809,6 +839,26 @@ enum class UniqueType(
 
     ///////////////////////////////////////// region 06 TILE UNIQUES /////////////////////////////////////////
 
+    // Resources: the monopoly effects go into the resource's `globalMonopolyUniques` and `strategicMonopolyUniques` (they apply while the civilization has that monopoly),
+    // together with the existing `[relativeAmount]% [stat] [cityFilter]`, `[relativeAmount]% Golden Age length` and the combat uniques. Not read yet: slices T1 and T2 of the trade plan
+    MonopolyTileYield("[stats] from each tile with this resource", UniqueTarget.Resource,
+        docDescription = "Only in `globalMonopolyUniques` and `strategicMonopolyUniques`: added to every tile of the civilization that has the resource, while it has the monopoly " +
+            "(Vox Populi's `Resource_YieldChangeFromMonopoly`; `MonopolyFlatBonus` is added to every positive stat)"),
+    MonopolyHappiness("[amount] Happiness from a global monopoly", UniqueTarget.Resource,
+        docDescription = "Only in `globalMonopolyUniques`: local happiness that every copy-owning civilization with the monopoly gets (the original's `MonopolyHappiness`; " +
+            "`MonopolyFlatBonus` is added)"),
+    ResourceProductionCost("[relativeAmount]% Production of [baseUnitFilter] units in cities with this resource", UniqueTarget.Resource,
+        docDescription = "Vox Populi's `Resource_UnitCombatProductionCostModifiersLocal` (option `RESOURCES_PRODUCTION_COST_MODIFIERS`: Ivory against Siege). Use the modifier `<before the [era]>` " +
+            "for the era it ends in. Not read yet: slice T1 of the trade plan"),
+    ResourceWonderProduction("[relativeAmount]% Production of Wonders in cities with this resource", UniqueTarget.Resource,
+        docDescription = "Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (the modifier `<before the [era]>`). " +
+            "Not read yet: slice T1 of the trade plan"),
+
+    // Improvements
+    ImprovementStatsOnRoute("[stats] if a trade route crosses this tile on a [improvementName]", UniqueTarget.Improvement,
+        docDescription = "Vox Populi's `Improvement_RouteYieldChanges`: the improvement gives the stats while a trade route of any civilization passes over the tile along a road or " +
+            "a railroad (name the route's improvement: `Road` or `Railroad`; a railroad is read instead of the road from the fourth era). Not read yet: slice T3 of the trade plan"),
+
     // Natural wonders
     NaturalWonderNeighborCount("Must be adjacent to [amount] [simpleTerrain] tiles", UniqueTarget.Terrain, flags = UniqueFlag.setOfHiddenToUsers),
     NaturalWonderNeighborsRange("Must be adjacent to [amount] to [amount] [simpleTerrain] tiles", UniqueTarget.Terrain, flags = UniqueFlag.setOfHiddenToUsers),
@@ -1029,6 +1079,14 @@ enum class UniqueType(
 
     ConditionalWithResource("with [resource]", UniqueTarget.Conditional),
     ConditionalWithoutResource("without [resource]", UniqueTarget.Conditional),
+    ConditionalGlobalMonopoly("with a global monopoly of [resource]", UniqueTarget.Conditional,
+        docDescription = "True while the civilization has a global monopoly of the resource (more than half of the copies on the map for a luxury, V:CvPlayer.cpp:39139-39232). " +
+            "Not evaluated yet: slice T2 of the trade plan, until then false"),
+    ConditionalStrategicMonopoly("with a strategic monopoly of [resource]", UniqueTarget.Conditional,
+        docDescription = "True while the civilization has a strategic monopoly of the resource (more than a quarter of the copies on the map). Not evaluated yet: slice T2 of the trade plan, until then false"),
+    ConditionalOnTradeRoute("on tiles of trade routes and their cities", UniqueTarget.Conditional,
+        docDescription = "True for a tile or city that a trade route of any civilization passes over (Vox Populi's Inca, `TRAIT_GREAT_ANDEAN_ROAD`). " +
+            "Not evaluated yet: slice T3 of the trade plan, until then false"),
 
     // Supports also stockpileable resources (Gold, Faith, Culture, Science)
     ConditionalWhenAboveAmountStatResource("when above [amount] [stat/resource]", UniqueTarget.Conditional, flags = setOf(UniqueFlag.AcceptsSpeedModifier)),
@@ -1296,6 +1354,15 @@ enum class UniqueType(
             "(`CvUnit::pillage`, `INSTANT_YIELD_TYPE_PILLAGE`, `..._PILLAGE_GLOBAL`)"),
     TriggerUponWltkdStart("upon We Love The King Day starting", UniqueTarget.TriggerCondition,
         docDescription = "In the city that starts celebrating (`CvCity::ChangeWeLoveTheKingDayCounter`, `INSTANT_YIELD_TYPE_WLTKD_START`)"),
+    TriggerUponCompletingTradeRoute("upon completing a [tradeRouteKind] trade route", UniqueTarget.TriggerCondition,
+        docDescription = "When a trade route of the civilization ends, in the city it started in (and in the destination city for a domestic route): `international`, `domestic` or `any` " +
+            "(`INSTANT_YIELD_TYPE_TR_END`, V:CvTradeClasses.cpp:2606-2650). Never fired yet: slice T3 of the trade plan"),
+    TriggerUponTradeUnitMoving("upon a trade route unit moving", UniqueTarget.TriggerCondition,
+        docDescription = "Once for each step that a trade unit of the civilization makes along its route (`INSTANT_YIELD_TYPE_TR_MOVEMENT`, V:CvPlayer.cpp:26826-26838). " +
+            "Never fired yet: slice T3 of the trade plan"),
+    TriggerUponPlunderingTradeRoute("upon plundering a trade route", UniqueTarget.TriggerCondition, UniqueTarget.UnitTriggerCondition,
+        docDescription = "When a unit of the civilization plunders a trade route (`INSTANT_YIELD_TYPE_PLUNDER_TRADE_ROUTE`, V:CvPlayer.cpp:26863-26870). " +
+            "Never fired yet: slice T3 of the trade plan"),
     TriggerUponGainingLuxury("upon gaining a luxury resource", UniqueTarget.TriggerCondition,
         docDescription = "When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is " +
             "how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)"),

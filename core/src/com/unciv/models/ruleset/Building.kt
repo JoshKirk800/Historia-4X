@@ -66,6 +66,12 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
 
     /** This Building can only be built if one of these resources is nearby - it must be improved! */
     var requiredNearbyImprovedResources: List<String>? = null
+
+    /** This Building can only be built if the civilization has a global monopoly of at least one of these resources (the original's `Building_ResourceMonopolyOrs`,
+     *  CvCity::IsBuildingResourceMonopolyValid). Empty: no requirement. Not read yet: slice T2 of `phaseE/vp-trade-plan.md` */
+    var requiredMonopolyAnyOf: List<String> = emptyList()
+    /** ... and of all of these (`Building_ResourceMonopolyAnds`; no data in Vox Populi 5.4.8). Empty: no requirement. Not read yet either */
+    var requiredMonopolies: List<String> = emptyList()
     var cityStrength = 0.0
     var cityHealth = 0
     var replaces: String? = null

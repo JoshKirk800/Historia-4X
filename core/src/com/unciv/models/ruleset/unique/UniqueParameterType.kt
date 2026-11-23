@@ -617,6 +617,14 @@ enum class UniqueParameterType(
         override val staticKnownValues = com.unciv.logic.city.NeedType.entries.map { it.label }.toSet()
     },
 
+    /** The kinds of trade route a trigger names, used by [UniqueType.TriggerUponCompletingTradeRoute]: a domestic route is one between two cities of the same civilization
+     *  (`TradeRouteKind.Food` or `Production`), see [com.unciv.models.TradeRoute.matchesFilter] */
+    TradeRouteKindName("tradeRouteKind", "international", "One of `international`, `domestic` or `any`", "Trade route kinds",
+        severityDefault = UniqueType.UniqueParameterErrorSeverity.RulesetInvariant
+    ) {
+        override val staticKnownValues = setOf("international", "domestic", "any")
+    },
+
     /** The ways a city gets a tile, used by [UniqueType.TriggerUponAcquiringTile], see [com.unciv.logic.civilization.TileAcquisition] */
     TileAcquisition("tileAcquisition", "border growth",
         "One of `border growth`, `purchase`, `settling`, `conquest`, `culture bomb` or `stolen by culture bomb`", "Tile Acquisitions",

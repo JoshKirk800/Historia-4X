@@ -1159,6 +1159,53 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "[stats] for each trade route that starts in this city"
+	Added to the city for every trade route of its owner that starts in it (Vox Populi's `Belief_YieldPerActiveTR`, `Policy_YieldChangeTradeRoute`). Not read yet: slice T3 of the trade plan
+
+	Example: "[+1 Gold, +2 Production] for each trade route that starts in this city"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[stats] on [tradeRouteFilter] trade routes"
+	Added to the yields of a trade route that matches the filter, for the city it starts in; with the modifier `<for every [Era scaler]>` it grows with the era. Not read yet: slice T3 of the trade plan
+
+	Example: "[+1 Gold, +2 Production] on [Land] trade routes"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount]% quantity of [resource]"
+	Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), as the original's `Belief_ResourceQuantityModifiers` do. Not read yet: slice T1 of the trade plan
+
+	Example: "[+20]% quantity of [Iron]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount] to the flat bonus of each monopoly"
+	Added to every flat yield, happiness or tile bonus that a global monopoly of the civilization gives (the original's `MonopolyModFlat`). Not read yet: slice T2 of the trade plan
+
+	Example: "[+20] to the flat bonus of each monopoly"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% to the percentage bonus of each monopoly"
+	Added to every percentage that a global monopoly of the civilization gives (the original's `MonopolyModPercent`). Not read yet: slice T2 of the trade plan
+
+	Example: "[+20]% to the percentage bonus of each monopoly"
+
+	Applicable to: Global
+
+??? example  "City-State resources count towards monopolies"
+	The copies of a resource that allied City-States give the civilization are owned copies when its monopolies are counted (the original's `CSResourcesCountForMonopolies`). Not read yet: slice T2 of the trade plan
+
+	Applicable to: Global
+
+??? example  "[stats] [cityFilter] for every global monopoly"
+	Added to the matching cities once for each global monopoly the civilization has (the original's `Building_YieldChangesPerMonopoly`, `Policy_CityYieldPerMonopoly`). Not read yet: slice T2 of the trade plan
+
+	Example: "[+1 Gold, +2 Production] [in all cities] for every global monopoly"
+
+	Applicable to: Global
+
 ??? example  "[relativeAmount]% Great Person generation [cityFilter]"
 	Example: "[+20]% Great Person generation [in all cities]"
 
@@ -2254,6 +2301,27 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, FollowerBelief
 
+??? example  "[stats] for each trade route that starts in this city"
+	Added to the city for every trade route of its owner that starts in it (Vox Populi's `Belief_YieldPerActiveTR`, `Policy_YieldChangeTradeRoute`). Not read yet: slice T3 of the trade plan
+
+	Example: "[+1 Gold, +2 Production] for each trade route that starts in this city"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[stats] on [tradeRouteFilter] trade routes"
+	Added to the yields of a trade route that matches the filter, for the city it starts in; with the modifier `<for every [Era scaler]>` it grows with the era. Not read yet: slice T3 of the trade plan
+
+	Example: "[+1 Gold, +2 Production] on [Land] trade routes"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount]% quantity of [resource]"
+	Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), as the original's `Belief_ResourceQuantityModifiers` do. Not read yet: slice T1 of the trade plan
+
+	Example: "[+20]% quantity of [Iron]"
+
+	Applicable to: Global, FollowerBelief
+
 ??? example  "[relativeAmount]% Great Person generation [cityFilter]"
 	Example: "[+20]% Great Person generation [in all cities]"
 
@@ -2431,6 +2499,20 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Must have an owned [tileFilter] within [amount] tiles"
 	Example: "Must have an owned [Farm] within [3] tiles"
+
+	Applicable to: Building
+
+??? example  "[stats] on domestic trade routes that start in this city"
+	Added to the yield of every food or production route of the civilization that starts in the city, before the route's percentage modifiers (Vox Populi's `Building_YieldFromInternalTR`). Not read yet: slice T3 of the trade plan
+
+	Example: "[+1 Gold, +2 Production] on domestic trade routes that start in this city"
+
+	Applicable to: Building
+
+??? example  "[stats] while any trade route passes through this city"
+	Added to the city every turn in which a trade unit of any civilization stands on the city's tile (Vox Populi's `Building_YieldChangesFromPassingTR`). Not read yet: slice T3 of the trade plan
+
+	Example: "[+1 Gold, +2 Production] while any trade route passes through this city"
 
 	Applicable to: Building
 
@@ -3719,6 +3801,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, Unit, Terrain, Improvement
 
+??? example  "[stats] if a trade route crosses this tile on a [improvementName]"
+	Vox Populi's `Improvement_RouteYieldChanges`: the improvement gives the stats while a trade route of any civilization passes over the tile along a road or a railroad (name the route's improvement: `Road` or `Railroad`; a railroad is read instead of the road from the fourth era). Not read yet: slice T3 of the trade plan
+
+	Example: "[+1 Gold, +2 Production] if a trade route crosses this tile on a [Trading Post]"
+
+	Applicable to: Improvement
+
 ??? example  "Vegetation"
 	Applicable to: Terrain, Improvement
 
@@ -3892,6 +3981,34 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Example: "Obsolete with [Agriculture]"
 
 	Applicable to: Building, Improvement, Resource
+
+??? example  "[stats] from each tile with this resource"
+	Only in `globalMonopolyUniques` and `strategicMonopolyUniques`: added to every tile of the civilization that has the resource, while it has the monopoly (Vox Populi's `Resource_YieldChangeFromMonopoly`; `MonopolyFlatBonus` is added to every positive stat)
+
+	Example: "[+1 Gold, +2 Production] from each tile with this resource"
+
+	Applicable to: Resource
+
+??? example  "[amount] Happiness from a global monopoly"
+	Only in `globalMonopolyUniques`: local happiness that every copy-owning civilization with the monopoly gets (the original's `MonopolyHappiness`; `MonopolyFlatBonus` is added)
+
+	Example: "[3] Happiness from a global monopoly"
+
+	Applicable to: Resource
+
+??? example  "[relativeAmount]% Production of [baseUnitFilter] units in cities with this resource"
+	Vox Populi's `Resource_UnitCombatProductionCostModifiersLocal` (option `RESOURCES_PRODUCTION_COST_MODIFIERS`: Ivory against Siege). Use the modifier `<before the [era]>` for the era it ends in. Not read yet: slice T1 of the trade plan
+
+	Example: "[+20]% Production of [Melee] units in cities with this resource"
+
+	Applicable to: Resource
+
+??? example  "[relativeAmount]% Production of Wonders in cities with this resource"
+	Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (the modifier `<before the [era]>`). Not read yet: slice T1 of the trade plan
+
+	Example: "[+20]% Production of Wonders in cities with this resource"
+
+	Applicable to: Resource
 
 ??? example  "Must not be on [amount] largest landmasses"
 	Example: "Must not be on [3] largest landmasses"
@@ -4554,6 +4671,25 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Conditional
 
+??? example  "&lt;with a global monopoly of [resource]&gt;"
+	True while the civilization has a global monopoly of the resource (more than half of the copies on the map for a luxury, V:CvPlayer.cpp:39139-39232). Not evaluated yet: slice T2 of the trade plan, until then false
+
+	Example: "&lt;with a global monopoly of [Iron]&gt;"
+
+	Applicable to: Conditional
+
+??? example  "&lt;with a strategic monopoly of [resource]&gt;"
+	True while the civilization has a strategic monopoly of the resource (more than a quarter of the copies on the map). Not evaluated yet: slice T2 of the trade plan, until then false
+
+	Example: "&lt;with a strategic monopoly of [Iron]&gt;"
+
+	Applicable to: Conditional
+
+??? example  "&lt;on tiles of trade routes and their cities&gt;"
+	True for a tile or city that a trade route of any civilization passes over (Vox Populi's Inca, `TRAIT_GREAT_ANDEAN_ROAD`). Not evaluated yet: slice T3 of the trade plan, until then false
+
+	Applicable to: Conditional
+
 ??? example  "&lt;when above [amount] [stat/resource]&gt;"
 	Example: "&lt;when above [3] [Culture]&gt;"
 
@@ -4974,6 +5110,23 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: TriggerCondition
 
+??? example  "&lt;upon completing a [tradeRouteKind] trade route&gt;"
+	When a trade route of the civilization ends, in the city it started in (and in the destination city for a domestic route): `international`, `domestic` or `any` (`INSTANT_YIELD_TYPE_TR_END`, V:CvTradeClasses.cpp:2606-2650). Never fired yet: slice T3 of the trade plan
+
+	Example: "&lt;upon completing a [international] trade route&gt;"
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon a trade route unit moving&gt;"
+	Once for each step that a trade unit of the civilization makes along its route (`INSTANT_YIELD_TYPE_TR_MOVEMENT`, V:CvPlayer.cpp:26826-26838). Never fired yet: slice T3 of the trade plan
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon plundering a trade route&gt;"
+	When a unit of the civilization plunders a trade route (`INSTANT_YIELD_TYPE_PLUNDER_TRADE_ROUTE`, V:CvPlayer.cpp:26863-26870). Never fired yet: slice T3 of the trade plan
+
+	Applicable to: TriggerCondition, UnitTriggerCondition
+
 ??? example  "&lt;upon gaining a luxury resource&gt;"
 	When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)
 
@@ -5008,6 +5161,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: TriggerCondition, UnitTriggerCondition
 
 ??? example  "&lt;upon turn start&gt;"
+	Applicable to: TriggerCondition, UnitTriggerCondition
+
+??? example  "&lt;upon plundering a trade route&gt;"
+	When a unit of the civilization plunders a trade route (`INSTANT_YIELD_TYPE_PLUNDER_TRADE_ROUTE`, V:CvPlayer.cpp:26863-26870). Never fired yet: slice T3 of the trade plan
+
 	Applicable to: TriggerCondition, UnitTriggerCondition
 
 ??? example  "&lt;upon entering combat&gt;"
@@ -5281,6 +5439,7 @@ There is a conversion affecting dashes and leading/trailing blanks. Please make 
 *[tileFilter]: Anything that can be used either in an improvementFilter or in a terrainFilter can be used here, plus 'unimproved'
 *[tourismRelation]: One of `Shared Religion`, `Open Borders`, `Trade Route`, `Lower Happiness`, `Common Enemies`, `Shared Ideology` or `Different Ideologies`.
 *[tradeRouteFilter]: A trade route matches if its unit is of that domain (`Land` or `Water`), if it is of that kind (`International`, `Domestic`, `Food` or `Production`), or if the civilization on the other end matches a civ filter. `All` matches every route.
+*[tradeRouteKind]: One of `international`, `domestic` or `any`.
 *[unitNameGroup]: The name of a unit name group found in UnitNameGroups.json, or one of their unique tags.
 *[unitTriggerTarget]: `This Unit` or `Target Unit`.
 *[unitType]: Can be 'Land', 'Water', 'Air', any unit type, a filtering Unique on a unit type.

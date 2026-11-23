@@ -105,6 +105,10 @@ Each resource has the following structure:
 | revealedBy           | String          | none     | The technology (or policy) name required to see, work and improve this resource                                                              
 | improvedBy           | List of strings | empty    | The improvements required for obtaining this resource. Must be in [TileImprovements.json](#tileimprovementsjson)                            |
 | improvement          | String          | none     | The improvement required to obtain this resource. Must be in [TileImprovements.json](#tileimprovementsjson) (redundant due to `improvedBy`) |
+| obsoleteBy           | String          | none     | The technology (or policy) that makes the resource obsolete: a civilization that has it no longer sees or trades it (not used by any rule yet)       |
+| isMonopoly           | Boolean         | false    | Whether owning most of the copies on the map gives a monopoly bonus; the bonuses are `globalMonopolyUniques` and `strategicMonopolyUniques` (not used by any rule yet) |
+| globalMonopolyUniques    | List of Strings | empty | [Uniques](../uniques.md) that apply while a civilization has a global monopoly of this resource (more than half of the copies on the map)                  |
+| strategicMonopolyUniques | List of Strings | empty | Uniques that apply while a civilization has a strategic monopoly of this resource (more than a quarter of the copies)                                       |
 | unique               | List of Strings | empty    | List of [unique abilities](../uniques.md) this resource has                                                                                 |
 | civilopediaText      | List            | empty    | See [civilopediaText chapter](5-Miscellaneous-JSON-files.md#civilopedia-text)                                                               |
 

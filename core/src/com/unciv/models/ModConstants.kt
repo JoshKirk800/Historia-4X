@@ -85,6 +85,100 @@ class ModConstants {
      *  `Can be gifted by city-states` and `Cannot be gifted by city-states` take part in the choice of a city-state's unique unit and of the unit it gives its patron. */
     var cityStateGiftUnitFlagsLikeVp = false
 
+    // --- Barbarian camps (StageBarbarians, VP slice M8) ---
+    /** VP 5.4.8 CvBarbarians::DoCamps, ActivateBarbSpawner, DoBarbSpawnerAttacked, DoBarbCampCleared, SpawnBarbarianUnits and GetRandomBarbarianUnitType, read through
+     *  [barbarianConstants] (see [com.unciv.logic.automation.civilization.BarbarianCampsLikeVp]): camps are scheduled by the game turns elapsed (a percentage of the valid tiles on
+     *  the initial turn, then one every [BarbarianConstants.campSpawnRate] turns, no cap on their number), keep minimum distances from capitals, camps, barbarian cities and
+     *  recently cleared camps, and a per-camp spawn counter drives the units (several at once, capped by the barbarians nearby, boats from [BarbarianConstants.navalUnitStartTurn]).
+     *  false: the Brave New World model of [com.unciv.logic.automation.civilization.BarbarianManager] (a camp target from the fog, a roll each turn, 8 to 12 turns between spawns). */
+    var barbariansLikeVp = false
+
+    /** The GlobalDefines BARBARIAN_* and MAX_BARBARIANS_FROM_* of Vox Populi, read only with [barbariansLikeVp] (can only be modded all-or-nothing, a data class so the Json serializer
+     *  can omit it when default). Values of Vox Populi 5.4.8 after the Community Patch and Vox Populi DefineChanges; the original game's CHILL option does not exist in
+     *  Unciv, so only the RAGING variants are modelled. Percentages and the `CampFirstTurnPercent*` are as in the source: the initial camp count is
+     *  `(CampFirstTurnPercentOfTarget + startEra * CampFirstTurnPercentPerEra) * validTiles / 1000`, so 10 means 1%. */
+    data class BarbarianConstants(
+        /** BARBARIAN_INITIAL_SPAWN_TURN: camps begin once this many game turns have elapsed (0 in Community Patch) */
+        val initialSpawnTurn: Int = 2,
+        /** BARBARIAN_INITIAL_SPAWN_TURN_FROM_SPAWNER: camps and cities start spawning units after this many turns */
+        val initialSpawnTurnFromSpawner: Int = 10,
+        /** BARBARIAN_INITIAL_SPAWN_SPAWNER_DELAY: turns added to the first counter of camps made on the initial turn */
+        val initialSpawnSpawnerDelay: Int = 0,
+        /** BARBARIAN_CAMP_FIRST_TURN_PERCENT_OF_TARGET_TO_ADD (VP 10, CP 33) */
+        val campFirstTurnPercentOfTarget: Int = 10,
+        /** BARBARIAN_CAMP_FIRST_TURN_PERCENT_PER_ERA, times the starting era's number */
+        val campFirstTurnPercentPerEra: Int = 5,
+        /** BARBARIAN_CAMP_SPAWN_RATE and ..._RAGING: a camp is placed every this many turns after the initial turn (at least 1) */
+        val campSpawnRate: Int = 2,
+        val campSpawnRateRaging: Int = -1,
+        /** BARBARIAN_CAMP_NUM_AFTER_INITIAL and ..._RAGING: camps placed on such a turn */
+        val campNumAfterInitial: Int = 1,
+        val campNumAfterInitialRaging: Int = 0,
+        /** BARBARIAN_CAMP_MINIMUM_DISTANCE_CAPITAL / _ANOTHER_CAMP (camps and barbarian cities) / _RECENTLY_CLEARED_CAMP; 0 turns the rule off */
+        val campMinimumDistanceCapital: Int = 4,
+        val campMinimumDistanceAnotherCamp: Int = 4,
+        val campMinimumDistanceRecentlyClearedCamp: Int = 2,
+        /** BARBARIAN_CAMP_CLEARED_MIN_TURNS_TO_RESPAWN: turns a cleared camp or city counts as recently cleared */
+        val campClearedMinTurnsToRespawn: Int = 15,
+        /** BARBARIAN_CAMP_MINIMUM_ISLAND_SIZE (CP 2) */
+        val campMinimumIslandSize: Int = 1,
+        /** BARBARIAN_CAMP_COASTAL_SPAWN_ROLL: percent chance that a camp is placed on the coast if a coastal tile is valid */
+        val campCoastalSpawnRoll: Int = 33,
+        /** CustomModOptions BALANCE_ENCAMPMENTS_SPAWN_ON_VISIBLE_TILES, enabled by Vox Populi: camps may appear on tiles a civilization can see */
+        val campsOnVisibleTiles: Boolean = true,
+        /** BARBARIAN_MIN_SPAWN_DELAY */
+        val minSpawnDelay: Int = 2,
+        /** BARBARIAN_SPAWN_DELAY_FROM_ENCAMPMENT, _RAND, _RAGING_MULTIPLIER, BARBARIAN_ENCAMPMENT_SPAWN_DELAY_REDUCTION_PER_SPAWN, _MAX_SPAWN_DELAY_REDUCTION,
+         *  BARBARIAN_ENCAMPMENT_ATTACKED_DELAY_MULTIPLIER */
+        val encampmentSpawnDelay: Int = 12,
+        val encampmentSpawnDelayRand: Int = 9,
+        val encampmentSpawnDelayRagingMultiplier: Int = 50,
+        val encampmentSpawnDelayReductionPerSpawn: Int = -1,
+        val encampmentMaxSpawnDelayReduction: Int = -3,
+        val encampmentAttackedDelayMultiplier: Int = 50,
+        /** The same for cities: BARBARIAN_SPAWN_DELAY_FROM_CITY, _RAND, _RAGING_MULTIPLIER, BARBARIAN_CITY_SPAWN_DELAY_REDUCTION_PER_SPAWN, BARBARIAN_CITY_MAX_SPAWN_DELAY_REDUCTION,
+         *  BARBARIAN_CITY_ATTACKED_DELAY_MULTIPLIER */
+        val citySpawnDelay: Int = 6,
+        val citySpawnDelayRand: Int = 4,
+        val citySpawnDelayRagingMultiplier: Int = 50,
+        val citySpawnDelayReductionPerSpawn: Int = -1,
+        val cityMaxSpawnDelayReduction: Int = -3,
+        val cityAttackedDelayMultiplier: Int = 50,
+        /** BARBARIAN_NUM_UNITS_INITIAL_ENCAMPMENT_CREATION_SPAWN (+_RAGING, +_PER_ERA in percent of an era): units of a camp made on the initial turn */
+        val numUnitsInitialEncampmentCreation: Int = 2,
+        val numUnitsInitialEncampmentCreationRaging: Int = 0,
+        val numUnitsInitialEncampmentCreationPerEra: Int = 0,
+        /** BARBARIAN_NUM_UNITS_ENCAMPMENT_CREATION_SPAWN: units of a camp made later */
+        val numUnitsEncampmentCreation: Int = 2,
+        val numUnitsEncampmentCreationRaging: Int = 0,
+        val numUnitsEncampmentCreationPerEra: Int = 0,
+        /** BARBARIAN_NUM_UNITS_PER_ENCAMPMENT_SPAWN: units a camp spawns when its counter runs out */
+        val numUnitsPerEncampmentSpawn: Int = 1,
+        val numUnitsPerEncampmentSpawnRaging: Int = 0,
+        val numUnitsPerEncampmentSpawnPerEra: Int = 0,
+        /** BARBARIAN_NUM_UNITS_PER_CITY_SPAWN: units a barbarian city spawns */
+        val numUnitsPerCitySpawn: Int = 1,
+        val numUnitsPerCitySpawnRaging: Int = 0,
+        val numUnitsPerCitySpawnPerEra: Int = 0,
+        /** MAX_BARBARIANS_FROM_CAMP_NEARBY / _RANGE and MAX_BARBARIANS_FROM_CITY_NEARBY / _RANGE: no spawn while this many barbarian military units are within the range */
+        val maxBarbariansFromCampNearby: Int = 2,
+        val maxBarbariansFromCampNearbyRange: Int = 4,
+        val maxBarbariansFromCityNearby: Int = 4,
+        val maxBarbariansFromCityNearbyRange: Int = 4,
+        /** BARBARIAN_NAVAL_UNIT_START_TURN_SPAWN (CP 30): game turn from which boats may be spawned next to a camp or city */
+        val navalUnitStartTurn: Int = 20,
+        /** BARBARIAN_UNIT_SPAWN_NO_RESOURCE_MULTIPLIER, _PREFERRED_TYPE (percent), _NUM_CANDIDATES (the best n are drawn from by weight) */
+        val unitSpawnNoResourceMultiplier: Int = 150,
+        val unitSpawnPreferredTypeMultiplier: Int = 200,
+        val unitSpawnNumCandidates: Int = 5,
+        /** The ruleset has no `DefaultUnitAI`, so the preferred AI types of GetRandomBarbarianUnitType are approximated: UNITAI_FAST_ATTACK is a melee land unit of one of
+         *  [fastAttackUnitTypes], UNITAI_DEFENSE a melee land unit of one of [defenseUnitTypes]; UNITAI_RANGED is any ranged land unit without indirect fire,
+         *  UNITAI_ATTACK_SEA any melee ship */
+        val fastAttackUnitTypes: List<String> = listOf("Mounted", "Armored"),
+        val defenseUnitTypes: List<String> = listOf("Gunpowder"),
+    )
+    var barbarianConstants = BarbarianConstants()
+
     /** VP CvUnitCombat::DoDamageMath uses separate melee and ranged defines in hundredths. */
     data class CombatDamageConstants(
         val meleeBase: Int = 2400,

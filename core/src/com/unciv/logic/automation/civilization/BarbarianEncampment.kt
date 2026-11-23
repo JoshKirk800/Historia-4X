@@ -9,6 +9,8 @@ class BarbarianEncampment() : IsPartOfGameInfoSerialization {
     var countdown = 0
     var spawnedUnits = -1
     var destroyed = false // destroyed encampments haunt the vicinity for 15 turns preventing new spawns
+    /** CvBarbarians m_abBarbSpawnerAttacked, only with `barbariansLikeVp`: the spawner was attacked since the last turn, so a further attack does not shorten the counter again */
+    var attacked = false
 
     @Transient
     lateinit var gameInfo: GameInfo
@@ -22,6 +24,7 @@ class BarbarianEncampment() : IsPartOfGameInfoSerialization {
         toReturn.countdown = countdown
         toReturn.spawnedUnits = spawnedUnits
         toReturn.destroyed = destroyed
+        toReturn.attacked = attacked
         return toReturn
     }
 

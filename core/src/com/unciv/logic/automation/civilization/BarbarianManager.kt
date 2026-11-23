@@ -59,6 +59,7 @@ class BarbarianManager : IsPartOfGameInfoSerialization {
 
     fun updateEncampments() {
         updateBarbarianTech()
+        if (likeVp()) return BarbarianCampsLikeVp(this).doCamps()
 
         // Check if camps were destroyed
         for (encampment in encampments.toList()) { // tolist to avoid concurrent modification
@@ -78,8 +79,13 @@ class BarbarianManager : IsPartOfGameInfoSerialization {
 
     /** Called when an encampment was attacked, will speed up time to next spawn */
     fun campAttacked(position: HexCoord) {
-        encampments.firstOrNull { it.position == position }?.wasAttacked()
+        val encampment = encampments.firstOrNull { it.position == position } ?: return
+        if (!likeVp()) encampment.wasAttacked()
+        else if (!encampment.destroyed) BarbarianCampsLikeVp(this).spawnerAttacked(encampment)
     }
+
+    /** The switch of the Vox Populi camp model, `barbariansLikeVp` */
+    fun likeVp() = gameInfo.ruleset.modOptions.constants.barbariansLikeVp
 
     fun placeBarbarianEncampment(forTesting: Boolean = false) {
         val rng = gameInfo.getBarbarianCivilization().state.stateBasedRandom("BarbarianManager.placeBarbarianEncampent", encampments.map { it.position }.hashCode())
@@ -174,7 +180,7 @@ class BarbarianManager : IsPartOfGameInfoSerialization {
      * [CivilizationInfo.addNotification][Add a notification] to every civilization that have
      * adopted Honor policy and have explored the [tile] where the Barbarian Encampment has spawned.
      */
-    private fun notifyCivsOfBarbarianEncampment(tile: Tile) {
+    internal fun notifyCivsOfBarbarianEncampment(tile: Tile) {
         for (civ in gameInfo.civilizations) {
             if (!civ.hasExplored(tile)) continue
             if (!civ.hasUnique(UniqueType.NotifiedOfBarbarianEncampments)) continue
@@ -191,6 +197,13 @@ class BarbarianManager : IsPartOfGameInfoSerialization {
         tile.setImprovement(improvement)
         val newCamp = BarbarianEncampment(tile.position)
         newCamp.gameInfo = gameInfo
+        if (likeVp()) {
+            // CvPlot::setImprovementType: a camp put down starts its spawn counter (ActivateBarbSpawner); a recently cleared record of the tile is gone
+            encampments.removeAll { it.position == tile.position }
+            encampments.add(newCamp)
+            BarbarianCampsLikeVp(this).activate(newCamp)
+            return
+        }
         encampments.add(newCamp)
     }
 
@@ -300,7 +313,7 @@ class BarbarianManager : IsPartOfGameInfoSerialization {
  *  The landmasses of [tileMap], CvArea of the land: every group of land tiles that touch, mountains included. [Tile.getContinent] is not
  *  used, it leaves out the impassable tiles, so a range of mountains would cut a landmass in two.
  */
-private class Landmasses(tileMap: TileMap) {
+internal class Landmasses(tileMap: TileMap) {
     private val ids = HashMap<Tile, Int>()
     val sizes: IntArray
     val landTiles: Int
@@ -320,4 +333,7 @@ private class Landmasses(tileMap: TileMap) {
     }
 
     fun idOf(tile: Tile) = ids.getValue(tile)
+
+    /** The number of land tiles of the landmass of the land [tile] */
+    fun sizeOf(tile: Tile) = sizes[idOf(tile)]
 }

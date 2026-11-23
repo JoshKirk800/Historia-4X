@@ -51,6 +51,18 @@ class CityStatsYieldShapeTests {
         assertEquals(second.getTiles().count(), Countables.getCountableAmount(countable, GameContext(civ, city = second)))
     }
 
+    @Test
+    fun `border culture applies locally and does not add policy culture`() {
+        val culture = capital.total(Stat.Culture)
+        capital.build("[3] border culture [in this city]", "[50]% border culture [in this city]")
+        assertEquals(19.5f, capital.expansion.borderCulturePerTurn(10f), 1e-3f)
+        assertEquals(10f, second.expansion.borderCulturePerTurn(10f), 1e-3f)
+        assertEquals(-2f, second.expansion.borderCulturePerTurn(-2f), 1e-3f)
+        capital.expansion.nextTurn(0f)
+        assertEquals(4, capital.expansion.cultureStored)
+        assertEquals(culture, capital.total(Stat.Culture), 1e-3f)
+    }
+
     //region Processes
 
     @Test

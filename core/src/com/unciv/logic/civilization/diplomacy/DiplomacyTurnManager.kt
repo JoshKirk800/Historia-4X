@@ -103,7 +103,10 @@ object DiplomacyTurnManager {
         // our influence would be set to -59, overwriting the old value, which we want to keep
         // as it should be restored once the war ends (though we keep influence degradation from time during the war)
         val perTurnBonus = getCityStateInfluencePerTurnBonus()
-        if (perTurnBonus != 0f) {
+        if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateInfluenceLikeVp) {
+            // CvMinorCivAI::DoFriendshipDecay: the change of the turn in hundredths (the floor of -60 is the setter's)
+            setInfluence(influence + getCityStateVpChangeTimes100() / 100f)
+        } else if (perTurnBonus != 0f) {
             // CvMinorCivAI::DoFriendship (CvMinorCivAI.cpp:5192-5203): the bonus is added on top of the decay or recovery and,
             // unlike the recovery, is not stopped at the resting point; only a decay never takes us below it
             val baseChange = when {

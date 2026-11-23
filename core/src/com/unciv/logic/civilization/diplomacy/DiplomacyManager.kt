@@ -32,6 +32,7 @@ import yairm210.purity.annotations.Pure
 import yairm210.purity.annotations.Readonly
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sign
 
@@ -429,7 +430,9 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
             return otherCivDiplomacy().getTurnsToRelationshipChange()
 
         if (civInfo.isCityState && !otherCiv.isCityState) {
-            val dropPerTurn = getCityStateInfluenceDegrade()
+            // with the decay that grows with the points over the resting point this is the estimate of this turn's rate
+            val dropPerTurn = if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateInfluenceLikeVp) max(0, -getCityStateVpChangeTimes100()) / 100f
+                else getCityStateInfluenceDegrade()
             return when {
                 dropPerTurn == 0f -> 0
                 isRelationshipLevelEQ(RelationshipLevel.Ally) -> ceil((getInfluence() - 60f) / dropPerTurn).toInt() + 1
@@ -454,8 +457,9 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
     }
 
     fun setInfluence(amount: Float) {
+        val old = influence
         influence = max(amount, MINIMUM_INFLUENCE)
-        civInfo.cityStateFunctions.updateAllyCivForCityState()
+        civInfo.cityStateFunctions.updateAllyCivForCityState(otherCiv, old)
     }
 
     @VisibleForTesting
@@ -468,7 +472,8 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
 
     // To be run from City-State DiplomacyManager, which holds the influence. Resting point for every major civ can be different.
     @Readonly
-    internal fun getCityStateInfluenceRestingPoint(): Float {
+    fun getCityStateInfluenceRestingPoint(): Float {
+        val vp = civInfo.gameInfo.ruleset.modOptions.constants.cityStateInfluenceLikeVp
         var restingPoint = 0f
 
         otherCiv.forEachMatchingUnique(UniqueType.CityStateRestingPoint) { unique ->
@@ -483,11 +488,75 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
                     restingPoint += unique.params[0].toInt()
             }
 
+        if (vp) {
+            // CvMinorCivAI::GetFriendshipAnchorWithMajor (V:CvMinorCivAI.cpp:10679-10704)
+            val constants = civInfo.gameInfo.ruleset.modOptions.constants.cityStateInfluence
+            if (diplomaticStatus == DiplomaticStatus.Protector) restingPoint += constants.anchorProtected
+            if (hasFlag(DiplomacyFlags.WaryOf)) restingPoint += constants.anchorWary
+            // United Front: the ally, while at war with anyone
+            if (civInfo.allyCiv == otherCiv && otherCiv.isAtWar())
+                otherCiv.forEachMatchingUnique(UniqueType.CityStateAllyRestingPointAtWar) { restingPoint += it.params[0].toInt() }
+            return restingPoint
+        }
+
         if (diplomaticStatus == DiplomaticStatus.Protector) restingPoint += 10
 
         if (hasFlag(DiplomacyFlags.WaryOf)) restingPoint -= 20
 
         return restingPoint
+    }
+
+    /** Whether the capital of this city-state follows the religion that [otherCiv] founded: influence recovers 50% faster and decays 25% slower (V:CvMinorCivAI::IsSameReligionAsMajor) */
+    @Readonly
+    private fun sharesReligionWithOtherCiv(): Boolean {
+        val religion = if (civInfo.cities.isEmpty() || civInfo.getCapital() == null) null
+            else civInfo.getCapital()!!.religion.getMajorityReligionName()
+        return religion != null && religion == otherCiv.religionManager.religion?.name
+    }
+
+    /**
+     *  The change of the influence in one turn in hundredths, as CvMinorCivAI::GetFriendshipChangePerTurnTimes100 works it out (V:CvMinorCivAI.cpp:10393-10562) with
+     *  [com.unciv.models.ModConstants.cityStateInfluenceLikeVp]: the stored influence, the resting point, the shift of policies, the modifiers of the religion and of the uniques, the
+     *  game speed. Run from the City-State's DiplomacyManager. A city-state without a capital does not change.
+     */
+    @Readonly
+    internal fun getCityStateVpChangeTimes100(): Int {
+        val capital = civInfo.getCapital() ?: return 0
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants.cityStateInfluence
+        val shared = sharesReligionWithOtherCiv()
+
+        // iShift: the trade route bonus of policies times the routes to city-states (at most 5), the bonus for a city-state we could bully
+        var shift = 0
+        if (otherCiv.hasUnique(UniqueType.CityStateInfluenceWithTradeRoute)
+            && (otherCiv.tradeRoutes.routes.any { it.getDestinationCiv() == civInfo } || civInfo.tradeRoutes.routes.any { it.getDestinationCiv() == otherCiv })) {
+            val routes = min(otherCiv.tradeRoutes.routes.count { it.getDestinationCiv()?.isCityState == true }, constants.tradeRouteBonusRoutes)
+            otherCiv.forEachMatchingUnique(UniqueType.CityStateInfluenceWithTradeRoute) { shift += it.params[0].toInt() * routes * 100 }
+        }
+        if (otherCiv.hasUnique(UniqueType.CityStateInfluenceGainWhenAfraid) && civInfo.cityStateFunctions.getTributeWillingness(otherCiv) >= 0)
+            otherCiv.forEachMatchingUnique(UniqueType.CityStateInfluenceGainWhenAfraid) { shift += it.params[0].toInt() * 100 }
+
+        var recoveryPercent = 100 + if (shared) constants.sharedReligionRatePercent else 0
+        if (otherCiv.hasUnique(UniqueType.CityStateInfluenceRecoversTwiceNormalRate)) recoveryPercent += 100
+
+        var decayPercent = 100 + if (shared) constants.sharedReligionRatePercent / -2 else 0
+        otherCiv.forEachMatchingUnique(UniqueType.CityStateInfluenceDegradation) { decayPercent += it.params[0].toInt() }
+        for (civ in civInfo.gameInfo.civilizations.filter { it.isMajorCiv && it != otherCiv })
+            civ.forEachMatchingUnique(UniqueType.OtherCivsCityStateRelationsDegradeFaster) { decayPercent += it.params[0].toInt() }
+
+        val drop = when {
+            otherCiv.isMinorCivAggressor() -> constants.dropAggressorTimes100
+            civInfo.cityStatePersonality == CityStatePersonality.Hostile -> constants.dropHostileTimes100
+            else -> constants.dropTimes100
+        }
+        val change = CityStateInfluence.Change(
+            currentTimes100 = (influence * 100).roundToInt(), restingPointTimes100 = (getCityStateInfluenceRestingPoint() * 100).roundToInt(),
+            shiftTimes100 = shift, recoveryPercent = recoveryPercent, dropTimes100 = drop,
+            damagedCapitalProtected = capital.health < capital.getMaxHealth() && diplomaticStatus == DiplomaticStatus.Protector,
+            decayPercent = decayPercent, stopsDecay = false, // the Cold War embargo of the World Congress stops the decay of an ally (P4.6e)
+            trainPercent = max(1, (civInfo.gameInfo.speed.productionCostModifier * 100).roundToInt()),
+            ally = civInfo.allyCiv == otherCiv
+        )
+        return CityStateInfluence.changePerTurnTimes100(constants, change)
     }
 
     @Readonly

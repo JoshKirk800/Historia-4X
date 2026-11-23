@@ -166,6 +166,9 @@ enum class UniqueType(
 
     CityStateCanGiftGreatPeople("Allied City-States will occasionally gift Great People", UniqueTarget.Global),  // used in Policy
     CityStateInfluenceDegradation("[relativeAmount]% City-State Influence degradation", UniqueTarget.Global),
+    CityStateAllyRestingPointAtWar("Resting point for Influence with City-States we are the Ally of is increased by [amount] while we are at war", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `cityStateInfluenceLikeVp`: the original's `Policies.MinimumAllyInfluenceIncreaseAtWar` (CvMinorCivAI::GetFriendshipAnchorWithMajor, " +
+            "V:CvMinorCivAI.cpp:10701-10704), added to the resting point of the ally of a city-state while the civilization is at war with anyone"),
     CityStateRestingPoint("Resting point for Influence with City-States is increased by [amount]", UniqueTarget.Global),
     CityStateInfluenceWithTradeRoute("[amount] Influence per turn with City-States we have a trade route with", UniqueTarget.Global,
         docDescription = "Added to the per-turn influence change with each City-State that is connected to us by a trade route in either direction, " +

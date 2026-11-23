@@ -207,6 +207,10 @@ class Civilization : IsPartOfGameInfoSerialization {
     val popupAlerts = ArrayList<PopupAlert>()
     /**Serialization field for [allyCiv]. Is equivalent to ``allyCiv.civName``*/
     private var allyCivName: String? = null
+    /** The civID of the permanent ally of this city-state, whatever the influence (CvMinorCivAI::SetPermanentAlly, World Congress), see [permanentAllyCiv] */
+    private var permanentAllyCivID: String? = null
+    /** No civilization can be the ally of this city-state (CvMinorCivAI::SetNoAlly, World Congress). Only read with [com.unciv.models.ModConstants.cityStateInfluenceLikeVp] */
+    var noAlly = false
     var naturalWonders = ArrayList<String>()
 
     var notifications = ArrayList<Notification>()
@@ -377,6 +381,8 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.victoryManager = victoryManager.clone()
         toReturn.ai = ai.clone()
         toReturn.allyCivName = allyCivName
+        toReturn.permanentAllyCivID = permanentAllyCivID
+        toReturn.noAlly = noAlly
         for (diplomacyManager in diplomacy.values.map { it.clone() })
             toReturn.diplomacy[diplomacyManager.otherCivName] = diplomacyManager
         toReturn.proximity.putAll(proximity)
@@ -1443,6 +1449,12 @@ class Civilization : IsPartOfGameInfoSerialization {
             allyCivName = value?.civID
             field = value
         }
+
+    /** The permanent ally of this city-state (assuming it is one): the ally whatever the influence is, as long as it is not [noAlly]. Only read with [com.unciv.models.ModConstants.cityStateInfluenceLikeVp] */
+    @get:Readonly
+    var permanentAllyCiv: Civilization?
+        get() = permanentAllyCivID?.let { gameInfo.getCivilization(it) }
+        set(value) { permanentAllyCivID = value?.civID }
 
     /** Determine if this civ (typically as human player) is allowed to know how many major civs there are
      *

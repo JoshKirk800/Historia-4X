@@ -484,6 +484,40 @@ class ModConstants {
     var tributeGlobalModifier = 100 // 75 in BNW
     var tributeLocalModifier = 100 // 125 in BNW
 
+    /**
+     *  How the influence of a major with a city-state changes each turn as in Vox Populi (CvMinorCivAI::GetFriendshipChangePerTurnTimes100, V:CvMinorCivAI.cpp:10393-10562, with
+     *  MOD_BALANCE_VP), instead of Brave New World's: the resting point (`GetFriendshipAnchorWithMajor`, 10664-10752: 5 for a protector, not the 10 of the old code), a decay that
+     *  grows with the points over the resting point, three times as fast towards a protector whose capital is damaged, the trade route bonus of policies times the number of the
+     *  routes to city-states (at most [CityStateInfluenceConstants.tradeRouteBonusRoutes]), the change divided by the game speed's production cost percentage, and an ally that
+     *  stays until another civilization has more influence (`DoFriendshipChangeEffects`, 11348-11489). Off: the old rules.
+     */
+    var cityStateInfluenceLikeVp = false
+
+    /**
+     *  The defines of [cityStateInfluenceLikeVp], in the hundredths of influence the source uses where it does. Can only be modded all-or-nothing; the defaults are Vox Populi 5.4.8's.
+     *  [dropTimes100] `MINOR_FRIENDSHIP_DROP_PER_TURN` (-100 there), [dropHostileTimes100] `..._HOSTILE` (150), [dropAggressorTimes100] `..._AGGRESSOR` (200): the decay of a turn above the
+     *  resting point, for a hostile city-state and against a civilization that attacked city-states; [recoveryTimes100] `MINOR_FRIENDSHIP_NEGATIVE_INCREASE_PER_TURN`;
+     *  [sharedReligionRatePercent] `MINOR_FRIENDSHIP_RATE_MOD_SHARED_RELIGION` (recovery faster by this, decay slower by half of it); [scalingDecayExponent] `MINOR_INFLUENCE_SCALING_DECAY_EXPONENT`
+     *  with [scalingDecayStart] and [scalingDecayFull], the points over the resting point from which the decay grows and where the exponent takes over (50 and 100 in the source's code);
+     *  [damagedCapitalDecayPercent] `MINOR_FRIENDSHIP_DROP_PER_TURN_DAMAGED_CAPITAL_MULTIPLIER` (CP 100, VP 300); [anchorProtected] `MINOR_FRIENDSHIP_ANCHOR_MOD_PROTECTED` and [anchorWary]
+     *  `MINOR_FRIENDSHIP_ANCHOR_MOD_WARY_OF`: the resting point of a protector and against a civilization the city-state is wary of.
+     */
+    data class CityStateInfluenceConstants(
+        val dropTimes100: Int = 100,
+        val dropHostileTimes100: Int = 150,
+        val dropAggressorTimes100: Int = 200,
+        val recoveryTimes100: Int = 100,
+        val sharedReligionRatePercent: Int = 50,
+        val scalingDecayExponent: Double = 1.5,
+        val scalingDecayStart: Int = 50,
+        val scalingDecayFull: Int = 100,
+        val damagedCapitalDecayPercent: Int = 300,
+        val anchorProtected: Int = 5,
+        val anchorWary: Int = -20,
+        val tradeRouteBonusRoutes: Int = 5,
+    )
+    var cityStateInfluence = CityStateInfluenceConstants()
+
     // Espionage
     /**
      *  Vox Populi's spy points (CvPlayer::CreateSpies with MOD_BALANCE_SPY_POINTS, V:CvPlayer.cpp:23292-23338) instead of whole spies. false: `Gain an extra spy` makes one spy and

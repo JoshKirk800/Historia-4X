@@ -25,6 +25,7 @@ import yairm210.purity.annotations.Readonly
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /** Class containing city-state-specific functions */
@@ -358,16 +359,43 @@ class CityStateFunctions(val civInfo: Civilization) {
         return true
     }
 
-    fun updateAllyCivForCityState() {
+    /**
+     *  Who is the ally of this city-state now. With [com.unciv.models.ModConstants.cityStateInfluenceLikeVp] the ally stays until a civilization has more influence than it
+     *  ([CityStateInfluence.allyAfter]); [changed], the civilization whose influence just changed from [oldInfluence], says which of the cases of the source applies. Without it,
+     *  and in the other calls (a war, a defeat), the civilization with the most influence from 60 on is the ally.
+     */
+    fun updateAllyCivForCityState(changed: Civilization? = null, oldInfluence: Float? = null) {
         if (!civInfo.isCityState) return
         val oldAlly = civInfo.allyCiv
         var newAlly: Civilization? = null
 
-        val maxInfluence = civInfo.diplomacy
-            .filter { it.value.otherCiv.isMajorCiv && !it.value.otherCiv.isDefeated() }
-            .maxByOrNull { it.value.getInfluence() }
-        if (maxInfluence != null && maxInfluence.value.getInfluence() >= 60) {
-            newAlly = maxInfluence.value.otherCiv
+        val majors = civInfo.diplomacy.values.map { it.otherCiv }.filter { it.isMajorCiv && !it.isDefeated() }
+        val influenceOf = { civ: Civilization -> civInfo.getDiplomacyManager(civ)!!.getInfluence() }
+        if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateInfluenceLikeVp) {
+            val permanent = civInfo.permanentAllyCiv
+            if (changed != null && oldInfluence != null && changed in majors) {
+                val diplomacy = civInfo.getDiplomacyManager(changed)!!
+                val new100 = (influenceOf(changed) * 100).roundToInt()
+                newAlly = CityStateInfluence.allyAfter(
+                    oldAlly, changed, (oldInfluence * 100).roundToInt(), new100, new100 >= 6000 && !diplomacy.otherCiv.isAtWarWith(civInfo),
+                    { (influenceOf(it) * 100).roundToInt() }, majors, permanent, civInfo.noAlly
+                )
+            } else {
+                // no changed civilization: the ally stays while it qualifies, else the one with the most influence (from 60 on)
+                newAlly = when {
+                    civInfo.noAlly -> null
+                    permanent != null -> permanent
+                    oldAlly != null && oldAlly in majors && influenceOf(oldAlly) >= 60 -> oldAlly
+                    else -> majors.maxByOrNull { influenceOf(it) }?.takeIf { influenceOf(it) >= 60 }
+                }
+            }
+        } else {
+            val maxInfluence = civInfo.diplomacy
+                .filter { it.value.otherCiv.isMajorCiv && !it.value.otherCiv.isDefeated() }
+                .maxByOrNull { it.value.getInfluence() }
+            if (maxInfluence != null && maxInfluence.value.getInfluence() >= 60) {
+                newAlly = maxInfluence.value.otherCiv
+            }
         }
 
         if (oldAlly == newAlly) return

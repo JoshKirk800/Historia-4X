@@ -377,6 +377,8 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | pantheonBase                             | Int    | 10                            | [^L]  |
 | pantheonGrowth                           | Int    | 5                             | [^L]  |
 | workboatAutomationSearchMaxTiles         | Int    | 37                            | [^M]  |
+| cityStateInfluenceLikeVp                 | Boolean | false                        | How the influence with a City-State changes each turn as in Vox Populi instead of Brave New World's: a protector's resting point is 5 (not 10), the decay grows with the points over the resting point, is three times as fast towards a protector whose capital is damaged, the trade route bonus is multiplied by the number of routes to City-States (at most 5), the change is divided by the game speed's production cost percentage, and an ally stays until another civilization has more influence |
+| cityStateInfluence                       | Object  | [See below](#citystateinfluenceconstants) | The defines of that model, only read with `cityStateInfluenceLikeVp` |
 | spyPointsLikeVp                          | Boolean | false                        | Vox Populi's spy points instead of whole spies: `Gain [n] Spy Points` counts points and makes a spy each time they reach the threshold (100 in Vox Populi), `Gain an extra spy` is one threshold of points, a negative amount is a debt. Without it `Gain [n] Spy Points` does nothing |
 | espionage                                | Object  | [See below](#espionageconstants) | The threshold of spy points and the time a killed spy stays dead |
 | maxSpyRank                               | Int    | 3                             | [^N]  |
@@ -655,6 +657,25 @@ The defines of Vox Populi's trade route model (`tradeRouteModelLikeVp`). These v
 | riverModifier | Int | 25 | Percent more on land routes when a city is on a river |
 | proximityMax | Int | 50 | The most percent a route between close cities loses |
 | targetTurns | Int | 30 | Turns a route lasts before the game speed's `tradeRouteSpeedModifier` |
+
+#### CityStateInfluenceConstants
+
+The defines of `cityStateInfluenceLikeVp`, in hundredths of influence where the original uses them. These values are not merged individually, only the entire sub-structure is. The defaults are Vox Populi 5.4.8's.
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| dropTimes100 | Int | 100 | `MINOR_FRIENDSHIP_DROP_PER_TURN`: the decay of a turn above the resting point |
+| dropHostileTimes100 | Int | 150 | `MINOR_FRIENDSHIP_DROP_PER_TURN_HOSTILE`: for a hostile City-State |
+| dropAggressorTimes100 | Int | 200 | `MINOR_FRIENDSHIP_DROP_PER_TURN_AGGRESSOR`: against a civilization that has attacked City-States |
+| recoveryTimes100 | Int | 100 | `MINOR_FRIENDSHIP_NEGATIVE_INCREASE_PER_TURN`: the recovery of a turn below the resting point |
+| sharedReligionRatePercent | Int | 50 | `MINOR_FRIENDSHIP_RATE_MOD_SHARED_RELIGION`: recovery this much faster, decay half of it slower, with the religion of the civilization |
+| scalingDecayExponent | Float | 1.5 | `MINOR_INFLUENCE_SCALING_DECAY_EXPONENT`: the decay of 100 or more points over the resting point is this power of the hundreds of points over it |
+| scalingDecayStart | Int | 50 | Points over the resting point from which the decay grows by 0.02 for each point (until `scalingDecayFull`) |
+| scalingDecayFull | Int | 100 | Points over the resting point from which the exponent applies |
+| damagedCapitalDecayPercent | Int | 300 | `MINOR_FRIENDSHIP_DROP_PER_TURN_DAMAGED_CAPITAL_MULTIPLIER`: the decay towards a protector while the capital is damaged |
+| anchorProtected | Int | 5 | `MINOR_FRIENDSHIP_ANCHOR_MOD_PROTECTED`: the resting point of a protector |
+| anchorWary | Int | -20 | `MINOR_FRIENDSHIP_ANCHOR_MOD_WARY_OF`: the resting point against a civilization the City-State is wary of |
+| tradeRouteBonusRoutes | Int | 5 | The most routes to City-States that multiply the trade route bonus of policies |
 
 #### EspionageConstants
 

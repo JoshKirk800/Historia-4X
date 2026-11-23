@@ -148,6 +148,9 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
         // must be after setting name & civInfo because it sets the baseUnit according to the name
         // and the civInfo is required for using `hasUnique` when determining its movement options
         unit.setTransients(civInfo.gameInfo.ruleset)
+        // CvUnit::setDamage(0) on creation: a unit starts undamaged, at its own maximum (more than 100 with `[n] maximum hit points` from its type's uniques and
+        // `unitMaxHitPointsLikeVp`; always 100 otherwise)
+        unit.health = unit.getMaxHealth()
 
         return unit
     }

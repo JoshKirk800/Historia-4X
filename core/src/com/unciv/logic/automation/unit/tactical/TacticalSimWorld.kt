@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.PlotDefense
+import com.unciv.logic.automation.unit.reachMovement
 import com.unciv.logic.battle.BattleDamage
 import com.unciv.logic.battle.CityCombatant
 import com.unciv.logic.battle.MapUnitCombatant
@@ -363,7 +364,7 @@ class SimWorld(
         if (tile.getOwner() != civ) return false
         val improvement = tile.getUnpillagedTileImprovement() ?: return false
         // IsPlayerCitadel: damage must exceed enemy healing and defense must be at least 50%.
-        return PlotDefense.nearbyEnemyDamage(improvement) > 10 && PlotDefense.defenseModifier(improvement) >= 50
+        return PlotDefense.nearbyEnemyDamage(improvement) > PlotDefense.enemyHealRate(civ) && PlotDefense.defenseModifier(improvement) >= 50
     }
 
     private fun buildDangerSources() {
@@ -372,7 +373,7 @@ class SimWorld(
             if (!other.isAlive() || !isAtWar(other)) continue
             for (enemy in other.units.getCivUnits()) {
                 if (!enemy.isMilitary() || enemy.baseUnit.isAirUnit() || !enemy.baseUnit.isMelee() && !enemy.baseUnit.isRanged() || !enemy.isVisibleTo(civ)) continue
-                val reach = enemy.baseUnit.movement.coerceAtLeast(1) + if (enemy.baseUnit.isRanged()) enemy.getRange() else 1
+                val reach = enemy.reachMovement().coerceAtLeast(1) + if (enemy.baseUnit.isRanged()) enemy.getRange() else 1
                 if (enemy.getTile().aerialDistanceTo(target) > reachRing + reach) continue
                 val index = plotOf(enemy.getTile()).let { if (it >= 0) enemyAt[it] else -1 }
                 dangerUnits.add(DangerSource(enemy, if (index >= 0 && enemies[index].unit == enemy) index else -1))
@@ -537,7 +538,7 @@ class SimWorld(
             val distance = attackerTile.aerialDistanceTo(tile)
             val ranged = attacker.baseUnit.isRanged()
             val range = if (ranged) attacker.getRange() else 1
-            if (distance > attacker.baseUnit.movement.coerceAtLeast(1) + range) continue
+            if (distance > attacker.reachMovement().coerceAtLeast(1) + range) continue
             // A unit that does not shoot attacks its own domain
             if (!ranged && attacker.baseUnit.isLandUnit != tile.isLand && !tile.isCityCenter()) continue
             val attackerCombatant = SimCombatant(attacker, attackerTile, attackerHealth)
@@ -566,7 +567,7 @@ class SimWorld(
             } else 10 * unit.getMaxHealth()
         }
         sum += improvementDamageAt(tile) + unit.getDamageFromTerrain(tile)
-        return minOf(sum, 10 * 100)
+        return minOf(sum, 10 * unit.getMaxHealth())
     }
 
     private fun improvementDamageAt(tile: Tile): Int {

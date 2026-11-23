@@ -14,50 +14,100 @@
 	// Ranged+Siege
 	{
 		"name": "Accuracy I",
-		"uniques": ["[+15]% Strength <when fighting in [Open terrain] tiles> <when attacking>", "[-90]% weight to this choice for AI decisions"],
-		"unitTypes": ["Siege","Archery","Ranged Gunpowder"],
-        "column": 1,
-        "row": 1
-    },
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+10]% Strength <vs units at or below half health>"
+		],
+		"unitTypes": [
+			"Siege",
+			"Archery",
+			"Ranged Gunpowder"
+		],
+		"row": 1,
+		"column": 1
+	},
 	{
 		"name": "Accuracy II",
-		"prerequisites": ["Accuracy I"],
-		"uniques": ["[+15]% Strength <when fighting in [Open terrain] tiles> <when attacking>"],
-		"unitTypes": ["Siege","Archery","Ranged Gunpowder"],
-        "column": 1,
-        "row": 2
-    },
+		"prerequisites": [
+			"Accuracy I"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+10]% Strength <vs units at or below half health>"
+		],
+		"unitTypes": [
+			"Siege",
+			"Archery",
+			"Ranged Gunpowder"
+		],
+		"row": 2,
+		"column": 1
+	},
 	{
 		"name": "Accuracy III",
-		"prerequisites": ["Accuracy II"],
-		"uniques": ["[+15]% Strength <when fighting in [Open terrain] tiles> <when attacking>"],
-		"unitTypes": ["Siege","Archery","Ranged Gunpowder"],
-        "column": 1,
-        "row": 3
-    },
+		"prerequisites": [
+			"Accuracy II"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+10]% Strength <vs units at or below half health>"
+		],
+		"unitTypes": [
+			"Siege",
+			"Archery",
+			"Ranged Gunpowder"
+		],
+		"row": 3,
+		"column": 1
+	},
 
 	{
 		"name": "Barrage I",
-		"uniques": ["[+15]% Strength <when fighting in [Rough terrain] tiles> <when attacking>", "[-90]% weight to this choice for AI decisions"],
-		"unitTypes": ["Siege","Archery","Ranged Gunpowder"],
-        "column": 2,
-        "row": 1
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+10]% Strength <vs units above half health>"
+		],
+		"unitTypes": [
+			"Siege",
+			"Archery",
+			"Ranged Gunpowder"
+		],
+		"row": 1,
+		"column": 2
 	},
 	{
 		"name": "Barrage II",
-		"prerequisites": ["Barrage I"],
-		"uniques": ["[+15]% Strength <when fighting in [Rough terrain] tiles> <when attacking>"],
-		"unitTypes": ["Siege","Archery","Ranged Gunpowder"],
-        "column": 2,
-        "row": 2
+		"prerequisites": [
+			"Barrage I"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+10]% Strength <vs units above half health>"
+		],
+		"unitTypes": [
+			"Siege",
+			"Archery",
+			"Ranged Gunpowder"
+		],
+		"row": 2,
+		"column": 2
 	},
 	{
 		"name": "Barrage III",
-		"prerequisites": ["Barrage II"],
-		"uniques": ["[+15]% Strength <when fighting in [Rough terrain] tiles> <when attacking>"],
-		"unitTypes": ["Siege","Archery","Ranged Gunpowder"],
-        "column": 2,
-        "row": 3
+		"prerequisites": [
+			"Barrage II"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+10]% Strength <vs units above half health>"
+		],
+		"unitTypes": [
+			"Siege",
+			"Archery",
+			"Ranged Gunpowder"
+		],
+		"row": 3,
+		"column": 2
 	},
 
 	{
@@ -70,11 +120,22 @@
 	},
 	{
 		"name": "Extended Range",
-		"prerequisites": ["Accuracy III","Barrage III","Targeting II","Bombardment II"],
-		"uniques": ["[+1] Range"],
-		"unitTypes": ["Archery","Ranged Gunpowder","Siege","Ranged Water"],
-        "column": 3,
-        "row": 3
+		"prerequisites": [
+			"Barrage III",
+			"Siege III (Land)"
+		],
+		"uniques": [
+			"[-20]% Strength <when making a ranged attack>",
+			"[+1] Range",
+			"Requires at least [2] attack range"
+		],
+		"unitTypes": [
+			"Archery",
+			"Ranged Gunpowder",
+			"Siege"
+		],
+		"row": 3,
+		"column": 3
 	},
 	{
 		"name": "Indirect Fire",
@@ -88,50 +149,106 @@
 	// Melee, Mounted+Armor
 	{
 		"name": "Shock I",
-		"uniques": ["[+15]% Strength <when fighting in [Open terrain] tiles>", "[-90]% weight to this choice for AI decisions"],
-		"unitTypes": ["Sword","Gunpowder","Mounted","Armored"],
-        "column": 4,
-        "row": 1
+		"uniques": [
+			"[+10]% Strength",
+			"[+5]% to Flank Attack bonuses"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder",
+			"Mounted",
+			"Armored"
+		],
+		"row": 1,
+		"column": 4
 	},
 	{
 		"name": "Shock II",
-		"prerequisites": ["Shock I"],
-		"uniques": ["[+15]% Strength <when fighting in [Open terrain] tiles>"],
-		"unitTypes": ["Sword","Gunpowder","Mounted","Armored"],
-        "column": 4,
-        "row": 2
+		"prerequisites": [
+			"Shock I"
+		],
+		"uniques": [
+			"[+10]% Strength",
+			"[+5]% to Flank Attack bonuses"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder",
+			"Mounted",
+			"Armored"
+		],
+		"row": 2,
+		"column": 4
 	},
 	{
 		"name": "Shock III",
-		"prerequisites": ["Shock II"],
-		"uniques": ["[+15]% Strength <when fighting in [Open terrain] tiles>"],
-		"unitTypes": ["Sword","Gunpowder","Mounted","Armored"],
-        "column": 4,
-        "row": 3
+		"prerequisites": [
+			"Shock II"
+		],
+		"uniques": [
+			"[+10]% Strength",
+			"[+5]% to Flank Attack bonuses"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder",
+			"Mounted",
+			"Armored"
+		],
+		"row": 3,
+		"column": 4
 	},
 
 	{
 		"name": "Drill I",
-		"uniques": ["[+15]% Strength <when fighting in [Rough terrain] tiles>", "[-90]% weight to this choice for AI decisions"],
-		"unitTypes": ["Sword","Gunpowder","Mounted","Armored"],
-        "column": 5,
-        "row": 1
+		"uniques": [
+			"[+10]% Strength",
+			"[15]% less damage from cities"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder",
+			"Mounted",
+			"Armored"
+		],
+		"row": 1,
+		"column": 5
 	},
 	{
 		"name": "Drill II",
-		"prerequisites": ["Drill I"],
-		"uniques": ["[+15]% Strength <when fighting in [Rough terrain] tiles>"],
-		"unitTypes": ["Sword","Gunpowder","Mounted","Armored"],
-        "column": 5,
-        "row": 2
+		"prerequisites": [
+			"Drill I"
+		],
+		"uniques": [
+			"[+10]% Strength",
+			"[15]% less damage from cities"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder",
+			"Mounted",
+			"Armored"
+		],
+		"row": 2,
+		"column": 5
 	},
 	{
 		"name": "Drill III",
-		"prerequisites": ["Drill II"],
-		"uniques": ["[+15]% Strength <when fighting in [Rough terrain] tiles>"],
-		"unitTypes": ["Sword","Gunpowder","Mounted","Armored"],
-        "column": 5,
-        "row": 3
+		"prerequisites": [
+			"Drill II"
+		],
+		"uniques": [
+			"[+10]% Strength",
+			"[15]% less damage from cities"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder",
+			"Mounted",
+			"Armored"
+		],
+		"row": 3,
+		"column": 5
 	},
 	{
 		"name": "Charge",
@@ -151,11 +268,21 @@
 	},
 	{
 		"name": "Formation I",
-		"prerequisites": ["Shock II","Drill II","Accuracy II","Barrage II"],
-		"uniques": ["[+33]% Strength <vs [Mounted] units>", "[-50]% weight to this choice for AI decisions"],
-		"unitTypes": ["Sword","Gunpowder","Mounted","Armored"],
-        "column": 7,
-        "row": 2
+		"prerequisites": [
+			"Drill II"
+		],
+		"uniques": [
+			"[+15]% Strength <when fighting in [Open terrain] tiles> <when defending>",
+			"[+33]% Strength <vs [Mounted] units>"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder",
+			"Mounted",
+			"Armored"
+		],
+		"row": 2,
+		"column": 7
 	},
 
 	{
@@ -176,11 +303,21 @@
 	},
 	{
 		"name": "Amphibious",
-		"prerequisites": ["Shock I", "Drill I"],
-		"uniques": ["Eliminates combat penalty for attacking over a river", "Eliminates combat penalty for attacking across a coast"],
-		"unitTypes": ["Sword","Gunpowder"],
-        "column": 6,
-        "row": 1
+		"prerequisites": [
+			"Shock I",
+			"Drill II"
+		],
+		"uniques": [
+			"Eliminates combat penalty for attacking across a coast",
+			"Eliminates combat penalty for attacking over a river",
+			"Ignores terrain cost in [Marsh] tiles"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder"
+		],
+		"row": 1,
+		"column": 6
 	},
 	{
 		"name": "Medic",
@@ -202,18 +339,33 @@
 	// Scout
 	{
 		"name": "Scouting I",
-		"uniques": ["[+1] Sight"],
-		"unitTypes": ["Scout"],
-        "column": 8,
-        "row": 1
+		"prerequisites": [
+			"Trailblazer II",
+			"Survivalism II"
+		],
+		"uniques": [
+			"[+1] Sight",
+			"[+1] Sight <when [Embarked]>"
+		],
+		"unitTypes": [
+			"Scout"
+		],
+		"row": 1,
+		"column": 8
 	},
 	{
 		"name": "Scouting II",
-		"prerequisites": ["Scouting I"],
-		"uniques": ["[+1] Sight"],
-		"unitTypes": ["Scout"],
-        "column": 8,
-        "row": 2
+		"prerequisites": [
+			"Scouting I"
+		],
+		"uniques": [
+			"[+1] Movement"
+		],
+		"unitTypes": [
+			"Scout"
+		],
+		"row": 2,
+		"column": 8
 	},
 	{
 		"name": "Scouting III",
@@ -225,18 +377,30 @@
 	},
 	{
 		"name": "Survivalism I",
-		"uniques": ["[+5] HP when healing <in [Foreign Land] tiles>", "[+25]% Strength <when defending>"],
-		"unitTypes": ["Scout"],
-        "column": 9,
-        "row": 1
+		"uniques": [
+			"[+25]% Strength <when defending>",
+			"[+5] HP when healing <in [Foreign Land] tiles>"
+		],
+		"unitTypes": [
+			"Scout"
+		],
+		"row": 1,
+		"column": 9
 	},
 	{
 		"name": "Survivalism II",
-		"prerequisites": ["Survivalism I"],
-		"uniques": ["[+5] HP when healing <in [Foreign Land] tiles>", "[+25]% Strength <when defending>"],
-		"unitTypes": ["Scout"],
-        "column": 9,
-        "row": 2
+		"prerequisites": [
+			"Survivalism I"
+		],
+		"uniques": [
+			"[+25]% Strength <when defending>",
+			"[+5] HP when healing <in [Foreign Land] tiles>"
+		],
+		"unitTypes": [
+			"Scout"
+		],
+		"row": 2,
+		"column": 9
 	},
 	{
 		"name": "Survivalism III",
@@ -307,26 +471,51 @@
 	// Water Ranged
 	{
 		"name": "Targeting I",
-		"uniques": ["[+15]% Strength <vs [Water] units>"],
-		"unitTypes": ["Ranged Water","Submarine"],
-        "column": 13,
-        "row": 1
+		"uniques": [
+			"[+10]% Strength <vs units at or below half health>",
+			"[+10]% Strength <vs [Land] units> <when attacking>",
+			"[+10]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Ranged Water",
+			"Submarine"
+		],
+		"row": 1,
+		"column": 13
 	},
 	{
 		"name": "Targeting II",
-		"prerequisites": ["Targeting I"],
-		"uniques": ["[+15]% Strength <vs [Water] units>"],
-		"unitTypes": ["Ranged Water","Submarine"],
-        "column": 13,
-        "row": 2
+		"prerequisites": [
+			"Targeting I"
+		],
+		"uniques": [
+			"[+10]% Strength <vs units at or below half health>",
+			"[+10]% Strength <vs [Land] units> <when attacking>",
+			"[+10]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Ranged Water",
+			"Submarine"
+		],
+		"row": 2,
+		"column": 13
 	},
 	{
 		"name": "Targeting III",
-		"prerequisites": ["Targeting II"],
-		"uniques": ["[+15]% Strength <vs [Water] units>"],
-		"unitTypes": ["Ranged Water","Submarine"],
-        "column": 13,
-        "row": 3
+		"prerequisites": [
+			"Targeting II"
+		],
+		"uniques": [
+			"[+10]% Strength <vs units at or below half health>",
+			"[+10]% Strength <vs [Land] units> <when attacking>",
+			"[+10]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Ranged Water",
+			"Submarine"
+		],
+		"row": 3,
+		"column": 13
 	},
 
 	// Submarine
@@ -415,34 +604,56 @@
 	// Bomber
 	{
 		"name": "Siege I",
-		"uniques": ["[+33]% Strength <vs cities>", "[-100]% weight to this choice for AI decisions"],
-		"unitTypes": ["Bomber"],
-        "column": 17,
-        "row": 1
+		"uniques": [
+			"[+50]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Bomber"
+		],
+		"row": 1,
+		"column": 17
 	},
 	{
 		"name": "Siege II",
-		"prerequisites": ["Siege I"],
-		"uniques": ["[+33]% Strength <vs cities>"],
-		"unitTypes": ["Bomber"],
-        "column": 17,
-        "row": 2
+		"prerequisites": [
+			"Siege I"
+		],
+		"uniques": [
+			"[+50]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Bomber"
+		],
+		"row": 2,
+		"column": 17
 	},
 	{
 		"name": "Siege III",
-		"prerequisites": ["Siege II"],
-		"uniques": ["[+34]% Strength <vs cities>"],
-		"unitTypes": ["Bomber"],
-        "column": 17,
-        "row": 3
+		"prerequisites": [
+			"Siege II"
+		],
+		"uniques": [
+			"[+50]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Bomber"
+		],
+		"row": 3,
+		"column": 17
 	},
 	{
 		"name": "Evasion",
-		"prerequisites": ["Siege II", "Bombardment II"],
-		"uniques": ["Damage taken from interception reduced by [50]%", "[+200]% weight to this choice for AI decisions"],
-		"unitTypes": ["Bomber"],
-        "column": 17,
-        "row": 4
+		"prerequisites": [
+			"Siege II"
+		],
+		"uniques": [
+			"Damage taken from interception reduced by [50]%"
+		],
+		"unitTypes": [
+			"Bomber"
+		],
+		"row": 4,
+		"column": 17
 	},
 
 	// Aircraft
@@ -494,19 +705,32 @@
 	},
 	{
 		"name": "Air Targeting I",
-		"prerequisites": ["Interception I","Siege I","Bombardment I","Dogfighting I"],
-		"uniques": ["[+33]% Strength <vs [Water] units>", "[-100]% weight to this choice for AI decisions"],
-		"unitTypes": ["Fighter","Bomber"],
-        "column": 20,
-        "row": 1
+		"uniques": [
+			"[+15]% Strength <vs [Land] units> <when attacking>",
+			"[+15]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Fighter",
+			"Bomber"
+		],
+		"row": 1,
+		"column": 20
 	},
 	{
 		"name": "Air Targeting II",
-		"prerequisites": ["Air Targeting I"],
-		"uniques": ["[+33]% Strength <vs [Water] units>"],
-		"unitTypes": ["Fighter","Bomber"],
-        "column": 20,
-        "row": 2
+		"prerequisites": [
+			"Air Targeting I"
+		],
+		"uniques": [
+			"[+15]% Strength <vs [Land] units> <when attacking>",
+			"[+15]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Fighter",
+			"Bomber"
+		],
+		"row": 2,
+		"column": 20
 	},
 
 	{
@@ -570,19 +794,45 @@
 	// Mixed
 	{
 		"name": "Cover I",
-		"prerequisites": ["Shock I","Drill I","Accuracy I","Barrage I"],
-		"uniques": ["[+33]% Strength <vs [Ranged] units> <when defending>", "[-100]% weight to this choice for AI decisions"],
-		"unitTypes": ["Sword","Gunpowder","Archery","Ranged Gunpowder","Siege"],
-        "column": 24,
-        "row": 1
+		"prerequisites": [
+			"Shock II",
+			"Drill I",
+			"Barrage II",
+			"Accuracy I",
+			"Hull I"
+		],
+		"uniques": [
+			"[+25]% Strength <vs [Ranged] units> <when defending>"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder",
+			"Archery",
+			"Ranged Gunpowder",
+			"Siege",
+			"Melee Water"
+		],
+		"row": 1,
+		"column": 24
 	},
 	{
 		"name": "Cover II",
-		"prerequisites": ["Cover I"],
-		"uniques": ["[+33]% Strength <vs [Ranged] units> <when defending>"],
-		"unitTypes": ["Sword","Gunpowder","Archery","Ranged Gunpowder","Siege"],
-        "column": 24,
-        "row": 2
+		"prerequisites": [
+			"Cover I"
+		],
+		"uniques": [
+			"[+25]% Strength <vs [Ranged] units> <when defending>"
+		],
+		"unitTypes": [
+			"Sword",
+			"Gunpowder",
+			"Archery",
+			"Ranged Gunpowder",
+			"Siege",
+			"Melee Water"
+		],
+		"row": 2,
+		"column": 24
 	},
 
 	{
@@ -612,11 +862,26 @@
 	},
 	{
 		"name": "Sentry",
-		"prerequisites": ["Shock I","Drill I","Bombardment I","Targeting I","Boarding Party I","Coastal Raider I","Wolfpack I","Flight Deck I","Armor Plating I"],
-		"uniques": ["[+1] Sight"],
-		"unitTypes": ["Mounted","Ranged Water","Armored","Melee Water","Submarine","Aircraft Carrier"],
-        "column": 24,
-        "row": 4
+		"prerequisites": [
+			"Shock II",
+			"Drill I",
+			"Targeting I",
+			"Bombardment II",
+			"Flight Deck I",
+			"Armor Plating II"
+		],
+		"uniques": [
+			"[+1] Sight"
+		],
+		"unitTypes": [
+			"Mounted",
+			"Ranged Water",
+			"Armored",
+			"Submarine",
+			"Aircraft Carrier"
+		],
+		"row": 4,
+		"column": 24
 	},
 	{
 		"name": "Logistics",
@@ -637,46 +902,80 @@
         "row": 1
 	},
 	{
-		"name": "Air Ambush I", // PROMOTION_AIR_AMBUSH_1: its own prerequisites, which air units can have
-		"prerequisites": ["Interception I","Dogfighting I","Siege I","Bombardment I"],
-		"uniques": ["[+33]% Strength <vs [Armored] units>", "[-100]% weight to this choice for AI decisions"],
-		"unitTypes": ["Fighter","Bomber"],
-        "column": 25,
-        "row": 2
+		"name": "Air Ambush I",
+		"prerequisites": [
+			"Siege II"
+		],
+		"uniques": [
+			"[+50]% Strength <vs [Armored] units>"
+		],
+		"unitTypes": [
+			"Bomber"
+		],
+		"row": 2,
+		"column": 25
 	},
 	{
 		"name": "Air Ambush II",
-		"prerequisites": ["Air Ambush I"],
-		"uniques": ["[+33]% Strength <vs [Armored] units>"],
-		"unitTypes": ["Fighter","Bomber"],
-        "column": 25,
-        "row": 3
+		"prerequisites": [
+			"Air Ambush I"
+		],
+		"uniques": [
+			"[+50]% Strength <vs [Armored] units>"
+		],
+		"unitTypes": [
+			"Bomber"
+		],
+		"row": 3,
+		"column": 25
 	},
 
 
 	// Water ranged and air units
 	{
 		"name": "Bombardment I",
-		"uniques": ["[+33]% Strength <vs [Land] units>"],
-		"unitTypes": ["Ranged Water","Bomber"],
-        "column": 26,
-        "row": 1
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+30]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Ranged Water",
+			"Bomber"
+		],
+		"row": 1,
+		"column": 26
 	},
 	{
 		"name": "Bombardment II",
-		"prerequisites": ["Bombardment I"],
-		"uniques": ["[+33]% Strength <vs [Land] units>"],
-		"unitTypes": ["Ranged Water","Bomber"],
-        "column": 26,
-        "row": 2
+		"prerequisites": [
+			"Bombardment I"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+30]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Ranged Water",
+			"Bomber"
+		],
+		"row": 2,
+		"column": 26
 	},
 	{
 		"name": "Bombardment III",
-		"prerequisites": ["Bombardment II"],
-		"uniques": ["[+34]% Strength <vs [Land] units>"],
-		"unitTypes": ["Ranged Water","Bomber"],
-        "column": 26,
-        "row": 3
+		"prerequisites": [
+			"Bombardment II"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+30]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Ranged Water",
+			"Bomber"
+		],
+		"row": 3,
+		"column": 26
 	},
 
 	// Uniques that should be kept on upgrades
@@ -864,5 +1163,580 @@
 	{	// For barbarian water units
 		"name": "Unable to pillage tiles",
 		"uniques": ["Unable to pillage tiles"]
+	},
+
+	// Vox Populi promotions (P6 M4, `rulegen applymilitary`)
+	{
+		"name": "Charge I",
+		"prerequisites": [
+			"Shock II"
+		],
+		"uniques": [
+			"[+20]% Strength <vs [Wounded] units>",
+			"[+10]% Strength <when fighting in [Open terrain] tiles> <when attacking>"
+		],
+		"unitTypes": [
+			"Armored",
+			"Mounted"
+		]
+	},
+	{
+		"name": "Formation II",
+		"prerequisites": [
+			"Formation I"
+		],
+		"uniques": [
+			"[+15]% Strength <when fighting in [Open terrain] tiles> <when defending>",
+			"[+33]% Strength <vs [Mounted] units>"
+		],
+		"unitTypes": [
+			"Armored",
+			"Gunpowder",
+			"Sword",
+			"Mounted"
+		]
+	},
+	{
+		"name": "Ace Pilot I",
+		"uniques": [
+			"[33]% chance to intercept air attacks"
+		],
+		"unitTypes": [
+			"Fighter"
+		]
+	},
+	{
+		"name": "Ace Pilot II",
+		"prerequisites": [
+			"Ace Pilot I"
+		],
+		"uniques": [
+			"[+33]% Damage when intercepting",
+			"[33]% chance to intercept air attacks"
+		],
+		"unitTypes": [
+			"Fighter"
+		]
+	},
+	{
+		"name": "Ace Pilot III",
+		"prerequisites": [
+			"Ace Pilot II"
+		],
+		"uniques": [
+			"[+33]% Damage when intercepting",
+			"[+1] Range",
+			"[34]% chance to intercept air attacks"
+		],
+		"unitTypes": [
+			"Fighter"
+		]
+	},
+	{
+		"name": "Ace Pilot IV",
+		"prerequisites": [
+			"Ace Pilot III"
+		],
+		"uniques": [
+			"[+34]% Damage when intercepting",
+			"[+1] Range",
+			"[1] extra interceptions may be made per turn"
+		],
+		"unitTypes": [
+			"Fighter"
+		]
+	},
+	{
+		"name": "Air Logistics",
+		"prerequisites": [
+			"Siege III",
+			"Air Targeting III"
+		],
+		"uniques": [
+			"[1] additional attacks per turn"
+		],
+		"unitTypes": [
+			"Bomber"
+		]
+	},
+	{
+		"name": "Hull I",
+		"uniques": [
+			"[+10]% Strength",
+			"[+10] maximum hit points"
+		],
+		"unitTypes": [
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Hull II",
+		"prerequisites": [
+			"Hull I"
+		],
+		"uniques": [
+			"[+10]% Strength",
+			"[+15] maximum hit points"
+		],
+		"unitTypes": [
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Hull III",
+		"prerequisites": [
+			"Hull II"
+		],
+		"uniques": [
+			"[+10]% Strength",
+			"[+15] maximum hit points"
+		],
+		"unitTypes": [
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Torpedo I",
+		"uniques": [
+			"[+30]% Strength <vs [Land] units> <when attacking>",
+			"[+30]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Submarine"
+		]
+	},
+	{
+		"name": "Torpedo II",
+		"prerequisites": [
+			"Torpedo I"
+		],
+		"uniques": [
+			"[+30]% Strength <vs [Land] units> <when attacking>",
+			"[+30]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Submarine"
+		]
+	},
+	{
+		"name": "Torpedo III",
+		"prerequisites": [
+			"Torpedo II"
+		],
+		"uniques": [
+			"[+30]% Strength <vs [Land] units> <when attacking>",
+			"[+30]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Submarine"
+		]
+	},
+	{
+		"name": "Air Penetration I",
+		"prerequisites": [
+			"Air Targeting II"
+		],
+		"uniques": [
+			"[33]% chance to evade interception"
+		],
+		"unitTypes": [
+			"Bomber"
+		]
+	},
+	{
+		"name": "Air Penetration II",
+		"prerequisites": [
+			"Air Penetration I"
+		],
+		"uniques": [
+			"[33]% chance to evade interception"
+		],
+		"unitTypes": [
+			"Bomber"
+		]
+	},
+	{
+		"name": "Interceptor I",
+		"uniques": [
+			"[15]% chance to intercept air attacks"
+		],
+		"unitTypes": [
+			"Aircraft Carrier",
+			"Gunpowder",
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Interceptor II",
+		"prerequisites": [
+			"Interceptor I"
+		],
+		"uniques": [
+			"[15]% chance to intercept air attacks"
+		],
+		"unitTypes": [
+			"Aircraft Carrier",
+			"Gunpowder",
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Interceptor III",
+		"prerequisites": [
+			"Interceptor II"
+		],
+		"uniques": [
+			"[15]% chance to intercept air attacks"
+		],
+		"unitTypes": [
+			"Aircraft Carrier",
+			"Gunpowder",
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Interceptor IV",
+		"prerequisites": [
+			"Interceptor III"
+		],
+		"uniques": [
+			"[15]% chance to intercept air attacks"
+		],
+		"unitTypes": [
+			"Aircraft Carrier",
+			"Gunpowder",
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Air Supremacy I",
+		"uniques": [
+			"[+100]% Strength <vs [Air] units>"
+		],
+		"unitTypes": [
+			"Fighter"
+		]
+	},
+	{
+		"name": "Air Supremacy II",
+		"prerequisites": [
+			"Air Supremacy I"
+		],
+		"uniques": [
+			"[+100]% Strength <vs [Air] units>"
+		],
+		"unitTypes": [
+			"Fighter"
+		]
+	},
+	{
+		"name": "Eagle Hunter",
+		"prerequisites": [
+			"Dogfighting I"
+		],
+		"uniques": [
+			"[+33]% Strength <vs [Fighter] units>"
+		],
+		"unitTypes": [
+			"Fighter"
+		]
+	},
+	{
+		"name": "Siege I (Land)",
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+15]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Siege"
+		]
+	},
+	{
+		"name": "Siege II (Land)",
+		"prerequisites": [
+			"Siege I (Land)"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+15]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Siege"
+		]
+	},
+	{
+		"name": "Siege III (Land)",
+		"prerequisites": [
+			"Siege II (Land)"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+15]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Siege"
+		]
+	},
+	{
+		"name": "Field I",
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+10]% Strength <when fighting in [Open terrain] tiles> <when attacking>"
+		],
+		"unitTypes": [
+			"Siege"
+		]
+	},
+	{
+		"name": "Field II",
+		"prerequisites": [
+			"Field I"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+10]% Strength <when fighting in [Open terrain] tiles> <when attacking>"
+		],
+		"unitTypes": [
+			"Siege"
+		]
+	},
+	{
+		"name": "Field III",
+		"prerequisites": [
+			"Field II"
+		],
+		"uniques": [
+			"[+10]% Strength <when making a ranged attack>",
+			"[+10]% Strength <when fighting in [Open terrain] tiles> <when attacking>"
+		],
+		"unitTypes": [
+			"Siege"
+		]
+	},
+	{
+		"name": "Trailblazer I",
+		"uniques": [
+			"[+1] Sight",
+			"[+1] Sight <when [Embarked]>",
+			"Ignores terrain cost in [Hill] tiles",
+			"Ignores terrain cost in [Jungle] tiles",
+			"Ignores terrain cost in [Forest] tiles"
+		],
+		"unitTypes": [
+			"Scout"
+		]
+	},
+	{
+		"name": "Trailblazer II",
+		"prerequisites": [
+			"Trailblazer I"
+		],
+		"uniques": [
+			"Eliminates combat penalty for attacking over a river",
+			"[+1] Movement",
+			"Ignores terrain cost in [Desert] tiles",
+			"Ignores terrain cost in [Snow] tiles",
+			"Ignores terrain cost in [Marsh] tiles"
+		],
+		"unitTypes": [
+			"Scout"
+		]
+	},
+	{
+		"name": "Coastal Artillery",
+		"prerequisites": [
+			"Field I"
+		],
+		"uniques": [
+			"[+50]% Strength <vs [Melee Water] units>",
+			"[+50]% Strength <vs [Ranged Water] units>",
+			"[+50]% Strength <vs [Aircraft Carrier] units>"
+		],
+		"unitTypes": [
+			"Siege"
+		]
+	},
+	{
+		"name": "Charge II",
+		"prerequisites": [
+			"Charge I"
+		],
+		"uniques": [
+			"[+20]% Strength <vs [Wounded] units>",
+			"[+10]% Strength <when fighting in [Open terrain] tiles> <when attacking>"
+		],
+		"unitTypes": [
+			"Armored",
+			"Mounted"
+		]
+	},
+	{
+		"name": "Air Targeting III",
+		"prerequisites": [
+			"Air Targeting II"
+		],
+		"uniques": [
+			"[+25]% Strength <vs [Land] units> <when attacking>",
+			"[+25]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Bomber"
+		]
+	},
+	{
+		"name": "Firing Doctrine",
+		"prerequisites": [
+			"Barrage III",
+			"Field III"
+		],
+		"uniques": [
+			"[+25]% Strength <vs units above half health>"
+		],
+		"unitTypes": [
+			"Archery",
+			"Ranged Gunpowder",
+			"Siege"
+		]
+	},
+	{
+		"name": "Broadside",
+		"prerequisites": [
+			"Bombardment III"
+		],
+		"uniques": [
+			"[+40]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Ranged Water"
+		]
+	},
+	{
+		"name": "Blockade",
+		"prerequisites": [
+			"Hull III"
+		],
+		"uniques": [
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
+			"Withdraws before melee combat <with [100]% chance>"
+		],
+		"unitTypes": [
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Coup de Grace",
+		"prerequisites": [
+			"Accuracy III"
+		],
+		"uniques": [
+			"Only for mounted units",
+			"[+30]% Strength <vs units at or below half health>"
+		],
+		"unitTypes": [
+			"Archery",
+			"Ranged Gunpowder"
+		]
+	},
+	{
+		"name": "Sentry (Archer)",
+		"prerequisites": [
+			"Accuracy III"
+		],
+		"uniques": [
+			"[+1] Sight",
+			"Only for mounted units"
+		],
+		"unitTypes": [
+			"Archery",
+			"Ranged Gunpowder"
+		]
+	},
+	{
+		"name": "Shrapnel Rounds I",
+		"prerequisites": [
+			"Bombardment III"
+		],
+		"uniques": [
+			"[+50]% Strength <vs [Land] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Ranged Water"
+		]
+	},
+	{
+		"name": "Shrapnel Rounds II",
+		"prerequisites": [
+			"Shrapnel Rounds I"
+		],
+		"uniques": [
+			"[+50]% Strength <vs [Land] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Ranged Water"
+		]
+	},
+	{
+		"name": "Vanguard",
+		"prerequisites": [
+			"Hull III"
+		],
+		"uniques": [
+			"[+125]% Strength <vs cities> <when attacking>",
+			"[50]% less damage from cities"
+		],
+		"unitTypes": [
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Naval Siege",
+		"prerequisites": [
+			"Hull II"
+		],
+		"uniques": [
+			"May heal outside of friendly territory",
+			"[+75]% Strength <vs cities> <when attacking>"
+		],
+		"unitTypes": [
+			"Melee Water"
+		]
+	},
+	{
+		"name": "Aerial Torpedo",
+		"prerequisites": [
+			"Ace Pilot III"
+		],
+		"uniques": [
+			"[+33]% Strength <vs [Water] units> <when attacking>"
+		],
+		"unitTypes": [
+			"Fighter"
+		]
+	},
+	{
+		"name": "Hunter Killer",
+		"prerequisites": [
+			"Torpedo II"
+		],
+		"uniques": [
+			"Can see invisible [Submarine] units",
+			"[+50]% Strength <vs [Submarine] units>"
+		],
+		"unitTypes": [
+			"Submarine"
+		]
+	},
+	{
+		"name": "Periscope Depth",
+		"prerequisites": [
+			"Torpedo III"
+		],
+		"uniques": [
+			"[+40]% Strength <vs [Ranged] units> <when defending>",
+			"Withdraws before melee combat <with [100]% chance>"
+		],
+		"unitTypes": [
+			"Submarine"
+		]
 	}
 ]

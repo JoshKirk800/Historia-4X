@@ -3,11 +3,15 @@ package com.unciv.logic.automation.unit
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
+import com.unciv.logic.automation.unit.tactical.PillageRules
+import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.PromotionAiDef
+import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.Promotion
 import kotlin.random.Random
@@ -52,9 +56,7 @@ object PromotionAi {
             var bestValue = 0
             val effects = UnitEffects(unit, rules)
             for (promotion in unit.promotions.getAvailablePromotions()) {
-                val def = rules.promotionAiOf(promotion.name) ?: continue
-                if (!canTake(unit, def)) continue
-                val value = promotionValue(unit, effects, def, random)
+                val value = rate(unit, rules.promotionAiOf(promotion.name), effects, promotion, random)
                 if (value > bestValue) {
                     bestValue = value
                     best = promotion
@@ -113,12 +115,27 @@ object PromotionAi {
     /** CvUnit::AI_promotionValue of [promotion] for [unit]: 0 for one the original rates nothing of or the unit cannot take */
     fun promotionValue(unit: MapUnit, promotion: Promotion, random: Random): Int {
         val rules = unit.civ.gameInfo.ruleset.ai
-        val def = rules.promotionAiOf(promotion.name) ?: return 0
-        if (!canTake(unit, def)) return 0
-        return promotionValue(unit, UnitEffects(unit, rules), def, random)
+        val def = rules.promotionAiOf(promotion.name)
+        return rate(unit, def, if (def != null) UnitEffects(unit, rules) else null, promotion, random)
     }
 
-    private fun promotionValue(unit: MapUnit, own: UnitEffects, p: PromotionAiDef, random: Random): Int {
+    /**
+     *  The rating of [promotion] for [unit]: the columns of its [def] row, if it has one and the unit can take it ([rowValue]), plus what
+     *  [vpUniqueValue] reads from the promotion's own uniques; positive ones get the roll, as the original adds it to the one value it computes.
+     *  [effects] is the unit's, needed with a [def].
+     */
+    private fun rate(unit: MapUnit, def: PromotionAiDef?, effects: UnitEffects?, promotion: Promotion, random: Random): Int {
+        var value = 0
+        if (def != null && effects != null) {
+            if (!canTake(unit, def)) return 0
+            value = rowValue(unit, effects, def)
+        }
+        value += vpUniqueValue(unit, promotion)
+        if (value > 0) value += random.nextInt(ROLL_RANGE)
+        return value
+    }
+
+    private fun rowValue(unit: MapUnit, own: UnitEffects, p: PromotionAiDef): Int {
         val ai = unit.civ.ai
         val offense = ai.personality(Flavor.Offense)
         val defense = ai.personality(Flavor.Defense)
@@ -279,11 +296,125 @@ object PromotionAi {
             }
         }
 
-        if (value > 0) value += random.nextInt(ROLL_RANGE)
         return value
     }
 
     private const val ROLL_RANGE = 15
+
+    /**
+     *  The terms of Vox Populi's CvUnit::AI_promotionValue (Release-5.4.8) for what the military flip's promotions do that the Brave New World rows
+     *  ([PromotionAiDef]) do not describe, read from the promotion's uniques with the original's flavor weights and factors; each is added only where the
+     *  engine reads the unique (its ModConstants switch is on), and the unit's own promotions stand for the original's `getExtra...` sums:
+     *  - `[amount] maximum hit points` (MaxHitPointsChange; `unitMaxHitPointsLikeVp`): half of amount x (offense + defense + city defense) for a shooter, else amount x (2 offense + defense);
+     *  - `[+n]% Strength` against units above half health (AttackAboveHealthMod), at or below half health (AttackBelowHealthMod, with what killing heals,
+     *    mounted x1.5) and fully healed (AttackFullyHealedMod): (n + the unit's own) x flavors x a factor by shooter or not;
+     *  - `[amount] extra flanking power` (ExtraFlankPower; `flankPowerLikeVp`): amount x (offense + mobile + recon), by the unit's flank bonus and (2 + moves) / 2;
+     *  - `Ignores terrain cost in`, `Half movement in` and `[amount] extra movement cost in` (IgnoreTerrainCostIn, TerrainHalfMove, TerrainExtraMove; `terrainMovementPromotionsLikeVp`)
+     *    for each terrain that matches and costs more than 1 (the half and extra ones, which cost, are negative), the more for a unit that gains XP from scouting;
+     *  - `Gains XP from scouting` (`scoutingXpLikeVp`) and `[amount] XP when pillaging` (`pillageXpLikeVp`);
+     *  - `[amount] air defense` (LandAirDefenseBonus; `airDefenseLikeVp`), doubled while we need air units, and `[amount]% chance to evade interception`
+     *    (EvasionChange; `airInterceptionLikeVp`).
+     *  The original adds up doubles and truncates once; so does this.
+     */
+    private fun vpUniqueValue(unit: MapUnit, promotion: Promotion): Int {
+        val uniques = promotion.uniqueObjects
+        if (uniques.isEmpty()) return 0
+        val civ = unit.civ
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        val ai = civ.ai
+        val offense = ai.personality(Flavor.Offense)
+        val defense = ai.personality(Flavor.Defense)
+        val cityDefense = ai.personality(Flavor.CityDefense)
+        val recon = ai.personality(Flavor.Recon)
+        val mobile = ai.personality(Flavor.Mobile)
+        val air = ai.personality(Flavor.Air)
+        val isRanged = unit.baseUnit.isRanged()
+        val baseMoves = unit.getMaxMovementWhenEmbarked(false, ignoreOtherUnit = true)
+        val scouts = unit.cache.gainsXpFromScouting
+        var value = 0.0
+
+        fun total(source: List<Unique>, type: UniqueType) = source.filter { it.type == type }.sumOf { it.params[0].toInt() }
+        fun strengthVs(source: List<Unique>, conditional: UniqueType) =
+            source.filter { it.type == UniqueType.Strength && it.modifiers.any { modifier -> modifier.type == conditional } }.sumOf { it.params[0].toInt() }
+        val own by lazy { unit.promotions.getPromotions().flatMap { it.uniqueObjects }.toList() }
+
+        if (constants.unitMaxHitPointsLikeVp) {
+            val amount = total(uniques, UniqueType.MaxHitPointsChange)
+            if (amount != 0) value += if (isRanged) amount * (offense + defense + cityDefense) * 0.5 else amount * (2 * offense + defense).toDouble()
+        }
+
+        val aboveHalf = strengthVs(uniques, UniqueType.ConditionalVsAboveHalfHealth)
+        if (aboveHalf != 0)
+            value += (aboveHalf + strengthVs(own, UniqueType.ConditionalVsAboveHalfHealth)) * (defense + 2 * cityDefense) * (if (isRanged) 0.45 else 0.2)
+        val belowHalf = strengthVs(uniques, UniqueType.ConditionalVsHalfHealthOrBelow)
+        if (belowHalf != 0) {
+            var extra = strengthVs(own, UniqueType.ConditionalVsHalfHealthOrBelow)
+            unit.forEachMatchingUnique(UniqueType.HealsAfterKilling, checkCivInfoUniques = true) { extra += it.params[0].toInt() }
+            var term = (belowHalf + extra) * (defense + 2 * offense) * (if (isRanged) 0.25 else 0.4)
+            if (MapUnitCombatant(unit).matchesOpponentFilter("Mounted")) term *= 1.5
+            value += term
+        }
+        val fullyHealed = strengthVs(uniques, UniqueType.ConditionalVsFullyHealed)
+        if (fullyHealed != 0)
+            value += (fullyHealed + strengthVs(own, UniqueType.ConditionalVsFullyHealed)) * (defense + 2 * cityDefense) * (if (isRanged) 0.3 else 0.15)
+
+        if (constants.flankPowerLikeVp) {
+            val power = total(uniques, UniqueType.ExtraFlankPower)
+            if (power > 0) {
+                var flankBonus = 0
+                unit.forEachMatchingUnique(UniqueType.FlankAttackBonus, checkCivInfoUniques = true) { flankBonus += it.params[0].toInt() }
+                value += power * (offense + mobile + recon) * (100 + flankBonus) / 100.0 * ((2 + baseMoves) / 2)
+            }
+        }
+
+        if (constants.terrainMovementPromotionsLikeVp) {
+            val terrains = civ.gameInfo.ruleset.terrains.values
+            val ignoresAll = unit.hasUnique(UniqueType.IgnoresTerrainCost)
+            fun filtersOf(type: UniqueType): List<String> {
+                val filters = ArrayList<String>()
+                unit.forEachMatchingUnique(type, gameContext = GameContext.IgnoreConditionals) { filters += it.params[if (type == UniqueType.ExtraMovementCostIn) 1 else 0] }
+                return filters
+            }
+            val ownIgnore = filtersOf(UniqueType.IgnoresTerrainCostIn)
+            val ownHalf = filtersOf(UniqueType.HalfMovementIn)
+            val ownExtra = filtersOf(UniqueType.ExtraMovementCostIn)
+            for (unique in uniques) {
+                when (unique.type) {
+                    UniqueType.IgnoresTerrainCostIn -> if (!ignoresAll) for (terrain in terrains)
+                        if (terrain.movementCost > 1 && terrain.matchesFilter(unique.params[0]) && ownIgnore.none { terrain.matchesFilter(it) })
+                            value += (mobile * 2 + recon) * 8 * (if (scouts) 3 else 1)
+                    UniqueType.HalfMovementIn -> for (terrain in terrains)
+                        if (terrain.matchesFilter(unique.params[0]) && ownHalf.none { terrain.matchesFilter(it) })
+                            value += mobile * 3 * -8 * (if (scouts) 2 else 1)
+                    UniqueType.ExtraMovementCostIn -> for (terrain in terrains)
+                        if (terrain.matchesFilter(unique.params[1]) && ownExtra.none { terrain.matchesFilter(it) })
+                            value += mobile * 3 * -5 * (if (scouts) 1.8 else 1.0)
+                    else -> Unit
+                }
+            }
+        }
+
+        if (constants.scoutingXpLikeVp && !scouts && uniques.any { it.type == UniqueType.GainsXpFromScouting })
+            value += (unit.getVisibilityRange() + baseMoves) * (3 * recon) * 5
+
+        if (constants.pillageXpLikeVp) {
+            val xp = total(uniques, UniqueType.XpFromPillaging)
+            if (xp > 0) value += xp * (offense + 2 * mobile) * baseMoves * (if (PillageRules.hasFreePillageMove(unit)) 2 else 1)
+        }
+
+        if (constants.airDefenseLikeVp) {
+            var amount = total(uniques, UniqueType.AirDefense)
+            if (amount != 0) {
+                if (ai.isMilitaryStrategyActive("MILITARYAISTRATEGY_NEED_AIR")) amount *= 2
+                value += amount * (3 * ai.personality(Flavor.Antiair)) * 0.4
+            }
+        }
+        if (constants.airInterceptionLikeVp) {
+            val evasion = total(uniques, UniqueType.EvadeInterception)
+            if (evasion != 0) value += evasion * (offense + 2 * air) * 0.5
+        }
+        return value.toInt()
+    }
 
     private fun doubleMoveValue(unitAi: UnitAiType, recon: Int, mobile: Int, offense: Int) = when (unitAi) {
         UnitAiType.EXPLORE -> 5 * (recon + mobile)

@@ -15,7 +15,8 @@ data class CityCombatConstants(
     var rangedStrengthModifier: Int = 0,
     var healing: Int = 8,
     var safeHealingMultiplier: Int = 3,
-    var defenseProcesses: Map<String, CityDefenseProcess> = emptyMap(),
+    /** Json can only instantiate a concrete map; its value type is read from this declaration */
+    var defenseProcesses: HashMap<String, CityDefenseProcess> = HashMap(),
     var landBlockadeRange: Int = 1,
     var navalBlockadeRange: Int = 1,
 )

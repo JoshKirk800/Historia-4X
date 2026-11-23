@@ -61,7 +61,8 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
     private val sourceCities = ArrayList<City>()
     /** The units that were in sight (or counted as in a city or camp) when this map was made, CvDangerPlots::m_knownUnits: the next turn's [previouslyKnown] */
     val knownUnits: Set<Int>
-    private val enemyHealRate = rules.define(AiDefine.ENEMY_HEAL_RATE)
+    /** What a unit heals in enemy territory: the engine's rate with `unitHealingLikeVp`, else the AI define */
+    private val enemyHealRate = civ.gameInfo.ruleset.modOptions.constants.let { if (it.unitHealingLikeVp) it.enemyUnitHeal else rules.define(AiDefine.ENEMY_HEAL_RATE) }
 
     private class Contents(val units: List<MapUnit>, val capturers: List<MapUnit>, val cities: List<City>)
 
@@ -301,7 +302,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
      */
     private fun canCapture(unit: MapUnit, tile: Tile): Boolean {
         if (unit.baseUnit.isAirUnit()) return false
-        if (unit.getTile().aerialDistanceTo(tile) > unit.baseUnit.movement.coerceAtLeast(1)) return false
+        if (unit.getTile().aerialDistanceTo(tile) > unit.reachMovement().coerceAtLeast(1)) return false
         val native = if (unit.baseUnit.isWaterUnit) tile.isWater || tile.isCityCenter() else !unit.isEmbarkedAt(tile)
         if (!native) return false
         if (unit.baseUnit.isRanged()) return true
@@ -378,7 +379,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
             if (unit.baseUnit.isAirUnit()) return distance <= unit.getRange()
             val ranged = unit.baseUnit.isRanged()
             val range = if (ranged) unit.getRange() else 1
-            if (distance > unit.baseUnit.movement.coerceAtLeast(1) + range) return false
+            if (distance > unit.reachMovement().coerceAtLeast(1) + range) return false
             return ranged || unit.baseUnit.isLandUnit == tile.isLand || tile.isCityCenter()
         }
 

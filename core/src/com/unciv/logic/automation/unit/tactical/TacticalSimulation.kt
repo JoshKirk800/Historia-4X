@@ -6,6 +6,7 @@ import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.AirMoves
+import com.unciv.logic.automation.unit.reachMovement
 import com.unciv.logic.battle.AttackableTile
 import com.unciv.logic.battle.Battle
 import com.unciv.logic.battle.BattleDamage
@@ -241,7 +242,7 @@ object TacticalSimulation {
             if (isCity && unit.hasUnique(UniqueType.CannotCaptureCities, checkCivInfoUniques = true)) continue
             val distance = unit.getTile().aerialDistanceTo(tile)
             // Do not bother if we are very far away
-            if (!air && distance > unit.baseUnit.movement.coerceAtLeast(1) * 4) continue
+            if (!air && distance > unit.reachMovement().coerceAtLeast(1) * 4) continue
             if (TacticalSafety.isCoveringFriendlyCivilian(ctx, unit)) continue
             var canReach = false
             if (air) canReach = distance <= unit.getRange()

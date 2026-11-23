@@ -26,7 +26,8 @@ import kotlin.math.min
  */
 object TacticalHealing {
 
-    /** CvUnit::shouldHeal(true): below this many hit points a unit heals whatever it could attack; below a third only if it can heal here and has nothing to hit */
+    /** CvUnit::shouldHeal(true): below this many hit points a unit heals whatever it could attack; below a third only if it can heal here and has nothing to hit.
+     *  This and the two damages below are absolute hit points, whatever the unit's maximum (CvUnit.cpp:29658, 29682); the third is its own GetMaxHitPoints() / 3 (29663). */
     private const val HARD_HEALTH_LIMIT = 13
     /** FindClosestSafePlotForHealing: a plot that heals more than this can be stayed on while there is nothing to fear */
     private const val GOOD_HEAL_RATE = 5

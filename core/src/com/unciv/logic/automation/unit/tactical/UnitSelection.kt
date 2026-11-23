@@ -99,7 +99,7 @@ object UnitSelection {
 
     /**
      *  CvTacticalAI::FindUnitsForHarassing: the units of the tactical AI that can be at [target] (or next to it, if an enemy holds it) within [turnsAway]
-     *  turns, the nearest first, at most [maxUnits]. A unit must have [minHealth] to [maxHealth] hit points (0 or less: no limit) and, outside the
+     *  turns, the nearest first, at most [maxUnits]. A unit must have [minHealth] to [maxHealth] hit points (0 or less: no limit; absolute hit points, as the callers pass MAX_HIT_POINTS fractions, CvTacticalAI.cpp:4856) and, outside the
      *  exception of a trade route plundered where the unit stands ([plunder]), not be a siege unit or carrier, not cover a civilian, face no more danger at the
      *  target than it has hit points and not be a garrison its city needs; no barbarian in its camp; of [water]'s domain (null: any). [moveLeft]: it must get
      *  there with movement to spare. Aircraft, which the original never recruits for these moves, are left out.

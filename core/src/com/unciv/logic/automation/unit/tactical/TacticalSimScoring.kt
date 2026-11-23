@@ -204,8 +204,9 @@ class SimScoring(private val w: SimWorld) {
             // Danger as well: with many enemies around we need our melee units as shields, do not waste hit points on attacks
             val tileAfterAttack = if (result.type == AssignmentType.MeleeKill) enemyTile else attackerTile
             val danger = w.danger(unit.index, tileAfterAttack, unit.selfDamage + damageReceived, pos.damageWith(result))
-            var belowHpLimit = danger > 100
-            // Self damage of previous attacks is not considered here, as in the original
+            // CvTacticalAI.cpp:7616: the danger is compared with the unit's own GetMaxHitPoints()
+            var belowHpLimit = danger > mu.getMaxHealth()
+            // Self damage of previous attacks is not considered here, as in the original; the limits are absolute hit points (CvTacticalAI.cpp:7272, 7618)
             if (mu.health - damageReceived < HP_LIMIT[aggression.ordinal]) belowHpLimit = true
             // The bias depends on the ratio of friendly to enemy units
             val scaledDamage = ((totalUnitDamageDealt + cityDamageDealt) * aggressionBias * factor + 0.5f).toInt()
@@ -265,7 +266,7 @@ class SimScoring(private val w: SimWorld) {
         if (adjacentEnemies > 3 || adjacentEnemies == 3 && pos.aggressionBias < 1)
             if (!frontlineCitadelOrCity) return Int.MAX_VALUE
 
-        val maxHitPoints = 100
+        val maxHitPoints = mu.getMaxHealth() // CvTacticalAI.cpp:7910: pUnit->GetMaxHitPoints()
         val currentHitPoints = mu.health - selfDamage
 
         // Unseen enemies might be hiding behind the edge, so assume danger there (unless it is a city)

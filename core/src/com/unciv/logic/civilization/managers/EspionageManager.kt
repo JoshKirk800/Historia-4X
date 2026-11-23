@@ -226,10 +226,10 @@ class EspionageManager : IsPartOfGameInfoSerialization {
 
     @Readonly
     fun getTilesVisibleViaSpies(): Sequence<Tile> {
-        val likeVp = civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp
         return spyList.asSequence()
             .filter { it.isSetUp() }
             .flatMap { spy ->
+                val likeVp = civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp
                 val city = spy.getCityOrNull() ?: return@flatMap emptySequence()
                 // Vox Populi: a spy gathering intel sees only what its passive bonuses show (SpyExtraVision), every other set up spy one ring (V:CvEspionageClasses.cpp:3401-3430)
                 val radius = if (likeVp && spy.action == SpyAction.GatheringIntel) spy.getBonuses().sumOf { b -> b.getMatchingUniques(UniqueType.SpyExtraVision).sumOf { it.params[0].toInt() } } else 1

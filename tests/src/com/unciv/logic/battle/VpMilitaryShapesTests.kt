@@ -151,6 +151,7 @@ class VpMilitaryShapesTests {
         religion.addBelief(belief)
         civ.religionManager.religion = religion
         city.religion.religionThisIsTheHolyCityOf = religion.name
+        city.religion.addPressure(religion.name, 100) // IsBeliefValid: a follower belief needs the holy city to follow the religion
         setFlag(game, "unitHealingLikeVp", true)
         setFlag(game, "stateReligionHealingLikeVp", true)
         assertEquals(29, unit.healingAmountForTile(tile, noTerrainDamage = true))
@@ -166,7 +167,7 @@ class VpMilitaryShapesTests {
         val promotion = com.unciv.models.ruleset.unit.Promotion().apply {
             name = "Territory medic"
             unitTypes = listOf(medic.type.name)
-            uniques = arrayListOf("[+7] HP healing for [Military] units on [All] tiles within [2] tiles")
+            uniques = arrayListOf("[+7] HP healing in neutral territory for [Military] units on [All] tiles within [2] tiles")
         }
         game.ruleset.unitPromotions[promotion.name] = promotion
         medic.promotions.addPromotion(promotion.name, isFree = true)

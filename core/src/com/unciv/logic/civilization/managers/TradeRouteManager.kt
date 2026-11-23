@@ -566,12 +566,11 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * The seam to the monopolies of slice T2 (CvPlayer::HasGlobalMonopoly, which the resource diversity of a route asks, V:CvTradeClasses.cpp:3010): whether [Civilization] has a
-     * global monopoly of the resource. Until the monopolies are merged nobody has one; at the merge this line becomes
-     * `val hasGlobalMonopoly: (Civilization, String) -> Boolean = { owner, resource -> owner.monopolies.hasGlobalMonopoly(resource) }`.
+     * CvPlayer::HasGlobalMonopoly, which the resource diversity of a route asks (V:CvTradeClasses.cpp:3010): whether [Civilization] has a
+     * global monopoly of the resource ([MonopolyManager], slice T2).
      */
     @Transient
-    val hasGlobalMonopoly: (Civilization, String) -> Boolean = { _, _ -> false }
+    val hasGlobalMonopoly: (Civilization, String) -> Boolean = { owner, resource -> owner.monopolies.hasGlobalMonopoly(resource) }
 
     /**
      * CvPlayer::GetYieldPerTurnFromResources (V:CvPlayer.cpp:18078-18130): what the civilization's uniques give every turn for each kind of luxury it exports in a deal

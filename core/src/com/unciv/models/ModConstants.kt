@@ -533,7 +533,35 @@ class ModConstants {
     var cityStateInfluence = CityStateInfluenceConstants()
 
     /**
-     *  Whether a major can give gold to a city-state for influence (the original's `CSD_GOLD_GIFT_DISABLED` is 1 in Vox Populi, whose human gift menu has units and tile improvements
+     *  The pledge to protect a city-state as in Vox Populi (CvMinorCivAI::CanMajorProtect, V:CvMinorCivAI.cpp:12367-12490, CanMajorWithdrawProtection, 12498-12520,
+     *  DoChangeProtectionFromMajor, 12291-12365, TestChangeProtectionFromMajor, 11979-12145; MOD_BALANCE_MINOR_PROTECTION_REQUIREMENTS) instead of Brave New World's: only a major whose
+     *  military might over its distance is at least the median of all the living majors', and that is the ally, has a trade route with the city-state or could make one, can
+     *  pledge; a pledge cannot be withdrawn for a while; a pledge that no longer qualifies ends after a warning, or at once below 0 influence, and costs influence for the era.
+     *  Off: the old rules. The numbers are in [CityStateProtectionConstants].
+     */
+    var cityStateProtectionLikeVp = false
+
+    /**
+     *  The defines of [cityStateProtectionLikeVp]. Can only be modded all-or-nothing; the defaults are Vox Populi 5.4.8's. [brokenTurns] `PLEDGE_BROKEN_MINIMUM_TURNS` and [bullyingTurns]
+     *  `PLEDGE_BROKEN_MINIMUM_TURNS_BULLYING`: the turns after a broken pledge, and after a tribute it demanded, in which it cannot pledge again (times the game speed's production
+     *  cost percentage); [minimumDuration] `BALANCE_MINOR_PROTECTION_MINIMUM_DURATION`; [warningTurns] the turns (times the same percentage) a pledge that no longer qualifies has to
+     *  qualify again, with a reminder every [reminderTurns]; [dishonourPerEra] `MINOR_FRIENDSHIP_DROP_DISHONOR_PLEDGE_TO_PROTECT` (-2000 in hundredths) the influence a broken pledge
+     *  costs for each era; [minimumInfluence] `FRIENDSHIP_THRESHOLD_CAN_PLEDGE_TO_PROTECT`; [militaryRequirement] `BALANCE_MINOR_PROTECTION_REQUIREMENTS`.
+     */
+    data class CityStateProtectionConstants(
+        val brokenTurns: Int = 20,
+        val bullyingTurns: Int = 30,
+        val minimumDuration: Int = 50,
+        val warningTurns: Int = 12,
+        val reminderTurns: Int = 4,
+        val dishonourPerEra: Int = 20,
+        val minimumInfluence: Int = 0,
+        val militaryRequirement: Boolean = true,
+    )
+    var cityStateProtection = CityStateProtectionConstants()
+
+    /**
+     *  Whether a major can give gold to a city-state (the original's `CSD_GOLD_GIFT_DISABLED` is 1 in Vox Populi, whose human gift menu has units and tile improvements
      *  instead, and `MINOR_GOLD_GIFT_SMALL`, `_MEDIUM` and `_LARGE` are 0, V:CvDiplomacyAI.cpp:36765). false: no gold gift, for the player and the AI
      */
     var cityStateGoldGifts = true

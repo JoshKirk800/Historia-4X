@@ -124,6 +124,10 @@ object DiplomacyTurnManager {
             setInfluence(min(restingPoint, influence + increment))
         }
 
+        // CvMinorCivAI::DoTurn tests each pledge (TestChangeProtectionFromMajor)
+        if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateProtectionLikeVp && otherCiv.isMajorCiv && !civInfo.isDefeated())
+            civInfo.cityStateFunctions.testProtection(otherCiv)
+
         if (!civInfo.isDefeated()) { // don't display city state relationship notifications when the city state is currently defeated
             val notificationActions = civInfo.cityStateFunctions.getNotificationActions()
             if (getTurnsToRelationshipChange() == 1) {

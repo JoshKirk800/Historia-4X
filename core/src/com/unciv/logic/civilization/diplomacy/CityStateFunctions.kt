@@ -351,6 +351,11 @@ class CityStateFunctions(val civInfo: Civilization) {
 
         val diplomacy = civInfo.getDiplomacyManager(otherCiv)!!
         diplomacy.diplomaticStatus = DiplomaticStatus.Protector
+        if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateProtectionLikeVp) {
+            diplomacy.turnLastPledged = civInfo.gameInfo.turns
+            diplomacy.turnsSincePledgeWarning = 0
+            return
+        }
         diplomacy.setFlag(DiplomacyFlags.RecentlyPledgedProtection, 10) // Can't break for 10 turns
     }
 
@@ -359,6 +364,10 @@ class CityStateFunctions(val civInfo: Civilization) {
             return
 
         val diplomacy = civInfo.getDiplomacyManager(otherCiv)!!
+        if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateProtectionLikeVp) {
+            endPledge(otherCiv, broken = false)
+            return
+        }
         diplomacy.diplomaticStatus = DiplomaticStatus.Peace
         diplomacy.setFlag(DiplomacyFlags.RecentlyWithdrewProtection, 20) // Can't re-pledge for 20 turns
         diplomacy.addInfluence(-20f)
@@ -370,6 +379,8 @@ class CityStateFunctions(val civInfo: Civilization) {
         if(!civInfo.isCityState || !otherCiv.isMajorCiv || otherCiv.isDefeated() || !civInfo.knows(otherCiv))
             return false
         val diplomacy = civInfo.getDiplomacyManager(otherCiv)!!
+        if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateProtectionLikeVp)
+            return diplomacy.diplomaticStatus != DiplomaticStatus.Protector && canMajorProtect(otherCiv, ignoreMilitaryRequirement = false)
         // Can't pledge too soon after withdrawing
         if (diplomacy.hasFlag(DiplomacyFlags.RecentlyWithdrewProtection))
             return false
@@ -385,12 +396,124 @@ class CityStateFunctions(val civInfo: Civilization) {
         return true
     }
 
+    /**
+     *  CvMinorCivAI::CanMajorProtect with `cityStateProtectionLikeVp` (V:CvMinorCivAI.cpp:12367-12490): both have capitals, they are not at war, [major] has the influence for it, is not
+     *  locked out by a pledge it broke or a tribute it demanded, is not weaker than the median of the majors by its might over its distance (unless [ignoreMilitaryRequirement]), and is
+     *  the ally, has a trade route with the city-state, or could make one
+     */
+    @Readonly
+    fun canMajorProtect(major: Civilization, ignoreMilitaryRequirement: Boolean): Boolean {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        val protection = constants.cityStateProtection
+        val capital = civInfo.getCapital() ?: return false
+        if (major.getCapital() == null || civInfo.isAtWarWith(major)) return false
+        val diplomacy = civInfo.getDiplomacyManager(major)!!
+        if (diplomacy.getInfluence() < protection.minimumInfluence) return false
+
+        val turn = civInfo.gameInfo.turns
+        val train = max(1, (civInfo.gameInfo.speed.productionCostModifier * 100).roundToInt())
+        if (diplomacy.turnLastPledgeBroken > -1 && protection.brokenTurns > 0 &&
+            turn - diplomacy.turnLastPledgeBroken < max(1, protection.brokenTurns * train / 100)) return false
+        if (diplomacy.turnLastBullied > -1 && protection.bullyingTurns > 0 && !major.hasUnique(UniqueType.CanBullyFriendlyCityStates) &&
+            turn - diplomacy.turnLastBullied < max(1, protection.bullyingTurns * train / 100)) return false
+
+        if (!protection.militaryRequirement) return true
+        if (!ignoreMilitaryRequirement) {
+            val strengths = ArrayList<Int>()
+            var majorStrength = 1
+            for (other in civInfo.gameInfo.getAliveMajorCivs().filter { it.cities.isNotEmpty() }) {
+                val distance = other.cities.minOf { it.getCenterTile().aerialDistanceTo(capital.getCenterTile()) }
+                val strength = CityStateProtection.strength(other.ai.militaryMight(), distance)
+                strengths.add(strength)
+                if (other == major && strength > 0) majorStrength = strength
+            }
+            if (!CityStateProtection.meetsMilitaryRequirement(strengths, majorStrength)) return false
+        }
+        return civInfo.allyCiv == major ||
+            major.tradeRoutes.routes.any { it.getDestinationCiv() == civInfo } || civInfo.tradeRoutes.routes.any { it.getDestinationCiv() == major } ||
+            canMakeTradeRouteWith(major)
+    }
+
+    /** CvPlayerTrade::GetNumTradeRoutesPossible() > 0 and CvGameTrade::CanCreateTradeRoute to the capital by land or by sea: whether [major] could send a trader here */
+    @Readonly
+    private fun canMakeTradeRouteWith(major: Civilization): Boolean {
+        val capital = civInfo.getCapital() ?: return false
+        if (major.tradeRoutes.getNumRoutesRemaining() <= 0) return false
+        for (isSea in listOf(false, true)) {
+            val baseRange = major.tradeRoutes.getTradeUnitType(isSea)?.let { major.tradeRoutes.getBaseRange(it) } ?: continue
+            if (major.cities.any { origin -> major.tradeRoutes.getDestinations(origin, isSea, baseRange).any { it.city == capital } }) return true
+        }
+        return false
+    }
+
+    /**
+     *  CvMinorCivAI::DoChangeProtectionFromMajor(false) with `cityStateProtectionLikeVp` (V:CvMinorCivAI.cpp:12291-12365): the pledge of [major] ends; a pledge that is [broken] costs
+     *  influence for each era of the major and locks it from pledging again for a while
+     */
+    private fun endPledge(major: Civilization, broken: Boolean) {
+        val diplomacy = civInfo.getDiplomacyManager(major)!!
+        diplomacy.diplomaticStatus = DiplomaticStatus.Peace
+        diplomacy.turnsSincePledgeWarning = 0
+        if (!broken) return
+        diplomacy.turnLastPledgeBroken = civInfo.gameInfo.turns
+        diplomacy.addInfluence(-(civInfo.gameInfo.ruleset.modOptions.constants.cityStateProtection.dishonourPerEra * max(1, major.getEraNumber())).toFloat())
+        major.addNotification("Your pledge to protect [${civInfo.civName}] is broken!", getNotificationActions(), NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy)
+    }
+
+    /**
+     *  CvMinorCivAI::TestChangeProtectionFromMajor (V:CvMinorCivAI.cpp:11979-12145), each turn of the city-state for a pledge of [major]: one that qualifies resets the warning; one that
+     *  does not is broken at once below 0 influence, else after the warning turns, with a reminder every few
+     */
+    fun testProtection(major: Civilization) {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        val diplomacy = civInfo.getDiplomacyManager(major) ?: return
+        if (diplomacy.diplomaticStatus != DiplomaticStatus.Protector) return
+        if (canMajorProtect(major, ignoreMilitaryRequirement = false)) {
+            diplomacy.turnsSincePledgeWarning = 0
+            return
+        }
+        if (civInfo.getCapital() == null || major.getCapital() == null) {
+            endPledge(major, broken = false)
+            return
+        }
+        val protection = constants.cityStateProtection
+        if (!protection.militaryRequirement) return
+        if (diplomacy.getInfluence() < protection.minimumInfluence) {
+            endPledge(major, broken = true)
+            return
+        }
+        val train = max(1, (civInfo.gameInfo.speed.productionCostModifier * 100).roundToInt())
+        when (CityStateProtection.warningStep(protection, diplomacy.turnsSincePledgeWarning, train)) {
+            CityStateProtection.Warning.End -> endPledge(major, broken = true)
+            CityStateProtection.Warning.Begin -> {
+                diplomacy.turnsSincePledgeWarning = 1
+                warnProtector(major)
+            }
+            CityStateProtection.Warning.Remind -> {
+                warnProtector(major)
+                diplomacy.turnsSincePledgeWarning++
+            }
+            CityStateProtection.Warning.Continue -> diplomacy.turnsSincePledgeWarning++
+        }
+    }
+
+    private fun warnProtector(major: Civilization) {
+        major.addNotification("Your pledge to protect [${civInfo.civName}] no longer qualifies, and will end if it does not soon!",
+            getNotificationActions(), NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy)
+    }
+
     @Readonly
     fun otherCivCanWithdrawProtection(otherCiv: Civilization): Boolean {
         // Must be a known city state
         if(!civInfo.isCityState || !otherCiv.isMajorCiv || otherCiv.isDefeated() || !civInfo.knows(otherCiv))
             return false
         val diplomacy = civInfo.getDiplomacyManager(otherCiv)!!
+        if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateProtectionLikeVp) {
+            // CvMinorCivAI::CanMajorWithdrawProtection (V:CvMinorCivAI.cpp:12498-12520): locked in for the minimum duration
+            val protection = civInfo.gameInfo.ruleset.modOptions.constants.cityStateProtection
+            return diplomacy.diplomaticStatus == DiplomaticStatus.Protector &&
+                !(diplomacy.turnLastPledged >= 0 && diplomacy.turnLastPledged + protection.minimumDuration > civInfo.gameInfo.turns)
+        }
         // Can't withdraw too soon after pledging
         if (diplomacy.hasFlag(DiplomacyFlags.RecentlyPledgedProtection))
             return false

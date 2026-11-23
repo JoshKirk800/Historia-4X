@@ -379,6 +379,8 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | workboatAutomationSearchMaxTiles         | Int    | 37                            | [^M]  |
 | cityStateInfluenceLikeVp                 | Boolean | false                        | How the influence with a City-State changes each turn as in Vox Populi instead of Brave New World's: a protector's resting point is 5 (not 10), the decay grows with the points over the resting point, is three times as fast towards a protector whose capital is damaged, the trade route bonus is multiplied by the number of routes to City-States (at most 5), the change is divided by the game speed's production cost percentage, and an ally stays until another civilization has more influence |
 | cityStateInfluence                       | Object  | [See below](#citystateinfluenceconstants) | The defines of that model, only read with `cityStateInfluenceLikeVp` |
+| cityStateProtectionLikeVp                | Boolean | false                        | The pledge to protect a City-State as in Vox Populi instead of Brave New World's: only a civilization whose military might over its distance is at least the median of all, and that is the ally, has a trade route with the City-State or could make one, can pledge; it cannot be withdrawn for 50 turns; one that no longer qualifies ends after a warning of 12 turns, or at once below 0 influence, and costs influence for the era |
+| cityStateProtection                    | Object  | [See below](#citystateprotectionconstants) | The defines of that model, only read with `cityStateProtectionLikeVp` |
 | cityStateGoldGifts                       | Boolean | true                         | Whether gold can be given to a City-State for influence, by the player and by the AI. Vox Populi has none (`CSD_GOLD_GIFT_DISABLED`) |
 | cityStateBullyLikeVp                     | Boolean | false                        | Demanding tribute as in Vox Populi instead of Brave New World's: the score is the share of the military might and the local power with no base reluctance and no penalty for low influence, gold needs a score of 20 and the heavy tribute (the worker) 100, a demand costs 30 influence and what the civilization has over its resting point, and the `upon demanding tribute from a City-State` yields are paid |
 | cityStateBully                           | Object  | [See below](#citystatebullyconstants) | The defines of that model, only read with `cityStateBullyLikeVp` |
@@ -712,6 +714,21 @@ The defines of `cityStateBullyLikeVp`, with the penalties as positive numbers. T
 | militaristicPenalty | Int | 10 | For a Militaristic City-State |
 | liberatedPenalty | Int | 100 | Taken off the score for a City-State liberated within `recentlyLiberatedTurns` |
 | scoreCap | Int | 100 | The highest score |
+
+#### CityStateProtectionConstants
+
+The defines of `cityStateProtectionLikeVp`. These values are not merged individually, only the entire sub-structure is. The defaults are Vox Populi 5.4.8's.
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| brokenTurns | Int | 20 | `PLEDGE_BROKEN_MINIMUM_TURNS`: the turns after a broken pledge in which it cannot be made again (times the game speed's production cost percentage) |
+| bullyingTurns | Int | 30 | `PLEDGE_BROKEN_MINIMUM_TURNS_BULLYING`: the same after a tribute demanded from the City-State, unless the civilization can bully friendly City-States |
+| minimumDuration | Int | 50 | `BALANCE_MINOR_PROTECTION_MINIMUM_DURATION`: the turns a pledge cannot be withdrawn |
+| warningTurns | Int | 12 | The turns (times the same percentage) a pledge that no longer qualifies has to qualify again |
+| reminderTurns | Int | 4 | A reminder every this many turns of the warning |
+| dishonourPerEra | Int | 20 | `MINOR_FRIENDSHIP_DROP_DISHONOR_PLEDGE_TO_PROTECT`: the influence a broken pledge costs for each era of the civilization |
+| minimumInfluence | Int | 0 | `FRIENDSHIP_THRESHOLD_CAN_PLEDGE_TO_PROTECT` |
+| militaryRequirement | Boolean | true | `BALANCE_MINOR_PROTECTION_REQUIREMENTS`: the median of the military and the ally, trade route or possible route |
 
 #### EspionageConstants
 

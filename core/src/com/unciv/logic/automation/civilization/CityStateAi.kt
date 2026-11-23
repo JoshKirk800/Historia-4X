@@ -110,6 +110,8 @@ object CityStateAi {
 
     /** CvMinorCivAI::CanMajorProtect: not at war, influence not negative, not in the lock-out after a pledge ended (Unciv's 20 turns after a withdrawal) */
     fun canMajorProtect(minor: Civilization, major: Civilization): Boolean {
+        // with `cityStateProtectionLikeVp` the whole rule: the military and the ally, trade route or possible route
+        if (minor.gameInfo.ruleset.modOptions.constants.cityStateProtectionLikeVp) return minor.cityStateFunctions.canMajorProtect(major, ignoreMilitaryRequirement = false)
         if (minor.isAtWarWith(major)) return false
         val diplomacy = minor.getDiplomacyManager(major) ?: return false
         if (diplomacy.getInfluence() < 0) return false

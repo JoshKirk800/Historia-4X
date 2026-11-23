@@ -278,6 +278,13 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
     /** For city-states: the game turn this major last demanded tribute from it (CvMinorCivAI::m_aiTurnLastBullied), -1 if it never did. Only kept with [com.unciv.models.ModConstants.cityStateBullyLikeVp] */
     var turnLastBullied = -1
 
+    /** For city-states: the game turn this major last pledged to protect it (CvMinorCivAI::m_aiTurnLastPledgedProtectionByMajor), -1 if it never did. Only kept with `cityStateProtectionLikeVp` */
+    var turnLastPledged = -1
+    /** For city-states: the game turn a pledge of this major last ended because it was broken (m_aiTurnLastPledgeBrokenByMajor), -1 if none was */
+    var turnLastPledgeBroken = -1
+    /** For city-states: the turns since the pledge of this major stopped qualifying (m_aiNumTurnsSincePtPWarning), 0 if it qualifies */
+    var turnsSincePledgeWarning = 0
+
     /** For city-states: what a Great Diplomat's mission or the liberation of the city-state added to the resting point of this major's influence (CvMinorCivAI::GetRestingPointChange).
      *  Only with [com.unciv.models.ModConstants.cityStateInfluenceLikeVp] */
     var restingPointChange = 0f
@@ -293,6 +300,9 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         toReturn.influence = influence
         toReturn.turnLastBullied = turnLastBullied
         toReturn.restingPointChange = restingPointChange
+        toReturn.turnLastPledged = turnLastPledged
+        toReturn.turnLastPledgeBroken = turnLastPledgeBroken
+        toReturn.turnsSincePledgeWarning = turnsSincePledgeWarning
         toReturn.flagsCountdown.putAll(flagsCountdown)
         toReturn.diplomaticModifiers.putAll(diplomaticModifiers)
         toReturn.negativeArchaeologyPoints = negativeArchaeologyPoints

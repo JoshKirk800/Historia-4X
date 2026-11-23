@@ -10,6 +10,7 @@ import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -89,6 +90,8 @@ class CityStateQuestRewardsTests {
     private val major: Civilization = game.addCiv("City-State quest rewards are increased by [50]%")
     private val plain: Civilization = game.addCiv()
 
+    private var originalInfluence = 0f
+
     @Before
     fun setUp() {
         game.makeHexagonalMap(4)
@@ -98,10 +101,17 @@ class CityStateQuestRewardsTests {
         cityState.cityStatePersonality = CityStatePersonality.Neutral
         for (civ in listOf(major, plain)) civ.diplomacyFunctions.makeCivilizationsMeet(cityState)
         val quest = game.ruleset.quests["Route"]!!
+        originalInfluence = quest.influence
         quest.influence = 40f
         quest.gold = 60
         quest.culture = 20
         game.ruleset.modOptions.constants.cityStateQuestsLikeVp = true
+    }
+
+    /** The rulesets are cloned per game but the quests in them are shared: put back what the tests changed */
+    @After
+    fun tearDown() {
+        game.ruleset.quests["Route"]!!.apply { gold = 0; culture = 0; influence = originalInfluence }
     }
 
     private fun assign(civ: Civilization) =

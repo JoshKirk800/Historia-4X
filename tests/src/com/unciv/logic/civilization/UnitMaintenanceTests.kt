@@ -8,7 +8,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** CvTreasury::CalculateUnitCost with the BNW GlobalDefines: 0.5 gold per unit, none free,
+/** CvTreasury::CalculateUnitCost with the Brave New World divisor (the ruleset itself has Vox Populi's 5 now, see VpConstantsTests): 0.5 gold per unit, none free,
  *  (paid x 0.5 x (1 + 8 x progress)) ^ (1 + progress / 7), progress = turn / turns of the game speed */
 @RunWith(GdxTestRunner::class)
 class UnitMaintenanceTests {
@@ -18,6 +18,7 @@ class UnitMaintenanceTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        game.ruleset.modOptions.constants.unitMaintenanceExponentDivisor = 7f
         game.makeHexagonalMap(4)
         game.setDifficulty("Prince") // a human of this level pays 100 % of the unit cost
         civ = game.addCiv(isPlayer = true)

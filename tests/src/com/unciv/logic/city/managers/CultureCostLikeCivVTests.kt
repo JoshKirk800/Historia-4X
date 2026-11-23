@@ -3,6 +3,7 @@ package com.unciv.logic.city.managers
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
+import com.unciv.models.ModConstants
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
@@ -22,6 +23,8 @@ class CultureCostLikeCivVTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // the numbers of Brave New World; the ruleset itself has Vox Populi's 20, 12 and 1.35 now (see VpConstantsTests)
+        game.ruleset.modOptions.constants.borderCulture = ModConstants.BorderCultureConstants()
         game.makeHexagonalMap(6)
         civ = game.addCiv()
         city = game.addCity(civ, game.getTile(HexCoord.Zero))

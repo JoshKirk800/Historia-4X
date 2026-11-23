@@ -11,7 +11,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Great People from points as in the original game: CvCityCitizens::DoSpecialists and GetSpecialistUpgradeThreshold */
+/** Great People from points as in the original game: CvCityCitizens::DoSpecialists and GetSpecialistUpgradeThreshold, with the thresholds of Brave New World
+ *  (base 100, plus 100 for each Great Person of the group; the ruleset itself has Vox Populi's 150 and 250 now, see VpConstantsTests) */
 @RunWith(GdxTestRunner::class)
 class GreatPersonProgressTests {
     private val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
@@ -21,6 +22,8 @@ class GreatPersonProgressTests {
 
     @Before
     fun setUp() {
+        game.ruleset.modOptions.constants.greatPersonThresholdBase = 100
+        game.ruleset.modOptions.constants.greatPersonThresholdIncrease = 100
         game.makeHexagonalMap(8)
         game.setSpeed("Standard")
         civ = game.addCiv()
@@ -37,16 +40,18 @@ class GreatPersonProgressTests {
         assertEquals(100, required("Great Scientist"))
         gain("Great Scientist")
         assertEquals(200, required("Great Scientist"))
-        gain("Great Engineer")
+        gain("Great Scientist")
         assertEquals("100 + 100 × 2, not doubled twice", 300, required("Great Scientist"))
     }
 
     @Test
-    fun `Writers, Artists and Musicians count apart from the other Great People and from each other`() {
+    fun `each kind of Great Person counts apart from the others`() {
         gain("Great Scientist")
         gain("Great Merchant")
         gain("Great Writer")
-        assertEquals(300, required("Great Engineer"))
+        assertEquals("the Engineer has a group of its own, as in Vox Populi with separate counters", 100, required("Great Engineer"))
+        assertEquals(200, required("Great Scientist"))
+        assertEquals(200, required("Great Merchant"))
         assertEquals(200, required("Great Writer"))
         assertEquals(100, required("Great Artist"))
         assertEquals(100, required("Great Musician"))

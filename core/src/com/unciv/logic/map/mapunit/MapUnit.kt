@@ -1055,7 +1055,31 @@ class MapUnit : IsPartOfGameInfoSerialization {
             }
         }
 
+        if (cache.gainsXpFromScouting) gainScoutingXp()
+
         civ.cache.updateViewableTiles(explorerPosition)
+    }
+
+    /**
+     *  StageForms2, CvPlot::setRevealed and CvUnit::setXY (scoutingXpLikeVp, the unique `Gains XP from scouting`): the tiles this unit sees that its civilization has not explored yet
+     *  count 1 each, a natural wonder BALANCE_SCOUT_XP_RANDOM_VALUE, ancient ruins a third of it and a resource the civilization can see a fourth; BALANCE_SCOUT_XP_DENOMINATOR of them
+     *  are one experience point. City-states and barbarians gain nothing. Called before the civilization explores the tiles, so that they are still new. The original awards the
+     *  experience when the unit has moved, this when the unit's sight has changed (it moved, or its sight range did).
+     */
+    private fun gainScoutingXp() {
+        if (civ.isBarbarian || civ.isCityState) return
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        var points = 0
+        for (tile in viewableTiles) {
+            if (tile.isExplored(civ)) continue
+            points += when {
+                tile.isNaturalWonder() -> constants.scoutXpRandomValue
+                tile.tileImprovement?.isAncientRuinsEquivalent(cache.state) == true -> constants.scoutXpRandomValue / 3
+                tile.tileResource != null && civ.canSeeResource(tile.tileResource) -> constants.scoutXpRandomValue / 4
+                else -> 1
+            }
+        }
+        if (points > 0) promotions.gainExperienceTimes100(points * 100 / constants.scoutXpDenominator)
     }
 
     /** Can accept a negative number to gain movement points */
@@ -1171,15 +1195,27 @@ class MapUnit : IsPartOfGameInfoSerialization {
         isDestroyed = true
     }
 
-    fun gift(recipient: Civilization) {
+    /** @param keepsPromotions `false` for a gift by the player (CvUnit::gift): the unit then loses its `Lost when the unit is gifted` promotions (giftPromotionLossLikeVp, see [losePromotionsOnGift]) */
+    fun gift(recipient: Civilization, keepsPromotions: Boolean = true) {
         stopEscorting()
         civ.units.removeUnit(this)
         civ.cache.updateViewableTiles()
         // all transported units should be gift as well
         currentTile.getUnits().filter { it.isTransported && isTransportTypeOf(it) }
-                .forEach { unit -> unit.gift(recipient) }
+                .forEach { unit -> unit.gift(recipient, keepsPromotions) }
         assignOwner(recipient)
+        if (!keepsPromotions) losePromotionsOnGift()
         recipient.cache.updateViewableTiles()
+    }
+
+    /**
+     *  StageForms2, CvUnit::convert with bIsGift (the new unit gets a promotion of the old one only if it is not LostOnGifting, else only the free promotions of its unit type):
+     *  with ModConstants.giftPromotionLossLikeVp the promotions with the unique `Lost when the unit is gifted` that the unit's type does not give for free are removed.
+     */
+    private fun losePromotionsOnGift() {
+        if (!civ.gameInfo.ruleset.modOptions.constants.giftPromotionLossLikeVp) return
+        for (promotion in promotions.getPromotions().filter { it.hasUnique(UniqueType.LostWhenGifted) && it.name !in baseUnit.promotions }.toList())
+            promotions.removePromotion(promotion.name)
     }
 
     /** Destroys the unit and gives stats if its a great person */

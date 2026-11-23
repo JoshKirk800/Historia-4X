@@ -247,7 +247,7 @@ object UnitActions {
             if (recipient.isCityState && unit.isGreatPerson())
                 unit.destroy()  // City states don't get GPs
             else
-                unit.gift(recipient)
+                unit.gift(recipient, keepsPromotions = false) // CvUnit::gift converts the unit with bIsGift
         }
         yield(UnitAction(UnitActionType.GiftUnit, action = giftAction))
     }

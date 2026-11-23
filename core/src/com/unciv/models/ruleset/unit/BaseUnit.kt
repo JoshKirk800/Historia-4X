@@ -295,6 +295,10 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
         if (hasUnique(UniqueType.Unbuildable, stateForConditionals))
             yield(RejectionReasonType.Unbuildable.toInstance())
 
+        // CvPlayer::canTrainUnit: a city-state gift unit (Units.MinorCivGift) is trained by nobody but the barbarians
+        if (!civ.isBarbarian && civ.gameInfo.ruleset.modOptions.constants.cityStateGiftUnitFlagsLikeVp && hasUnique(UniqueType.CanBeGiftedByCityStates))
+            yield(RejectionReasonType.Unbuildable.toInstance())
+
         if ((civ.isCityState || civ.isOneCityChallenger()) && hasUnique(UniqueType.FoundCity, GameContext.IgnoreConditionals))
             yield(RejectionReasonType.NoSettlerForOneCityPlayers.toInstance())
 

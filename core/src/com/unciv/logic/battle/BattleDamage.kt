@@ -350,12 +350,16 @@ object BattleDamage {
     private fun getFlankingBonus(unit: MapUnitCombatant, opponent: MapUnitCombatant, action: CombatAction, opponentTile: Tile = opponent.getTile()): Int {
         val opponentCiv = opponent.getCivInfo()
         val domain = opponent.unit.type.getMovementType()
+        // CvPlot::GetNumEnemyUnitsAdjacent with bConsiderFlanking: each unit adds CvUnit::GetFlankPower, 1 plus its `extra flanking power` (flankPowerLikeVp)
+        val flankPower = unit.unit.civ.gameInfo.ruleset.modOptions.constants.flankPowerLikeVp
         val friends = opponentTile.neighbors.sumOf { neighbor ->
-            neighbor.getUnits().count {
-                it != unit.unit && it.isMilitary() && !it.isEmbarked() && it.civ.isAtWarWith(opponentCiv) && it.type.getMovementType() == domain
+            neighbor.getUnits().sumOf {
+                if (it != unit.unit && it.isMilitary() && !it.isEmbarked() && it.civ.isAtWarWith(opponentCiv) && it.type.getMovementType() == domain)
+                    (if (flankPower) 1 + it.cache.extraFlankPower else 1)
+                else 0
             }
         }
-        if (friends == 0) return 0
+        if (friends <= 0) return 0
         var flankingBonus = BattleConstants.BASE_FLANKING_BONUS
         // e.g., Discipline policy - https://civilization.fandom.com/wiki/Discipline_(Civ5)
         unit.unit.forEachMatchingUnique(UniqueType.FlankAttackBonus, checkCivInfoUniques = true,

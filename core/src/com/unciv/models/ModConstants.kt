@@ -55,6 +55,36 @@ class ModConstants {
      *  With barbarians involved (owner or capturer) the unit stays as it is; a city-state destroys a resulting settler. Units without the unique follow the old rules. false: Settlers become Workers. */
     var captureClassLikeVp = false
 
+    // ---- StageForms2: promotion and unit columns of Vox Populi, each off (the uniques are not read) until the military flip ----
+    /** VP 5.4.8 CvUnit::GetFlankPower (UnitPromotions.ExtraFlankPower), read by CvPlot::GetNumEnemyUnitsAdjacent with bConsiderFlanking in CvPlot::GetEffectiveFlankingBonus:
+     *  a unit that supports a flank counts as 1 plus the sum of its `[amount] extra flanking power` instead of always 1. */
+    var flankPowerLikeVp = false
+
+    /** VP 5.4.8 CvUnitMovement::GetCostsForMove, GetMovementCostMultiplierFromPromotions, GetMovementCostAdderFromPromotions (UnitPromotions_Terrains / _Features IgnoreTerrainCostIn,
+     *  HalfMove, ExtraMove, with MOD_BALANCE_SANE_UNIT_MOVEMENT_COST off as in VP): the uniques `Ignores terrain cost in [tileFilter] tiles`, `Half movement in [tileFilter] tiles` and
+     *  `[amount] extra movement cost in [tileFilter] tiles` change the cost of entering a tile, in every movement cost, path search and reach calculation. */
+    var terrainMovementPromotionsLikeVp = false
+
+    /** VP 5.4.8 CvPlot::setRevealed (counts the tiles a unit reveals, weighted by BALANCE_SCOUT_XP_RANDOM_VALUE) and CvUnit::setXY (awards BALANCE_SCOUT_XP_DENOMINATOR points per XP):
+     *  the unique `Gains XP from scouting`. */
+    var scoutingXpLikeVp = false
+    /** VP 5.4.8 BALANCE_SCOUT_XP_RANDOM_VALUE: the points of a natural wonder a unit reveals (a third of it for ancient ruins, a fourth for a resource). Read with [scoutingXpLikeVp]. */
+    var scoutXpRandomValue = 12
+    /** VP 5.4.8 BALANCE_SCOUT_XP_DENOMINATOR: the points of revealed tiles that make one experience point. Read with [scoutingXpLikeVp]. */
+    var scoutXpDenominator = 10
+
+    /** VP 5.4.8 CvUnit::pillage (changeExperienceTimes100(GetXPFromPillaging() * 100) for an improvement) and CvUnit::shouldPillage (a unit with XP from pillaging pillages whenever it can):
+     *  the unique `[amount] XP when pillaging`. */
+    var pillageXpLikeVp = false
+
+    /** VP 5.4.8 CvUnit::convert (bIsGift), CvMinorCivIncomingUnitGift::applyToUnit: a gifted unit does not keep the promotions with the unique `Lost when the unit is gifted`, unless its
+     *  unit type gives them for free. */
+    var giftPromotionLossLikeVp = false
+
+    /** VP 5.4.8 CvGame::GetRandomUniqueUnitType (IsMinorCivGift, IsInvalidMinorCivGift), CvPlayer::GetCompetitiveSpawnUnitType with bMinorCivGift, CvPlayer::canTrainUnit: the uniques
+     *  `Can be gifted by city-states` and `Cannot be gifted by city-states` take part in the choice of a city-state's unique unit and of the unit it gives its patron. */
+    var cityStateGiftUnitFlagsLikeVp = false
+
     /** VP CvUnitCombat::DoDamageMath uses separate melee and ranged defines in hundredths. */
     data class CombatDamageConstants(
         val meleeBase: Int = 2400,

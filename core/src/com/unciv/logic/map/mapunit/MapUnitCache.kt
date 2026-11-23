@@ -75,6 +75,19 @@ class MapUnitCache(private val mapUnit: MapUnit) {
     var maxHealthChange = 0
         private set
 
+    // ---- StageForms2 (each is only filled with its ModConstants switch on) ----
+    /** The sum of the unit's `[amount] extra flanking power` (CvUnit::m_iFlankPower less its base 1), with flankPowerLikeVp */
+    var extraFlankPower = 0
+        private set
+
+    /** The unit's `Ignores terrain cost in`, `Half movement in` and `extra movement cost in` uniques, with terrainMovementPromotionsLikeVp; null if it has none */
+    var terrainMovementPromotions: TerrainMovementPromotions? = null
+        private set
+
+    /** The unit has `Gains XP from scouting`, with scoutingXpLikeVp */
+    var gainsXpFromScouting = false
+        private set
+
     var state = GameContext.EmptyState
 
     fun updateUniques() {
@@ -109,6 +122,13 @@ class MapUnitCache(private val mapUnit: MapUnit) {
             .none { it.value.terrainTarget != DoubleMovementTerrainTarget.Feature }
         noFilteredDoubleMovementUniques = doubleMovementInTerrain
             .none { it.value.terrainTarget == DoubleMovementTerrainTarget.Filter }
+        val constants = mapUnit.civ.gameInfo.ruleset.modOptions.constants
+        terrainMovementPromotions = if (constants.terrainMovementPromotionsLikeVp) TerrainMovementPromotions.of(mapUnit) else null
+        if (terrainMovementPromotions != null) noTerrainMovementUniques = false // getMovementCostBetweenAdjacentTiles must reach the half movement factor
+        extraFlankPower = 0
+        if (constants.flankPowerLikeVp)
+            mapUnit.forEachMatchingUnique(UniqueType.ExtraFlankPower, gameContext = GameContext.IgnoreConditionals) { extraFlankPower += it.params[0].toInt() }
+        gainsXpFromScouting = constants.scoutingXpLikeVp && mapUnit.hasUnique(UniqueType.GainsXpFromScouting)
         costToDisembark = (mapUnit.getMatchingUniques(UniqueType.ReducedDisembarkCost, checkCivInfoUniques = true))
             .minOfOrNull { it.params[0].toFloat() }
         costToEmbark = mapUnit.getMatchingUniques(UniqueType.ReducedEmbarkCost, checkCivInfoUniques = true)
@@ -148,6 +168,7 @@ class MapUnitCache(private val mapUnit: MapUnit) {
             UniqueType.CannotMove,
             UniqueType.CanMoveOnWater,
             UniqueType.DoubleMovementOnTerrain,
+            UniqueType.IgnoresTerrainCostIn, UniqueType.HalfMovementIn, UniqueType.ExtraMovementCostIn, // StageForms2
             UniqueType.ReducedDisembarkCost,
             UniqueType.ReducedEmbarkCost,
             UniqueType.CanEnterIceTiles,

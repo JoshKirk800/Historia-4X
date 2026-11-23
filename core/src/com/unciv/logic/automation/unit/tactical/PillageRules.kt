@@ -74,6 +74,9 @@ object PillageRules {
             if (!civ.ai.military.isPreferredAttackTarget(city)) return true
         }
 
+        // CvUnit::shouldPillage: a unit with XP from pillaging pillages (pillageXpLikeVp)
+        if (civ.gameInfo.ruleset.modOptions.constants.pillageXpLikeVp && unit.hasUnique(UniqueType.XpFromPillaging)) return true
+
         // A route in rough terrain
         if (owner != null && hasRoute &&
             (tile.isHill() || tile.baseTerrain == DESERT || tile.terrainFeatures.any { it == MARSH || it == FOREST } || tile.isAdjacentToRiver())) return true

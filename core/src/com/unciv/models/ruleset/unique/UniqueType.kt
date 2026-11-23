@@ -761,6 +761,45 @@ enum class UniqueType(
     WithdrawsBeforeMeleeCombat("Withdraws before melee combat", UniqueTarget.Unit),
     CannotCaptureCities("Unable to capture cities", UniqueTarget.Unit, UniqueTarget.Global),
     CannotPillage("Unable to pillage tiles", UniqueTarget.Unit, UniqueTarget.Global),
+
+    // ---- StageForms2: promotion columns of Vox Populi without a form, each read only with its ModConstants switch ----
+    /** VP 5.4.8 UnitPromotions.ExtraFlankPower (CvUnit::GetFlankPower, ChangeFlankPower; CvPlot::GetNumEnemyUnitsAdjacent with bConsiderFlanking): a unit counts as 1 plus this
+     *  when it supports a flank. */
+    ExtraFlankPower("[amount] extra flanking power", UniqueTarget.Unit,
+        docDescription = "Each flank-supporting unit counts as 1 plus the sum of its `extra flanking power` (VP CvUnit::GetFlankPower), so the flanking bonus of the unit it surrounds is " +
+            "10% x that sum. Only read with the ModConstants switch `flankPowerLikeVp`."),
+    /** VP 5.4.8 UnitPromotions_Terrains / _Features.IgnoreTerrainCostIn (CvUnit::isIgnoreTerrainCostIn, isIgnoreFeatureCostIn; CvUnitMovement::GetCostsForMove). */
+    IgnoresTerrainCostIn("Ignores terrain cost in [tileFilter] tiles", UniqueTarget.Unit,
+        docDescription = "Entering a matching tile costs 1 movement instead of the terrain's cost (the river crossing still takes the whole turn), before the unit's half-movement and extra movement cost " +
+            "uniques apply. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`."),
+    /** VP 5.4.8 UnitPromotions_Terrains / _Features.HalfMove (CvUnitMovement::GetMovementCostMultiplierFromPromotions: the cost is multiplied by 2). */
+    HalfMovementIn("Half movement in [tileFilter] tiles", UniqueTarget.Unit,
+        docDescription = "The mirror of `Double movement in`: the cost of entering a matching tile is doubled unless the unit also has double movement there. Only read with the " +
+            "ModConstants switch `terrainMovementPromotionsLikeVp`."),
+    /** VP 5.4.8 UnitPromotions_Terrains / _Features.ExtraMove (CvUnitMovement::GetMovementCostAdderFromPromotions: MOVE_DENOMINATOR x getTerrainExtraMoveCount). */
+    ExtraMovementCostIn("[amount] extra movement cost in [tileFilter] tiles", UniqueTarget.Unit,
+        docDescription = "Entering a matching tile costs this much more, after the unit's other movement cost modifiers. Only the most specific matching kind counts, in VP's order: " +
+            "a Mountain, a Hill, the base terrain, a terrain feature. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`."),
+    /** VP 5.4.8 UnitPromotions.GainsXPFromScouting (CvUnit::IsGainsXPFromScouting; CvPlot::setRevealed counts, CvUnit::setXY awards). */
+    GainsXpFromScouting("Gains XP from scouting", UniqueTarget.Unit,
+        docDescription = "Each tile the unit newly reveals to its civilization is worth 1 point, a visible resource scoutXpRandomValue / 4, ancient ruins scoutXpRandomValue / 3 and a natural wonder " +
+            "scoutXpRandomValue (ModConstants, 12 as in VP), and every `scoutXpDenominator` points are 1 experience point, scaled by the game speed. City-states and barbarians do not earn it. " +
+            "Only read with the ModConstants switch `scoutingXpLikeVp`."),
+    /** VP 5.4.8 UnitPromotions.XPFromPillaging (CvUnit::GetXPFromPillaging, CvUnit::pillage, CvUnit::shouldPillage). */
+    XpFromPillaging("[amount] XP when pillaging", UniqueTarget.Unit,
+        docDescription = "Experience for pillaging an improvement (not a road), scaled by the game speed; barbarians get none. Also makes the AI pillage (CvUnit::shouldPillage). " +
+            "Only read with the ModConstants switch `pillageXpLikeVp`."),
+    /** VP 5.4.8 UnitPromotions.LostOnGifting (CvUnit::convert bIsGift, CvMinorCivIncomingUnitGift::applyToUnit). */
+    LostWhenGifted("Lost when the unit is gifted", UniqueTarget.Promotion,
+        docDescription = "A unit that is gifted to another civilization loses this promotion, and gets it back only if its unit type gives it for free. Only read with the ModConstants " +
+            "switch `giftPromotionLossLikeVp`."),
+    /** VP 5.4.8 Units.MinorCivGift (CvUnitEntry::IsMinorCivGift): CvGame::GetRandomUniqueUnitType, CvPlayer::canTrainUnit. */
+    CanBeGiftedByCityStates("Can be gifted by city-states", UniqueTarget.Unit,
+        docDescription = "A militaristic city-state may be given this unit as its unique unit whoever it belongs to, even when no civilization of the game could build it, and is somewhat more likely to be; " +
+            "no civilization but the barbarians can build it. Only read with the ModConstants switch `cityStateGiftUnitFlagsLikeVp`."),
+    /** VP 5.4.8 Units.NoMinorCivGift (CvUnitEntry::IsInvalidMinorCivGift): CvGame::GetRandomUniqueUnitType, CvPlayer::GetCompetitiveSpawnUnitType with bMinorCivGift. */
+    CannotBeGiftedByCityStates("Cannot be gifted by city-states", UniqueTarget.Unit,
+        docDescription = "A city-state never gives this unit, neither as its unique unit nor as the military unit it gives its patron. Only read with the ModConstants switch `cityStateGiftUnitFlagsLikeVp`."),
     
     // allow any unit to destory cities instead of capturing them, also allows non melee units to destroy cities
     CanDestroyCities("Destroys [cityFilter] cities instead of capturing", UniqueTarget.Unit,

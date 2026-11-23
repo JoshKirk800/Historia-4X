@@ -26,6 +26,21 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
     @Suppress("PropertyName")
     var XP = 0
 
+    /** StageForms2: the hundredths of an experience point on top of [XP] (CvUnit::m_iExperienceTimes100 less 100 x XP), 0 to 99. Only [gainExperienceTimes100] makes any. */
+    var xpHundredths = 0
+
+    /**
+     *  CvUnit::changeExperienceTimes100 for experience that does not come from combat (scouting, pillaging): barbarians get none, the amount is scaled by the game speed's
+     *  experience percent, and what does not make a whole point is kept in [xpHundredths].
+     */
+    fun gainExperienceTimes100(amountTimes100: Int) {
+        if (unit.civ.isBarbarian && amountTimes100 > 0) return
+        val scaled = amountTimes100 * unit.civ.gameInfo.speed.experiencePercent / 100
+        val total = xpHundredths + scaled
+        XP += Math.floorDiv(total, 100)
+        xpHundredths = Math.floorMod(total, 100)
+    }
+
     /** The _names_ of the promotions this unit has acquired - see [getPromotions] for object access */
     var promotions = HashSet<String>()
         private set
@@ -249,6 +264,7 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
     fun clone(): UnitPromotions {
         @LocalState val toReturn = UnitPromotions()
         toReturn.XP = XP
+        toReturn.xpHundredths = xpHundredths
         toReturn.promotions = HashSet(promotions)
         toReturn.numberOfPromotions = numberOfPromotions
         return toReturn

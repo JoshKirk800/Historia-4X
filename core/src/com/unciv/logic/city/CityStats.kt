@@ -307,6 +307,16 @@ class CityStats(val city: City) {
             }
         }
 
+        // CvCity::getBaseYieldRateTimes100 adds the empire-population yield in the building's own city (V:CvCity.cpp:23494-23496).
+        var empirePopulation = -1
+        city.forEachMatchingUnique(UniqueType.StatsPerEmpirePopulationProportional) { unique ->
+            if (city.matchesFilter(unique.params[2])) {
+                if (empirePopulation < 0) empirePopulation = city.civ.cities.sumOf { it.population.population }
+                val amount = empirePopulation.toFloat() / unique.params[1].toInt()
+                sourceToStats.addStats(unique.stats.times(amount), unique.getSourceNameForUser(), unique.sourceObjectName ?: "")
+            }
+        }
+
         // "[stats] for each major religion with followers in the city [cityFilter]" (Candi)
         city.forEachMatchingUnique(UniqueType.StatsPerReligionWithFollowers) { unique ->
             if (city.matchesFilter(unique.params[1]))

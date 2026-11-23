@@ -42,9 +42,14 @@ class CivVLuxuryPlacementTests {
     }
 
     /** A Standard map (80 x 52) of 8 civs and 16 city states */
-    private fun standardMap(seed: Long): Pair<TileMap, com.unciv.models.ruleset.Ruleset> {
+    private fun standardMap(seed: Long, onlyKind: String? = null): Pair<TileMap, com.unciv.models.ruleset.Ruleset> {
         RulesetCache.loadRulesets(noMods = true)
-        val ruleset = RulesetCache[BaseRuleset.Civ_V_BNW.fullName]!!
+        var ruleset = RulesetCache[BaseRuleset.Civ_V_BNW.fullName]!!
+        if (onlyKind != null) {
+            // A copy of the ruleset (its objects are shared, its lists are not) in which [onlyKind] is the only luxury that is assigned (marble and ivory are special cases, and stay)
+            ruleset = ruleset.clone()
+            ruleset.tileResources.values.removeAll { it.resourceType == ResourceType.Luxury && it.name != onlyKind && it.name != "Marble" && it.name != "Ivory" }
+        }
         val gameInfo = GameInfo()
         gameInfo.ruleset = ruleset
         for (n in ruleset.nations.values.filter { it.isMajorCiv }.take(8) + ruleset.nations.values.filter { it.isCityState }.take(16)) {
@@ -80,22 +85,38 @@ class CivVLuxuryPlacementTests {
         assertEquals(listOf("10", "10", "10", "10", "5", "5", "5", "5", "5"), newLuxuries.map { cityState(it) })
     }
 
+    private fun onTerrainOfItsKind(tile: com.unciv.logic.map.tile.Tile, ruleset: com.unciv.models.ruleset.Ruleset) =
+        ruleset.tileResources[tile.resource!!]!!.terrainsCanBeFoundOn.any { it == tile.baseTerrain || it in tile.terrainFeatures }
+
     @Test
-    fun `every new luxury is placed on a Standard map within the census range`() {
-        val seen = HashSet<String>()
+    fun `the luxuries on a Standard map total about what Vox Populi's script places and stand on terrain of their kind`() {
+        // Not that a given kind is present: with the script's counts (8 regional kinds at most, 3 for the city states, 5 random, marble and ivory) about 17 of the 29 kinds are on
+        // a map, so a kind is absent from a map more often than not and no fixed number of maps makes its presence certain (see the next test, which forces it)
         for (seed in 71L..78L) {
             val (map, ruleset) = standardMap(seed)
             val luxuries = map.values.filter { it.resource != null && ruleset.tileResources[it.resource!!]!!.resourceType == ResourceType.Luxury }
-            seen += luxuries.map { it.resource!! }
             assertTrue("seed $seed: luxuries ${luxuries.size}", luxuries.size in 50..150)
-            for (tile in map.values.filter { it.resource in newLuxuries })
-                assertTrue("seed $seed: ${tile.resource} on ${tile.baseTerrain} ${tile.terrainFeatures}", ruleset.tileResources[tile.resource!!]!!.let { r ->
-                    r.terrainsCanBeFoundOn.any { it == tile.baseTerrain || it in tile.terrainFeatures || (it == "Hill" && "Hill" in tile.terrainFeatures) } })
+            assertTrue("seed $seed: no luxury under an old name", luxuries.none { it.resource == "Gold Ore" || it.resource == "Spices" })
+            for (tile in luxuries.filter { it.resource in newLuxuries })
+                assertTrue("seed $seed: ${tile.resource} on ${tile.baseTerrain} ${tile.terrainFeatures}", onTerrainOfItsKind(tile, ruleset))
         }
-        assertEquals("every new luxury is somewhere in 8 maps", emptyList<String>(), newLuxuries.filter { it !in seen })
-        assertTrue("Gold is placed under its new name", "Gold" in seen)
-        assertTrue("Cinnamon is placed under its new name", "Cinnamon" in seen)
-        assertTrue(seen.none { it == "Gold Ore" || it == "Spices" })
+    }
+
+    /**
+     *  Deterministic where a count of the kinds on random maps is not: with [newLuxuries] and the renamed Gold and Cinnamon each the only luxury kind that can be assigned
+     *  (the ruleset has no other, marble and ivory aside), the kind is a regional, city-state or random one on every map, so it is placed (the random kinds get at least 3 tiles)
+     *  whatever the seed. Nothing is left to chance but the terrain, and the kinds stand on terrain of their own kind, under their new names.
+     */
+    @Test
+    fun `every new luxury, and the renamed ones, is placed on a Standard map when it is the only kind there is`() {
+        for (kind in newLuxuries + listOf("Gold", "Cinnamon")) {
+            val (map, ruleset) = standardMap(71L, onlyKind = kind)
+            val placed = map.values.filter { it.resource == kind }
+            assertTrue("$kind: ${placed.size} tiles", placed.size >= 3)
+            for (tile in placed) assertTrue("$kind on ${tile.baseTerrain} ${tile.terrainFeatures}", onTerrainOfItsKind(tile, ruleset))
+            val luxuryKinds = map.values.mapNotNull { it.resource }.filter { ruleset.tileResources[it]!!.resourceType == ResourceType.Luxury }.toSet()
+            assertEquals("$kind: only it, marble and ivory", setOf(kind), luxuryKinds - setOf("Marble", "Ivory"))
+        }
     }
 
     @Test

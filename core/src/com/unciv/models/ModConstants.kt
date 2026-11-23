@@ -503,6 +503,13 @@ class ModConstants {
     // model ([com.unciv.logic.civilization.managers.TradeRouteValue]: the yields of a route, how long it lasts by the game speed's `tradeRouteSpeedModifier`, what a plunder pays, the
     // range by [worldTradeRouteDistance]); the rules (destination restriction, slots) are slice T4's, which turns them on with this flag as well
     var tradeRouteModelLikeVp = false
+
+    // Vox Populi's rule for a civilization that uses more of a strategic resource than it has (BALANCE_RESOURCE_SHORTAGE_UNIT_HEALING and
+    // BALANCE_RESOURCE_SHORTAGE_BUILDING_REFUND, `STRATEGIC_RESOURCE_EXHAUSTED_PENALTY` 0), slice T8 of phaseE/vp-trade-plan.md. false: the combat malus of the original (BNW).
+    // true: units short of a resource they need do not heal and keep their strength (CvUnit::GetStrategicResourceCombatPenalty, CvUnit::IsCannotHeal), and at each turn's start the
+    // buildings that use a short resource are refunded the shortage, each refunded copy adding 2 percent to the maintenance of all buildings (CvCity::DoTurn, CvTreasury::GetBuildingGoldMaintenance).
+    // Only major civilizations are affected
+    var resourceShortageLikeVp = false
     /** The defines of Vox Populi's route model (DB vp `Defines`, `(1) Community Patch/Database Changes/Defines/CoreDefineChanges.sql:1007` and DEF-VP; the values of Vox Populi 5.4.8).
      *  Can only be modded all-or-nothing. Percentages are of 100; "times 100" are hundredths */
     data class TradeRouteVpConstants(

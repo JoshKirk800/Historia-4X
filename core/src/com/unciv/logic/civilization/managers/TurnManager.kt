@@ -38,6 +38,7 @@ class TurnManager(val civInfo: Civilization) {
             civInfo.tech.updateResearchProgress()
 
         civInfo.cache.updateCivResources() // If you offered a trade last turn, this turn it will have been accepted/declined
+        ResourceShortage.refundBuildings(civInfo) // CvCity::DoTurn, before the cities' stats of this turn
         civInfo.monopolies.checkAll() // CvGame::doTurn: every living major civilization looks at every monopoly resource every turn
         InstantYields.checkLuxuryGains(civInfo)
         for (stockpiledResource in civInfo.getCivResourceSupply().filter { it.resource.isStockpiled })

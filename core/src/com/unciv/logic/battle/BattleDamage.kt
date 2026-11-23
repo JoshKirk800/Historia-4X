@@ -67,6 +67,7 @@ object BattleDamage {
     @Readonly
     private fun getMissingResourcePenalty(combatant: MapUnitCombatant, civInfo: Civilization): Int {
         if (civInfo.isBarbarian) return 0
+        if (civInfo.gameInfo.ruleset.modOptions.constants.resourceShortageLikeVp) return 0 // "Units cannot heal anymore, but strength is unaffected": ResourceShortage.cannotHeal
         val supply = civInfo.detailedCivResources // per origin: what is supplied (positive), what units and buildings use (negative)
         val civResources = civInfo.getCivResourcesByName()
         var penalty = 0

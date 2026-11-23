@@ -512,6 +512,9 @@ enum class UniqueType(
     RiggingElectionVotes("[relativeAmount]% votes when rigging City-State elections", UniqueTarget.Global,
         docDescription = "Multiplies the votes our spies get in City-State elections. " +
             "Note that the original reads this modifier from the City-State's own policies, which would never help the spy's owner; here it is read from the spy's owner."),
+    RigElectionInfluence("[relativeAmount]% influence from rigged City-State elections", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `espionageLikeVp`. Multiplies what we gain when we win a rigged election and what the others lose to us (Policies.RigElectionInfluenceModifier, " +
+            "CvMinorCivAI::DoElection, V:CvMinorCivAI.cpp:15213). Not the votes of [RiggingElectionVotes], which is Brave New World's"),
     SpyStartingLevel("New spies start with [amount] level(s)", UniqueTarget.Global),
     CounterIntelligenceSpyRankBonus("Spies in [cityFilter] cities act as though they have [relativeAmount] levels for [spyAction]", UniqueTarget.Global,
         docDescription = "Temporary effective rank change ([relativeAmount] added to rank, e.g. +1) for spies doing the given action in a matching city. " +

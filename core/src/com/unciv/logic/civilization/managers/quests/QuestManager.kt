@@ -178,8 +178,7 @@ class QuestManager : IsPartOfGameInfoSerialization {
     /** CvGame::UpdateGameEra (V:CvGame.cpp:4648-4668): the average era of the living major civilizations, rounded half up; the era of the global quests */
     @Readonly
     private fun getGameEraName(): String {
-        val majors = civ.gameInfo.civilizations.filter { it.isMajorCiv && it.isAlive() }
-        val average = if (majors.isEmpty()) 0 else (majors.sumOf { it.getEraNumber() }.toFloat() / majors.size + 0.5f).toInt()
+        val average = civ.gameInfo.getGameEraNumber()
         return ruleset.eras.values.firstOrNull { it.eraNumber == average }?.name ?: ruleset.eras.values.maxByOrNull { it.eraNumber }!!.name
     }
 

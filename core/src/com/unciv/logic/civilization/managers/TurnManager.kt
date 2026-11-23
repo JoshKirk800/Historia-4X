@@ -139,6 +139,12 @@ class TurnManager(val civInfo: Civilization) {
 
 
     private fun startTurnFlags() {
+        // CvMinorCivAI::DoElection under Vox Populi: every city-state holds its election on the turns that are a multiple of the interval, not when a flag of its own runs out (V:CvGame.cpp:11676-11693).
+        // The flag of the original's model is dropped so that the two schedules cannot both fire
+        if (civInfo.isCityState && civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp) {
+            civInfo.removeFlag(CivFlags.TurnsTillCityStateElection.name)
+            if (civInfo.gameInfo.isEspionageEnabled() && civInfo.cityStateFunctions.getTurnsUntilElectionLikeVp() == 0) civInfo.cityStateFunctions.holdElectionsLikeVp()
+        }
         for (flag in civInfo.flagsCountdown.keys.toList()) {
             // In case we remove flags while iterating
             if (!civInfo.flagsCountdown.containsKey(flag)) continue
@@ -545,7 +551,8 @@ class TurnManager(val civInfo: Civilization) {
 
             // Set turns to elections to a random number so not every city-state has the same election date
             // May be called at game start or when migrating a game from an older version
-            if (civInfo.gameInfo.isEspionageEnabled() && !civInfo.hasFlag(CivFlags.TurnsTillCityStateElection.name)) {
+            if (civInfo.gameInfo.isEspionageEnabled() && !civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp
+                && !civInfo.hasFlag(CivFlags.TurnsTillCityStateElection.name)) {
                 val rng = civInfo.state.stateBasedRandom("TurnManager.endTurn(Espianage)")
                 civInfo.addFlag(CivFlags.TurnsTillCityStateElection.name, rng.nextInt(civInfo.cityStateFunctions.getTurnsBetweenElections() + 1))
             }

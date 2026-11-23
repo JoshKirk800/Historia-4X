@@ -94,6 +94,78 @@ class CityStateFunctions(val civInfo: Civilization) {
         return (constants.cityStateElectionTurns * 100 * civInfo.gameInfo.speed.modifier).toInt() / 100
     }
 
+    /**
+     *  CvGame::GetTurnsBetweenMinorCivElections (V:CvGame.cpp:11667-11673) in the original's integer order: the interval times the speed's percent, then over 100. The speeds' `MinorCivElectionFreqMod`
+     *  (67, 100, 150, 300) are their `modifier` times 100, so the speed's modifier is read. Only with [com.unciv.models.ModConstants.espionageLikeVp]
+     */
+    @Readonly
+    fun getTurnsBetweenElectionsLikeVp(): Int =
+        civInfo.gameInfo.ruleset.modOptions.constants.cityStateElectionTurns * Math.round(civInfo.gameInfo.speed.modifier * 100) / 100
+
+    /** CvGame::GetTurnsUntilMinorCivElection (V:CvGame.cpp:11676-11693): 0 on the turns that are a multiple of the interval, for every city-state alike, else the turns to the next one */
+    @Readonly
+    fun getTurnsUntilElectionLikeVp(): Int {
+        val interval = getTurnsBetweenElectionsLikeVp()
+        if (interval == 0) return 0
+        val rest = civInfo.gameInfo.turns % interval
+        return if (rest == 0) 0 else interval - rest
+    }
+
+    /**
+     *  CvMinorCivAI::DoElection under Vox Populi (V:CvMinorCivAI.cpp:15145-15386), held on [getTurnsUntilElectionLikeVp] = 0 in every city-state alike. The votes of a major are the points its
+     *  spy in the capital has gathered, the points are spent, and the winner is drawn by weight with a seed of the city-state and the turn; there is no neutral party. The winner gets
+     *  [CityStateRigging.winnerInfluence] and, when every living major has a spy, its streak grows; every other major, spy or not, loses [CityStateRigging.loserLossTimes100] and its streak ends.
+     */
+    fun holdElectionsLikeVp() {
+        val capital = civInfo.getCapital() ?: return
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants.espionage
+        val majors = civInfo.gameInfo.getAliveMajorCivs()
+
+        // the votes: the points of the spy that rigs in the capital, which the election spends; a spy that gathered none has no vote (V:CvMinorCivAI.cpp:15161-15207)
+        val riggers = HashMap<Civilization, Spy>()
+        val votes = LinkedHashMap<Civilization, Int>()
+        for (spy in capital.espionage.getAllStationedSpies()) {
+            if (spy.action != SpyAction.RiggingElections || spy.civInfo !in majors) continue
+            riggers[spy.civInfo] = spy
+            if (spy.networkPoints > 0) votes[spy.civInfo] = spy.networkPoints
+            spy.spendNetworkPoints(spy.networkPoints)   // CvCityEspionage::ResetProgress: the votes are counted, so the spy begins again (V:CvMinorCivAI.cpp:15195)
+        }
+        if (votes.isEmpty()) return
+
+        val random = Random(capital.location.x * 31 + capital.location.y + civInfo.civName.hashCode() * 17 + civInfo.gameInfo.turns)
+        val winner = votes.entries.toList().randomWeighted(random) { it.value.toFloat() }.key
+        val modifier = rigModifier(winner)
+        val gameEra = civInfo.gameInfo.getGameEraNumber()
+        val everyoneHasASpy = majors.all { it.espionageManager.spyList.isNotEmpty() }   // CvPlayerEspionage::GetNumSpies: the spies it owns, dead or alive (V:CvEspionageClasses.cpp:4270-4273)
+
+        for (major in majors) {
+            val relation = civInfo.getDiplomacyManagerOrMeet(major)
+            if (major == winner) {
+                val gained = CityStateRigging.winnerInfluence(constants, modifier, major.getEraNumber(), relation.consecutiveRiggings)
+                relation.addInfluence(gained.toFloat())
+                if (everyoneHasASpy) relation.consecutiveRiggings++
+                major.addNotification("Your spy [${riggers[major]!!.name}] rigged the election in [${civInfo.civName}]: [$gained] influence!",
+                    capital.location, NotificationCategory.Espionage, NotificationIcon.Spy)
+            } else {
+                relation.consecutiveRiggings = 0
+                // GetEffectiveFriendshipWithMajorTimes100: -60 at war, so a major at war loses nothing; in hundredths, rounded, as a float of whole points could be a hundredth short
+                val lost = CityStateRigging.loserLossTimes100(constants, modifier, gameEra, Math.round(relation.getInfluence() * 100))
+                if (lost > 0) relation.addInfluence(-lost / 100f)
+                if (riggers.containsKey(major))
+                    major.addNotification("Your spy [${riggers[major]!!.name}] lost the election in [${civInfo.civName}] to [${winner.civName}]: [${lost / 100}] influence lost",
+                        capital.location, NotificationCategory.Espionage, NotificationIcon.Spy)
+            }
+        }
+    }
+
+    /** The percent the winner's policies add to the influence of a rigged election (`RigElectionInfluenceModifier`, V:CvMinorCivAI.cpp:15213); the traits that add to it have no rows in Vox Populi */
+    @Readonly
+    private fun rigModifier(winner: Civilization): Int {
+        var percent = 0
+        winner.forEachMatchingUnique(UniqueType.RigElectionInfluence) { percent += it.params[0].toInt() }
+        return percent
+    }
+
     fun holdElections() {
         civInfo.addFlag(CivFlags.TurnsTillCityStateElection.name, getTurnsBetweenElections())
         val capital = civInfo.getCapital() ?: return

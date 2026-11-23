@@ -289,6 +289,10 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
      *  Only with [com.unciv.models.ModConstants.cityStateInfluenceLikeVp] */
     var restingPointChange = 0f
 
+    /** For city-states: how many elections of this city-state this major rigged in a row (CvMinorCivAI::GetNumConsecutiveSuccessfulRiggings, V:CvMinorCivAI.cpp:15285 and 15308); it grows the
+     *  influence of the next win and is reset by a lost election and when the spy leaves. Only with [com.unciv.models.ModConstants.espionageLikeVp] */
+    var consecutiveRiggings = 0
+
     /** Total of each turn Science during Research Agreement */
     internal var totalOfScienceDuringRA = 0
 
@@ -300,6 +304,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         toReturn.influence = influence
         toReturn.turnLastBullied = turnLastBullied
         toReturn.restingPointChange = restingPointChange
+        toReturn.consecutiveRiggings = consecutiveRiggings
         toReturn.turnLastPledged = turnLastPledged
         toReturn.turnLastPledgeBroken = turnLastPledgeBroken
         toReturn.turnsSincePledgeWarning = turnsSincePledgeWarning

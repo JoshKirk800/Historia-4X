@@ -351,6 +351,13 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
     @Readonly fun getAliveCityStates() = civilizations.filter { it.isAlive() && it.isCityState }
     @Readonly fun getAliveMajorCivs() = civilizations.filter { it.isAlive() && it.isMajorCiv }
 
+    /** CvGame::UpdateGameEra (V:CvGame.cpp:4648-4668): the average era number of the living major civilizations, rounded half up; 0 with none. The era of the global quests and the city-state elections */
+    @Readonly
+    fun getGameEraNumber(): Int {
+        val majors = getAliveMajorCivs()
+        return if (majors.isEmpty()) 0 else (majors.sumOf { it.getEraNumber() }.toFloat() / majors.size + 0.5f).toInt()
+    }
+
     /** Gets civilizations in their commonly used order - City-states last,
      *  otherwise alphabetically by culture and translation. [civToSortFirst] can be used to force
      *  a specific Civilization to be listed first.

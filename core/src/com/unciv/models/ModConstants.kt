@@ -974,6 +974,13 @@ class ModConstants {
     var espionageLikeVp = false
 
     /**
+     *  Vox Populi's BALANCE_NO_COUPS (V:CustomMods.cpp:381, CvPlayerEspionage::CanStageCoup, V:CvEspionageClasses.cpp:3595-3598): a spy cannot stage a coup in a city-state, so the button of the
+     *  espionage screen, the AI's attempts and [com.unciv.models.Spy.canDoCoup] are gone. Independent of [espionageLikeVp], as the original's options are. The coup quest
+     *  (V:CvMinorCivAI.cpp:6710) belongs to the city-state quests
+     */
+    var noCoups = false
+
+    /**
      *  The defines of spy points and of the time a dead spy needs, `spyToPlayerRatio`, `majorPlayerMultiplier`, `thresholdMin`, `thresholdMax` and `pointUnit` read only with [spyPointsLikeVp].
      *  The threshold is `100 x spyToPlayerRatio / (city-states + majorPlayerMultiplier x majors)` of the players at the start, at least 1 of each, kept between the minimum and the
      *  maximum (CvGame::initSpyThreshold, V:CvGame.cpp:10722-10767: BALANCE_SPY_TO_PLAYER_RATIO 20, BALANCE_SPY_POINT_MAJOR_PLAYER_MULTIPLIER 2,
@@ -1013,6 +1020,15 @@ class ModConstants {
         val missionCooldownTurns: Int = 15,
         /** The turns a spy cannot move after it chose a counterspy focus (`ESPIONAGE_COUNTERSPY_CHANGE_FOCUS_COOLDOWN`, CvPlayerEspionage::GetNumTurnsSpyMovementBlocked, V:CvEspionageClasses.cpp:2829-2842) */
         val counterspyChangeCooldownTurns: Int = 5,
+        /** The influence the winner of a rigged election gets (CvMinorCivAI::DoElection, V:CvMinorCivAI.cpp:15221: `ESPIONAGE_INFLUENCE_GAINED_FOR_RIGGED_ELECTION`, 30 in Vox Populi), times the game's era and
+         *  the streak; the percent it grows by for each election the winner rigged in a row (`ESPIONAGE_CONSECUTIVE_RIGGING_INFLUENCE_MODIFIER`, 40, :15233); and what each other major loses, times the
+         *  era (`ESPIONAGE_INFLUENCE_LOST_FOR_RIGGED_ELECTION`, 5, :15318). Read only with [espionageLikeVp] */
+        val riggingInfluenceGained: Int = 30,
+        val riggingConsecutiveModifierPercent: Int = 40,
+        val riggingInfluenceLost: Int = 5,
+        /** The votes a rigging spy adds each turn is its rank times this plus its civilization's offensive strength percent (`CalcPerTurn(SPY_STATE_RIG_ELECTION)`, V:CvEspionageClasses.cpp:3099-3102); the
+         *  original compares the votes of the players and never divides by 100, so only the proportions matter */
+        val riggingVotesPerRank: Int = 100,
     )
     var espionage = EspionageConstants()
 

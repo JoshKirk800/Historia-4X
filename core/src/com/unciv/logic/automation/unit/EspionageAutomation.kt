@@ -258,6 +258,7 @@ class EspionageAutomation(private val civInfo: Civilization) {
      * whose ally is another civilization), and that ally is not one we have a Declaration of Friendship with.
      */
     fun isCoupCandidate(spy: Spy): Boolean {
+        if (gameInfo.ruleset.modOptions.constants.noCoups) return false   // CvPlayerEspionage::CanStageCoup, which AttemptCoups asks first
         if (!spy.isAlive() || !spy.isSetUp() || spy.action == SpyAction.Coup) return false
         val owner = spy.getCityOrNull()?.civ ?: return false
         val ally = owner.allyCiv ?: return false

@@ -5,6 +5,7 @@ import com.unciv.Constants
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.*
+import com.unciv.logic.civilization.diplomacy.CityStateRigging
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.EspionageManager
 import com.unciv.logic.civilization.managers.InfluenceLevel
@@ -191,7 +192,11 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
                 turnsRemainingForAction = incrementTechStealingProgress()
                 if (turnsRemainingForAction == 0) stealTech()
             }
-            SpyAction.RiggingElections -> {
+            SpyAction.RiggingElections -> if (likeVp()) {
+                // CvPlayerEspionage::ProcessSpy for SPY_STATE_RIG_ELECTION: the votes of the spy grow every turn by its rate, and the election (CityStateFunctions.holdElectionsLikeVp) spends them
+                addRiggingVotes(CityStateRigging.votesPerTurn(civInfo.gameInfo.ruleset.modOptions.constants.espionage, getEffectiveRank()))
+                turnsRemainingForAction = getCity().civ.cityStateFunctions.getTurnsUntilElectionLikeVp()
+            } else {
                 // No action done here
                 // Handled in CityStateFunctions.nextTurnElections()
                 // TODO: Once we remove support for the old flag system we can remove the null check
@@ -228,7 +233,7 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
             isDiplomat -> { setAction(SpyAction.Schmoozing); schmoozeLikeVp() }
             city.civ == civInfo -> { setAction(SpyAction.CounterIntelligence, 10); askForFocus() }
             city.civ.isCityState ->
-                setAction(SpyAction.RiggingElections, (city.civ.flagsCountdown[CivFlags.TurnsTillCityStateElection.name] ?: 1) - 1)
+                setAction(SpyAction.RiggingElections, city.civ.cityStateFunctions.getTurnsUntilElectionLikeVp())
             else -> setAction(SpyAction.GatheringIntel)
         }
     }
@@ -305,6 +310,15 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         for (bonus in bonusesFor(isDiplomat))
             if (bonusPoints(bonus) in (before + 1)..maxNetworkPoints)
                 addNotification("Your spy [$name] in [${city.name}] has earned the passive bonus [${bonus.name}]")
+    }
+
+    /**
+     *  The votes a spy rigging a city-state's election gathers (CvCityEspionage::GetAmount of a spy in the state SPY_STATE_RIG_ELECTION, V:CvMinorCivAI.cpp:15192). They are kept in
+     *  [networkPoints], as the original keeps them in the one amount, but they are not intel: they must not raise [maxNetworkPoints], which the passive bonuses (and so the science they steal) are
+     *  earned on, nor announce one
+     */
+    fun addRiggingVotes(votes: Int) {
+        networkPoints += votes
     }
 
     /** The spy lived after a mission of [turn] (V:CvEspionageClasses.cpp:1715-1724): it must wait before the next, and an AI spy thinks about where it should be */
@@ -468,7 +482,9 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         otherCivDiplomacyManager.setFlag(DiplomacyFlags.DiscoveredSpiesInOurCities, 30, true)
     }
 
-    @Readonly fun canDoCoup(): Boolean = getCityOrNull() != null && getCity().civ.isCityState && isSetUp()
+    /** CvPlayerEspionage::CanStageCoup (V:CvEspionageClasses.cpp:3590-3598): never with [com.unciv.models.ModConstants.noCoups]; the button, the AI and a spy already preparing one all ask this */
+    @Readonly fun canDoCoup(): Boolean = !civInfo.gameInfo.ruleset.modOptions.constants.noCoups
+            && getCityOrNull() != null && getCity().civ.isCityState && isSetUp()
             && getCity().civ.allyCiv != civInfo
 
     /**
@@ -556,6 +572,10 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
 
     fun moveTo(city: City?, asDiplomat: Boolean = false) {
         require(!asDiplomat || (city != null && canMoveTo(city, asDiplomat)))
+        // CvPlayerEspionage::ExtractSpyFromCity (V:CvEspionageClasses.cpp:2902-2906): a spy that leaves a city-state's city ends the streak of elections its owner rigged there
+        val leaving = getCityOrNull()
+        if (likeVp() && leaving != null && leaving != city && leaving.civ.isCityState)
+            leaving.civ.getDiplomacyManager(civInfo)?.consecutiveRiggings = 0
         isDiplomat = asDiplomat
         if (city == null) { // Moving to spy hideout
             location = null

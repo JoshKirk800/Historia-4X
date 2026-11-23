@@ -32,6 +32,9 @@
         "greatPersonThresholdIncrease": 250,
         // CvCity::GetJONSCultureThreshold
         "cultureCostLikeCivV": true,
+        // CULTURE_COST_FIRST_PLOT 20, CULTURE_COST_LATER_PLOT_MULTIPLIER 12 and CULTURE_COST_LATER_PLOT_EXPONENT 1.35 (DefineChanges.sql:144-146;
+        // Brave New World 15, 10 and 1.1; the comment in CvCity.cpp that says 15 for Vox Populi is stale)
+        "borderCulture": { "first": 20, "laterPlotMultiplier": 12, "exponent": 1.35 },
         // CvTreasury::DoGold
         "treasuryNeverNegative": true,
         // CvPlayer::GetBuyPlotCost, CvCity::GetBuyPlotCost, CvCity::CanBuyPlot, CvCity::GetBuyablePlotList

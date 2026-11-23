@@ -359,6 +359,7 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | unitMaintenanceExponentDivisor           | Float  | 3.0                           | [^U]  |
 | sciencePerPopulation                     | Float  | 1.0                           | Science each citizen of a city gives (`SCIENCE_PER_POPULATION`: 1 in Brave New World, 0 in Vox Populi) |
 | cityGrowth                               | Object | [See below](#citygrowthconstants) | Food a city needs to grow (`CITY_GROWTH_MULTIPLIER` and the others) |
+| borderCulture                            | Object | [See below](#borderculturecostconstants) | Culture a city needs for its next tile with `cultureCostLikeCivV` (`CULTURE_COST_FIRST_PLOT` and the others) |
 | greatPersonThresholdBase                 | Int    | 100                           | Points a city needs for the first Great Person of a group (`GREAT_PERSON_THRESHOLD_BASE`: Brave New World 100, Vox Populi 150) |
 | greatPersonThresholdIncrease             | Int    | 100                           | Points added for each Great Person of the group gained so far (`GREAT_PERSON_THRESHOLD_INCREASE`: Brave New World 100, Vox Populi 250). The groups are those of the unique `Is part of Great Person group [comment]` |
 | minimalCityDistance                      | Int    | 3                             | [^D]  |
@@ -671,6 +672,16 @@ These values are not merged individually, only the entire sub-structure is. The 
 | base | Int | 15 | `BASE_CITY_GROWTH_THRESHOLD` |
 | multiplier | Float | 8 | `CITY_GROWTH_MULTIPLIER`: Brave New World 8, Vox Populi 12 |
 | exponent | Float | 1.5 | `CITY_GROWTH_EXPONENT`: Brave New World 1.5, Vox Populi 2.22 |
+
+#### BorderCultureCostConstants
+
+These values are not merged individually, only the entire sub-structure is. With `cultureCostLikeCivV` the culture a city needs for its next tile is `first + int((level * laterPlotMultiplier) ^ exponent)`, level being the number of tiles it has claimed by culture, before the city-state, policy, game speed and rounding rules.
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| first | Int | 15 | `CULTURE_COST_FIRST_PLOT`: Brave New World 15, Vox Populi 20 |
+| laterPlotMultiplier | Int | 10 | `CULTURE_COST_LATER_PLOT_MULTIPLIER`: Brave New World 10, Vox Populi 12 |
+| exponent | Float | 1.1 | `CULTURE_COST_LATER_PLOT_EXPONENT`: Brave New World 1.1, Vox Populi 1.35 |
 
 ## AI.json
 

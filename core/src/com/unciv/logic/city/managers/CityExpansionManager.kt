@@ -53,8 +53,9 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
         return city.tiles.count { it != city.location && it !in tilesAroundCity}
     }
 
-    // The formula of the original is CvCity::GetJONSCultureThreshold (GlobalDefines CULTURE_COST_FIRST_PLOT 15, ..._LATER_PLOT_MULTIPLIER 10, ..._EXPONENT 1.1,
-    // CULTURE_PLOT_COST_MOD_MINIMUM -85, CULTURE_COST_VISIBLE_DIVISOR 5): 15 + (10 x level)^1.1, x 1.5 for a city-state, x (100 + the sum of the modifiers, at least -85) %,
+    // The formula of the original is CvCity::GetJONSCultureThreshold (GlobalDefines CULTURE_COST_FIRST_PLOT, ..._LATER_PLOT_MULTIPLIER, ..._EXPONENT, which are the
+    // ModConstants borderCulture, 15, 10 and 1.1 in Brave New World and 20, 12 and 1.35 in Vox Populi; CULTURE_PLOT_COST_MOD_MINIMUM -85, CULTURE_COST_VISIBLE_DIVISOR 5):
+    // first + (multiplier x level)^exponent, x 1.5 for a city-state, x (100 + the sum of the modifiers, at least -85) %,
     // x the game speed, rounded down to 5. The Civ V rulesets turn it on with the ModConstants cultureCostLikeCivV.
     // Other rulesets keep the older formula: 6 x (claimed tiles + 1.4813)^1.3, which is the Civ VI one ("Mathematics of Civilization V" has 20 + (10 (t-1))^1.1).
     @Readonly
@@ -79,7 +80,8 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
     @Readonly
     private fun getCultureToNextTileLikeCivV(): Int {
         val level = if (cultureLevel >= 0) cultureLevel else tilesClaimed()
-        var cost = 15 + (10.0 * level).pow(1.1).toInt()
+        val border = city.getRuleset().modOptions.constants.borderCulture
+        var cost = border.first + (border.laterPlotMultiplier.toDouble() * level).pow(border.exponent).toInt()
         if (city.civ.isCityState) cost = cost * 150 / 100
 
         var percent = 0

@@ -67,6 +67,17 @@ class ModConstants {
     )
     var cityGrowth = CityGrowthConstants()
 
+    /** The culture a city needs for its next tile under [cultureCostLikeCivV] (CvCity::GetJONSCultureThreshold, V:CvCity.cpp:17311-17325):
+     *  `first + int((level * laterPlotMultiplier) ^ exponent)`, level being the number of tiles the city has claimed by culture. Defines CULTURE_COST_FIRST_PLOT,
+     *  CULTURE_COST_LATER_PLOT_MULTIPLIER and CULTURE_COST_LATER_PLOT_EXPONENT: 15, 10 and 1.1 in Brave New World, 20, 12 and 1.35 in Vox Populi (DefineChanges.sql:144-146;
+     *  the "15 in VP" comment of the source is stale). Can only be modded all-or-nothing */
+    data class BorderCultureConstants(
+        val first: Int = 15,
+        val laterPlotMultiplier: Int = 10,
+        val exponent: Double = 1.1,
+    )
+    var borderCulture = BorderCultureConstants()
+
     // The minimal distance that must be between any two cities, not counting the tiles cities are on
     // The number is the amount of tiles between two cities, not counting the tiles the cities are on.
     // e.g. "C__C", where "C" is a tile with a city and "_" is a tile without a city, has a distance of 2.

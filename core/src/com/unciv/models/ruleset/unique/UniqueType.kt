@@ -271,6 +271,7 @@ enum class UniqueType(
 
     /// Border growth
     BorderCulture("[relativeAmount] border culture [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
+    BorderCultureFromTiles("[relativeAmount] border culture from [tileFilter] tiles [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
     BorderCulturePercent("[relativeAmount]% border culture [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
     BorderGrowthPercentage("[relativeAmount]% Culture cost of natural border growth [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
         docDescription = MULTIPLICATIVE_BONUS_EXPLANATION),

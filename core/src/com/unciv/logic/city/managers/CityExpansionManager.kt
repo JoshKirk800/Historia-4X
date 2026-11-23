@@ -498,6 +498,14 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
         city.forEachMatchingUnique(UniqueType.BorderCulture) { unique ->
             if (city.matchesFilter(unique.params[1])) flat += unique.params[0].toInt()
         }
+        city.forEachMatchingUnique(UniqueType.BorderCultureFromTiles) { unique ->
+            if (city.matchesFilter(unique.params[2])) {
+                val filter = unique.params[1]
+                val worked = city.getWorkedTiles().count { it.matchesFilter(filter, city.civ) }
+                val center = if (city.getCenterTile().matchesFilter(filter, city.civ)) 1 else 0
+                flat += unique.params[0].toInt() * (worked + center)
+            }
+        }
         city.forEachMatchingUnique(UniqueType.BorderCulturePercent) { unique ->
             if (city.matchesFilter(unique.params[1])) percent += unique.params[0].toInt()
         }

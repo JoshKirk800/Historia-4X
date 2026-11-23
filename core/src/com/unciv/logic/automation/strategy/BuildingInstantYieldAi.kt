@@ -27,7 +27,8 @@ import kotlin.math.max
  *  - BorderGrowth (`upon acquiring a tile through border growth`): n;
  *  - Purchase (`upon buying something with [Gold]`): n, x the cities for the global table; FaithPurchase ([Faith]): n, twice for a Religious civilization;
  *  - UnitProduction (`upon completing a unit`): n for each domain (land, sea, air) of which this is the best military city ([MilitaryCities.bestForDomain]);
- *  - GoldenAgeStart (`upon entering a Golden Age`, a flat yield): max(1, 3 x n x the golden age points a turn / what the next golden age needs).
+ *  - GoldenAgeStart (`upon entering a Golden Age`, a flat yield): max(1, 3 x n x the golden age points a turn / what the next golden age needs);
+ *  - TR_END (`upon completing a [domestic|international|any] trade route`, `Building_YieldFromInternalTREnd` and `...InternationalTREnd`, the city table only): n.
  *
  *  Per-turn shapes: a process modifier (`[x]% yield from processes`) is a modifier of twice x for the yield of the process the city is running (the unique
  *  names no yield); yield from yield (`[x]% of [stat] added to [stat]`) is x percent of the city's rate of the first stat as a flat yield (VP divides the target rate by x, which is
@@ -36,7 +37,7 @@ import kotlin.math.max
  *
  *  None, because VP's input is not in the engine: unit level up, combat experience and death yields (P6), the border growth part of the plot culture cost modifiers
  *  (`getPlotCultureCostModifier`), the investment modifiers of policies and traits added to the purchase yields, the retroactive and growth extra yields, the policy
- *  unlock, the spy, long count, trade route end and victory in a Golden Age yields (P3, P4, P5), the traits' `WLTKDGPImprovementModifier` and `GrowthBoon`, the
+ *  unlock, the spy, long count and victory in a Golden Age yields (P4, P5), the traits' `WLTKDGPImprovementModifier` and `GrowthBoon`, the
  *  Golden Age yields per age (`<for every [Golden Ages]>` flows through the building's stats like any other multiplier).
  */
 object BuildingInstantYieldAi {
@@ -87,6 +88,8 @@ object BuildingInstantYieldAi {
                     UniqueType.TriggerUponCompletingUnit -> for (domain in MilitaryCities.UnitDomain.entries)
                         if (MilitaryCities.bestForDomain(civ, domain) == city) terms.instant += amount
                     UniqueType.TriggerUponEnteringGoldenAge -> terms.flat += goldenAgeStartValue(city, amount)
+                    // The city table only: GetYieldFromInternalTREnd and GetYieldFromInternationalTREnd (V:CvCityStrategyAI.cpp:3826-3832)
+                    UniqueType.TriggerUponCompletingTradeRoute -> if (local) terms.instant += amount
                     else -> {}
                 }
             }

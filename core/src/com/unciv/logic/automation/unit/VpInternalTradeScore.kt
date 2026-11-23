@@ -36,17 +36,18 @@ import com.unciv.models.stats.Stat
  * Food targets (same function, FOOD): none while the empire is unhappy (CvPlayer::IsEmpireUnhappy, [EconomicMilitaryStrategyTests.isEmpireUnhappy]);
  * else the cities whose base food is below the average.
  *
- * Not present in the BNW rules base, so left out (as in the source's own absent-input cases):
+ * What the data and the needs model give ([VpTradeScoreTerms]): the x400 of a starving destination (CvCity::GetUnhappinessFromFamine, with the needs model) in
+ * place of the x20 of a food focus, the doubling of a connection to the capital of a city that is isolated (GetUnhappinessFromIsolation), what the buildings of
+ * both ends give when the route ends per turn of its length (GetYieldFromInternalTREnd), and what our cities on the path give while a route passes (iScoreFromPassingTR).
+ *
+ * None, because VP's input is not in the engine (each of them is a zero or unchanged term here):
  *  - the Utopia Project (PROJECT_UTOPIA_PROJECT: target city and the x150 of ScoreInternalTR), and corporations
- *    (GetFoundedCorporation / IsTradeRoutesInvulnerable): routes are never invulnerable, so a city under siege at either end scores 0 and the
+ *    (GetFoundedCorporation / IsTradeRoutesInvulnerable; O1 of the plan, no corporations): routes are never invulnerable, so a city under siege at either end scores 0 and the
  *    inner checks for the invulnerable case (isInDangerOfFalling, IsInEnemyDominatedZone) cannot be reached;
- *  - famine and isolation unhappiness (CvCity::GetUnhappinessFromFamine, GetUnhappinessFromIsolation: the x400 for a starving destination, the
- *    famine clause of the food targets, the doubling of a connection to the capital);
+ *  - the famine clause of the food targets (GetPrioritizedTradeRoutes);
  *  - wonder resource routes (TRADE_CONNECTION_WONDER_RESOURCE, MOD_TRADE_WONDER_RESOURCE_ROUTES, ScoreWonderTR) and internal gold routes
- *    (TRADE_CONNECTION_GOLD_INTERNAL, ScoreGoldInternalTR): Unciv has no such kind;
- *  - trait and building terms: IsTradeRouteProductionSiphon, GetGoldInternalTrade, IsConquestOfTheWorld
- *    (x5 in a golden age), GetYieldFromInternalTREnd (VP-only uniques), the path's iScoreFromTerrain and iScoreFromPassingTR (no
- *    terrain-yield trait or passing-route city yield; see [VpTradePathScore]).
+ *    (TRADE_CONNECTION_GOLD_INTERNAL, ScoreGoldInternalTR): not ported (O3 of the plan: inactive in Vox Populi);
+ *  - trait terms: IsTradeRouteProductionSiphon, GetGoldInternalTrade, IsConquestOfTheWorld (x5 in a golden age), the path's iScoreFromTerrain (no terrain-yield trait).
  *
  * Mapping of the inputs that exist in a different form:
  *  - getBaseYieldRateTimes100(YIELD_FOOD / YIELD_PRODUCTION): the city's base stats before percentage modifiers
@@ -56,7 +57,7 @@ import com.unciv.models.stats.Stat
  *  - IsAtWar and GetNumberCivsAtWarWith(true): the civilizations we are at war with, barbarians not counted, city-states counted;
  *  - CvCity::isUnderSiege: [CityDangerAi.isUnderSiege]; GetCachedTradePathInfo's iPathLength: the number of tiles of the route's path;
  *  - CheckTradeConnectionWasPlundered: [com.unciv.logic.civilization.managers.TradeRouteManager.wasPlunderedRecently];
- *  - GetTradeRouteTurns (internal yields at the end of a route): none, see above.
+ *  - GetTradeRouteTurns (internal yields at the end of a route): the turns of the route a trade unit would start ([com.unciv.models.TradeRoute.getTurnsLeft] of the preview).
  */
 class VpInternalTradeScore(private val civ: Civilization, private val pathScore: VpTradePathScore) {
 
@@ -154,21 +155,47 @@ class VpInternalTradeScore(private val civ: Civilization, private val pathScore:
 
         var score: Long = if (kind == TradeRouteKind.Food) foodScore(origin, destinationCity) else productionScore(origin, destinationCity)
 
+        // Direct connection to the capital through a trade route
+        if (VpTradeScoreTerms.isolation(destinationCity) > 0 && origin.isCapital()) score *= 2
+        if (VpTradeScoreTerms.isolation(origin) > 0 && destinationCity.isCapital()) score *= 2
+
         if (netGold <= 0) score += netGold * 10L
         score -= pathScore.partnerYield * 10L
 
+        // Instant yields when the trade route ends?
+        score += routeEndScore(candidate, origin, destinationCity)
+
         // Internal routes are preferred at war
         score *= warMultiplier
+        score += VpTradeScoreTerms.passingRouteScore(civ, path)
 
         score /= maxOf(distance, 1)
         return pathScore.apply(score, path).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
     }
 
-    /** TRADE_CONNECTION_FOOD of ScoreInternalTR: the food surplus of the origin over the destination, much more for a destination that focuses on food */
+    /**
+     *  TRADE_CONNECTION_FOOD of ScoreInternalTR: the food surplus of the origin over the destination, much more for a destination that focuses on food (x20) or
+     *  starves (x400, with the needs model)
+     */
     private fun foodScore(origin: City, destination: City): Long {
         var score = ((baseFood100(origin) + origin.population.population) - (baseFood100(destination) + destination.population.population)) / 100L
-        if (destination.getCityFocus() == CityFocus.FoodFocus) score *= 20
+        val famine = VpTradeScoreTerms.famine(destination) > 0
+        if (famine) score *= 400
+        else if (destination.getCityFocus() == CityFocus.FoodFocus) score *= 20
         return score
+    }
+
+    /**
+     *  What the buildings of the two ends give when the route ends (`GetYieldFromInternalTREnd` of both cities, V:CvTradeClasses.cpp:7558-7562) per turn of the route,
+     *  all yields added up. The route's length is that of the route a trade unit would start.
+     */
+    private fun routeEndScore(candidate: TradeRouteCandidate, origin: City, destination: City): Long {
+        val yields = VpTradeScoreTerms.routeEndYields(origin, false).toMap()
+        val destinationYields = VpTradeScoreTerms.routeEndYields(destination, false).toMap()
+        if (yields.isEmpty() && destinationYields.isEmpty()) return 0
+        val unitType = manager.getTradeUnitType(candidate.isSea) ?: return 0
+        val turns = maxOf(1, manager.preview(unitType, origin, candidate.destination)?.getTurnsLeft() ?: return 0)
+        return (yields.keys + destinationYields.keys).sumOf { ((yields[it] ?: 0) + (destinationYields[it] ?: 0)) / turns }.toLong()
     }
 
     /**

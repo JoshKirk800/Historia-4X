@@ -801,8 +801,17 @@ object DealAi {
             list.firstOrNull { it.type == type }?.let { list.remove(it) }
         }
 
+        /**
+         *  Whether the rules of the deals forbid [type] (gold or gold per turn) from the civilization that gives it in this deal: the temporary item for the permanent one
+         *  (CvDeal::IsPossibleToTradeItem, which the original's DoAddGoldTo... and DoAddGPTTo... ask first, V:CvDealAI.cpp:4535, 4589, 4643, 4711)
+         */
+        private fun forbidden(fromUs: Boolean, type: TradeOfferType): Boolean {
+            val probe = TradeOffer(if (type == TradeOfferType.Gold) Constants.flatGold else Constants.goldPerTurn, type, 1, if (type == TradeOfferType.Gold) -1 else 0)
+            return TradeEvaluation.blocksTemporaryForPermanent(probe, if (fromUs) us else them, if (fromUs) them else us, if (fromUs) trade.theirOffers else trade.ourOffers)
+        }
+
         fun addGoldToThem(dontChange: Boolean) {
-            if (dontChange || total >= 0 || amountOf(trade.ourOffers, TradeOfferType.Gold) != 0) return
+            if (dontChange || total >= 0 || amountOf(trade.ourOffers, TradeOfferType.Gold) != 0 || forbidden(false, TradeOfferType.Gold)) return
             var gold = getGoldForValue(us, -total)
             val already = amountOf(trade.theirOffers, TradeOfferType.Gold)
             gold = min(gold + already, goldAvailable(trade, them, false))
@@ -811,7 +820,7 @@ object DealAi {
         }
 
         fun addGoldToUs(dontChange: Boolean) {
-            if (dontChange || total <= 0 || amountOf(trade.theirOffers, TradeOfferType.Gold) != 0) return
+            if (dontChange || total <= 0 || amountOf(trade.theirOffers, TradeOfferType.Gold) != 0 || forbidden(true, TradeOfferType.Gold)) return
             var gold = getGoldForValue(us, total)
             val already = amountOf(trade.ourOffers, TradeOfferType.Gold)
             gold = min(gold + already, goldAvailable(trade, us, true))
@@ -820,7 +829,8 @@ object DealAi {
         }
 
         fun addGptToThem(dontChange: Boolean, duration: Int) {
-            if (dontChange || total >= 0 || goldRate(them) <= 0 || amountOf(trade.ourOffers, TradeOfferType.Gold_Per_Turn) != 0) return
+            if (dontChange || total >= 0 || goldRate(them) <= 0 || amountOf(trade.ourOffers, TradeOfferType.Gold_Per_Turn) != 0 ||
+                forbidden(false, TradeOfferType.Gold_Per_Turn)) return
             var gpt = getGptForValue(us, -total)
             val already = amountOf(trade.theirOffers, TradeOfferType.Gold_Per_Turn)
             gpt = min(gpt + already, goldRate(them))
@@ -829,7 +839,8 @@ object DealAi {
         }
 
         fun addGptToUs(dontChange: Boolean, duration: Int) {
-            if (dontChange || total <= 0 || goldRate(us) <= 0 || amountOf(trade.theirOffers, TradeOfferType.Gold_Per_Turn) != 0) return
+            if (dontChange || total <= 0 || goldRate(us) <= 0 || amountOf(trade.theirOffers, TradeOfferType.Gold_Per_Turn) != 0 ||
+                forbidden(true, TradeOfferType.Gold_Per_Turn)) return
             var gpt = getGptForValue(us, total)
             val already = amountOf(trade.ourOffers, TradeOfferType.Gold_Per_Turn)
             gpt = min(gpt + already, goldRate(us))

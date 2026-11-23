@@ -27,9 +27,11 @@ import kotlin.math.sqrt
  *  own, before the approach modifiers [DealAi.getTradeItemValue] applies to the deal; `null` is the original's INT_MAX: not for sale or
  *  not worth buying at any price.
  *
- *  Not ported: the VP branch of the luxury value (`MOD_BALANCE_VP`, roadmap W8.7); the resource obsolescence of CvTeam::IsResourceObsolete
- *  (the era after which the AI stops trading Iron and Horses: not in the ruleset); the luxury yields of beliefs (Goddess of Festivals:
- *  Vox Populi's; BNW has none) and of the Netherlands' trade traits; the building's mutually exclusive group (no such field in a
+ *  The VP branch of the luxury value (`MOD_BALANCE_VP`) is [VpLuxuryValue], read with `dealLuxuryValueLikeVp`; the value below is its Community Patch branch.
+ *
+ *  Not ported: the resource obsolescence of CvTeam::IsResourceObsolete in the strategic value (the era after which the AI stops trading Iron and Horses:
+ *  [VpLuxuryValue] reads it for a luxury); the luxury yields of beliefs (Goddess of Festivals:
+ *  Vox Populi's; BNW has none) and, in the Community Patch branch, of the Netherlands' trade traits; the building's mutually exclusive group (no such field in a
  *  building); Nuclear Gandhi (CvDiplomacyAI::IsNuclearGandhi: a mod option of the original); the renewal of a deal in progress (no
  *  deal under renewal is kept apart from the new one); the units a civ cannot train (traits that forbid a unit class) and the units
  *  City-States gift (no such flags on a unit).
@@ -91,6 +93,7 @@ object DealResourceValues {
      *  x2 when the empire is unhappy (x3 very unhappy).
      */
     fun luxuryValue(us: Civilization, them: Civilization, resource: TileResource, numTurns: Int, fromMe: Boolean, netGoldOfReceiver: Int): Int? {
+        if (us.gameInfo.ruleset.modOptions.constants.dealLuxuryValueLikeVp) return VpLuxuryValue.value(us, them, resource, fromMe, netGoldOfReceiver)
         val turns = max(1, numTurns)
         val owner = if (fromMe) us else them
         val baseHappiness = happinessFromLuxury(owner, resource) + extraHappinessPerLuxury(owner)
@@ -122,7 +125,7 @@ object DealResourceValues {
      *  unhappy threshold) if its citizens lost [happiness] of their happiness, so it keeps its last copy. Nothing while no citizen is unhappy.
      *  The buying side's tiers are the original's 12, 6 and 3 gold per turn scaled, here as factors 4, 3 and 2 of the Community Patch value.
      */
-    private fun wouldBeUnhappyWithout(civ: Civilization, happiness: Int): Boolean {
+    internal fun wouldBeUnhappyWithout(civ: Civilization, happiness: Int): Boolean {
         val needs = civ.stats.needs
         if (needs.unhappyCitizens <= 0) return false
         val percent = min(200, (needs.happyCitizens - happiness) * 100 / max(1, needs.unhappyCitizens)) / 2
@@ -157,7 +160,7 @@ object DealResourceValues {
         max(1, civ.tech.techsResearched.size * 100 / max(1, civ.gameInfo.ruleset.technologies.size))
 
     /** Whether [civ] is at war with a major, or (an AI) has a major it plans war on: CvDealAI::GetStrategicResourceItemList's `bWar` */
-    private fun atWarOrPlanningWar(civ: Civilization): Boolean {
+    internal fun atWarOrPlanningWar(civ: Civilization): Boolean {
         if (civ.gameInfo.civilizations.any { it.isMajorCiv && it.isAlive() && civ.isAtWarWith(it) }) return true
         if (civ.isHuman()) return false
         return civ.gameInfo.civilizations.any {

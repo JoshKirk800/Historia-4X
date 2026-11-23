@@ -327,10 +327,11 @@ object AttackTargetsAi {
      *  CvMilitaryAI::ScoreAttackTarget: approach x distance weight x desirability x sqrt(economic value / the city's hit points). The
      *  distance weight falls linearly with the path length from 10 at 8 tiles to 1 at 24 by land (6 to 1 from 8 to 36 by sea). Desirability:
      *  x 2.5 for an original capital when going for (or close to) world conquest, x 1.5 for a city we founded; a city-state's city / 2,
-     *  x 100 / 250 more when its ally is at war with us, 0 while we fight a major and not that city-state.
+     *  x 100 / 250 more when its ally is at war with us, 0 while we fight a major and not that city-state. x 125 / 100 when the city has a resource of which
+     *  we already own a share of the copies on the map ([MonopolyAi.attackDesirabilityPercent]).
      *
      *  Missing inputs (none): the city-state quests of the original (liberation, war, acquire a city - Vox Populi's), IsTryingToLiberate,
-     *  the city-state combat trait, conquest yields by terrain, resource monopolies.
+     *  the city-state combat trait, conquest yields by terrain.
      */
     fun scoreAttackTarget(civ: Civilization, target: AttackTarget, economicValues: MutableMap<City, Int> = HashMap()): Int {
         val city = target.targetCity
@@ -352,6 +353,9 @@ object AttackTargetsAi {
             } else if (civ.gameInfo.civilizations.any { it.isMajorCiv && civ.isAtWarWith(it) } && !civ.isAtWarWith(city.civ)) return 0
         }
 
+        // Will this get us closer to a monopoly?
+        desirability = desirability * MonopolyAi.attackDesirabilityPercent(civ, city) / 100
+
         val value = economicValues.getOrPut(city) { economicValue(city, civ) }
         val economic = sqrt(max(0, value).toFloat() / max(1, city.health).toFloat())
         return (target.approachScore * distanceWeight * desirability * economic).toInt()
@@ -361,7 +365,7 @@ object AttackTargetsAi {
      *  CvCity::updateEconomicValue / getEconomicValue for [possibleOwner], in hundredths of gold: (food x 3 + production x 4 + science x 3 +
      *  gold (after building maintenance) + culture x 3 + faith x 3) / 3, + 23 per world wonder; plus the resources the city owns or will
      *  likely claim within 3 tiles: a luxury quantity x happiness per luxury x 200 (100 when the World Congress bans it; 600 if [possibleOwner]
-     *  has none or the owner would lose its last), a strategic resource quantity x 400 (800 likewise). Food is the city's whole food, before
+     *  has none, the owner would lose its last or the copies would give [possibleOwner] a monopoly), a strategic resource quantity x 400 (800 likewise). Food is the city's whole food, before
      *  what the citizens eat. Tourism and golden age points per city have no counterpart here.
      */
     fun economicValue(city: City, possibleOwner: Civilization): Int {
@@ -383,7 +387,8 @@ object AttackTargetsAi {
             if (resource.getMatchingUniques(UniqueType.ObsoleteWith).any { possibleOwner.tech.isResearched(it.params[0]) }) continue
             val quantity = if (resource.resourceType == ResourceType.Strategic) tile.resourceAmount else 1
             if (quantity <= 0) continue
-            val lacking = possibleOwner.getResourceAmount(resource.name) == 0 || owner.getResourceAmount(resource.name) == quantity
+            val lacking = possibleOwner.getResourceAmount(resource.name) == 0 || owner.getResourceAmount(resource.name) == quantity ||
+                MonopolyAi.wouldGainMonopoly(possibleOwner, resource, quantity)
             when (resource.resourceType) {
                 ResourceType.Luxury -> {
                     var value = if (city.civ.gameInfo.league?.isLuxuryBanned(resource.name) == true) 100 else 200

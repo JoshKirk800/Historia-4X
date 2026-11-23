@@ -5,6 +5,7 @@ import com.unciv.logic.automation.WaterBodies
 import com.unciv.logic.automation.civilization.DealResourceValues
 import com.unciv.logic.automation.civilization.PlotShape
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
+import com.unciv.logic.automation.strategy.MonopolyAi
 import com.unciv.logic.automation.strategy.StrengthLevel
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.civilization.Civilization
@@ -35,8 +36,7 @@ import kotlin.math.min
  *  feature, whatever the climate under it; a plot's river is the one of CvPlot::isRiver by adjacency; "the way a neighbor's city is found by
  *  its outward direction" ([neighborOutward]) takes the neighbor of the plot that is farthest from the capital instead of the original's
  *  six-way direction bucket; the Inca hills ([INCA_MULTIPLIER]) are the hills next to mountains where the original's Pata-Pata (Terrace farm in Civ V)
- *  stands on mountains themselves, and mountains count for them as the original's [MOUNTAIN_MULTIPLIER]; the strategic monopolies of
- *  Vox Populi's tradeable resource value (BALANCE_RESOURCE_MONOPOLIES) and the Persian-style "rivers are roads" trait have no counterpart in the
+ *  stands on mountains themselves, and mountains count for them as the original's [MOUNTAIN_MULTIPLIER]; the Persian-style "rivers are roads" trait has no counterpart in the
  *  ruleset; the logging flag bCoastOnly of the original (set only while it writes its debug file) is not modelled.
  */
 class CitySiteEvaluator(private val civ: Civilization, private val ignorePlots: BooleanArray? = null) {
@@ -535,6 +535,8 @@ class CitySiteEvaluator(private val civ: Civilization, private val ignorePlots: 
                 // Since there are not "multiple" luxuries on a tile, increase this value
                 if (resource.resourceType == ResourceType.Luxury) tradeable *= 3
                 if (notOwned) tradeable *= 3
+                // Will this get us closer to a monopoly?
+                tradeable *= MonopolyAi.siteMultiplier(civ, resource, MonopolyAi.copiesOf(tile, resource))
             }
         }
         happiness *= flavorMultipliers[HAPPINESS] * happinessMultiplier

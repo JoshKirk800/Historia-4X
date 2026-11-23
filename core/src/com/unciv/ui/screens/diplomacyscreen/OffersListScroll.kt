@@ -11,7 +11,9 @@ import com.unciv.logic.trade.TradeOfferType.*
 import com.unciv.logic.trade.TradeOffersList
 import com.unciv.models.ruleset.tile.ResourceSupplyList
 import com.unciv.models.translations.tr
+import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.components.extensions.disable
+import com.unciv.ui.screens.TradeOfferRows
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.widgets.ExpanderTab
 import com.unciv.ui.images.IconTextButton
@@ -110,6 +112,9 @@ class OffersListScroll(
                         labelCell.width(maxLabelWidth)
                     }
                 }
+
+                // Permanent or temporary, where the rules of the deals tell them apart
+                TradeOfferRows.permanenceNote(offer, ourCiv.getCiv())?.let { tradeButton.addTooltip(it.tr(), 18f) }
 
                 val amountPerClick =
                     when (offer.type) {

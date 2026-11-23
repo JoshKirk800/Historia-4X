@@ -22,6 +22,7 @@ import com.unciv.ui.components.extensions.pad
 import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.images.ImageGetter
+import com.unciv.ui.screens.MonopolyRows
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.view.CivView
 
@@ -43,6 +44,7 @@ class ResourcesOverviewTab(
         private const val defaultPad = 10f
         private const val tooltipSize = 24f
         private const val total = "Total" // Used both as label and as invisible pseudo-origin
+        private const val MONOPOLY = "Monopoly"
     }
 
     private fun getTurnImage(vertical: Boolean) =
@@ -128,7 +130,23 @@ class ResourcesOverviewTab(
         label.onClick {
             overviewScreen.openCivilopedia(makeLink())
         }
+        if (monopolyTooltip(this).isNotEmpty()) label.addTooltip(name + monopolyTooltip(this), tooltipSize, tipAlign = Align.left, hideIcons = true)
         return label
+    }
+
+    private val monopolyRows = MonopolyRows.rows(viewingPlayer.getCiv()).associateBy { it.resource }
+
+    /** The monopoly lines of the tooltip of [resource]: its state for us and what a monopoly gives, empty for a resource without a monopoly */
+    private fun monopolyTooltip(resource: TileResource): String {
+        val row = monopolyRows[resource.name] ?: return ""
+        return "\n" + (MonopolyRows.lines(row) + MonopolyRows.tooltipLines(resource)).joinToString("\n") { it.tr() }
+    }
+
+    /** The cell of the monopoly row: the share of the copies, in the colour of the state (green for a global monopoly, yellow for a strategic one) */
+    private fun monopolyLabel(resource: TileResource): Label {
+        val row = monopolyRows[resource.name] ?: return "".toLabel()
+        val color = if (row.global) Color.GREEN else if (row.strategic) Color.YELLOW else Color.WHITE
+        return "${row.percent}%".toLabel(color).apply { addTooltip(monopolyTooltip(resource).trimStart(), tooltipSize, tipAlign = Align.top) }
     }
 
     private enum class ExtraInfoOrigin(
@@ -183,7 +201,7 @@ class ResourcesOverviewTab(
         add(turnImageH)
         for (resource in resources) {
             add(getResourceImage(resource.name).apply {
-                addTooltip(resource.name, tipAlign = Align.topLeft, hideIcons = true)
+                addTooltip(resource.name + monopolyTooltip(resource), tipAlign = Align.topLeft, hideIcons = true)
             })
         }
         addSeparator()
@@ -202,6 +220,13 @@ class ResourcesOverviewTab(
         add(total.toLabel()).left()
         for (resource in resources) {
             add(resourceDrilldown.getTotalLabel(resource))
+        }
+
+        // The monopoly state of each resource, only where the rules have monopolies
+        if (monopolyRows.isNotEmpty()) {
+            row()
+            add(MONOPOLY.toLabel()).left()
+            for (resource in resources) add(monopolyLabel(resource))
         }
 
         // Separate rows for origins not part of the totals

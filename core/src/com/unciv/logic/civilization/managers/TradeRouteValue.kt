@@ -255,7 +255,7 @@ object TradeRouteValue {
      * none between a civilization's own cities, none when [computing] or the owner of the destination is a major civilization with [UniqueType.NoTradeRouteProximityPenalty].
      */
     @Readonly
-    private fun proximityModifier(route: TradeRoute, origin: City, destination: City, computing: Civilization, manager: TradeRouteManager): Int {
+    fun proximityModifier(route: TradeRoute, origin: City, destination: City, computing: Civilization, manager: TradeRouteManager): Int {
         if (origin.civ == destination.civ) return 0
         if (computing.isMajorCiv && computing.hasUnique(UniqueType.NoTradeRouteProximityPenalty)) return 0
         if (destination.civ.isMajorCiv && destination.civ.hasUnique(UniqueType.NoTradeRouteProximityPenalty)) return 0

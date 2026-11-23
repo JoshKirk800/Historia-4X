@@ -6,6 +6,7 @@ import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stats
+import com.unciv.ui.screens.MonopolyRows
 import com.unciv.ui.screens.civilopediascreen.FormattedLine
 
 object ResourceDescriptions {
@@ -19,6 +20,12 @@ object ResourceDescriptions {
 
         if (!(resource as Stats).isEmpty())
             textList += FormattedLine(resource.cloneStats().toString())
+
+        val monopolyLines = MonopolyRows.tooltipLines(resource)
+        if (monopolyLines.isNotEmpty()) {
+            textList += FormattedLine()
+            for (line in monopolyLines) textList += FormattedLine(line.trimStart(), indent = if (line.startsWith(" ")) 1 else 0)
+        }
 
         if (!resource.revealedBy.isNullOrEmpty()) {
             textList += FormattedLine()

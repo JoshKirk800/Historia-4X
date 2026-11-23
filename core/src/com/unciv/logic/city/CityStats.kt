@@ -3,6 +3,7 @@ package com.unciv.logic.city
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.civilization.CivFlags
 import com.unciv.logic.civilization.managers.TradeRouteManager
+import com.unciv.logic.civilization.managers.TradeRouteValue
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.models.Counter
 import com.unciv.models.ruleset.Building
@@ -667,6 +668,7 @@ class CityStats(val city: City) {
         newBaseStatList["Tile yields"] = statsFromTiles
         newBaseStatList["Specialists"] = statsFromSpecialists
         newBaseStatList["Trade routes"] = getStatsFromTradeRoute()
+        TradeRouteValue.getCityStats(city).let { if (!it.isEmpty()) newBaseStatList["Trade route effects"] = it } // routes passing and routes of the city
         newBaseStatList["Great Works"] = city.greatWorks.getStats()
         newBaseStatTree.children["Buildings"] = statsFromBuildings
 

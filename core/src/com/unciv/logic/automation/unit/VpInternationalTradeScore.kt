@@ -10,6 +10,7 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.managers.TradeRouteCandidate
+import com.unciv.logic.civilization.managers.TradeRouteValue
 import com.unciv.models.TradeRouteKind
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
@@ -34,13 +35,13 @@ import kotlin.math.sqrt
  * by the civilizations we are at war with (at least 2) - the path's danger.
  *
  * Mapping to what Unciv has:
- * - Yields are those of [com.unciv.logic.civilization.managers.TradeRouteManager.preview], i.e. Brave New World's rules stay: the gold of
- *   each end (CvPlayerTrade::GetTradeConnectionValueTimes100), and the science of each end (the half of the technologies the other knows and we
- *   do not, plus the influence bonus). VP's own estimate of that science (a divisor of 125 instead of 200, multiplied by the era, plus the
- *   policy bump) is not applied, as it estimates a yield BNW does not pay. Culture is read from the route's culture yields (none in BNW,
- *   0 today). The "other side" terms keep VP's /10 (gold, when we are friends, approach friendly or opinion neutral or better) and /3 (science
- *   and culture, friends, approach friendly or opinion friend or better); "friends" is a declaration of friendship or defensive pact
- *   (CvDiplomacyAI::IsFriendOrAlly), the approach and the opinion those of [com.unciv.logic.automation.diplomacy.DiplomacyAi].
+ * - Yields are those of [com.unciv.logic.civilization.managers.TradeRouteManager.preview]: with [com.unciv.models.ModConstants.tradeRouteModelLikeVp]
+ *   Vox Populi's own route value ([TradeRouteValue], CvPlayerTrade::GetTradeConnectionValueTimes100), so the gold, science and culture of each end are
+ *   what the route would pay and what the original's AI reads (its science estimate, a divisor of 125 multiplied by the era, is the yield itself); without
+ *   the flag Brave New World's rules stay: the gold of each end, and the science of each end (the half of the technologies the other knows and we do
+ *   not, plus the influence bonus), no culture. The "other side" terms keep VP's /10 (gold, when we are friends, approach friendly or opinion neutral
+ *   or better) and /3 (science and culture, friends, approach friendly or opinion friend or better); "friends" is a declaration of friendship or
+ *   defensive pact (CvDiplomacyAI::IsFriendOrAlly), the approach and the opinion those of [com.unciv.logic.automation.diplomacy.DiplomacyAi].
  * - VP's domain-specific tourism bonuses come from building fields not present in BNW; they contribute zero here.
  * - Religion: the pressure terms as in VP (pressures divided by RELIGION_MISSIONARY_PRESSURE_MULTIPLIER, 10), with our state religion
  *   ([OpinionAi.stateReligion], CvPlayerReligions::GetStateReligion) and the accumulated pressures of the cities.
@@ -53,8 +54,9 @@ import kotlin.math.sqrt
  *
  * Not present in the rules, so left out (each of them is a zero or unchanged term here):
  * corporations (invulnerable routes, franchises, offices, GP rate per franchise, free franchise above Popular, the office / franchise
- * score), foreign-territory route yields, production siphon, no open trade, plunder without war, city yields from the end of a route,
- * a city's poverty, illiteracy and boredom, the yields from passing routes and terrain (none in BNW).
+ * score), foreign-territory route yields, the production and food a siphoned city-state pays (the route value pays them, the score does not read them), no open
+ * trade, plunder without war, city yields from the end of a route, a city's poverty, illiteracy and boredom, the yields from passing routes and terrain
+ * (the cities and tiles get them from [TradeRouteValue] with the rules of Vox Populi, the score does not read them).
  * Also omitted: the city-state production building (x25), event tourism, the protected-minor policy, strategic trade partners
  * and the extra culture and science policy bump. The siege test is [CityDangerAi.isUnderSiege] and, as there are no invulnerable routes, the
  * invulnerable branch of the origin's siege (falling, enemy-dominated zone) never applies.
@@ -185,14 +187,7 @@ class VpInternationalTradeScore(private val civ: Civilization, private val pathS
     }
 
     /** CvMinorCivAI::IsSiphoned: we have an unpillaged improvement that siphons luxuries on a tile of the city-state */
-    private fun isSiphoned(cityState: Civilization): Boolean = siphoned.getOrPut(cityState.civID) {
-        cityState.cities.any { city ->
-            city.getTiles().any { tile ->
-                tile.getOwner() == cityState && tile.improvementBuilder == civ.civID && !tile.improvementIsPillaged &&
-                    tile.tileImprovement?.hasUnique(UniqueType.SiphonsLuxuriesFromCityState) == true
-            }
-        }
-    }
+    private fun isSiphoned(cityState: Civilization): Boolean = siphoned.getOrPut(cityState.civID) { TradeRouteValue.isSiphoned(civ, cityState) }
 
     private companion object {
         /** RELIGION_MISSIONARY_PRESSURE_MULTIPLIER: the pressure shown to the user is the internal one divided by this */

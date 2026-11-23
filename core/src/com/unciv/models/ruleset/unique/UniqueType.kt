@@ -312,11 +312,20 @@ enum class UniqueType(
     // (`parity/vp-resources`, `-monopolies`, `-trade-yields`, `-trade-rules`), until then nothing reads them and no ruleset uses them. The corporation shapes of the
     // plan (founding a corporation, franchises and their yields) are not here: the owner decided against corporations for now (D22, O1)
     StatsPerTradeRouteOfCity("[stats] for each trade route that starts in this city", UniqueTarget.Global, UniqueTarget.FollowerBelief,
-        docDescription = "Added to the city for every trade route of its owner that starts in it (Vox Populi's `Belief_YieldPerActiveTR`, `Policy_YieldChangeTradeRoute`). " +
-            "Not read yet: slice T3 of the trade plan"),
+        docDescription = "Added to the city for every trade route of its owner that starts in it and every route that ends in it, counted as the original's " +
+            "`Belief_YieldPerActiveTR` does (V:CvBeliefClasses.cpp:4332-4350 with CvPlayerTrade::GetNumberOfTradeRoutesCity, V:CvTradeClasses.cpp:4723-4730: the routes from the city " +
+            "and the routes to it, of any civilization, so a route between two of the civilization's cities counts for both). Nothing reads it in a ruleset that does not use it"),
     StatsOnTradeRouteDomain("[stats] on [tradeRouteFilter] trade routes", UniqueTarget.Global, UniqueTarget.FollowerBelief,
-        docDescription = "Added to the yields of a trade route that matches the filter, for the city it starts in; with the modifier `<for every [Era scaler]>` it grows with the era. " +
-            "Not read yet: slice T3 of the trade plan"),
+        docDescription = "Added to the yield of a trade route that matches the filter, for the stat it names, before the route's modifiers (Vox Populi's `Belief_TradeRouteYieldChange`, " +
+            "`Policy_TradeRouteYieldChange`, `Trait_TradeRouteYieldChange`, V:CvTradeClasses.cpp:3232-3270): the unique of the city the route starts in. Gold, culture and science " +
+            "for an international route, food and production for a domestic one; with the modifier `<for every [Era scaler]>` it grows with the era. " +
+            "Only read with `tradeRouteModelLikeVp`"),
+    InternationalTradeRouteYieldPercent("[relativeAmount]% yields from international trade routes", UniqueTarget.Global,
+        docDescription = "Added to the modifier of the yields of the civilization's international trade routes, for the origin (Vox Populi's `Policies.TradeRouteYieldModifier`, " +
+            "POLICYMOD_TRADE_MODIFIER, V:CvTradeClasses.cpp:3705-3707). Only read with `tradeRouteModelLikeVp`"),
+    NoTradeRouteProximityPenalty("No proximity penalty on trade routes", UniqueTarget.Global,
+        docDescription = "The routes of the civilization and the routes to it are not made less valuable the shorter they are than the longest route possible (Vox Populi's " +
+            "`Traits.NoTradeRouteProximityPenalty`, Morocco's `TRAIT_GATEWAY_AFRICA`, V:CvTradeClasses.cpp:3372-3418). Only read with `tradeRouteModelLikeVp`"),
     ResourceQuantityPercent("[relativeAmount]% quantity of [resource]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
         docDescription = "Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), " +
             "as the original's `Belief_ResourceQuantityModifiers` do (V:CvPlayer.cpp:38843-38865; there the modifier is the amount times the number of cities that follow the belief, " +
@@ -559,10 +568,11 @@ enum class UniqueType(
 
     StatsOnDomesticRoutesFromCity("[stats] on domestic trade routes that start in this city", UniqueTarget.Building,
         docDescription = "Added to the yield of every food or production route of the civilization that starts in the city, before the route's percentage modifiers " +
-            "(Vox Populi's `Building_YieldFromInternalTR`). Not read yet: slice T3 of the trade plan"),
+            "(Vox Populi's `Building_YieldFromInternalTR`, V:CvTradeClasses.cpp:4157, 4217). Only this city's own buildings count, whatever the unique says about the scope. " +
+            "Only read with `tradeRouteModelLikeVp`"),
     StatsWhenTradeRoutePasses("[stats] while any trade route passes through this city", UniqueTarget.Building,
-        docDescription = "Added to the city every turn in which a trade unit of any civilization stands on the city's tile (Vox Populi's `Building_YieldChangesFromPassingTR`). " +
-            "Not read yet: slice T3 of the trade plan"),
+        docDescription = "Added to the city while the path of any trade route of any civilization goes over the city's tile (Vox Populi's `Building_YieldChangesFromPassingTR`, " +
+            "V:CvCity.cpp:23328 with CvPlot::IsTradeUnitRoute, V:CvTradeClasses.cpp:1376-1402: the path, not the place the trade unit stands now). Only this city's own buildings count"),
 
 
     // Todo nuclear weapon and spaceship enabling requires a rethink.
@@ -859,7 +869,8 @@ enum class UniqueType(
     // Improvements
     ImprovementStatsOnRoute("[stats] if a trade route crosses this tile on a [improvementName]", UniqueTarget.Improvement,
         docDescription = "Vox Populi's `Improvement_RouteYieldChanges`: the improvement gives the stats while a trade route of any civilization passes over the tile along a road or " +
-            "a railroad (name the route's improvement: `Road` or `Railroad`; a railroad is read instead of the road from the fourth era). Not read yet: slice T3 of the trade plan"),
+            "a railroad (name the route's improvement: `Road` or `Railroad`; the railroad's row is read instead of the road's from the fourth era of the civilization the yield is for, " +
+            "V:CvPlot.cpp:10733-10742). What the original also gives for a road or railroad that connects a city to the capital (V:CvPlot.cpp:10744-10760) is not read here"),
 
     // Natural wonders
     NaturalWonderNeighborCount("Must be adjacent to [amount] [simpleTerrain] tiles", UniqueTarget.Terrain, flags = UniqueFlag.setOfHiddenToUsers),
@@ -1086,8 +1097,8 @@ enum class UniqueType(
     ConditionalStrategicMonopoly("with a strategic monopoly of [resource]", UniqueTarget.Conditional,
         docDescription = "True while the civilization has a strategic monopoly of the resource (more than a quarter of the copies on the map)"),
     ConditionalOnTradeRoute("on tiles of trade routes and their cities", UniqueTarget.Conditional,
-        docDescription = "True for a tile or city that a trade route of any civilization passes over (Vox Populi's Inca, `TRAIT_GREAT_ANDEAN_ROAD`). " +
-            "Not evaluated yet: slice T3 of the trade plan, until then false"),
+        docDescription = "True for a tile or city that the path of a trade route of any civilization passes over (Vox Populi's Inca, `TRAIT_GREAT_ANDEAN_ROAD`, " +
+            "V:CvPlot.cpp:10955-10975: IsTradeUnitRoute; the original also counts tiles of a road that connects a city to the capital, which is not read here)"),
 
     // Supports also stockpileable resources (Gold, Faith, Culture, Science)
     ConditionalWhenAboveAmountStatResource("when above [amount] [stat/resource]", UniqueTarget.Conditional, flags = setOf(UniqueFlag.AcceptsSpeedModifier)),
@@ -1357,13 +1368,14 @@ enum class UniqueType(
         docDescription = "In the city that starts celebrating (`CvCity::ChangeWeLoveTheKingDayCounter`, `INSTANT_YIELD_TYPE_WLTKD_START`)"),
     TriggerUponCompletingTradeRoute("upon completing a [tradeRouteKind] trade route", UniqueTarget.TriggerCondition,
         docDescription = "When a trade route of the civilization ends, in the city it started in (and in the destination city for a domestic route): `international`, `domestic` or `any` " +
-            "(`INSTANT_YIELD_TYPE_TR_END`, V:CvTradeClasses.cpp:2606-2650). Never fired yet: slice T3 of the trade plan"),
+            "(`INSTANT_YIELD_TYPE_TR_END`, V:CvTradeClasses.cpp:2606-2650: once for each end of a domestic route, so twice for a unique that does not name a city). Not fired for a route " +
+            "that was plundered or cancelled"),
     TriggerUponTradeUnitMoving("upon a trade route unit moving", UniqueTarget.TriggerCondition,
-        docDescription = "Once for each step that a trade unit of the civilization makes along its route (`INSTANT_YIELD_TYPE_TR_MOVEMENT`, V:CvPlayer.cpp:26826-26838). " +
-            "Never fired yet: slice T3 of the trade plan"),
+        docDescription = "Once each turn that a trade unit of the civilization moves along its route, and when it starts, in the city the route starts in, however many steps it makes " +
+            "(`INSTANT_YIELD_TYPE_TR_MOVEMENT`, V:CvTradeClasses.cpp:2085-2150, V:CvPlayer.cpp:26826-26838)"),
     TriggerUponPlunderingTradeRoute("upon plundering a trade route", UniqueTarget.TriggerCondition, UniqueTarget.UnitTriggerCondition,
-        docDescription = "When a unit of the civilization plunders a trade route (`INSTANT_YIELD_TYPE_PLUNDER_TRADE_ROUTE`, V:CvPlayer.cpp:26863-26870). " +
-            "Never fired yet: slice T3 of the trade plan"),
+        docDescription = "When a unit of the civilization plunders a trade route, in the city the unit was made in (else the capital); as a unit's own unique it is the unit " +
+            "that gains (`INSTANT_YIELD_TYPE_PLUNDER_TRADE_ROUTE`, V:CvTradeClasses.cpp:5034, V:CvPlayer.cpp:26863-26870)"),
     TriggerUponGainingLuxury("upon gaining a luxury resource", UniqueTarget.TriggerCondition,
         docDescription = "When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is " +
             "how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)"),

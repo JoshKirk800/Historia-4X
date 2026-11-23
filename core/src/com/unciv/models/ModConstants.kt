@@ -499,8 +499,9 @@ class ModConstants {
 
     // Vox Populi's trade route model instead of Brave New World's (CvPlayerTrade::GetTradeConnectionValueTimes100, V:CvTradeClasses.cpp:3604-4247; the option BALANCE_VP and
     // BALANCE_TRADE_ROUTE_PROXIMITY_PENALTY, BALANCE_TRADE_ROUTE_DESTINATION_RESTRICTION). false: the constants above and the rules as they are. true: the numbers of
-    // [tradeRouteVp] and the Eras' `tradeRouteFoodBonus` and `tradeRouteProductionBonus`, with the route rules of the original. Nothing reads these yet: slices T3 and T4 of
-    // phaseE/vp-trade-plan.md add the model, and they are what the flag will turn on
+    // [tradeRouteVp] and the Eras' `tradeRouteFoodBonus` and `tradeRouteProductionBonus`, with the route rules of the original. Slice T3 of phaseE/vp-trade-plan.md reads the value
+    // model ([com.unciv.logic.civilization.managers.TradeRouteValue]: the yields of a route, how long it lasts by the game speed's `tradeRouteSpeedModifier`, what a plunder pays, the
+    // range by [worldTradeRouteDistance]); the rules (destination restriction, slots) are slice T4's, which turns them on with this flag as well
     var tradeRouteModelLikeVp = false
     /** The defines of Vox Populi's route model (DB vp `Defines`, `(1) Community Patch/Database Changes/Defines/CoreDefineChanges.sql:1007` and DEF-VP; the values of Vox Populi 5.4.8).
      *  Can only be modded all-or-nothing. Percentages are of 100; "times 100" are hundredths */
@@ -538,7 +539,8 @@ class ModConstants {
 
     /** What the route range (the unit's base range plus the traits' and techs') is multiplied by for the size of the map: the percentage of the entry with the greatest
      *  `tiles` that the map has at least (the original's `Worlds.TradeRouteDistanceMod`, V:CvTradeClasses.cpp:5332-5390: 80 Duel and Tiny, 90 Small, 100 Standard, 130 Large,
-     *  160 Huge). Empty: 100 percent. Not read yet: slice T4 of phaseE/vp-trade-plan.md (O8: by the number of tiles until the world sizes have rule tables) */
+     *  160 Huge). Empty: 100 percent. Read by [com.unciv.logic.civilization.managers.TradeRouteManager.getRange] with [tradeRouteModelLikeVp], where the other percentages of the
+     *  range add to it (O8 of phaseE/vp-trade-plan.md: by the number of tiles until the world sizes have rule tables) */
     data class WorldTradeRouteDistance(val tiles: Int = 0, val percent: Int = 100)
     var worldTradeRouteDistance: List<WorldTradeRouteDistance> = emptyList()
 

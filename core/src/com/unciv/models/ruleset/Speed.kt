@@ -27,7 +27,7 @@ class Speed : RulesetObject() {
     var hurryModifier: Float = 1f
     /** What the number of turns a trade route lasts is multiplied by (the original's `GameSpeeds.TradeRouteSpeedMod`, V:CvTradeClasses.cpp:1404-1442: 300, 150, 100 and 67 percent
      *  in Vox Populi for Marathon, Epic, Standard and Quick; the column does not exist in Brave New World, so like [hurryModifier] it does not default to [modifier]).
-     *  Not read yet: slice T4 of `phaseE/vp-trade-plan.md` */
+     *  Read with [com.unciv.models.ModConstants.tradeRouteModelLikeVp] by [com.unciv.logic.civilization.managers.TradeRouteManager.getTargetTurns] */
     var tradeRouteSpeedModifier: Float = 1f
     var goldGiftModifier: Float = modifier
     var cityStateTributeScalingInterval: Float = 6.5f

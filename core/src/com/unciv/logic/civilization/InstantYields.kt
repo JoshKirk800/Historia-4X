@@ -3,7 +3,9 @@ package com.unciv.logic.civilization
 import com.unciv.Constants
 import com.unciv.logic.GameInfo
 import com.unciv.logic.city.City
+import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
+import com.unciv.models.TradeRoute
 import com.unciv.models.ruleset.INonPerpetualConstruction
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unique.GameContext
@@ -148,6 +150,41 @@ object InstantYields {
             civ.highestLuxuryAmounts[name] = quantity
             fire(UniqueType.TriggerUponGainingLuxury, civ, civ.getCapital(), quantity - highest, triggerNotificationText = "due to gaining [$name]")
         }
+    }
+
+    /**
+     *  INSTANT_YIELD_TYPE_TR_END (V:CvTradeClasses.cpp:2606-2650): a trade route of [civ] ran its course. Fires [UniqueType.TriggerUponCompletingTradeRoute] in the city it started in
+     *  and, for a domestic route, once more in the city it ended in (the original calls `doInstantYield` for each end, so what the civilization's own uniques give is given twice).
+     */
+    fun tradeRouteCompleted(civ: Civilization, route: TradeRoute, origin: City, destination: City?) {
+        val kind = if (route.isInternational()) "international" else "domestic"
+        val filter = { trigger: Unique -> trigger.params[0] == "any" || trigger.params[0] == kind }
+        fire(UniqueType.TriggerUponCompletingTradeRoute, civ, origin, triggerNotificationText = "due to completing a trade route", triggerFilter = filter)
+        if (!route.isInternational() && destination != null)
+            fire(UniqueType.TriggerUponCompletingTradeRoute, civ, destination, triggerNotificationText = "due to completing a trade route", triggerFilter = filter)
+    }
+
+    /**
+     *  INSTANT_YIELD_TYPE_TR_MOVEMENT (V:CvTradeClasses.cpp:2085-2150): the trade unit of a route of [civ] that starts in [origin] has made its steps of the turn (and when it starts,
+     *  V:CvTradeClasses.cpp:848): fires [UniqueType.TriggerUponTradeUnitMoving] once, in the city of origin, however many steps it made.
+     */
+    fun tradeUnitMoved(civ: Civilization, origin: City) {
+        fire(UniqueType.TriggerUponTradeUnitMoving, civ, origin, triggerNotificationText = "due to a trade route unit moving")
+    }
+
+    /**
+     *  INSTANT_YIELD_TYPE_PLUNDER_TRADE_ROUTE (V:CvTradeClasses.cpp:5034, V:CvPlayer.cpp:26863-26870): [plunderer] of [civ] plundered a trade route. Fires
+     *  [UniqueType.TriggerUponPlunderingTradeRoute] for the civilization's uniques and for the unit's own, in the city the unit was made in, the capital for a unit with none.
+     */
+    fun tradeRoutePlundered(civ: Civilization, plunderer: MapUnit?) {
+        if (civ.isCityState || civ.isBarbarian || civ.isSpectator) return
+        val city = plunderer?.getOriginCity()?.takeIf { it.civ == civ } ?: civ.getCapital()
+        val context = GameContext(civ, city = city, unit = plunderer, tile = plunderer?.takeIf { it.hasTile() }?.currentTile ?: city?.getCenterTileOrNull())
+        val notification = "due to plundering a trade route"
+        fire(UniqueType.TriggerUponPlunderingTradeRoute, civ, city, context = context, triggerNotificationText = notification)
+        if (plunderer != null)
+            for (unique in plunderer.getTriggeredUniques(UniqueType.TriggerUponPlunderingTradeRoute, context).toList())
+                UniqueTriggerActivation.triggerUnique(unique, civ, city, plunderer, context.tile, triggerNotificationText = notification)
     }
 
     /** Whether [unique] is one of the effects that Vox Populi's `processBuilding` hands out only the first time a building is built in a city (V:CvCity.cpp:14830-14853) */

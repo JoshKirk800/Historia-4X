@@ -499,6 +499,16 @@ enum class Countables(
             UniqueParameterType.Specialist.getTranslatedErrorSeverity(parameterText, ruleset)
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
     },
+    NonSpecialistCitizensInCity("Non-specialist citizens in this city", shortDocumentation = "The citizens of the city that are no specialists") {
+        override val documentationStrings = listOf(
+            "The original's `Policy_YieldFromNonSpecialistCitizens` adds the yield for each such citizen to a city's base yield (`CvCity::getBaseYieldRateTimes100`); " +
+                "a fraction of a yield is a fractional stat: `[+0.25 Culture] [in all cities] <for every [Non-specialist citizens in this city]>`."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val city = gameContext.city ?: return null
+            return city.population.population - city.population.getNumberOfSpecialists()
+        }
+    },
     GoldenAgesUpTo("Golden Ages up to [positiveAmount]", shortDocumentation = "The number of Golden Ages the civilization has had, at most the amount") {
         override val documentationStrings = listOf(
             "The original's `YieldCap` of `Building_YieldChangesPerGoldenAge` and `Trait_ResourceYieldChangesFromGoldenAge`: the yield per golden age is capped as a total, " +

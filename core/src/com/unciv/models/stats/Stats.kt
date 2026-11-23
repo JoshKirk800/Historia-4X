@@ -231,7 +231,8 @@ open class Stats(
 
     companion object {
         private val allStatNames = Stat.entries.joinToString("|") { it.name }
-        private val statRegexPattern = "([+-])(\\d+) ($allStatNames)"
+        // A decimal amount (`+0.25 Culture`) is for Vox Populi's yields per citizen, tile or building, which are hundredths (the `...Times100` tables)
+        private val statRegexPattern = "([+-])(\\d+(?:\\.\\d+)?) ($allStatNames)"
         private val statRegex = Regex(statRegexPattern)
         private val entireStringRegexPattern = Regex("$statRegexPattern(, $statRegexPattern)*")
 

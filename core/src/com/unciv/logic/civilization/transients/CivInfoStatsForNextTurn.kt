@@ -293,6 +293,7 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         val goldDifferenceFromTrade = civInfo.diplomacy.values.sumOf { it.goldPerTurn() }
         if (goldDifferenceFromTrade != 0)
             statMap["Trade"] = Stats(gold = goldDifferenceFromTrade.toFloat())
+        civInfo.tradeRoutes.getResourceTradeStats(civInfo).let { if (!it.isEmpty()) statMap["Resource trade"] = it }
 
         for ((key, value) in getGlobalStatsFromUniques())
             statMap.add(key,value)

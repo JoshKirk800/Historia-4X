@@ -1185,6 +1185,25 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "No destination restriction on trade routes"
+	With `tradeRouteModelLikeVp` a civilization may send only one international trade route to a city; the routes of the civilization with this unique, and the routes to its cities, are not restricted (Vox Populi's `Traits.NoTradeRouteDestinationRestriction`, Venice, V:CvTradeClasses.cpp:665-685)
+
+	Applicable to: Global
+
+??? example  "[stats] for each luxury resource exported"
+	Added to the civilization's yields every turn for each kind of luxury resource that it sells in a deal (`Trait_YieldFromExport`, Netherlands, V:CvPlayer.cpp:18078-18130); Vox Populi multiplies it by the era, so use the modifier `<for every [Era scaler]>`
+
+	Example: "[+1 Gold, +2 Production] for each luxury resource exported"
+
+	Applicable to: Global
+
+??? example  "[stats] for each luxury resource imported"
+	Added to the civilization's yields every turn for each kind of luxury resource that it gets from a deal, from allied City-States or from a siphon (`Trait_YieldFromImport`, V:CvPlayer.cpp:18078-18130); use the modifier `<for every [Era scaler]>` for the era
+
+	Example: "[+1 Gold, +2 Production] for each luxury resource imported"
+
+	Applicable to: Global
+
 ??? example  "[relativeAmount]% quantity of [resource]"
 	Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), as the original's `Belief_ResourceQuantityModifiers` do. Not read yet: slice T1 of the trade plan
 

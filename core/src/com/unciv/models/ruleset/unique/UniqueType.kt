@@ -326,6 +326,15 @@ enum class UniqueType(
     NoTradeRouteProximityPenalty("No proximity penalty on trade routes", UniqueTarget.Global,
         docDescription = "The routes of the civilization and the routes to it are not made less valuable the shorter they are than the longest route possible (Vox Populi's " +
             "`Traits.NoTradeRouteProximityPenalty`, Morocco's `TRAIT_GATEWAY_AFRICA`, V:CvTradeClasses.cpp:3372-3418). Only read with `tradeRouteModelLikeVp`"),
+    NoTradeRouteDestinationRestriction("No destination restriction on trade routes", UniqueTarget.Global,
+        docDescription = "With `tradeRouteModelLikeVp` a civilization may send only one international trade route to a city; the routes of the civilization with this unique, " +
+            "and the routes to its cities, are not restricted (Vox Populi's `Traits.NoTradeRouteDestinationRestriction`, Venice, V:CvTradeClasses.cpp:665-685)"),
+    StatsPerExportedLuxury("[stats] for each luxury resource exported", UniqueTarget.Global,
+        docDescription = "Added to the civilization's yields every turn for each kind of luxury resource that it sells in a deal (`Trait_YieldFromExport`, Netherlands, " +
+            "V:CvPlayer.cpp:18078-18130); Vox Populi multiplies it by the era, so use the modifier `<for every [Era scaler]>`"),
+    StatsPerImportedLuxury("[stats] for each luxury resource imported", UniqueTarget.Global,
+        docDescription = "Added to the civilization's yields every turn for each kind of luxury resource that it gets from a deal, from allied City-States or from a siphon " +
+            "(`Trait_YieldFromImport`, V:CvPlayer.cpp:18078-18130); use the modifier `<for every [Era scaler]>` for the era"),
     ResourceQuantityPercent("[relativeAmount]% quantity of [resource]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
         docDescription = "Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), " +
             "as the original's `Belief_ResourceQuantityModifiers` do. Not read yet: slice T1 of the trade plan"),

@@ -80,7 +80,9 @@ class TradeLogic(val ourCivilization: Civilization, val otherCivilization: Civil
         offers.add(TradeOffer(Constants.goldPerTurn, TradeOfferType.Gold_Per_Turn, civInfo.stats.statsForNextTurn.gold.toInt(), civInfo.gameInfo.speed))
 
         if (!civInfo.isOneCityChallenger() && !otherCiv.isOneCityChallenger())
-            for (city in civInfo.cities.filterNot { it.isCapital() || it.isInResistance() })
+            // a peace treaty is only possible at war: the founder's city is offered then (CvDeal::IsPossibleToTradeItem, V:CvDealClasses.cpp:649)
+            for (city in civInfo.cities.filterNot { it.isCapital() || it.isInResistance()
+                    || TradeEvaluation.isFoundedCityBlocked(it, civInfo, otherCiv, civInfo.isAtWarWith(otherCiv)) })
                 offers.add(TradeOffer(city.id, TradeOfferType.City, speed = civInfo.gameInfo.speed))
 
         if (!civInfo.isAtWarWith(otherCiv))

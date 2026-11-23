@@ -63,6 +63,18 @@ class CityStatsYieldShapeTests {
         assertEquals(culture, capital.total(Stat.Culture), 1e-3f)
     }
 
+    @Test
+    fun `border culture from tiles counts the city center and worked tiles only`() {
+        capital.clearWorkedTiles()
+        val worked = capital.getTiles().first { it != capital.getCenterTile() }
+        capital.workTile(worked)
+        capital.build("[2] border culture from [All] tiles [in this city]")
+        assertEquals(4f, capital.expansion.borderCulturePerTurn(0f), 1e-3f)
+        capital.clearWorkedTiles()
+        assertEquals(2f, capital.expansion.borderCulturePerTurn(0f), 1e-3f)
+        assertEquals(0f, second.expansion.borderCulturePerTurn(0f), 1e-3f)
+    }
+
     //region Processes
 
     @Test

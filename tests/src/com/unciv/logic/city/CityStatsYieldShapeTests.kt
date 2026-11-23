@@ -277,6 +277,54 @@ class CityStatsYieldShapeTests {
     }
 
     //endregion
+    //region Eras and specialists
+
+    private fun enterEras(count: Int) {
+        val start = game.gameInfo.getStartingEra().eraNumber
+        civ.tech.era = game.ruleset.eras.values.first { it.eraNumber == start + count }
+    }
+
+    /** CvTeam::SetCurrentEra adds Feature_EraYieldChanges once for each era the team enters but its start era (V:CvTeam.cpp:8635-8688) */
+    @Test
+    fun `the countable Eras entered counts the eras since the starting era`() {
+        assertTrue(Countables.isKnownValue("Eras entered", game.ruleset))
+        assertEquals(0, Countables.getCountableAmount("Eras entered", GameContext(civ)))
+        enterEras(2)
+        assertEquals(2, Countables.getCountableAmount("Eras entered", GameContext(civ)))
+    }
+
+    /** CvPlot::calculateYield: the team's feature yield change is added to the tile's yield (V:CvPlot.cpp:10998, 11020) */
+    @Test
+    fun `a feature yield grows with each era entered for the civilization that looks at the tile`() {
+        val feature = com.unciv.models.ruleset.tile.Terrain().apply {
+            name = "Era feature"
+            type = com.unciv.models.ruleset.tile.TerrainType.TerrainFeature
+            uniques.add("[+2 Science] <for every [Eras entered]>")
+        }
+        game.ruleset.terrains[feature.name] = feature
+        feature.setTransients()
+        val tile = game.setTileTerrainAndFeatures(HexCoord(2, 0), "Grassland", feature.name)
+
+        assertEquals(0f, tile.stats.getTileStats(capital, civ).science - plainScience(), 1e-3f)
+        enterEras(3)
+        assertEquals(6f, tile.stats.getTileStats(capital, civ).science - plainScience(), 1e-3f)
+        assertEquals("no civilization, no eras", 0f, tile.stats.getTileStats(null, null).science - plainScience(), 1e-3f)
+    }
+
+    private fun plainScience() = game.setTileTerrain(HexCoord(3, 0), "Grassland").stats.getTileStats(capital, civ).science
+
+    /** CvCity::GetBaseYieldRateFromSpecialists counts the specialists of every kind for every yield, golden age points included (V:CvCity.cpp:23389) */
+    @Test
+    fun `the countable of the specialists of a kind in the city`() {
+        assertTrue(Countables.isKnownValue("[Merchant] Specialists in this city", game.ruleset))
+        capital.population.specialistAllocations["Merchant"] = 2
+        capital.population.specialistAllocations["Scientist"] = 1
+        assertEquals(2, Countables.getCountableAmount("[Merchant] Specialists in this city", GameContext(civ, city = capital)))
+        assertEquals(1, Countables.getCountableAmount("[Scientist] Specialists in this city", GameContext(civ, city = capital)))
+        assertEquals(0, Countables.getCountableAmount("[Merchant] Specialists in this city", GameContext(civ, city = second)))
+    }
+
+    //endregion
     //region Golden ages
 
     /** CvPlayer::GetGoldenAgePointsFromCitiesTimes100 sums CvCity::getYieldRateTimes100(YIELD_GOLDEN_AGE_POINTS) of the cities (V:CvPlayer.cpp:24846-24860) */

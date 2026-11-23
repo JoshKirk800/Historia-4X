@@ -57,6 +57,16 @@ class ModConstants {
     // Community Patch, 0 in Vox Populi (DefineChanges.sql:350, CvCity.cpp: CvCity::setPopulation)
     var sciencePerPopulation = 1f
 
+    /** The food a city of population p needs to grow, before the speed, the starting era and the handicaps (CvPlayer::getGrowthThreshold, V:CvPlayer.cpp:46530-46537):
+     *  `base + (p - 1) * multiplier` (cut to an integer) `+ floor((p - 1) ^ exponent)`. Defines BASE_CITY_GROWTH_THRESHOLD, CITY_GROWTH_MULTIPLIER and CITY_GROWTH_EXPONENT:
+     *  15, 8 and 1.5 in Brave New World, 15, 12 and 2.22 in Vox Populi (DefineChanges.sql). Can only be modded all-or-nothing */
+    data class CityGrowthConstants(
+        val base: Int = 15,
+        val multiplier: Float = 8f,
+        val exponent: Float = 1.5f,
+    )
+    var cityGrowth = CityGrowthConstants()
+
     // The minimal distance that must be between any two cities, not counting the tiles cities are on
     // The number is the amount of tiles between two cities, not counting the tiles the cities are on.
     // e.g. "C__C", where "C" is a tile with a city and "_" is a tile without a city, has a distance of 2.

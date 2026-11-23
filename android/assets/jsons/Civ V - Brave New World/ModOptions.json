@@ -24,6 +24,8 @@
         // CvCity::setPopulation: GlobalDefines SCIENCE_PER_POPULATION, 1 in Community Patch, 0 in Vox Populi (DefineChanges.sql:350);
         // the science of a city comes from its buildings, specialists and tiles
         "sciencePerPopulation": 0,
+        // CvPlayer::getGrowthThreshold: BASE_CITY_GROWTH_THRESHOLD 15, CITY_GROWTH_MULTIPLIER 12 and CITY_GROWTH_EXPONENT 2.22 (DefineChanges.sql; Brave New World 15, 8, 1.5)
+        "cityGrowth": { "base": 15, "multiplier": 12, "exponent": 2.22 },
         // CvCity::GetJONSCultureThreshold
         "cultureCostLikeCivV": true,
         // CvTreasury::DoGold

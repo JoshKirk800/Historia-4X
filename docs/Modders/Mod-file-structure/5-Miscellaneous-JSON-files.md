@@ -358,6 +358,7 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | unitMaintenanceGameMultiplier            | Float  | 1.0                           | [^U]  |
 | unitMaintenanceExponentDivisor           | Float  | 3.0                           | [^U]  |
 | sciencePerPopulation                     | Float  | 1.0                           | Science each citizen of a city gives (`SCIENCE_PER_POPULATION`: 1 in Brave New World, 0 in Vox Populi) |
+| cityGrowth                               | Object | [See below](#citygrowthconstants) | Food a city needs to grow (`CITY_GROWTH_MULTIPLIER` and the others) |
 | minimalCityDistance                      | Int    | 3                             | [^D]  |
 | minimalCityDistanceOnDifferentContinents | Int    | 2                             | [^D]  |
 | unitUpgradeCost                          | Object | [See below](#unitupgradecost) | [^J]  |
@@ -658,6 +659,16 @@ These values are not merged individually, only the entire sub-structure is. Only
 |-----------|------|---------|-------|
 | globalThreshold | Int | 50 | Percent of the copies of a luxury on the map that a civilization must own (more than this) for a global monopoly |
 | strategicThreshold | Int | 25 | The same for a strategic monopoly of a strategic resource |
+
+#### CityGrowthConstants
+
+These values are not merged individually, only the entire sub-structure is. The food a city of population p needs for its next citizen is `base + (p - 1) * multiplier` (cut to an integer) `+ floor((p - 1) ^ exponent)`, times the game speed and starting era percentages (and the handicap's, for the AI).
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| base | Int | 15 | `BASE_CITY_GROWTH_THRESHOLD` |
+| multiplier | Float | 8 | `CITY_GROWTH_MULTIPLIER`: Brave New World 8, Vox Populi 12 |
+| exponent | Float | 1.5 | `CITY_GROWTH_EXPONENT`: Brave New World 1.5, Vox Populi 2.22 |
 
 ## AI.json
 

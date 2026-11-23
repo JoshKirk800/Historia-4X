@@ -50,8 +50,10 @@ class CityPopulationManager : IsPartOfGameInfoSerialization {
     
     @Readonly
     fun getFoodToNextPopulation(): Int {
-        // civ v math, civilization.wikia
-        var foodRequired = 15 + 8 * (population - 1) + floor((population - 1).toDouble().pow(1.5))
+        // civ v math, civilization.wikia; the constants of CvPlayer::getGrowthThreshold
+        val growth = city.getRuleset().modOptions.constants.cityGrowth
+        var foodRequired = growth.base + ((population - 1) * growth.multiplier).toInt() +
+            floor((population - 1).toDouble().pow(growth.exponent.toDouble()))
 
         foodRequired *= city.civ.gameInfo.speed.modifier
         foodRequired *= city.civ.gameInfo.getStartingEra().growthPercent / 100f

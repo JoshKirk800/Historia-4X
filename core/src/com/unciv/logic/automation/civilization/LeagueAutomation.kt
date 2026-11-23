@@ -1148,7 +1148,8 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
 
     /**
      * Ban Luxury (CvVotingClasses.cpp:12564-12597): -100 if we have the luxury (-150 more with an unhappy empire), -75 for each of our tiles with it,
-     * +100 for the proposer. Monopolies have no counterpart.
+     * +100 for the proposer. When we own such tiles, a further -350 if we hold the global monopoly of the luxury (V:CvVotingClasses.cpp:12586-12590: the
+     * term sits inside the owned-tiles branch, so a monopoly held only through imports or buildings adds nothing; the plan's 1.8 left that out).
      */
     private fun scoreBanLuxury(luxury: String?, forSelf: Boolean): Int {
         if (luxury == null) return 0
@@ -1157,7 +1158,9 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
             extra -= 100
             if (civ.isEmpireUnhappy()) extra -= 150
         }
-        extra -= 75 * ownedTiles.count { it.resource == luxury }
+        val ownedCount = ownedTiles.count { it.resource == luxury }
+        extra -= 75 * ownedCount
+        if (ownedCount > 0 && civ.monopolies.hasGlobalMonopoly(luxury)) extra -= 350
         if (forSelf) extra += 100
         return extra
     }

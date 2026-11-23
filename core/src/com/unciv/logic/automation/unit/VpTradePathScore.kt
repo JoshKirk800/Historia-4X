@@ -12,7 +12,8 @@ import com.unciv.models.ruleset.ai.MajorCivApproach
  * Vox Populi's AddTradePathToCache and CvTradeAI::ApplyTradeRouteModifier (CvTradeClasses.cpp): political risk per
  * owned tile, visible enemy defenders and enemy-dominated tactical zones, plus at most ten unseen tiles. The city-state
  * ally supplies its political stance. The tactical map is the latest available map; absent maps contribute no zone risk.
- * VP's corporation invulnerability, passing-route and terrain trait yields are not present in the BNW rules base.
+ * None, because VP's input is not in the engine: the corporation's invulnerability (O1 of the plan) and the terrain yields of a trait (no such shape). The
+ * yields of our cities on the path while a route passes are [VpTradeScoreTerms.passingRouteScore].
  */
 class VpTradePathScore(private val civ: Civilization) {
     /** Positive trait yields per distinct trading partner, including Morocco's countable nation unique. */

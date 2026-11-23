@@ -377,6 +377,22 @@ class LeagueAutomationTests {
     }
 
     @Test
+    fun `the AI avoids banning a luxury it holds a monopoly of`() {
+        val luxury = game.createResource().apply { resourceType = com.unciv.models.ruleset.tile.ResourceType.Luxury; isMonopoly = true; setTransients(game.ruleset) }
+        val capital = a.cities.first()
+        capital.getCenterTile().setTileResource(luxury.name)
+        // the only copy on the map is on our tile: no monopoly is held before the check runs; 100 for the proposer, 75 for the tile
+        assertEquals(100 - 75, evaluator(a).scoreEffects(resolution("Ban Luxury"), luxury.name))
+        capital.cityConstructions.addBuilding(game.createBuilding("Provides [1] [${luxury.name}]"))
+        a.cache.updateCivResources()
+        assertTrue(a.monopolies.hasGlobalMonopoly(luxury.name))
+        // V:CvVotingClasses.cpp:12586-12590: 100 for the proposer, less 100 for having it, 75 for the tile and 350 for the monopoly
+        assertEquals(100 - 100 - 75 - 350, evaluator(a).scoreEffects(resolution("Ban Luxury"), luxury.name))
+        // a civilization that owns none of it keeps the proposer's 100
+        assertEquals(100, evaluator(b).scoreEffects(resolution("Ban Luxury"), luxury.name))
+    }
+
+    @Test
     fun `arts funding and sciences funding are worth nothing without unique persons, improvements or works`() {
         assertEquals(0, evaluator(a).scoreEffects(resolution("Arts Funding"), null))
         assertEquals(0, evaluator(a).scoreEffects(resolution("Sciences Funding"), null))

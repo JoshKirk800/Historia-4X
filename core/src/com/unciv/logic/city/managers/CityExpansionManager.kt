@@ -1,6 +1,7 @@
 package com.unciv.logic.city.managers
 
 import com.unciv.logic.automation.diplomacy.DiplomacyEvents
+import com.unciv.logic.automation.strategy.MonopolyAi
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.InstantYields
@@ -263,7 +264,8 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
      *  the path cost x PLOT_INFLUENCE_DISTANCE_MULTIPLIER; a resource the civilization can see PLOT_INFLUENCE_RESOURCE_COST (a bonus resource
      *  beyond the work range 0, within it one less), else water PLOT_INFLUENCE_WATER_COST and a tile beyond the work range
      *  PLOT_INFLUENCE_RING_COST; an improvement PLOT_INFLUENCE_IMPROVEMENT_COST (a barbarian camp PLOT_INFLUENCE_RING_COST); a road
-     *  PLOT_INFLUENCE_ROUTE_COST; a natural wonder PLOT_INFLUENCE_NW_COST; each point of yield PLOT_INFLUENCE_YIELD_POINT_COST (three
+     *  PLOT_INFLUENCE_ROUTE_COST; a natural wonder PLOT_INFLUENCE_NW_COST; the copies of a resource that would give the civilization a monopoly one more
+     *  PLOT_INFLUENCE_RESOURCE_COST (V:CvCity.cpp:28295; the term of the adjacent plots, 28409, is the terrain-claiming trait's: none); each point of yield PLOT_INFLUENCE_YIELD_POINT_COST (three
      *  for the city's most deficient yield); each unowned neighbor with a visible resource (a bonus one only within the work range) -1,
      *  with a natural wonder -1 (and a further -1 once if one of those is within the work range); PLOT_INFLUENCE_NO_ADJACENT_OWNED_COST if
      *  no neighbor belongs to this city. VP's extra claim of neighbors for a terrain-claiming trait (bTraitExtraLand) is none in BNW.
@@ -280,6 +282,8 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
         val resource = tile.tileResource
         if (civ.canSeeResource(resource)) {
             score += ai.define(AiDefine.PLOT_INFLUENCE_RESOURCE_COST)
+            // This is the copy we need to gain a monopoly!
+            if (MonopolyAi.wouldGainMonopoly(civ, resource, MonopolyAi.copiesOf(tile, resource))) score += ai.define(AiDefine.PLOT_INFLUENCE_RESOURCE_COST)
             if (resource.resourceType == ResourceType.Bonus) {
                 if (tileDistance > ringRange) score -= ai.define(AiDefine.PLOT_INFLUENCE_RESOURCE_COST) // a distant bonus resource is not wanted
                 else score += 1

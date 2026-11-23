@@ -79,6 +79,36 @@ class TechAutomationTests {
     }
 
     @Test
+    fun `a tech that connects a resource next to 25 to 50 percent ownership scores one more for each such tile`() {
+        // As the test above, with Cattle a monopoly resource: two Cattle tiles on the map, both next to our city. The civilization owns copies through a building.
+        // A tile scores (3 - 1) + 1 when we can improve it + 1 for a share above 25 and at most 50 percent (V:CvTechClasses.cpp:1128-1131), + 1 as that test says,
+        // when we own a copy (so the 1 for owning none does not apply): 5 for 1 of 2 copies (50 percent), 4 for 2 of 2 (100 percent). One priority point is 38 weight
+        // at Animal Husbandry and 19 at Agriculture, which is what the 10 points of 2 tiles of 5 did above (380 and 190)
+        val cattle = game.ruleset.tileResources["Cattle"]!!
+        cattle.isMonopoly = true // the resource object is shared by the tests of the run: put back below
+        try {
+            val civ = withCity(civWith(Flavor.Gold to 10))
+            for (position in listOf(game.getTile(1, 0).position, game.getTile(0, 1).position)) {
+                game.setTileTerrain(position, "Grassland")
+                game.tileMap[position].setTileResource(cattle)
+            }
+            civ.getCapital()!!.cityConstructions.addBuilding(game.createBuilding("Provides [1] [Cattle]"))
+            civ.cache.updateCivResources()
+            TechAutomation.rebuildWeights(civ)
+            assertEquals(237 + 10 * 38, weight(civ, "Animal Husbandry"))
+            assertEquals(603 + 10 * 19, weight(civ, "Agriculture"))
+            // two of the two copies: over 50 percent, the term is gone, 8 points
+            civ.getCapital()!!.cityConstructions.addBuilding(game.createBuilding("Provides [1] [Cattle]"))
+            civ.cache.updateCivResources()
+            TechAutomation.rebuildWeights(civ)
+            assertEquals(237 + 8 * 38, weight(civ, "Animal Husbandry"))
+            assertEquals(603 + 8 * 19, weight(civ, "Agriculture"))
+        } finally {
+            cattle.isMonopoly = false
+        }
+    }
+
+    @Test
     fun `tech weight sums its flavors times the blend of the current flavors scaled to 10 at the largest, raised to 2 at least`() {
         // Offense 4, Nuke 2: current flavors scale to 10 and 5; at turn 0 (p = 100) the blends are (10x900 + 4x100)/1000 = 9 and (5x900 + 2x100)/1000 = 4;
         // Nuke 4 + (10 - 4)/4 = 5, and the 36 flavors at 0 get 10/4 = 2: every tech adds its priorities (1 + 1 + 1) once for each of the 38 flavors.

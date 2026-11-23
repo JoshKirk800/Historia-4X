@@ -423,6 +423,7 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | dealsBlockTemporaryForPermanent          | Boolean | false                        | A deal in which the AI gives something temporary and gets something permanent is refused (not used by any rule yet) |
 | dealHumanPermanentForAiTemporary         | Boolean | true                         | With that rule: except when a human gives the permanent item |
 | dealNoPeacetimeSellingFoundedCities      | Boolean | false                        | The founder of a city does not sell it unless at war (not used by any rule yet) |
+| dealLuxuryValueLikeVp                    | Boolean | false                        | The AI values a luxury in a deal in the units of one gold per turn, as Vox Populi does (the last copy of an unhappy empire is not for sale) |
 | monopoly                                 | Object  | [See below](#monopolyconstants) | The shares of the copies of a resource on the map that make a monopoly |
 | leagueProposersPerSession                | Int    | 2                             | Civilizations that propose resolutions in a session of the World Congress |
 | leagueProposalsPerProposer               | Int    | 1                             | Resolutions each proposer proposes |

@@ -548,10 +548,13 @@ class ModConstants {
     // pacts, agreements) and gets something permanent (gold, maps, cities, techs) is refused (BlockTemporaryForPermanentTrade, V:CvDealClasses.cpp:1368-1470), except with
     // dealHumanPermanentForAiTemporary for a human who gives the permanent item (MOD_DEALAI_HUMAN_PERMANENT_FOR_AI_TEMPORARY, 1 in Vox Populi; only read with the rule).
     // dealNoPeacetimeSellingFoundedCities: the founder does not sell a city it founded unless at war (MOD_DEALAI_NO_PEACETIME_SELLING_FOUNDED_CITIES, V:CvDealClasses.cpp:649).
-    // Not read yet: slice T4 of phaseE/vp-trade-plan.md
+    // Read by slice T4 of phaseE/vp-trade-plan.md
     var dealsBlockTemporaryForPermanent = false
     var dealHumanPermanentForAiTemporary = true
     var dealNoPeacetimeSellingFoundedCities = false
+    /** The AI values a luxury in a deal as Vox Populi's `MOD_BALANCE_VP` branch of CvDealAI::GetLuxuryResourceValue does (V:CvDealAI.cpp:1290-1590), in the units of one gold
+     *  per turn, instead of the Community Patch's: see [com.unciv.logic.automation.civilization.VpLuxuryValue] */
+    var dealLuxuryValueLikeVp = false
 
     /** The shares of the copies of a resource on the map that make a monopoly (GLOBAL_RESOURCE_MONOPOLY_THRESHOLD 50 and STRATEGIC_RESOURCE_MONOPOLY_THRESHOLD 25,
      *  V:CvPlayer.cpp:39139-39232), in percent. Only read for resources that are `isMonopoly`. Can only be modded all-or-nothing */

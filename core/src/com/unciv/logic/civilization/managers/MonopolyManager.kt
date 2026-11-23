@@ -90,7 +90,7 @@ class MonopolyManager : IsPartOfGameInfoSerialization {
 
     /** The copies of [resource] the civilization owns for the purpose of monopolies, V:CvPlayer.cpp:39128-39132 */
     @Readonly
-    private fun ownedCopies(resource: TileResource): Int {
+    fun ownedCopies(resource: TileResource): Int {
         val countCityStates = civInfo.hasUnique(UniqueType.CityStateResourcesCountForMonopolies)
         var owned = 0
         for (supply in civInfo.detailedCivResources) {

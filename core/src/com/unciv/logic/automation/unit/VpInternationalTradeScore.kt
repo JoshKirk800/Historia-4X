@@ -7,6 +7,7 @@ import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.automation.strategy.WarAlliesAi
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.city.City
+import com.unciv.logic.city.NeedType
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.managers.TradeRouteCandidate
@@ -15,6 +16,7 @@ import com.unciv.models.TradeRouteKind
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.stats.Stat
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -35,13 +37,16 @@ import kotlin.math.sqrt
  * by the civilizations we are at war with (at least 2) - the path's danger.
  *
  * Mapping to what Unciv has:
- * - Yields are those of [com.unciv.logic.civilization.managers.TradeRouteManager.preview]: with [com.unciv.models.ModConstants.tradeRouteModelLikeVp]
- *   Vox Populi's own route value ([TradeRouteValue], CvPlayerTrade::GetTradeConnectionValueTimes100), so the gold, science and culture of each end are
- *   what the route would pay and what the original's AI reads (its science estimate, a divisor of 125 multiplied by the era, is the yield itself); without
- *   the flag Brave New World's rules stay: the gold of each end, and the science of each end (the half of the technologies the other knows and we do
- *   not, plus the influence bonus), no culture. The "other side" terms keep VP's /10 (gold, when we are friends, approach friendly or opinion neutral
- *   or better) and /3 (science and culture, friends, approach friendly or opinion friend or better); "friends" is a declaration of friendship or
- *   defensive pact (CvDiplomacyAI::IsFriendOrAlly), the approach and the opinion those of [com.unciv.logic.automation.diplomacy.DiplomacyAi].
+ * - Gold is the route's: [com.unciv.logic.civilization.managers.TradeRouteManager.preview] gives the yield of each end, with
+ *   [com.unciv.models.ModConstants.tradeRouteModelLikeVp] Vox Populi's own route value ([TradeRouteValue], CvPlayerTrade::GetTradeConnectionValueTimes100) as the original's
+ *   AI reads it. Science and culture are the original's estimate with the flag ([VpTradeScoreTerms.originScience] and the others: the difference in technologies or
+ *   policies over TRADE_ROUTE_SCIENCE_DIVISOR_TIMES100 and CULTURE, times the era, which is not the route's real yield, the square root of the difference); without the
+ *   flag Brave New World's rules stay: the science of each end (the half of the technologies the other knows and we do not, plus the influence bonus), no culture. The
+ *   "other side" terms keep VP's /10 (gold, when we are friends, approach friendly or opinion neutral or better) and /3 (science and culture, friends, approach
+ *   friendly or opinion friend or better); "friends" is a declaration of friendship or defensive pact (CvDiplomacyAI::IsFriendOrAlly), the approach and the
+ *   opinion those of [com.unciv.logic.automation.diplomacy.DiplomacyAi].
+ * - What the data gives besides the route: a city short of gold, science or culture (poverty, illiteracy, boredom, with the needs model), what the buildings of the
+ *   origin give when a route ends, and the yields of its cities on the path while a route passes ([VpTradeScoreTerms]).
  * - VP's domain-specific tourism bonuses come from building fields not present in BNW; they contribute zero here.
  * - Religion: the pressure terms as in VP (pressures divided by RELIGION_MISSIONARY_PRESSURE_MULTIPLIER, 10), with our state religion
  *   ([OpinionAi.stateReligion], CvPlayerReligions::GetStateReligion) and the accumulated pressures of the cities.
@@ -52,13 +57,11 @@ import kotlin.math.sqrt
  *   city-state (CvMinorCivAI::IsSiphoned) is one of our Feitorias
  *   on a tile of the city-state that [UniqueType.SiphonsLuxuriesFromCityState] gives luxuries from.
  *
- * Not present in the rules, so left out (each of them is a zero or unchanged term here):
- * corporations (invulnerable routes, franchises, offices, GP rate per franchise, free franchise above Popular, the office / franchise
- * score), foreign-territory route yields, the production and food a siphoned city-state pays (the route value pays them, the score does not read them), no open
- * trade, plunder without war, city yields from the end of a route, a city's poverty, illiteracy and boredom, the yields from passing routes and terrain
- * (the cities and tiles get them from [TradeRouteValue] with the rules of Vox Populi, the score does not read them).
+ * None, because VP's input is not in the engine: corporations (invulnerable routes, franchises, offices, GP rate per franchise, free franchise above Popular, the
+ * office / franchise score: O1 of the plan, no corporations), the foreign-territory yields of a trait and its terrain yields (no such shapes), the production siphon
+ * of a trait, the tourism bonuses of buildings (P5), no open trade, plunder without war.
  * Also omitted: the city-state production building (x25), event tourism, the protected-minor policy, strategic trade partners
- * and the extra culture and science policy bump. The siege test is [CityDangerAi.isUnderSiege] and, as there are no invulnerable routes, the
+ * and the extra culture and science policy bump (no row). The siege test is [CityDangerAi.isUnderSiege] and, as there are no invulnerable routes, the
  * invulnerable branch of the origin's siege (falling, enemy-dominated zone) never applies.
  */
 class VpInternationalTradeScore(private val civ: Civilization, private val pathScore: VpTradePathScore) {
@@ -105,6 +108,11 @@ class VpInternationalTradeScore(private val civ: Civilization, private val pathS
         var goldAmount = (route.originYields.gold * 100f).roundToInt().toLong()
         // Emphasize gold if we are in the red
         if (netGold < -1) goldAmount *= sqrt((-netGold).toFloat()).toInt()
+        // If a city is impoverished, send trade routes from there
+        goldAmount += VpTradeScoreTerms.needBonus(fromCity, NeedType.Poverty) * 10L
+        // Instant gold when the trade route ends?
+        val turnsToComplete = max(1, route.getTurnsLeft())
+        goldAmount += VpTradeScoreTerms.routeEndYield(fromCity, Stat.Gold, true) / turnsToComplete
 
         var otherGoldAmount = if (partner.isCityState) 0L else (route.destinationYields.gold * 100f).roundToInt().toLong()
         // If we are friends with the player, we do not care about how much gold they make
@@ -115,14 +123,20 @@ class VpInternationalTradeScore(private val civ: Civilization, private val pathS
 
         // Science and culture of each end; we do not care so much what a friend makes
         val caresLess = friendOrAlly || friendlyApproach || opinion >= MajorCivOpinion.Friend
-        var otherScience = route.destinationYields.science.roundToInt()
-        var otherCulture = route.destinationYields.culture.roundToInt()
+        val vpEstimate = VpTradeScoreTerms.usesVpEstimate(civ)
+        var ownScience = if (vpEstimate) VpTradeScoreTerms.originScience(civ, partner) else route.originYields.science.roundToInt()
+        var ownCulture = if (vpEstimate) VpTradeScoreTerms.originCulture(civ, partner) else route.originYields.culture.roundToInt()
+        var otherScience = if (vpEstimate) VpTradeScoreTerms.destinationScience(civ, partner) else route.destinationYields.science.roundToInt()
+        var otherCulture = if (vpEstimate) VpTradeScoreTerms.destinationCulture(civ, partner) else route.destinationYields.culture.roundToInt()
+        // A city short of science or culture sends routes, and what the route's end gives
+        ownScience += VpTradeScoreTerms.needBonus(fromCity, NeedType.Illiteracy) + VpTradeScoreTerms.routeEndYield(fromCity, Stat.Science, true) / turnsToComplete
+        ownCulture += VpTradeScoreTerms.needBonus(fromCity, NeedType.Boredom) + VpTradeScoreTerms.routeEndYield(fromCity, Stat.Culture, true) / turnsToComplete
         if (caresLess) {
             otherScience /= 3
             otherCulture /= 3
         }
-        val scienceDelta = route.originYields.science.roundToInt() - otherScience
-        val cultureDelta = route.originYields.culture.roundToInt() - otherCulture
+        val scienceDelta = ownScience - otherScience
+        val cultureDelta = ownCulture - otherCulture
 
         val religionDelta = religionDelta(fromCity, toCity)
 
@@ -132,8 +146,12 @@ class VpInternationalTradeScore(private val civ: Civilization, private val pathS
         val flavorReligion = ai.personalityAndGrandStrategy(Flavor.Religion)
         var score: Long = goldDelta / max(1, 10 - flavorGold) +
             scienceDelta.toLong() * flavorScience + cultureDelta.toLong() * flavorCulture + religionDelta.toLong() * (flavorReligion / 2)
+        score += VpTradeScoreTerms.passingRouteScore(civ, destination.path)
         // Abort if we are negative
         if (score <= 0) return 0
+
+        // The instant yields of the route's end besides the ones above
+        for (stat in listOf(Stat.Food, Stat.Production, Stat.Faith)) score += VpTradeScoreTerms.routeEndYield(fromCity, stat, true) / turnsToComplete
 
         score *= max(1, civ.getAiEraNumber()) // more international trade late game, please
 

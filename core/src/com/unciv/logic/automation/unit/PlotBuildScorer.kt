@@ -5,6 +5,7 @@ import com.unciv.logic.automation.civilization.CityStateAi
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.TheftAi
 import com.unciv.logic.automation.diplomacy.TheftType
+import com.unciv.logic.automation.strategy.MonopolyAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.tile.RoadStatus
@@ -59,7 +60,8 @@ class SBuilderState(changed: Map<Tile, TileImprovement?> = emptyMap(), extra: Ma
  *    one. Only for a plot that one of our cities can work.
  *  - Connecting a resource: its [resourceWeight] to the base score, ⅔ of it (⅓ with exactly one available) moved to the potential score when
  *    the resource is already available more than once (once); resources the old improvement connects do not count as available, those the
- *    assignment pass plans to connect do ([SBuilderState.extraResources]).
+ *    assignment pass plans to connect do ([SBuilderState.extraResources]). A monopoly resource adds to the secondary score 2000 for the build that gives a global
+ *    monopoly (1000 for a strategic one) and to the potential score 2000 (1000) when one is still reachable ([MonopolyAi.plotBuildBonus]).
  *  - Adjacency (CvBuilderTaskingAI::ScorePlotBuild's planned adjacency, with the adjacency rules that name an improvement: BNW's
  *    ImprovementStatsForAdjacencies, the Moai's culture, and Vox Populi's YieldPerXAdjacentImprovement, [UniqueType.ImprovementStatsPerAdjacent], 1/n of the stats for
  *    each adjacent one): the improvement's own yield changes by the planned improvements of its neighbours that differ from what
@@ -85,7 +87,7 @@ class SBuilderState(changed: Map<Tile, TileImprovement?> = emptyMap(), extra: Ma
  *  Not ported (none-inputs, the rules BNW lacks or later branches): the tile claim (NewOwner), BlockTileSteal (a theft bonus for an improvement
  *  that blocks tile theft), Great Person rate (GreatPersonRateModifier), domain production and experience, the planned features of
  *  [SBuilderState] (mChangedPlotFeatures), the adjacent terrain, feature and resource yields (YieldPerXAdjacentTerrain, AdjacentTerrain/Feature/ResourceYieldChanges: they do not change with what is planned, and the tile stats of a plot hold them), WLTKD and
- *  golden age improvement yields, resource monopolies, the canal term (MakesPassable), CvPlot::IsChokePoint, CvPlot::IsStealBlockedByImprovement
+ *  golden age improvement yields, the resource an improvement creates (none of ours does), the canal term (MakesPassable), CvPlot::IsChokePoint, CvPlot::IsStealBlockedByImprovement
  *  and embassy improvements,
  *  improvement maintenance (0 in the rules), spawned resources, IMPROVEMENTS_EXTENSIONS and the vanilla Celts block (inactive in Vox Populi).
  *  The culture bomb walks the plots in Unciv's order (the original's ring table decides which plots come before the first plot of somebody else,
@@ -266,6 +268,11 @@ class PlotBuildScorer(val civ: Civilization, val routes: PlannedRoutes = Planned
                 secondaryScore -= downPriority
                 potentialScore += downPriority
             }
+
+            // Amp up monopoly allocation
+            val monopoly = MonopolyAi.plotBuildBonus(civ, resource, extraResource, MonopolyAi.copiesOf(tile, resource))
+            secondaryScore += monopoly.secondary
+            potentialScore += monopoly.potential
         }
 
         // Do we have or will we build a road here? Not for a plot that is only on a strategic route

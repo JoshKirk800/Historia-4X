@@ -5,6 +5,7 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.InfluenceTrend
+import com.unciv.logic.civilization.managers.TradeRouteValue
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.TraitCategory
@@ -44,8 +45,8 @@ import kotlin.math.max
  *  are read through [Building.getStats] and [Building.getMatchingUniques] like any other.
  *
  *  None, because VP's input is not in the engine: the theming bonus yields and accomplishments (P5), the yield per city strength and combat experience, level up and death
- *  yields (P6), the trade route ends and passing trade routes (P3), strategic resources of city-states, allies and friends and the spy yields (P4), the Maya long count,
- *  per theme, tech enhanced, per building, per tile, per monopoly, golden age yields per age, great person birth, policy unlock, area, distance to capital and religion
+ *  yields (P6), the yield per franchise (P3's corporations, not ported: O1 of the trade plan), strategic resources of city-states, allies and friends and the spy yields (P4), the Maya long count,
+ *  per theme, tech enhanced, per building, per tile, golden age yields per age, great person birth, policy unlock, area, distance to capital and religion
  *  building modifiers, the city connection yields, the yields BNW's Stats lack (tourism, golden age points, great general and admiral points, population,
  *  local culture, the JFD yields), the VP happiness flat reductions (distress, poverty, illiteracy, boredom, unrest: with the needs model [BuildingProductionAi] values
  *  them per unhappy citizen), and from the traits: the art,
@@ -181,6 +182,7 @@ object BuildingYieldAi {
         }
 
         flat += specialistFlat(city, building, stat)
+        flat += monopolyAndRouteFlat(city, building, stat)
 
         if (stat == Stat.Gold) {
             val tradeBonus = building.getMatchingUniques(UniqueType.TradeRouteGoldForDestination, state).filter { it.isLocalEffect }.sumOf { it.params[0].toInt() } +
@@ -233,6 +235,23 @@ object BuildingYieldAi {
             value = strategicValue(city, stat, value)
         }
         return value
+    }
+
+    /**
+     *  The flat yields of the monopolies and routes (V:CvCityStrategyAI.cpp:3505-3508, 3525-3527; the economic building value of V:CvEconomicAI.cpp:2016, 2021 reads the same):
+     *  the building's `[stats] [cityFilter] for every global monopoly` (`Building_YieldChangesPerMonopoly`) once for each global monopoly of the civilization, and the
+     *  stats it gives `while any trade route passes through this city` (`Building_YieldChangesFromPassingTR`) when the path of a route goes over the city's tile now.
+     */
+    private fun monopolyAndRouteFlat(city: City, building: Building, stat: Stat): Int {
+        var flat = 0
+        val state = city.state
+        val monopolies = city.civ.monopolies.globalMonopolyCount()
+        if (monopolies > 0)
+            for (unique in building.getMatchingUniques(UniqueType.StatsPerGlobalMonopoly, state))
+                if (city.matchesFilter(unique.params[1])) flat += positive(unique.stats[stat]) * monopolies
+        if (building.hasUnique(UniqueType.StatsWhenTradeRoutePasses, ignoreConditionals) && TradeRouteValue.isOnRoute(city.civ.gameInfo, city.getCenterTile()))
+            for (unique in building.getMatchingUniques(UniqueType.StatsWhenTradeRoutePasses, state)) flat += positive(unique.stats[stat])
+        return flat
     }
 
     /** The yields a building adds through specialists: the stats of the specialists it adds, and the specialist yields it gives */

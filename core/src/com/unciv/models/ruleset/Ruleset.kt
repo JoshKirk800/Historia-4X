@@ -204,6 +204,8 @@ class Ruleset {
         }
     }
 
+    /** Whether any resource is a monopoly resource: the AI terms that read monopolies (MOD_BALANCE_RESOURCE_MONOPOLIES) are inert without */
+    val hasMonopolyResources: Boolean @Readonly get() = tileResources.values.any { it.isMonopoly }
     val roadImprovement: TileImprovement? by lazy { RoadStatus.Road.improvement(this) }
     val railroadImprovement: TileImprovement? by lazy { RoadStatus.Railroad.improvement(this) }
     //endregion

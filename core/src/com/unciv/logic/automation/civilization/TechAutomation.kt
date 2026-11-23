@@ -262,11 +262,13 @@ object TechAutomation {
      *  that we own or that are unowned within 4 of the city, whose connecting improvement we cannot build yet, the tech of that improvement gets
      *  (3 − distance to the city) + 1 when we have none of the resource + 1 when the improvement can stand on the tile + 1 for not being able
      *  to build it, added to its 1. (The original adds the first terms for tiles whose improvement we can build too; the tech is known then and
-     *  never weighed. Not ported: the monopoly term, the rules have no monopolies.)
+     *  never weighed.) One more when our share of the copies of the resource on the map is above the strategic and at most the global monopoly threshold
+     *  (V:CvTechClasses.cpp:1128-1131; read only where the ruleset has monopolies, so the rules without them keep their numbers).
      */
     private fun localeTechPriorities(civ: Civilization, data: TechData): IntArray {
         val priorities = IntArray(data.techs.size) { 1 }
         val range = civ.gameInfo.ruleset.modOptions.constants.cityWorkRange
+        val monopolyConstants = civ.gameInfo.ruleset.modOptions.constants.monopoly
         for (city in civ.cities) {
             val center = city.getCenterTile()
             center.forEachTileInDistance(range) { tile ->
@@ -281,6 +283,11 @@ object TechAutomation {
                 if (tech < 0 || civ.tech.isResearched(data.techs[tech].name)) return@forEachTileInDistance
                 var multiplier = 3 - distance
                 if (civ.getResourceAmount(resource) <= 0) multiplier++
+                if (data.ruleset.hasMonopolyResources) {
+                    // "somehow close on monopolies?" V:CvTechClasses.cpp:1128-1131
+                    val share = civ.monopolies.percent(resource)
+                    if (share > monopolyConstants.strategicThreshold && share <= monopolyConstants.globalThreshold) multiplier++
+                }
                 if (tile.improvementFunctions.canImprovementBeBuiltHere(improvement, resourceIsVisible = true)) multiplier++
                 priorities[tech] += multiplier + 1
             }

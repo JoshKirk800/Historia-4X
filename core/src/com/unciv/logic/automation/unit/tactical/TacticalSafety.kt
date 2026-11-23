@@ -84,16 +84,13 @@ object TacticalSafety {
      *  True if it did.
      */
     fun heal(unit: MapUnit): Boolean {
-        if (unit.health >= MAX_HEALTH || unit.isEmbarked() || unit.getTile().isCityCenter()) return false
+        if (unit.health >= unit.getMaxHealth() || unit.isEmbarked() || unit.getTile().isCityCenter()) return false
         if (unit.baseUnit.isWaterUnit && !unit.getTile().isFriendlyTerritory(unit.civ)) return false
         if (isUnderEnemyRangedAttack(unit)) return false
         AiDecisionLog.log(unit.civ) { "Tactical: ${unit.name} heals at ${unit.getTile().position} (${unit.health})" }
         if (unit.canFortify()) unit.fortify()
         return true
     }
-
-    /** CvUnit::GetMaxHitPoints */
-    private const val MAX_HEALTH = 100
 
     /** The mean of the damage roll, for expected damage (the original's getCombatDamage without randomness) */
     private const val EXPECTED_RANDOMNESS = 0.5f

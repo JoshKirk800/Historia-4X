@@ -37,6 +37,7 @@ class SimPosition private constructor(val world: SimWorld, val parent: SimPositi
     val alive: BitSet = BitSet()
     val enemyDamage: IntArray = IntArray(world.enemies.size)
     val cityDamage: IntArray = IntArray(world.cities.size)
+    val garrisonDamage: IntArray = IntArray(world.cities.size)
     val freed = BitSet()
     private val clearedCamps = BitSet()
     private val capturedCivilians = BitSet()
@@ -63,7 +64,7 @@ class SimPosition private constructor(val world: SimWorld, val parent: SimPositi
         other.last.copyInto(last); other.importance.copyInto(importance); other.plotScore.copyInto(plotScore); other.prevScore.copyInto(prevScore)
         available.addAll(other.available); notQuiteFinished.addAll(other.notQuiteFinished); finished.addAll(other.finished)
         alive.or(other.alive)
-        other.enemyDamage.copyInto(enemyDamage); other.cityDamage.copyInto(cityDamage)
+        other.enemyDamage.copyInto(enemyDamage); other.cityDamage.copyInto(cityDamage); other.garrisonDamage.copyInto(garrisonDamage)
         freed.or(other.freed); clearedCamps.or(other.clearedCamps); capturedCivilians.or(other.capturedCivilians); pillaged.or(other.pillaged)
         assignments.addAll(other.assignments)
         damageDelta = other.damageDelta; bonusScore = other.bonusScore; totalScore = other.totalScore
@@ -74,15 +75,19 @@ class SimPosition private constructor(val world: SimWorld, val parent: SimPositi
     fun makeChild(id: Long): SimPosition = SimPosition(world, this, id).also { it.copyFrom(this) }
 
     //region Reading
-    val damage get() = DamageOverlay(enemyDamage, cityDamage)
+    val damage get() = DamageOverlay(enemyDamage, cityDamage, garrisonDamage)
 
     /** A copy of the damage dealt with that of [assignment] added (GetNextPosition) */
     fun damageWith(assignment: SimAssignment): DamageOverlay {
         val enemy = enemyDamage.copyOf()
         val city = cityDamage.copyOf()
+        val garrison = garrisonDamage.copyOf()
         for ((index, amount) in assignment.unitDamage) enemy[index] += amount
-        if (assignment.cityIndex >= 0) city[assignment.cityIndex] += assignment.cityDamage
-        return DamageOverlay(enemy, city)
+        if (assignment.cityIndex >= 0) {
+            city[assignment.cityIndex] += assignment.cityDamage
+            garrison[assignment.cityIndex] += assignment.garrisonDamage
+        }
+        return DamageOverlay(enemy, city, garrison)
     }
 
     fun stats(unit: Int) = SimUnitStats(unit, plot[unit], moves[unit], attacks[unit], selfDamage[unit], importance[unit], last[unit], world.units[unit].strategy)
@@ -146,7 +151,7 @@ class SimPosition private constructor(val world: SimWorld, val parent: SimPositi
 
     /** setCombatUnitEndTurn is called for a finished unit that is not blocked and will not run off to heal */
     private fun endsTurn(unit: Int) = last[unit] != AssignmentType.Blocked &&
-        (moves[unit] <= EPSILON || world.civ.isBarbarian || world.units[unit].unit.health >= 100)
+        (moves[unit] <= EPSILON || world.civ.isBarbarian || world.units[unit].unit.let { it.health >= it.getMaxHealth() })
 
     /** CvTacticalPlot::getNumAdjacentFriendliesEndTurn: units that have finished their turn next to the plot */
     fun adjacentFriendliesEndTurn(p: Int, domain: SimDomain): Int {
@@ -326,7 +331,10 @@ class SimPosition private constructor(val world: SimWorld, val parent: SimPositi
 
     private fun applyDamage(a: SimAssignment) {
         for ((index, amount) in a.unitDamage) enemyDamage[index] += amount
-        if (a.cityIndex >= 0) cityDamage[a.cityIndex] += a.cityDamage
+        if (a.cityIndex >= 0) {
+            cityDamage[a.cityIndex] += a.cityDamage
+            garrisonDamage[a.cityIndex] += a.garrisonDamage
+        }
     }
 
     private fun killEnemyAt(p: Int) {

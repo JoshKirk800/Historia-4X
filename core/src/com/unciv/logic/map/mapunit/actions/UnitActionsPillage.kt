@@ -65,6 +65,12 @@ object UnitActionsPillage {
                 val freePillage = unit.hasUnique(UniqueType.NoMovementToPillage, checkCivInfoUniques = true)
                 if (!freePillage) unit.useMovementPoints(1f)
 
+                // CvUnit::pillage: bSuccessfulNonRoadPillage gives changeExperienceTimes100(GetXPFromPillaging() * 100) (pillageXpLikeVp)
+                if (pillagingImprovement && unit.civ.gameInfo.ruleset.modOptions.constants.pillageXpLikeVp) {
+                    val pillageXp = unit.getMatchingUniques(UniqueType.XpFromPillaging).sumOf { it.params[0].toInt() }
+                    if (pillageXp > 0) unit.promotions.gainExperienceTimes100(pillageXp * 100)
+                }
+
                 if (pillagingImprovement) { // only Improvements heal HP
                     var healAmount = 25f
                     unit.forEachMatchingUnique(UniqueType.PercentHealthFromPillaging, checkCivInfoUniques = true) { unique ->

@@ -160,7 +160,7 @@ object ExplorerAi {
             if (tile == unit.getTile()) {
                 if (isUnfriendlyTerritory(civ, tile)) continue
                 if (unit.currentMovement >= unit.getMaxMovement() && maxTurns <= 3 && !human) {
-                    val damage = 100 - unit.health
+                    val damage = unit.getMaxHealth() - unit.health
                     val healRate = minOf(unit.getHealAmountForCurrentTile(), damage) - danger.get(unit, tile)
                     if ((healRate >= 7 || healRate > 0 && damage > 30) && healRate * 40 > bestScore) {
                         best = tile

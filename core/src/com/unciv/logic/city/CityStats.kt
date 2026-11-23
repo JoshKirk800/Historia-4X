@@ -876,13 +876,16 @@ class CityStats(val city: City) {
                 val happinessGrowth = city.cityStats.needs.growthModifier()
                 if (happinessGrowth != 0) newFinalStatList.add("Happiness", Stats(food = happinessGrowth / 100f * totalFood))
             }
+            // CvCity::getGrowthMods: the growth lost for each unit out of supply (calculateUnitGrowthMaintenanceMod), with unitSupplyLikeVp
+            val supplyGrowth = city.civ.stats.getUnitSupplyGrowthPenalty()
+            if (supplyGrowth != 0) newFinalStatList.add("[Unit Supply] ([Growth])", Stats(food = supplyGrowth / 100f * totalFood))
             if (city.isWeLoveTheKingDayActive() && (needsModel || city.civ.getHappiness() >= 0)) {
                 // We Love The King Day +25%, only if not unhappy (the original's Vox Populi: whatever the happiness)
                 val weLoveTheKingFood = Stats(food = totalFood / 4)
                 newFinalStatList.add("We Love The King Day", weLoveTheKingFood)
             }
             // The growth modifiers add up to -100% at the most (CvCity::getGrowthMods), no city shrinks of them
-            if (needsModel) {
+            if (needsModel || supplyGrowth != 0) {
                 val foodAfterModifiers = newFinalStatList.values.map { it.food }.sum()
                 if (foodAfterModifiers < 0) newFinalStatList.add("Growth modifiers limit", Stats(food = -foodAfterModifiers))
             }

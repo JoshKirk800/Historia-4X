@@ -17,10 +17,18 @@
 		"unitType": "Civilian",
 		"movement": 4,
 		"cost": 450,
+		"purchaseCooldown": 1,
 		"requiredTech": "Archaeology",
-		"uniques": ["Can build [Archaeological Dig] improvements on tiles", "Can excavate archaeological sites", "Only available <in cities with a [University]>",
-			"Cannot be purchased", "Unbuildable <for [City-State] Civilizations>"],
-		"purchaseCooldown": 1
+		"uniques": [
+			"Cannot be purchased",
+			"Limited to [3] per Civilization",
+			"Never appears as a Barbarian unit",
+			"Unbuildable <for [City-State] Civilizations>",
+			"Becomes [Archaeologist] when captured",
+			"Can build [Archaeological Dig] improvements on tiles",
+			"Can excavate archaeological sites",
+			"Only available <in cities with a [Museum]>"
+		]
 	},
 	{
 		"name": "Settler",
@@ -466,15 +474,19 @@
 		"name": "Horseman",
 		"unitType": "Mounted",
 		"movement": 4,
-		"strength": 12,
+		"strength": 14,
 		"cost": 90,
-		"requiredTech": "Trade",
-		"requiredResource": "Horses",
-		"upgradesTo": "Knight",
+		"purchaseCooldown": 1,
+		"requiredTech": "Military Strategy",
 		"obsoleteTech": "Chivalry",
-		"uniques": ["Can move after attacking","No defensive terrain bonus","[-33]% Strength <vs cities> <when attacking>" ],
-		"attackSound": "horse",
-		"purchaseCooldown": 1
+		"upgradesTo": "Knight",
+		"requiredResource": "Horses",
+		"uniques": [
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[-33]% Strength <vs cities> <when attacking>"
+		],
+		"attackSound": "horse"
 	},
 	{
 		"name": "Companion Cavalry",
@@ -515,54 +527,68 @@
 		"name": "Cataphract",
 		"unitType": "Mounted",
 		"uniqueTo": "Byzantium",
-		"replaces": "Horseman",
+		"replaces": "Knight",
 		"movement": 3,
-		"strength": 15,
+		"strength": 28,
 		"cost": 175,
-		"requiredTech": "Trade",
-		"upgradesTo": "Knight",
-		"obsoleteTech": "Chivalry",
+		"purchaseCooldown": 1,
+		"requiredTech": "Chivalry",
+		"obsoleteTech": "Combustion",
+		"upgradesTo": "Lancer",
 		"requiredResource": "Horses",
-		"uniques": ["Can move after attacking", "[-25]% Strength <vs cities> <when attacking>",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"Can move after attacking",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
+			"[-25]% Strength <vs cities> <when attacking>",
+			"[+30]% Strength <when fighting in [Open terrain] tiles>",
 			"Can only be purchased in cities with [Barracks]"
 		],
-		"attackSound": "horse",
-		"purchaseCooldown": 1
+		"attackSound": "horse"
 	},
 	{
 		"name": "Catapult",
 		"unitType": "Siege",
 		"movement": 2,
-		"strength": 7,
-		"rangedStrength": 8,
+		"strength": 5,
+		"rangedStrength": 13,
 		"cost": 100,
-		"requiredTech": "Mathematics",
+		"purchaseCooldown": 1,
+		"requiredTech": "Masonry",
 		"obsoleteTech": "Physics",
 		"upgradesTo": "Trebuchet",
-		"uniques": ["[+200]% Strength <vs cities> <when attacking>", "No defensive terrain bonus",
-			"Must set up to ranged attack", "[-1] Sight", "Never appears as a Barbarian unit",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"No defensive terrain bonus",
+			"[+100]% Strength <vs cities> <when attacking>",
+			"[-33]% Strength <vs [Land] units> <when attacking>",
+			"Must set up to ranged attack",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
 			"Can only be purchased in cities with [Barracks]"
 		],
-		"attackSound": "throw",
-		"purchaseCooldown": 1
+		"attackSound": "throw"
 	},
 	{
 		"name": "Siege Tower",
-		"unitType": "Siege",
-		"replaces": "Catapult",
+		"unitType": "Civilian",
 		"uniqueTo": "Assyria",
-		"movement": 2,
-		"strength": 12,
+		"movement": 4,
 		"cost": 100,
-		"requiredTech": "Mathematics",
-		"upgradesTo": "Trebuchet",
-		"obsoleteTech": "Physics",
-		"promotions": ["Cover I"],
-		"uniques": ["[+200]% Strength <vs cities> <when attacking>", "No defensive terrain bonus", "Can only attack [City] units", "[+1] Sight", "[+50]% Strength bonus for [Military] units within [2] tiles attacking a city this unit is adjacent to",
+		"purchaseCooldown": 1,
+		"requiredTech": "Military Strategy",
+		"uniques": [
+			"Limited to [2] per Civilization",
+			"Never appears as a Barbarian unit",
+			"Uncapturable",
+			"[+40]% Strength bonus for [Military] units within [2] tiles attacking a city this unit is adjacent to",
+			"Units on this tile heal [5] HP when healing",
+			"All adjacent units heal [+5] HP when healing",
+			"Units on this tile heal [5] HP when healing",
+			"[+5] HP when healing <in [Foreign Land] tiles>",
+			"All adjacent units heal [+5] HP when healing",
 			"Can only be purchased in cities with [Barracks]"
 		],
-		"attackSound": "throw",
-		"purchaseCooldown": 1
+		"attackSound": "throw"
 	},
 	{
 		"name": "Ballista",
@@ -683,7 +709,7 @@
 			"Can only be purchased in cities with [Barracks]"
 		],
 		"upgradesTo": "Lancer",
-		"obsoleteTech": "Metallurgy",
+		"obsoleteTech": "Economics",
 		"attackSound": "metalhit",
 		"purchaseCooldown": 1
 	},
@@ -724,53 +750,66 @@
 	{
 		"name": "Galleass",
 		"unitType": "Ranged Water",
-		"movement": 3,
-		"strength": 16,
-		"rangedStrength": 17,
+		"movement": 4,
+		"strength": 14,
+		"rangedStrength": 24,
+		"range": 1,
 		"cost": 175,
-		"requiredTech": "Compass",
+		"purchaseCooldown": 1,
+		"requiredTech": "Guilds",
 		"obsoleteTech": "Navigation",
 		"upgradesTo": "Frigate",
-		"uniques": ["Cannot enter ocean tiles",
+		"uniques": [
+			"Can move after attacking",
+			"[-25]% Strength <vs [Land] units> <when attacking>",
+			"Half movement in [Ocean] tiles",
 			"Can only be purchased in cities with [Harbor]"
 		],
-		"attackSound": "arrow",
-		"purchaseCooldown": 1
+		"attackSound": "arrow"
 	},
 	{
 		"name": "Great Galleass",
 		"unitType": "Ranged Water",
-		"replaces": "Galleass",
 		"uniqueTo": "Venice",
-		"movement": 3,
-		"strength": 18,
-		"rangedStrength": 20,
-		"range": 2,
+		"replaces": "Galleass",
+		"movement": 4,
+		"strength": 20,
+		"rangedStrength": 30,
+		"range": 1,
 		"cost": 250,
-		"requiredTech": "Compass",
-		"upgradesTo": "Frigate",
-		"obsoleteTech": "Navigation",
-		"uniques": ["Cannot enter ocean tiles",
+		"purchaseCooldown": 1,
+		"requiredTech": "Gunpowder",
+		"obsoleteTech": "Dynamite",
+		"upgradesTo": "Cruiser",
+		"uniques": [
+			"Can move after attacking",
+			"[-25]% Strength <vs [Land] units> <when attacking>",
+			"Half movement in [Ocean] tiles",
+			"[+10]% Strength <when making a ranged attack>",
+			"[+30]% Strength <vs cities> <when attacking>",
 			"Can only be purchased in cities with [Harbor]"
 		],
-		"attackSound": "arrow",
-		"purchaseCooldown": 1
+		"attackSound": "arrow"
 	},
 	{
 		"name": "Knight",
 		"unitType": "Mounted",
 		"movement": 4,
-		"strength": 20,
+		"strength": 24,
 		"cost": 175,
+		"purchaseCooldown": 1,
 		"requiredTech": "Chivalry",
-		"obsoleteTech": "Military Science",
-		"upgradesTo": "Cavalry",
+		"obsoleteTech": "Economics",
+		"upgradesTo": "Lancer",
 		"requiredResource": "Horses",
-		"uniques": ["Can move after attacking","No defensive terrain bonus","[-33]% Strength <vs cities> <when attacking>", "Never appears as a Barbarian unit",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[-33]% Strength <vs cities> <when attacking>",
 			"Can only be purchased in cities with [Barracks]"
 		],
-		"attackSound": "horse",
-		"purchaseCooldown": 1
+		"attackSound": "horse"
 	},
 	{
 		"name": "Camel Archer",
@@ -816,19 +855,26 @@
 	{
 		"name": "Naresuan's Elephant",
 		"unitType": "Mounted",
-		"replaces": "Knight",
 		"uniqueTo": "Siam",
+		"replaces": "Knight",
 		"movement": 3,
-		"strength": 25,
+		"strength": 26,
 		"cost": 175,
+		"purchaseCooldown": 1,
 		"requiredTech": "Chivalry",
-		"obsoleteTech": "Military Science",
-		"upgradesTo": "Cavalry",
-		"uniques": ["Can move after attacking","No defensive terrain bonus","[+50]% Strength <vs [Mounted] units>","[-33]% Strength <vs cities> <when attacking>",
+		"obsoleteTech": "Combustion",
+		"upgradesTo": "Lancer",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[-33]% Strength <vs cities> <when attacking>",
+			"[+25]% Strength <when stacked with a [Great General] unit>",
+			"[+50]% Strength <vs [Mounted] units>",
+			"[-10]% Strength for enemy [Military] units in adjacent [All] tiles",
 			"Can only be purchased in cities with [Barracks]"
 		],
-		"attackSound": "elephant",
-		"purchaseCooldown": 1
+		"attackSound": "elephant"
 	},
 	{
 		"name": "Mandekalu Cavalry",
@@ -926,17 +972,23 @@
 		"name": "Trebuchet",
 		"unitType": "Siege",
 		"movement": 2,
-		"strength": 12,
-		"rangedStrength": 14,
+		"strength": 8,
+		"rangedStrength": 20,
 		"cost": 175,
+		"purchaseCooldown": 1,
 		"requiredTech": "Physics",
-		"obsoleteTech": "Chemistry",
+		"obsoleteTech": "Gunpowder",
 		"upgradesTo": "Cannon",
-		"uniques": ["[+200]% Strength <vs cities> <when attacking>","No defensive terrain bonus","Must set up to ranged attack","[-1] Sight","Never appears as a Barbarian unit",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"No defensive terrain bonus",
+			"[+100]% Strength <vs cities> <when attacking>",
+			"[-33]% Strength <vs [Land] units> <when attacking>",
+			"Must set up to ranged attack",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
 			"Can only be purchased in cities with [Barracks]"
 		],
-		"attackSound": "throw",
-		"purchaseCooldown": 1
+		"attackSound": "throw"
 	},
 	{
 		"name": "Hwach'a",
@@ -948,7 +1000,7 @@
 		"rangedStrength": 26,
 		"cost": 120,
 		"requiredTech": "Physics",
-		"obsoleteTech": "Chemistry",
+		"obsoleteTech": "Gunpowder",
 		"upgradesTo": "Cannon",
 		"uniques": ["No defensive terrain bonus","Must set up to ranged attack"],
 		"attackSound": "throw"
@@ -1019,7 +1071,7 @@
 		"cost": 160,
 		"requiredTech": "Astronomy",
 		"upgradesTo": "Ironclad",
-		"obsoleteTech": "Steam Power",
+		"obsoleteTech": "Industrialization",
 		"uniques": ["[+1] Sight", "Withdraws before melee combat <with [80]% chance>",
 			"Can only be purchased in cities with [Harbor]"
 		],
@@ -1036,7 +1088,7 @@
 		"cost": 160,
 		"requiredTech": "Astronomy",
 		"upgradesTo": "Ironclad",
-		"obsoleteTech": "Steam Power",
+		"obsoleteTech": "Industrialization",
 		"uniques": ["[+1] Sight", "Withdraws before melee combat <with [80]% chance>", "Can sell [1] exotic goods",
 			"Can only be purchased in cities with [Harbor]"
 		],
@@ -1154,7 +1206,7 @@
 		"requiredTech": "Navigation",
 		"upgradesTo": "Destroyer",
 		"promotions": ["Coastal Raider I", "[Privateer] ability"],
-		"obsoleteTech": "Combustion",
+		"obsoleteTech": "Radio",
 		"hurryCostModifier": 20,
 		"attackSound": "cannon"
 	},
@@ -1169,7 +1221,7 @@
 		"requiredTech": "Navigation",
 		"upgradesTo": "Destroyer",
 		"promotions": ["Coastal Raider I", "Coastal Raider II", "Supply", "[Privateer] ability"],
-		"obsoleteTech": "Combustion",
+		"obsoleteTech": "Radio",
 		"attackSound": "cannon",
 		"purchaseCooldown": 1,
 		"uniques": [
@@ -1179,19 +1231,18 @@
 	{
 		"name": "Frigate",
 		"unitType": "Ranged Water",
-		"movement": 5,
+		"movement": 4,
 		"strength": 25,
-		"rangedStrength": 28,
+		"rangedStrength": 35,
 		"cost": 375,
-		"requiredResource": "Iron",
-		"requiredTech": "Navigation",
-		"obsoleteTech": "Electronics",
-		"upgradesTo": "Battleship",
-		"attackSound": "shipCannonVolley",
 		"purchaseCooldown": 1,
+		"requiredTech": "Navigation",
+		"obsoleteTech": "Dynamite",
+		"upgradesTo": "Cruiser",
 		"uniques": [
 			"Can only be purchased in cities with [Harbor]"
-		]
+		],
+		"attackSound": "shipCannonVolley"
 	},
 	{
 		"name": "Ship of the Line",
@@ -1207,7 +1258,7 @@
 			"Can only be purchased in cities with [Harbor]"
 		],
 		"requiredTech": "Navigation",
-		"obsoleteTech": "Electronics",
+		"obsoleteTech": "Nuclear Fission",
 		"upgradesTo": "Battleship",
 		"attackSound": "shipCannonVolley",
 		"purchaseCooldown": 1
@@ -1216,39 +1267,48 @@
 		"name": "Lancer",
 		"unitType": "Mounted",
 		"movement": 4,
-		"strength": 25,
+		"strength": 37,
 		"cost": 350,
-		"requiredTech": "Metallurgy",
+		"purchaseCooldown": 1,
+		"requiredTech": "Economics",
+		"obsoleteTech": "Combustion",
+		"upgradesTo": "Landship",
 		"requiredResource": "Horses",
-		"uniques": ["Can move after attacking","No defensive terrain bonus","[-33]% Strength <vs cities> <when attacking>","Never appears as a Barbarian unit",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[-33]% Strength <vs cities> <when attacking>",
 			"Can only be purchased in cities with [Armory]",
 			"Can only be purchased in cities with [Stable]"
 		],
-		"promotions": ["Formation I"],
-		"upgradesTo": "Anti-Tank Gun",
-		"obsoleteTech": "Combined Arms",
-		"attackSound": "horse",
-		"purchaseCooldown": 1
+		"attackSound": "horse"
 	},
 	{
 		"name": "Winged Hussar",
 		"unitType": "Mounted",
-		"replaces": "Lancer",
 		"uniqueTo": "Poland",
+		"replaces": "Lancer",
 		"movement": 5,
-		"strength": 28,
+		"strength": 40,
 		"cost": 350,
-		"requiredTech": "Metallurgy",
-		"requiredResource": "Horses",
-		"upgradesTo": "Anti-Tank Gun",
+		"purchaseCooldown": 1,
+		"requiredTech": "Economics",
 		"obsoleteTech": "Combined Arms",
-		"promotions": ["Shock I", "Formation I"],
-		"uniques": ["Can move after attacking", "No defensive terrain bonus", "[-33]% Strength <vs cities> <when attacking>", "Heavy Charge",
+		"upgradesTo": "Landship",
+		"requiredResource": "Horses",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[-33]% Strength <vs cities> <when attacking>",
+			"[+15]% Strength <when fighting in [Open terrain] tiles> <when defending>",
+			"[+33]% Strength <vs [Mounted] units>",
+			"Heavy Charge",
 			"Can only be purchased in cities with [Armory]",
 			"Can only be purchased in cities with [Stable]"
 		],
-		"attackSound": "horse",
-		"purchaseCooldown": 1
+		"attackSound": "horse"
 	},
 	{
 		"name": "Sipahi",
@@ -1292,17 +1352,24 @@
 		"name": "Cannon",
 		"unitType": "Siege",
 		"movement": 2,
-		"strength": 14,
-		"rangedStrength": 20,
+		"strength": 11,
+		"rangedStrength": 29,
 		"cost": 350,
-		"requiredTech": "Chemistry",
-		"upgradesTo": "Artillery",
-		"obsoleteTech": "Dynamite",
-		"uniques": ["[+200]% Strength <vs cities> <when attacking>","No defensive terrain bonus","Must set up to ranged attack","[-1] Sight","Never appears as a Barbarian unit",
+		"purchaseCooldown": 1,
+		"requiredTech": "Gunpowder",
+		"obsoleteTech": "Rifling",
+		"upgradesTo": "Field Gun",
+		"requiredResource": "Iron",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"No defensive terrain bonus",
+			"[+100]% Strength <vs cities> <when attacking>",
+			"[-33]% Strength <vs [Land] units> <when attacking>",
+			"Must set up to ranged attack",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
 			"Can only be purchased in cities with [Armory]"
 		],
-		"attackSound": "cannon",
-		"purchaseCooldown": 1
+		"attackSound": "cannon"
 	},
 
 	// Industrial Era
@@ -1483,36 +1550,46 @@
 	{
 		"name": "Ironclad",
 		"unitType": "Melee Water",
-		"movement": 3,
-		"strength": 45,
+		"movement": 5,
+		"strength": 55,
 		"cost": 900,
-		"requiredTech": "Steam Power",
-		"requiredResource": "Coal",
+		"purchaseCooldown": 1,
+		"requiredTech": "Industrialization",
+		"obsoleteTech": "Radio",
 		"upgradesTo": "Destroyer",
-		"obsoleteTech": "Combustion",
-		"uniques": ["[+33]% Strength <vs cities>","Double movement in [Coast]", "Never appears as a Barbarian unit",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[5] air defense",
 			"Can only be purchased in cities with [Seaport]"
 		],
-		"attackSound": "shipguns",
-		"purchaseCooldown": 1
+		"attackSound": "shipguns"
 	},
 	{
 		"name": "Artillery",
 		"unitType": "Siege",
 		"movement": 2,
-		"strength": 21,
-		"rangedStrength": 28,
+		"strength": 27,
+		"rangedStrength": 50,
 		"range": 3,
 		"cost": 1300,
-		"requiredTech": "Dynamite",
+		"purchaseCooldown": 1,
+		"requiredTech": "Ballistics",
+		"obsoleteTech": "Advanced Ballistics",
 		"upgradesTo": "Rocket Artillery",
-		"uniques": ["[+200]% Strength <vs cities> <when attacking>","No defensive terrain bonus",
-			"Must set up to ranged attack","[-1] Sight", "Never appears as a Barbarian unit",
+		"requiredResource": "Iron",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[3] air defense",
+			"No defensive terrain bonus",
+			"[+100]% Strength <vs cities> <when attacking>",
+			"[-33]% Strength <vs [Land] units> <when attacking>",
+			"Must set up to ranged attack",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
+			"[-10]% Strength <when making a ranged attack>",
+			"Ranged attacks may be performed over obstacles",
 			"Can only be purchased in cities with [Military Academy]"
 		],
-		"promotions": ["Indirect Fire"],
-		"attackSound": "artillery",
-		"purchaseCooldown": 1
+		"attackSound": "artillery"
 	},
 
 	// Modern era
@@ -1520,18 +1597,29 @@
 	{
 		"name": "Submarine",
 		"unitType": "Submarine",
-		"movement": 5,
-		"strength": 35,
+		"movement": 4,
+		"strength": 40,
 		"rangedStrength": 60,
+		"range": 1,
 		"cost": 1300,
-		"requiredTech": "Refrigeration",
-		"upgradesTo": "Nuclear Submarine",
-		"obsoleteTech": "Telecommunications",
-		"uniques": ["[+75]% Strength <when attacking>", "Can only attack [Water] tiles", "Never appears as a Barbarian unit",
+		"purchaseCooldown": 1,
+		"requiredTech": "Plastics",
+		"obsoleteTech": "Electronics",
+		"upgradesTo": "Attack Submarine",
+		"requiredResource": "Aluminum",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"Can only attack [Water] tiles",
+			"[5] air defense",
+			"Can move after attacking",
+			"[+50]% Strength <vs [Land] units> <when attacking>",
+			"[+50]% Strength <vs [Water] units> <when attacking>",
+			"[-75]% Strength <vs cities> <when attacking>",
+			"Invisible to non-adjacent units",
+			"Can enter ice tiles",
 			"Can only be purchased in cities with [Seaport]"
 		],
-		"attackSound": "torpedo",
-		"purchaseCooldown": 1
+		"attackSound": "torpedo"
 	},
 	{
 		"name": "Great War Infantry",
@@ -1541,7 +1629,7 @@
 		"cost": 320,
 		"requiredTech": "Replaceable Parts",
 		"upgradesTo": "Infantry",
-		"obsoleteTech": "Plastics",
+		"obsoleteTech": "Combined Arms",
 		"attackSound": "shot"
 	},
 	{
@@ -1552,7 +1640,7 @@
 		"cost": 550,
 		"requiredTech": "Replaceable Parts",
 		"upgradesTo": "Infantry",
-		"obsoleteTech": "Plastics",
+		"obsoleteTech": "Combined Arms",
 		"uniques": ["[+20]% Strength <when fighting in [Foreign Land] tiles>", "Unbuildable"],
 		// XML: Class is UNITCLASS_GREAT_WAR_INFANTRY, whose unit is the Great War Infantry for every civilization, so CvPlayer::canTrain
 		// refuses it everywhere; the units come from Volunteer Army (Policy_FreeUnitClasses UNITCLASS_FOREIGNLEGION)
@@ -1595,16 +1683,19 @@
 		"name": "Infantry",
 		"unitType": "Gunpowder",
 		"movement": 2,
-		"strength": 70,
+		"strength": 62,
 		"cost": 1300,
-		"requiredTech": "Plastics",
-		"upgradesTo": "Mechanized Infantry",
-		"obsoleteTech": "Mobile Tactics",
-		"attackSound": "shot",
 		"purchaseCooldown": 1,
+		"requiredTech": "Combined Arms",
+		"obsoleteTech": "Mobile Tactics",
+		"upgradesTo": "Mechanized Infantry",
 		"uniques": [
+			"[8] air defense",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
+			"[+25] maximum hit points",
 			"Can only be purchased in cities with [Military Academy]"
-		]
+		],
+		"attackSound": "shot"
 	},
 	{
 		"name": "Pracinha",
@@ -1638,20 +1729,24 @@
 		"name": "Battleship",
 		"unitType": "Ranged Water",
 		"movement": 5,
-		"strength": 55,
-		"rangedStrength": 65,
+		"strength": 60,
+		"rangedStrength": 75,
 		"range": 3,
 		"cost": 1800,
-		"requiredResource": "Oil",
-		"requiredTech": "Electronics",
-		"uniques": ["Never appears as a Barbarian unit",
+		"purchaseCooldown": 1,
+		"requiredTech": "Nuclear Fission",
+		"obsoleteTech": "Lasers",
+		"upgradesTo": "Missile Cruiser",
+		"requiredResource": "Iron",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[15] air defense",
+			"[-10]% Strength <when making a ranged attack>",
+			"Ranged attacks may be performed over obstacles",
 			"Can only be purchased in cities with [Seaport]",
 			"Can only be purchased in cities with [Military Academy]"
 		],
-		"promotions": ["Indirect Fire"],
-		"attackSound": "shipguns",
-		"purchaseCooldown": 1
-		// Does not actually upgrade to Missile Cruisers
+		"attackSound": "shipguns"
 	},
 	{
 		"name": "Machine Gun",
@@ -1689,17 +1784,22 @@
 		"name": "Anti-Aircraft Gun",
 		"unitType": "Gunpowder",
 		"movement": 2,
-		"interceptRange": 2,
-		"strength": 50,
+		"strength": 40,
 		"cost": 950,
+		"purchaseCooldown": 1,
 		"requiredTech": "Ballistics",
+		"obsoleteTech": "Advanced Ballistics",
+		"interceptRange": 3,
 		"upgradesTo": "Mobile SAM",
-		"obsoleteTech": "Rocketry",
-		"uniques": ["[100]% chance to intercept air attacks", "[+150]% Strength <vs [Air] units>", "[+150]% Strength <vs [Helicopter] units>", "Never appears as a Barbarian unit",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[20] air defense",
+			"[+100]% Strength <vs [Air] units>",
+			"[15]% chance to intercept air attacks",
+			"[15]% chance to intercept air attacks",
 			"Can only be purchased in cities with [Military Academy]"
 		],
-		"attackSound": "machinegun",
-		"purchaseCooldown": 1
+		"attackSound": "machinegun"
 	},
 	{
 		"name": "Landship",
@@ -1707,30 +1807,37 @@
 		"movement": 4,
 		"strength": 60,
 		"cost": 1000,
+		"purchaseCooldown": 1,
 		"requiredTech": "Combustion",
-		"requiredResource": "Oil",
-		"upgradesTo": "Tank",
 		"obsoleteTech": "Combined Arms",
-		"uniques": ["Can move after attacking","No defensive terrain bonus", "Never appears as a Barbarian unit",
+		"upgradesTo": "Tank",
+		"requiredResource": "Oil",
+		"uniques": [
+			"[3] air defense",
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[+25]% Strength <when defending>",
 			"Can only be purchased in cities with [Military Academy]"
 		],
-		"attackSound": "tankshot",
-		"purchaseCooldown": 1
+		"attackSound": "tankshot"
 	},
 	{
 		"name": "Destroyer",
 		"unitType": "Melee Water",
-		"movement": 6,
-		"strength": 55,
-		"interceptRange": 2,
+		"movement": 5,
+		"strength": 70,
 		"cost": 1300,
-		"requiredTech": "Combustion",
-		"uniques": ["Can see invisible [Submarine] units", "[40]% chance to intercept air attacks",
-			"Withdraws before melee combat <with [80]% chance>", "[+100]% Strength <vs [Submarine] units>",
+		"purchaseCooldown": 1,
+		"requiredTech": "Radio",
+		"obsoleteTech": "Nuclear Fission",
+		"upgradesTo": "Fleet Destroyer",
+		"uniques": [
+			"[15] air defense",
+			"[+33]% Strength <vs [Submarine] units> <when attacking>",
+			"[+25]% Strength <vs [Submarine] units> <when defending>",
 			"Can only be purchased in cities with [Seaport]"
 		],
-		"attackSound": "shipguns",
-		"purchaseCooldown": 1
+		"attackSound": "shipguns"
 	},
 
 	// Atomic Era
@@ -1840,31 +1947,45 @@
 	},
 	{
 		"name": "XCOM Squad",
-		"unitType": "Gunpowder",
-		"movement": 2,
-		"strength": 100,
+		"unitType": "Scout",
+		"movement": 3,
+		"strength": 75,
 		"cost": 2600,
-		"requiredTech": "Nanotechnology",
-		"uniques": ["May Paradrop to [Land] tiles up to [40] tiles away <in [{Friendly} {Land}] tiles>",
+		"purchaseCooldown": 1,
+		"requiredTech": "Lasers",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[25] air defense",
+			"Eliminates combat penalty for attacking across a coast",
+			"Eliminates combat penalty for attacking over a river",
+			"Ignores terrain cost in [Marsh] tiles",
+			"[+25]% Strength <when attacking>",
+			"May Paradrop to [Land] tiles up to [40] tiles away <in [{Friendly} {Land}] tiles>",
+			"[5] XP when pillaging",
 			"Can only be purchased in cities with [Military Base]"
 		],
-		"attackSound": "shot",
-		"purchaseCooldown": 1
+		"attackSound": "shot"
 	},
 	{
 		"name": "Tank",
 		"unitType": "Armored",
 		"movement": 5,
-		"strength": 70,
+		"strength": 75,
 		"cost": 1800,
+		"purchaseCooldown": 1,
 		"requiredTech": "Combined Arms",
-		"requiredResource": "Oil",
+		"obsoleteTech": "Advanced Ballistics",
 		"upgradesTo": "Modern Armor",
-		"uniques": ["Can move after attacking","No defensive terrain bonus", "Never appears as a Barbarian unit",
+		"requiredResource": "Oil",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[3] air defense",
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[+25]% Strength <when defending>",
 			"Can only be purchased in cities with [Military Academy]"
 		],
-		"attackSound": "tankshot",
-		"purchaseCooldown": 1
+		"attackSound": "tankshot"
 	},
 	{
 		"name": "Panzer",
@@ -1896,71 +2017,89 @@
 		"name": "Atomic Bomb",
 		"unitType": "Atomic Bomber",
 		"movement": 1,
-		"strength": 150,
-		"rangedStrength": 150,
-		"range": 10,
+		"range": 6,
 		"cost": 3500,
+		"purchaseCooldown": 1,
 		"requiredTech": "Nuclear Fission",
 		"requiredResource": "Uranium",
-		"promotions" : ["Evasion"],
-		"uniques": ["Nuclear weapon of Strength [1]", "Only available <if [Manhattan Project] is constructed>", "Self-destructs when attacking",
-			"Blast radius [2]", "Unbuildable <when the [Nuclear Non-Proliferation] resolution is in effect>",
+		"uniques": [
+			"Cannot be purchased",
+			"Only available <if [Manhattan Project] is constructed>",
+			"Never appears as a Barbarian unit",
+			"Unbuildable <for [City-State] Civilizations>",
+			"Nuclear weapon of Strength [1]",
+			"Blast radius [2]",
+			"Unbuildable <when the [Nuclear Non-Proliferation] resolution is in effect>",
+			"Self-destructs when attacking",
+			"Aircraft",
 			"Can only be purchased in cities with [Airport]",
 			"Can only be purchased in cities with [Military Academy]"
 		],
-		"attackSound": "nuke",
-		"purchaseCooldown": 1
-		// Plane rather than a missile - can be based in city or Carrier only.
-		// Can be intercepted, but must die for it not to take effect.
+		"attackSound": "nuke"
 	},
 	{
 		"name": "Rocket Artillery",
 		"unitType": "Siege",
 		"movement": 2,
-		"strength": 45,
-		"rangedStrength": 60,
+		"strength": 37,
+		"rangedStrength": 75,
 		"range": 3,
 		"cost": 2250,
-		"requiredTech": "Rocketry",
-		"requiredResource": "Aluminum",
-		"uniques": ["[+200]% Strength <vs cities> <when attacking>","No defensive terrain bonus",
-			"[-1] Sight", "Never appears as a Barbarian unit",
+		"purchaseCooldown": 1,
+		"requiredTech": "Advanced Ballistics",
+		"requiredResource": "Iron",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[35] air defense",
+			"No defensive terrain bonus",
+			"[+100]% Strength <vs cities> <when attacking>",
+			"[-33]% Strength <vs [Land] units> <when attacking>",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
+			"[-10]% Strength <when making a ranged attack>",
+			"Ranged attacks may be performed over obstacles",
 			"Can only be purchased in cities with [Military Base]"
 		],
-		"promotions": ["Indirect Fire"],
-		"attackSound": "artillery",
-		"purchaseCooldown": 1
+		"attackSound": "artillery"
 	},
 	{
 		"name": "Mobile SAM",
 		"unitType": "Gunpowder",
 		"movement": 3,
-		"interceptRange": 2,
-		"strength": 65,
+		"strength": 55,
 		"cost": 1800,
-		"requiredTech": "Rocketry",
-		"uniques": ["[100]% chance to intercept air attacks", "[+150]% Strength <vs [Air] units>",
-			"[+150]% Strength <vs [Helicopter] units>", "Never appears as a Barbarian unit",
+		"purchaseCooldown": 1,
+		"requiredTech": "Advanced Ballistics",
+		"interceptRange": 4,
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[40] air defense",
+			"[+100]% Strength <vs [Air] units>",
+			"[15]% chance to intercept air attacks",
+			"[15]% chance to intercept air attacks",
+			"[15]% chance to intercept air attacks",
 			"Can only be purchased in cities with [Military Base]"
 		],
-		"attackSound": "missile",
-		"purchaseCooldown": 1
+		"attackSound": "missile"
 	},
 	{
 		"name": "Guided Missile",
 		"unitType": "Missile",
 		"movement": 1,
-		"strength": 60,
-		"rangedStrength": 60,
-		"range": 8,
+		"strength": 180,
+		"rangedStrength": 180,
+		"range": 12,
 		"cost": 1200,
+		"purchaseCooldown": 1,
 		"requiredTech": "Advanced Ballistics",
-		"uniques": ["[-100]% maintenance costs",
+		"requiredResource": "Oil",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"Self-destructs when attacking",
+			"Does not use unit supply",
 			"Can only be purchased in cities with [Airport]",
 			"Can only be purchased in cities with [Military Academy]"
 		],
-		"attackSound": "missile",
-		"purchaseCooldown": 1
+		"attackSound": "missile"
 	},
 	{
 		"name": "Nuclear Missile",
@@ -2004,48 +2143,69 @@
 		"name": "Nuclear Submarine",
 		"unitType": "Submarine",
 		"movement": 6,
-		"strength": 50,
-		"range": 3,
+		"strength": 60,
 		"rangedStrength": 85,
+		"range": 1,
 		"cost": 2500,
-		"requiredTech": "Telecommunications",
-		"uniques": ["[+75]% Strength <when attacking>", "Can only attack [Water] tiles", "[+1] Sight", "Can carry [2] [Missile] units", "Never appears as a Barbarian unit",
+		"purchaseCooldown": 1,
+		"requiredTech": "Robotics",
+		"requiredResource": "Aluminum",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"Can only attack [Water] tiles",
+			"[15] air defense",
+			"Can move after attacking",
+			"[+50]% Strength <vs [Land] units> <when attacking>",
+			"[+50]% Strength <vs [Water] units> <when attacking>",
+			"[-75]% Strength <vs cities> <when attacking>",
+			"Invisible to non-adjacent units",
+			"Can enter ice tiles",
+			"Can carry [2] [Missile] units",
 			"Can only be purchased in cities with [Seaport]",
 			"Can only be purchased in cities with [Military Base]"
 		],
-		"attackSound": "torpedo",
-		"purchaseCooldown": 1
+		"attackSound": "torpedo"
 	},
 	{
 		"name": "Mechanized Infantry",
 		"unitType": "Gunpowder",
 		"movement": 3,
-		"strength": 90,
+		"strength": 80,
 		"cost": 1800,
+		"purchaseCooldown": 1,
 		"requiredTech": "Mobile Tactics",
-		"uniques": ["Never appears as a Barbarian unit",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[15] air defense",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
+			"[+25] maximum hit points",
 			"Can only be purchased in cities with [Military Base]"
 		],
-		"attackSound": "tankshot",
-		"purchaseCooldown": 1
+		"attackSound": "tankshot"
 	},
 	{
 		"name": "Missile Cruiser",
 		"unitType": "Ranged Water",
-		"movement": 7,
-		"strength": 80,
-		"rangedStrength": 100,
+		"movement": 6,
+		"strength": 75,
+		"rangedStrength": 80,
 		"range": 3,
-		"interceptRange": 3,
 		"cost": 2500,
-		"requiredTech": "Robotics",
-		"uniques": ["[100]% chance to intercept air attacks", "Can see invisible [Submarine] units",
-			"Can carry [3] [Missile] units", "[+100]% Strength <vs [Submarine] units>", "Never appears as a Barbarian unit",
+		"purchaseCooldown": 1,
+		"requiredTech": "Lasers",
+		"interceptRange": 3,
+		"requiredResource": "Iron",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[20] air defense",
+			"[+25]% Strength <when defending>",
+			"[-10]% Strength <when making a ranged attack>",
+			"Ranged attacks may be performed over obstacles",
+			"Can carry [3] [Missile] units",
 			"Can only be purchased in cities with [Seaport]",
 			"Can only be purchased in cities with [Military Base]"
 		],
-		"attackSound": "shipguns",
-		"purchaseCooldown": 1
+		"attackSound": "shipguns"
 	},
 	{
 		"name": "Modern Armor",
@@ -2053,14 +2213,19 @@
 		"movement": 5,
 		"strength": 100,
 		"cost": 2500,
-		"requiredTech": "Lasers",
-		"requiredResource": "Aluminum",
+		"purchaseCooldown": 1,
+		"requiredTech": "Advanced Ballistics",
 		"upgradesTo": "Giant Death Robot",
-		"uniques": ["Can move after attacking", "No defensive terrain bonus", "Never appears as a Barbarian unit",
+		"requiredResource": "Oil",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[10] air defense",
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[+25]% Strength <when defending>",
 			"Can only be purchased in cities with [Military Base]"
 		],
-		"attackSound": "tankshot",
-		"purchaseCooldown": 1
+		"attackSound": "tankshot"
 	},
 	{
 		"name": "Jet Fighter",
@@ -2083,34 +2248,51 @@
 	{
 		"name": "Giant Death Robot",
 		"unitType": "Armored",
-		"movement": 5,
-		"strength": 150,
+		"movement": 8,
+		"strength": 125,
 		"cost": 3000,
-		"requiredTech": "Nuclear Fusion",
+		"purchaseCooldown": 1,
+		"requiredTech": "Robotics",
 		"requiredResource": "Uranium",
-		"uniques": ["Can move after attacking", "No defensive terrain bonus", "Never appears as a Barbarian unit",
+		"uniques": [
+			"[30] air defense",
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[+25]% Strength <when defending>",
+			"Eliminates combat penalty for attacking across a coast",
+			"Eliminates combat penalty for attacking over a river",
+			"Ignores terrain cost in [Marsh] tiles",
+			"Before engaging in combat performs an extra ranged attack with [50]% of melee combat strength",
+			"[+25]% Strength <when attacking>",
+			"[+100] maximum hit points",
 			"Can only be purchased in cities with [Military Base]"
 		],
-		"attackSound": "gdrAttack",
-		"purchaseCooldown": 1
+		"attackSound": "gdrAttack"
 	},
 	{
 		"name": "Stealth Bomber",
 		"unitType": "Bomber",
-		"movement": 2,
-		"strength": 85,
-		"rangedStrength": 85,
-		"range": 20,
+		"movement": 1,
+		"strength": 80,
+		"rangedStrength": 80,
+		"range": 12,
 		"cost": 2200,
+		"purchaseCooldown": 1,
 		"requiredTech": "Stealth",
 		"requiredResource": "Aluminum",
-		"uniques": ["Damage taken from interception reduced by [100]%", "Cannot be carried by [Carrier] units", "[+4] Sight", "Can see over obstacles",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"Does not use unit supply",
+			"Aircraft",
+			"[+4] Sight",
+			"Can see over obstacles",
+			"[25]% chance to evade interception",
+			"[+50] maximum hit points",
+			"Damage taken from interception reduced by [25]%",
 			"Can only be purchased in cities with [Airport]",
 			"Can only be purchased in cities with [Military Base]"
 		],
-		"promotions": ["Evasion"], // Not technically in Civ V, but this way new players / AI won't select this promotion which does nothing for this unit
-		"attackSound": "bombing",
-		"purchaseCooldown": 1
+		"attackSound": "bombing"
 	},
 
 	/* Great people */
@@ -2193,21 +2375,26 @@
 	{
 		"name": "Great Prophet",
 		"unitType": "Civilian",
-		"uniques": [
-            "Can instantly construct a [Holy site] improvement <by consuming this unit> <if it hasn't used other actions yet>",
-            "Can Spread Religion <for [2] movement> <[4] times> <after which this unit is consumed>",
-			"Removes other religions when spreading religion",
-            "May found a religion <by consuming this unit> <if it hasn't used other actions yet>",
-            "May enhance a religion <by consuming this unit>  <if it hasn't used other actions yet>",
-            "Is part of Great Person group [Prophet]",
-            "[This Unit] gets a name from the [Prophet] group",
-			"May enter foreign tiles without open borders", "[-1] Sight", "Great Person - [Faith]",
-			"Unbuildable", "Religious Unit", "Only available <when religion is enabled>",
-			"Takes your religion over the one in their birth city"],
-		"movement": 2,
-		"religiousStrength": 1000,
+		"movement": 4,
 		"purchaseCooldown": 1,
-		"globalFaithPurchaseCooldown": 5
+		"globalFaithPurchaseCooldown": 5,
+		"religiousStrength": 1000,
+		"uniques": [
+			"Unbuildable",
+			"Never appears as a Barbarian unit",
+			"Uncapturable",
+			"Is part of Great Person group [Prophet]",
+			"Great Person - [Faith]",
+			"May found a religion <by consuming this unit> <if it hasn't used other actions yet>",
+			"May enhance a religion <by consuming this unit>  <if it hasn't used other actions yet>",
+			"Can Spread Religion <for [4] movement> <[4] times> <after which this unit is consumed>",
+			"Removes other religions when spreading religion",
+			"Takes your religion over the one in their birth city",
+			"Religious Unit",
+			"Only available <when religion is enabled>",
+			"May enter foreign tiles without open borders",
+			"Can instantly construct a [Holy site] improvement <by consuming this unit> <if it hasn't used other actions yet>"
+		]
 	},
 	{
 		"name": "Great General",
@@ -2263,25 +2450,34 @@
 	{
 		"name": "Missionary",
 		"unitType": "Civilian",
-		"uniques": [
-            "Can Spread Religion <for [4] movement> <[2] times> <after which this unit is consumed>",
-            "May enter foreign tiles without open borders, but loses [250] religious strength each turn it ends there",
-			"Can be purchased with [Faith] [in all cities in which the majority religion is a major religion]",
-			"[-1] Sight", "Unbuildable", "Religious Unit", "Only available <when religion is enabled>"],
 		"movement": 4,
+		"purchaseCooldown": 1,
 		"religiousStrength": 1000,
-		"purchaseCooldown": 1
+		"uniques": [
+			"Unbuildable",
+			"Can be purchased with [Faith] [in all cities in which the majority religion is a major religion]",
+			"Becomes [Missionary] when captured",
+			"Can Spread Religion <for [4] movement> <[2] times> <after which this unit is consumed>",
+			"Religious Unit",
+			"Only available <when religion is enabled>",
+			"May enter foreign tiles without open borders, but loses [250] religious strength each turn it ends there"
+		]
 	},
 	{
 		"name": "Inquisitor",
 		"unitType": "Civilian",
-		"uniques": ["Prevents spreading of religion to the city it is next to",
-			"Can remove other religions from cities <in [Friendly] tiles> <once> <after which this unit is consumed>",
-            "Can be purchased with [Faith] [in all cities in which the majority religion is a major religion]",
-			"[+1] Sight", "Only available <when religion is enabled>", "Unbuildable", "Religious Unit"
-		],
 		"movement": 3,
-		"purchaseCooldown": 1
+		"purchaseCooldown": 1,
+		"religiousStrength": 1250,
+		"uniques": [
+			"Unbuildable",
+			"Can be purchased with [Faith] [in all cities in which the majority religion is a major religion]",
+			"Uncapturable",
+			"Can remove other religions from cities <in [Friendly] tiles> <once> <after which this unit is consumed>",
+			"Prevents spreading of religion to the city it is next to",
+			"Religious Unit",
+			"Only available <when religion is enabled>"
+		]
 	},
 
 	/* Spaceship Parts */
@@ -2293,55 +2489,363 @@
 		"unitType": "Civilian",
 		"movement": 2,
 		"cost": 8000,
-		"requiredTech": "Advanced Ballistics",
-		"requiredResource": "Aluminum",
-		"uniques": ["Spaceship part", "Cannot be purchased <before adopting [Space Procurements]>", "Only available <if [Apollo Program] is constructed>", "Uncapturable", "Can be added to [The Spaceship] in the Capital", "Limited to [3] per Civilization", "Only available <when [Scientific] Victory is enabled>",
-			"Can only be purchased in cities with [Spaceship Factory]"
-		],
 		"purchaseCooldown": 1,
-		"globalFaithPurchaseCooldown": 5
-		// costs 1500 in BNW
+		"globalFaithPurchaseCooldown": 5,
+		"requiredTech": "Nuclear Fusion",
+		"requiredResource": "Aluminum",
+		"uniques": [
+			"Only available <if [Apollo Program] is constructed>",
+			"Limited to [3] per Civilization",
+			"Never appears as a Barbarian unit",
+			"Unbuildable <for [City-State] Civilizations>",
+			"Spaceship part",
+			"Can be added to [The Spaceship] in the Capital",
+			"Only available <when [Scientific] Victory is enabled>",
+			"Uncapturable",
+			"Can only be purchased in cities with [Spaceship Factory]"
+		]
 	},
 	{
 		"name": "SS Cockpit",
 		"unitType": "Civilian",
 		"movement": 2,
 		"cost": 8000,
-		"requiredTech": "Satellites",
-		"requiredResource": "Aluminum",
-		"uniques": ["Spaceship part", "Cannot be purchased <before adopting [Space Procurements]>", "Only available <if [Apollo Program] is constructed>", "Uncapturable", "Can be added to [The Spaceship] in the Capital", "Limited to [1] per Civilization", "Only available <when [Scientific] Victory is enabled>",
-			"Can only be purchased in cities with [Spaceship Factory]"
-		],
 		"purchaseCooldown": 1,
-		"globalFaithPurchaseCooldown": 5
-		// costs 1500 in BNW
+		"globalFaithPurchaseCooldown": 5,
+		"requiredTech": "Globalization",
+		"requiredResource": "Aluminum",
+		"uniques": [
+			"Only available <if [Apollo Program] is constructed>",
+			"Limited to [1] per Civilization",
+			"Never appears as a Barbarian unit",
+			"Unbuildable <for [City-State] Civilizations>",
+			"Spaceship part",
+			"Can be added to [The Spaceship] in the Capital",
+			"Only available <when [Scientific] Victory is enabled>",
+			"Uncapturable",
+			"Can only be purchased in cities with [Spaceship Factory]"
+		]
 	},
 	{
 		"name": "SS Engine",
 		"unitType": "Civilian",
 		"movement": 2,
 		"cost": 8000,
+		"purchaseCooldown": 1,
+		"globalFaithPurchaseCooldown": 5,
 		"requiredTech": "Particle Physics",
 		"requiredResource": "Aluminum",
-		"uniques": ["Spaceship part", "Cannot be purchased <before adopting [Space Procurements]>", "Only available <if [Apollo Program] is constructed>", "Uncapturable", "Can be added to [The Spaceship] in the Capital", "Limited to [1] per Civilization", "Only available <when [Scientific] Victory is enabled>",
+		"uniques": [
+			"Only available <if [Apollo Program] is constructed>",
+			"Limited to [1] per Civilization",
+			"Never appears as a Barbarian unit",
+			"Unbuildable <for [City-State] Civilizations>",
+			"Spaceship part",
+			"Can be added to [The Spaceship] in the Capital",
+			"Only available <when [Scientific] Victory is enabled>",
+			"Uncapturable",
 			"Can only be purchased in cities with [Spaceship Factory]"
-		],
-		"purchaseCooldown": 1,
-		"globalFaithPurchaseCooldown": 5
-		// costs 1500 in BNW
+		]
 	},
 	{
 		"name": "SS Stasis Chamber",
 		"unitType": "Civilian",
 		"movement": 2,
 		"cost": 8000,
+		"purchaseCooldown": 1,
+		"globalFaithPurchaseCooldown": 5,
 		"requiredTech": "Nanotechnology",
 		"requiredResource": "Aluminum",
-		"uniques": ["Spaceship part", "Cannot be purchased <before adopting [Space Procurements]>", "Only available <if [Apollo Program] is constructed>", "Uncapturable", "Can be added to [The Spaceship] in the Capital", "Limited to [1] per Civilization", "Only available <when [Scientific] Victory is enabled>",
+		"uniques": [
+			"Only available <if [Apollo Program] is constructed>",
+			"Limited to [1] per Civilization",
+			"Never appears as a Barbarian unit",
+			"Unbuildable <for [City-State] Civilizations>",
+			"Spaceship part",
+			"Can be added to [The Spaceship] in the Capital",
+			"Only available <when [Scientific] Victory is enabled>",
+			"Uncapturable",
 			"Can only be purchased in cities with [Spaceship Factory]"
-		],
+		]
+	},
+
+	// Vox Populi units (P6 M4, `rulegen applymilitary`)
+	{
+		"name": "Barbarian Horseman",
+		"unitType": "Mounted",
+		"uniqueTo": "Barbarians",
+		"replaces": "Horseman",
+		"movement": 4,
+		"strength": 14,
+		"cost": 90,
 		"purchaseCooldown": 1,
-		"globalFaithPurchaseCooldown": 5
-		// costs 1500 in BNW
+		"requiredTech": "Military Strategy",
+		"obsoleteTech": "Chivalry",
+		"upgradesTo": "Knight",
+		"requiredResource": "Horses",
+		"uniques": [
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[-33]% Strength <vs cities> <when attacking>"
+		]
+	},
+	{
+		"name": "Field Gun",
+		"unitType": "Siege",
+		"movement": 2,
+		"strength": 17,
+		"rangedStrength": 40,
+		"cost": 900,
+		"purchaseCooldown": 1,
+		"requiredTech": "Rifling",
+		"obsoleteTech": "Ballistics",
+		"upgradesTo": "Artillery",
+		"requiredResource": "Iron",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[1] air defense",
+			"No defensive terrain bonus",
+			"[+100]% Strength <vs cities> <when attacking>",
+			"[-33]% Strength <vs [Land] units> <when attacking>",
+			"Must set up to ranged attack",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
+			"[-10]% Strength <when making a ranged attack>",
+			"Ranged attacks may be performed over obstacles",
+			"Can only be purchased in cities with [Armory]"
+		]
+	},
+	{
+		"name": "Fleet Destroyer",
+		"unitType": "Melee Water",
+		"movement": 5,
+		"strength": 80,
+		"cost": 1800,
+		"purchaseCooldown": 1,
+		"requiredTech": "Nuclear Fission",
+		"obsoleteTech": "Stealth",
+		"interceptRange": 2,
+		"upgradesTo": "Sensor Combat Ship",
+		"uniques": [
+			"[25] air defense",
+			"[+33]% Strength <vs [Submarine] units> <when attacking>",
+			"[+25]% Strength <vs [Submarine] units> <when defending>",
+			"[15]% chance to intercept air attacks",
+			"Can only be purchased in cities with [Seaport]",
+			"Can only be purchased in cities with [Military Academy]"
+		]
+	},
+	{
+		"name": "Sensor Combat Ship",
+		"unitType": "Melee Water",
+		"movement": 6,
+		"strength": 90,
+		"cost": 2500,
+		"purchaseCooldown": 1,
+		"requiredTech": "Stealth",
+		"interceptRange": 3,
+		"uniques": [
+			"[35] air defense",
+			"[+66]% Strength <vs [Submarine] units> <when attacking>",
+			"[+50]% Strength <vs [Submarine] units> <when defending>",
+			"[15]% chance to intercept air attacks",
+			"[15]% chance to intercept air attacks",
+			"Can carry [3] [Missile] units",
+			"Can only be purchased in cities with [Seaport]",
+			"Can only be purchased in cities with [Military Base]"
+		]
+	},
+	{
+		"name": "Liburna",
+		"unitType": "Ranged Water",
+		"movement": 4,
+		"strength": 7,
+		"rangedStrength": 16,
+		"range": 1,
+		"cost": 100,
+		"purchaseCooldown": 1,
+		"requiredTech": "Sailing",
+		"obsoleteTech": "Guilds",
+		"upgradesTo": "Galleass",
+		"uniques": [
+			"Can move after attacking",
+			"[-25]% Strength <vs [Land] units> <when attacking>",
+			"Cannot enter ocean tiles",
+			"Half movement in [Ocean] tiles",
+			"Can only be purchased in cities with [Lighthouse]"
+		]
+	},
+	{
+		"name": "Cruiser",
+		"unitType": "Ranged Water",
+		"movement": 4,
+		"strength": 40,
+		"rangedStrength": 55,
+		"cost": 900,
+		"purchaseCooldown": 1,
+		"requiredTech": "Dynamite",
+		"obsoleteTech": "Radio",
+		"upgradesTo": "Dreadnought",
+		"requiredResource": "Iron",
+		"uniques": [
+			"[5] air defense",
+			"Can only be purchased in cities with [Seaport]"
+		]
+	},
+	{
+		"name": "Dreadnought",
+		"unitType": "Ranged Water",
+		"movement": 4,
+		"strength": 50,
+		"rangedStrength": 65,
+		"cost": 1300,
+		"purchaseCooldown": 1,
+		"requiredTech": "Radio",
+		"obsoleteTech": "Nuclear Fission",
+		"upgradesTo": "Battleship",
+		"requiredResource": "Iron",
+		"uniques": [
+			"[10] air defense",
+			"[-10]% Strength <when making a ranged attack>",
+			"Ranged attacks may be performed over obstacles",
+			"Can only be purchased in cities with [Seaport]"
+		]
+	},
+	{
+		"name": "Attack Submarine",
+		"unitType": "Submarine",
+		"movement": 5,
+		"strength": 50,
+		"rangedStrength": 72,
+		"range": 1,
+		"cost": 1800,
+		"purchaseCooldown": 1,
+		"requiredTech": "Electronics",
+		"obsoleteTech": "Robotics",
+		"upgradesTo": "Nuclear Submarine",
+		"requiredResource": "Aluminum",
+		"uniques": [
+			"Can only attack [Water] tiles",
+			"[10] air defense",
+			"Can move after attacking",
+			"[+50]% Strength <vs [Land] units> <when attacking>",
+			"[+50]% Strength <vs [Water] units> <when attacking>",
+			"[-75]% Strength <vs cities> <when attacking>",
+			"Invisible to non-adjacent units",
+			"Can enter ice tiles",
+			"Can carry [1] [Missile] units",
+			"Can only be purchased in cities with [Seaport]",
+			"Can only be purchased in cities with [Military Academy]"
+		]
+	},
+	{
+		"name": "Rocket Missile",
+		"unitType": "Missile",
+		"movement": 1,
+		"strength": 120,
+		"rangedStrength": 120,
+		"range": 8,
+		"cost": 400,
+		"purchaseCooldown": 1,
+		"requiredTech": "Rocketry",
+		"upgradesTo": "Guided Missile",
+		"requiredResource": "Oil",
+		"uniques": [
+			"Self-destructs when attacking",
+			"Does not use unit supply",
+			"Can only be purchased in cities with [Military Academy]"
+		]
+	},
+	{
+		"name": "Iron Chariot",
+		"unitType": "Mounted",
+		"uniqueTo": "Assyria",
+		"movement": 4,
+		"strength": 17,
+		"cost": 100,
+		"purchaseCooldown": 1,
+		"requiredTech": "Bronze Working",
+		"obsoleteTech": "Economics",
+		"upgradesTo": "Knight",
+		"requiredResource": "Horses",
+		"uniques": [
+			"Consumes [1] [Iron]",
+			"No defensive terrain bonus",
+			"Can move after attacking",
+			"[-33]% Strength <vs cities> <when attacking>",
+			"[1] extra movement cost in [Hill] tiles",
+			"[1] extra movement cost in [Forest] tiles",
+			"[1] extra movement cost in [Jungle] tiles",
+			"[1] extra movement cost in [Marsh] tiles",
+			"[+20]% Strength <when fighting in [Open terrain] tiles>"
+		]
+	},
+	{
+		"name": "Fusta",
+		"unitType": "Ranged Water",
+		"uniqueTo": "Venice",
+		"movement": 5,
+		"strength": 14,
+		"rangedStrength": 21,
+		"range": 1,
+		"cost": 125,
+		"purchaseCooldown": 1,
+		"requiredTech": "Guilds",
+		"obsoleteTech": "Dynamite",
+		"upgradesTo": "Frigate",
+		"uniques": [
+			"Does not use unit supply",
+			"Half movement in [Ocean] tiles",
+			"[-25]% Strength <vs [Land] units> <when attacking>",
+			"Can move after attacking",
+			"Can only be purchased in cities with [Harbor]"
+		]
+	},
+	{
+		"name": "Licorne",
+		"unitType": "Siege",
+		"uniqueTo": "Russia",
+		"replaces": "Field Gun",
+		"movement": 2,
+		"strength": 17,
+		"rangedStrength": 45,
+		"cost": 900,
+		"purchaseCooldown": 1,
+		"requiredTech": "Rifling",
+		"obsoleteTech": "Advanced Ballistics",
+		"upgradesTo": "Artillery",
+		"requiredResource": "Iron",
+		"uniques": [
+			"Never appears as a Barbarian unit",
+			"[1] air defense",
+			"No defensive terrain bonus",
+			"[+100]% Strength <vs cities> <when attacking>",
+			"[-33]% Strength <vs [Land] units> <when attacking>",
+			"Must set up to ranged attack",
+			"[+25]% Strength <vs [Ranged] units> <when defending>",
+			"[-10]% Strength <when making a ranged attack>",
+			"Ranged attacks may be performed over obstacles",
+			"Can move after attacking",
+			"[+33]% Strength <vs [Sword] units> <when attacking>",
+			"[+33]% Strength <vs [Gunpowder] units> <when attacking>",
+			"Can only be purchased in cities with [Armory]"
+		]
+	},
+	{
+		"name": "Inquisition",
+		"unitType": "Civilian",
+		"uniqueTo": "Spain",
+		"replaces": "Inquisitor",
+		"movement": 3,
+		"purchaseCooldown": 1,
+		"religiousStrength": 1250,
+		"uniques": [
+			"Unbuildable",
+			"Can be purchased with [Faith] [in all cities in which the majority religion is a major religion]",
+			"Uncapturable",
+			"Can remove other religions from cities <in [Friendly] tiles> <once> <after which this unit is consumed>",
+			"Prevents spreading of religion to the city it is next to",
+			"Religious Unit",
+			"Only available <when religion is enabled>"
+		]
 	}
 ]

@@ -26,6 +26,21 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
     @Suppress("PropertyName")
     var XP = 0
 
+    /** StageForms2: the hundredths of an experience point on top of [XP] (CvUnit::m_iExperienceTimes100 less 100 x XP), 0 to 99. Only [gainExperienceTimes100] makes any. */
+    var xpHundredths = 0
+
+    /**
+     *  CvUnit::changeExperienceTimes100 for experience that does not come from combat (scouting, pillaging): barbarians get none, the amount is scaled by the game speed's
+     *  experience percent, and what does not make a whole point is kept in [xpHundredths].
+     */
+    fun gainExperienceTimes100(amountTimes100: Int) {
+        if (unit.civ.isBarbarian && amountTimes100 > 0) return
+        val scaled = amountTimes100 * unit.civ.gameInfo.speed.experiencePercent / 100
+        val total = xpHundredths + scaled
+        XP += Math.floorDiv(total, 100)
+        xpHundredths = Math.floorMod(total, 100)
+    }
+
     /** The _names_ of the promotions this unit has acquired - see [getPromotions] for object access */
     var promotions = HashSet<String>()
         private set
@@ -142,6 +157,7 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
         for (unique in unit.getTriggeredUniques(UniqueType.TriggerUponPromotionGain){ it.params[0] == promotionName })
             UniqueTriggerActivation.triggerUnique(unique, unit)
 
+        val maximumBefore = unit.getMaxHealth()
         if (!promotion.hasUnique(UniqueType.SkipPromotion))
             promotions.add(promotionName)
 
@@ -150,6 +166,8 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
         doDirectPromotionEffects(promotion)
 
         unit.updateUniques()
+        unit.keepDamageAfterMaxHealthChange(maximumBefore)
+        unit.civ.units.resetNumUnitsToSupply() // CvUnit::changeNoSupply: the promotion may take the unit out of the supply count
 
         // Since some units get promotions upon construction, they will get the addPromotion from the unit.postBuildEvent
         // upon creation, BEFORE they are assigned to a tile, so the updateVisibleTiles() would crash.
@@ -162,8 +180,11 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
         val promotion = ruleset.unitPromotions[promotionName]!!
 
         if (getPromotions().contains(promotion)) {
+            val maximumBefore = unit.getMaxHealth()
             promotions.remove(promotionName)
             unit.updateUniques()
+            unit.keepDamageAfterMaxHealthChange(maximumBefore)
+            unit.civ.units.resetNumUnitsToSupply()
             unit.updateVisibleTiles()
             
             for (unique in unit.getTriggeredUniques(UniqueType.TriggerUponPromotionLoss){ it.params[0] == promotionName })
@@ -188,14 +209,20 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
         return unit.civ.gameInfo.ruleset.unitPromotions.values.asSequence().filter { isAvailable(it) }
     }
 
+    /** VP 5.4.8 CvGameCoreUtils::IsPromotionValidForCivilianUnitType also matches the civilian's specific unit type. */
+    @Readonly
+    fun isApplicableToUnit(promotion: Promotion): Boolean = unit.type.name in promotion.unitTypes ||
+        (unit.civ.gameInfo.ruleset.modOptions.constants.civilianPromotionApplicabilityLikeVp && unit.isCivilian()
+            && unit.name in promotion.unitTypes)
+
     /** All promotions this unit could have in its promotion tree: those matching its unit type, plus those already adopted. */
     @Readonly
     fun getPromotionTreeCandidates(): List<AvailablePromotion> {
         val state = unit.cache.state
         return unit.civ.gameInfo.ruleset.unitPromotions.values
-            .filter { unit.baseUnit.unitType in it.unitTypes || it.name in promotions }
+            .filter { isApplicableToUnit(it) || it.name in promotions }
             .map { promotion ->
-                val blocked = promotion.hasUnique(UniqueType.Unavailable, state)
+                val blocked = !meetsExtraRequirements(promotion) || promotion.hasUnique(UniqueType.Unavailable, state)
                     || promotion.getMatchingUniques(UniqueType.OnlyAvailable, GameContext.IgnoreConditionals)
                         .any { !it.conditionalsApply(state) }
                 AvailablePromotion(promotion, promotion.name in promotions, blocked)
@@ -207,13 +234,29 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
     @Readonly
     private fun isAvailable(promotion: Promotion): Boolean {
         if (promotion.name in promotions) return false
-        if (unit.type.name !in promotion.unitTypes) return false
+        if (!isApplicableToUnit(promotion)) return false
         if (promotion.prerequisites.isNotEmpty() && promotion.prerequisites.none { it in promotions }) return false
 
         val stateForConditionals = unit.cache.state
+        if (!meetsExtraRequirements(promotion)) return false
         if (promotion.hasUnique(UniqueType.Unavailable, stateForConditionals)) return false
         if (promotion.getMatchingUniques(UniqueType.OnlyAvailable, GameContext.IgnoreConditionals)
             .any { !it.conditionalsApply(stateForConditionals) }) return false
+        return true
+    }
+
+    /** VP 5.4.8 CvUnit::canAcquirePromotion checks the mandatory prerequisite and effective attack range. */
+    @Readonly
+    private fun meetsExtraRequirements(promotion: Promotion): Boolean {
+        val state = unit.cache.state
+        // VP 5.4.8 CvUnit::canAcquirePromotion: a MountedOnly promotion is refused to a unit whose unit entry is not IsMounted
+        if (unit.civ.gameInfo.ruleset.modOptions.constants.mountedUnitFlagLikeVp
+            && promotion.hasUnique(UniqueType.PromotionMountedOnly, state)
+            && !unit.baseUnit.hasUnique(UniqueType.IsMountedUnit)) return false
+        if (promotion.getMatchingUniques(UniqueType.PromotionRequiresPromotion, state).any { it.params[0] !in promotions }) return false
+        if (promotion.getMatchingUniques(UniqueType.PromotionMinimumRange, state).any { unit.getRange() < it.params[0].toInt() }) return false
+        if (unit.getRange() > 0 && promotion.getMatchingUniques(UniqueType.PromotionMaximumRange, state)
+                .any { unit.getRange() > it.params[0].toInt() }) return false
         return true
     }
 
@@ -221,6 +264,7 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
     fun clone(): UnitPromotions {
         @LocalState val toReturn = UnitPromotions()
         toReturn.XP = XP
+        toReturn.xpHundredths = xpHundredths
         toReturn.promotions = HashSet(promotions)
         toReturn.numberOfPromotions = numberOfPromotions
         return toReturn

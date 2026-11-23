@@ -9,6 +9,7 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
+import com.unciv.models.ModConstants
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
@@ -40,6 +41,14 @@ class AirMovesTests {
 
     @Before
     fun setUp() {
+        // These tests are about the AI's air decisions with the original numbers: six slots in a city, a rebase range of twice the range,
+        // 200 hit points for a city without buildings and BNW's interception. The BNW ruleset turns the Vox Populi versions on.
+        val constants = game.ruleset.modOptions.constants
+        constants.airBasingLikeVp = false
+        constants.airBasing = ModConstants.AirBasingConstants()
+        constants.airDefenseLikeVp = false
+        constants.airInterceptionLikeVp = false
+        constants.cityCombatLikeVp = false
         game.makeHexagonalMap(24)
         civ = game.addCiv()
         enemy = game.addCiv()
@@ -365,10 +374,13 @@ class AirMovesTests {
 
     // region Nukes (Vox Populi: ShouldRebase, ExecuteAircraftMoves, ScoreAirBase, IsGoodUnitMix)
 
-    /** Only the western enemy city is left; our new city at -6 has it within an Atomic Bomb's range of 10, home (14 from it) does not */
+    /** The Atomic Bomb of the BNW ruleset has Vox Populi's range of 6 (it was 10), a rebase range of 12 here */
+    private val NUKE_RANGE = 6
+
+    /** Only the western enemy city is left; our new city at -8 has it within an Atomic Bomb's range of 6, home (14 from it) does not */
     private fun nukeSetup(): City {
         enemyEast.destroyCity(overrideSafeties = true)
-        val west = game.addCity(civ, tile(-6))
+        val west = game.addCity(civ, tile(-8))
         game.gameInfo.turns = 10 // the cities were not just taken
         return west
     }
@@ -377,8 +389,9 @@ class AirMovesTests {
     fun `at war a nuke rebases to a base with an enemy city in range`() {
         val west = nukeSetup()
         val nuke = game.addUnit("Atomic Bomb", civ, home.getCenterTile())
-        assertEquals(1, AirMoves.nukeBaseScore(civ, home.getCenterTile(), 10, enemy.cities))
-        assertEquals(21, AirMoves.nukeBaseScore(civ, west.getCenterTile(), 10, enemy.cities))
+        assertEquals(NUKE_RANGE, nuke.getRange())
+        assertEquals(1, AirMoves.nukeBaseScore(civ, home.getCenterTile(), NUKE_RANGE, enemy.cities))
+        assertEquals(21, AirMoves.nukeBaseScore(civ, west.getCenterTile(), NUKE_RANGE, enemy.cities))
         assertTrue(AirMoves.plotNukeMove(nuke))
         assertEquals(west.getCenterTile(), nuke.getTile())
     }
@@ -407,7 +420,7 @@ class AirMovesTests {
         val west = nukeSetup()
         val nuke = game.addUnit("Atomic Bomb", civ, home.getCenterTile())
         west.turnAcquired = game.gameInfo.turns - 1
-        assertEquals(-1, AirMoves.nukeBaseScore(civ, west.getCenterTile(), 10, enemy.cities))
+        assertEquals(-1, AirMoves.nukeBaseScore(civ, west.getCenterTile(), NUKE_RANGE, enemy.cities))
         AirMoves.plotNukeMove(nuke)
         assertEquals("just taken", home.getCenterTile(), nuke.getTile())
 
@@ -421,10 +434,12 @@ class AirMovesTests {
     @Test
     fun `a nuke out of reach of the best base goes to the base in reach nearest to it`() {
         val west = nukeSetup()
-        val far = game.addCity(civ, tile(20)) // 26 from the base at -6, beyond a rebase range of 20
+        // The rebase range is 12 (twice the nuke's range of 6): the city at 12 is 20 from the base at -8, out of reach, and has home (12 away)
+        // and the forward city (6 away) in reach
+        val far = game.addCity(civ, tile(12))
         val nuke = game.addUnit("Atomic Bomb", civ, far.getCenterTile())
         AirMoves.plotNukeMove(nuke)
-        assertEquals("home is 6 from the best base, the forward city 12", home.getCenterTile(), nuke.getTile())
+        assertEquals("home is 8 from the best base, the forward city 14", home.getCenterTile(), nuke.getTile())
         nuke.currentMovement = 1f
         AirMoves.plotNukeMove(nuke)
         assertEquals(west.getCenterTile(), nuke.getTile())

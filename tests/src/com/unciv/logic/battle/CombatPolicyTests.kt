@@ -34,6 +34,8 @@ class CombatPolicyTests {
 
     @Test
     fun `the city strength multiplier applies to the defense and to the ranged strike of a city`() {
+        // The original's strength of a city; the Brave New World ruleset switches Vox Populi's on (the next test)
+        game.ruleset.modOptions.constants.cityCombatLikeVp = false
         val plain = CityCombatant(city(game.addCiv()))
         val doubled = CityCombatant(city(game.addCiv("[+100]% City Strength"), 0, 2))
 
@@ -41,6 +43,20 @@ class CombatPolicyTests {
         assertEquals(plain.getDefendingStrength(null) * 2f, doubled.getDefendingStrength(null).toFloat(), 1f)
         // The raw building defense is subtracted once from a ranged strike, after multiplying.
         assertEquals(plain.getAttackingStrength(null) * 2f + plain.city.getStrength(), doubled.getAttackingStrength(null).toFloat(), 1f)
+    }
+
+    @Test
+    fun `with Vox Populi's city strength the multiplier doubles base and buildings of the defense and of the ranged strike alike`() {
+        // CvCity::updateStrengthValue: (CITY_STRENGTH_DEFAULT + building defense) x CityStrengthMod; CvCity::getStrengthValue(bForRangeStrike) subtracts nothing
+        // of the buildings (the process only) and CITY_RANGED_ATTACK_STRENGTH_MULTIPLIER is 0
+        game.ruleset.modOptions.constants.cityCombatLikeVp = true
+        val plain = CityCombatant(city(game.addCiv()))
+        val doubled = CityCombatant(city(game.addCiv("[+100]% City Strength"), 0, 2))
+        val base = game.ruleset.modOptions.constants.cityCombat.baseStrengthHundredths / 100f // 5.0
+        // the capital's Palace is the only building: 2.5 of strength, so 2 x (5.0 + 2.5) = 15
+        val expected = 2f * (base + plain.city.getStrength())
+        assertEquals(expected, doubled.getDefendingStrength(null).toFloat(), 0.5f)
+        assertEquals(expected, doubled.getAttackingStrength(null).toFloat(), 0.5f)
     }
 
     @Test

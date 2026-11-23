@@ -6,6 +6,7 @@ import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.AirMoves
+import com.unciv.logic.automation.unit.reachMovement
 import com.unciv.logic.battle.AttackableTile
 import com.unciv.logic.battle.Battle
 import com.unciv.logic.battle.BattleDamage
@@ -184,7 +185,7 @@ object TacticalSimulation {
                 AssignmentType.Heal, AssignmentType.Finish -> {
                     // The difference to a blocked unit: nobody else may move it, unless it should heal; this lets civilians use it as cover
                     unit.fortifyIfCan()
-                    if (unit.health >= 100 || !unit.hasMovement() || civ.isBarbarian) finishedUnits.add(unit)
+                    if (unit.health >= unit.getMaxHealth() || !unit.hasMovement() || civ.isBarbarian) finishedUnits.add(unit)
                     pre = true
                     post = true
                 }
@@ -241,7 +242,7 @@ object TacticalSimulation {
             if (isCity && unit.hasUnique(UniqueType.CannotCaptureCities, checkCivInfoUniques = true)) continue
             val distance = unit.getTile().aerialDistanceTo(tile)
             // Do not bother if we are very far away
-            if (!air && distance > unit.baseUnit.movement.coerceAtLeast(1) * 4) continue
+            if (!air && distance > unit.reachMovement().coerceAtLeast(1) * 4) continue
             if (TacticalSafety.isCoveringFriendlyCivilian(ctx, unit)) continue
             var canReach = false
             if (air) canReach = distance <= unit.getRange()
@@ -287,7 +288,7 @@ object TacticalSimulation {
             val attacker = MapUnitCombatant(unit)
             val dealt = BattleDamage.calculateDamageToDefender(attacker, defender, unit.getTile(), EXPECTED_RANDOMNESS, ignoreFlanking = true)
             val taken = if (unit.baseUnit.isRanged()) 0 else BattleDamage.calculateDamageToAttacker(attacker, defender, unit.getTile(), EXPECTED_RANDOMNESS, ignoreFlanking = true)
-            val accepted = if (defender is CityCombatant) dealt > taken || dealt * 2 > taken && unit.health - taken > 50
+            val accepted = if (defender is CityCombatant) dealt > taken || dealt * 2 > taken && unit.health - taken > unit.getMaxHealth() / 2
                 else dealt > taken / 5 && unit.health > taken / 2
             if (!accepted) continue
             // With many melee units do not assume they all can be executed at once
@@ -455,7 +456,9 @@ object TacticalSimulation {
                 // The actual siege will typically be longer because not all units attack the city each turn
                 val maxSiegeTurns = 13
                 // Community Patch uses 20 HP per turn; population healing belongs to full Vox Populi.
-                val healRate = if (city.getCenterTile().isBlockaded()) 0 else CITY_HIT_POINTS_HEALED_PER_TURN
+                val healRate = if (civ.gameInfo.ruleset.modOptions.constants.cityCombatLikeVp)
+                    com.unciv.logic.city.managers.CityTurnManager(city).getHealPerTurn()
+                else if (city.getCenterTile().isBlockaded()) 0 else CITY_HIT_POINTS_HEALED_PER_TURN
                 if ((expectedPerTurn - healRate) * maxSiegeTurns < requiredDamage) {
                     ctx.log { "too early for attacking ${city.name}, required damage $requiredDamage, expected maximum damage per turn $expectedPerTurn" }
                     continue
@@ -541,7 +544,7 @@ object TacticalSimulation {
 
         val initial = LinkedHashMap<Int, MapUnit>()
         for (unit in armyUnits.sortedBy { it.id }) {
-            if (unit.isDestroyed || !unit.hasMovement() || unit in ctx.cache.processedUnits || unit.health < 50) continue
+            if (unit.isDestroyed || !unit.hasMovement() || unit in ctx.cache.processedUnits || unit.health * 2 < unit.getMaxHealth()) continue
             // Can we attack somebody? Who can attack us?
             val canAttack = TacticalAttacks.canAttack(unit) && TargetHelper.getAttackableEnemies(unit, unit.movement.getDistanceToTiles()).isNotEmpty()
             val attackers = enemies.filter { canThreaten(it, unit.getTile()) }

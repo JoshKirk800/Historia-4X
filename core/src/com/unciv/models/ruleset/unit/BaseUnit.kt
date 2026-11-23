@@ -148,6 +148,9 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
         // must be after setting name & civInfo because it sets the baseUnit according to the name
         // and the civInfo is required for using `hasUnique` when determining its movement options
         unit.setTransients(civInfo.gameInfo.ruleset)
+        // CvUnit::setDamage(0) on creation: a unit starts undamaged, at its own maximum (more than 100 with `[n] maximum hit points` from its type's uniques and
+        // `unitMaxHitPointsLikeVp`; always 100 otherwise)
+        unit.health = unit.getMaxHealth()
 
         return unit
     }
@@ -295,6 +298,10 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
         if (hasUnique(UniqueType.Unbuildable, stateForConditionals))
             yield(RejectionReasonType.Unbuildable.toInstance())
 
+        // CvPlayer::canTrainUnit: a city-state gift unit (Units.MinorCivGift) is trained by nobody but the barbarians
+        if (!civ.isBarbarian && civ.gameInfo.ruleset.modOptions.constants.cityStateGiftUnitFlagsLikeVp && hasUnique(UniqueType.CanBeGiftedByCityStates))
+            yield(RejectionReasonType.Unbuildable.toInstance())
+
         if ((civ.isCityState || civ.isOneCityChallenger()) && hasUnique(UniqueType.FoundCity, GameContext.IgnoreConditionals))
             yield(RejectionReasonType.NoSettlerForOneCityPlayers.toInstance())
 
@@ -305,6 +312,9 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
 
         if (city != null && civ.tradeRoutes.isTradeUnit(this@BaseUnit) && !civ.tradeRoutes.canBuildTradeUnit(this@BaseUnit, city, ownQueue))
             yield(RejectionReasonType.NoTradeRouteSlot.toInstance())
+
+        if (isOutOfUnitSupplyCap(civ))
+            yield(RejectionReasonType.OutOfUnitSupply.toInstance())
 
         if (!civ.isBarbarian) { // Barbarians don't need resources
             val civResources = Counter(civ.getCivResourcesByName()) + additionalResources
@@ -445,7 +455,7 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
 
             val isRelevantPromotion = filter == "relevant"
                     && civInfo.gameInfo.ruleset.unitPromotions.values
-                .any { it.name == promotion && unit.type.name in it.unitTypes }
+                .any { it.name == promotion && unit.promotions.isApplicableToUnit(it) }
 
             if (isRelevantPromotion || unit.matchesFilter(filter)) {
                 unit.promotions.addPromotion(promotion, isFree = true)
@@ -544,6 +554,23 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
      *  Workers, settlers, Great People, missionaries, prophets, inquisitors and archaeologists do not.
      */
     val usesUnitSupply by lazy { isMilitary || hasUnique(UniqueType.UsesUnitSupply, GameContext.IgnoreConditionals) }
+
+    /** CvUnitEntry::IsNoSupply: the unit type (or the uniques every unit has) has [UniqueType.NoUnitSupply]. Only read with `unitSupplyLikeVp`. */
+    val hasNoUnitSupply by lazy { rulesetUniqueObjects.any { it.type == UniqueType.NoUnitSupply } }
+
+    /**
+     *  CvCity::canTrain (Vox Populi, BALANCE_VP): a combat unit that uses supply can not be trained once the units out of supply are as many as the
+     *  production penalty takes [com.unciv.models.ModConstants.UnitSupplyConstants.maxProductionPenalty] percent for ([maxProductionPenalty] / [productionPenaltyPerUnit]
+     *  units; no limit when either is 0). Only with `unitSupplyLikeVp`; never for barbarians.
+     */
+    @Readonly
+    private fun isOutOfUnitSupplyCap(civ: Civilization): Boolean {
+        val constants = ruleset.modOptions.constants
+        if (!constants.unitSupplyLikeVp || civ.isBarbarian || hasNoUnitSupply || (strength <= 0 && rangedStrength <= 0)) return false
+        val penalties = constants.unitSupplyConstants
+        if (penalties.maxProductionPenalty <= 0 || penalties.productionPenaltyPerUnit <= 0) return false
+        return civ.stats.getUnitSupplyDeficit() >= penalties.maxProductionPenalty / penalties.productionPenaltyPerUnit
+    }
 
     val isLandUnit by lazy { type.isLandUnit() }
     val isWaterUnit by lazy { type.isWaterUnit() }

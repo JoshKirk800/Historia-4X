@@ -61,7 +61,7 @@ object MovementCost {
 
         val toOwner = to.getOwner()
 
-        val extraCost = if (
+        var extraCost = if (
             toOwner != null &&
             toOwner.hasActiveEnemyMovementPenalty &&
             civ.isAtWarWith(toOwner)
@@ -86,11 +86,21 @@ object MovementCost {
         if (areConnectedByRiver) return 100f  // Rivers take the entire turn to cross
 
         // Cities reduce terrain cost to 1
-        val terrainCost = if (to.isCityCenter()) 1f
+        var terrainCost = if (to.isCityCenter()) 1f
             else to.lastTerrain.movementCost.toFloat() + featureOnHillsExtraCost(to)
 
+        // CvUnitMovement::GetCostsForMove (terrainMovementPromotionsLikeVp): the cost of the tile is 1 where the unit ignores it, doubled where it has half movement
+        // (unless it has double movement there too, which returns below) and raised by the extra movement cost of the tile, after both
+        var halfMovementFactor = 1f
+        val terrainPromotions = unit.cache.terrainMovementPromotions
+        if (terrainPromotions != null && !to.isCityCenter()) {
+            if (terrainPromotions.ignoresCostIn(to)) terrainCost = 1f
+            if (terrainPromotions.halvesMovementIn(to)) halfMovementFactor = 2f
+            extraCost += terrainPromotions.extraCostIn(to)
+        }
+
         if (unit.cache.noTerrainMovementUniques)
-            return terrainCost + extraCost
+            return terrainCost * halfMovementFactor + extraCost
 
         val gameContext = GameContext(unit.civ, unit = unit, tile = to)
 
@@ -105,7 +115,7 @@ object MovementCost {
             return 1f + extraCost // usually hills take 2 movements, so here it is 1
 
         if (unit.cache.noBaseTerrainOrHillDoubleMovementUniques)
-            return terrainCost + extraCost
+            return terrainCost * halfMovementFactor + extraCost
 
         if (hasDoubleMovement(unit, to.baseTerrain, MapUnitCache.DoubleMovementTerrainTarget.Base, gameContext))
             return terrainCost * 0.5f + extraCost
@@ -114,14 +124,14 @@ object MovementCost {
             return terrainCost * 0.5f + extraCost
 
         if (unit.cache.noFilteredDoubleMovementUniques)
-            return terrainCost + extraCost
+            return terrainCost * halfMovementFactor + extraCost
         if (unit.cache.doubleMovementInTerrain.any {
                 hasDoubleMovement(it.value, MapUnitCache.DoubleMovementTerrainTarget.Filter, gameContext)
                     && to.matchesFilter(it.key)
             })
             return terrainCost * 0.5f + extraCost
 
-        return terrainCost + extraCost // no road or other movement cost reduction
+        return terrainCost * halfMovementFactor + extraCost // no road or other movement cost reduction
     }
 
     /** CvUnitMovement::GetCostsForMove adds HILLS_EXTRA_MOVEMENT to the cost of the feature on a hill (a feature's cost replaces the terrain's, so

@@ -4,6 +4,7 @@ import com.unciv.UncivGame
 import com.unciv.logic.GameInfo
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.battle.CombatAction
+import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.ReligionState
@@ -23,6 +24,20 @@ object Conditionals {
             unique?.hashCode() ?: 0,
             state.hashCode())
         return Random(seed).nextFloat()
+    }
+
+    /**
+     *  Whether the unit that [state] attacks has lost fewer than half of its hit points, null if this is not an attack of a unit on a unit.
+     *  CvUnit::GetMaxAttackStrength tests `damage < maximum / 2`, CvUnit::GetMaxRangedCombatStrength `damage < (maximum + 1) / 2`: they differ for an odd maximum.
+     */
+    @Readonly
+    private fun isAttackedUnitAboveHalfHealth(state: GameContext): Boolean? {
+        val attacker = state.ourCombatant as? MapUnitCombatant ?: return null
+        if (state.combatAction != CombatAction.Attack) return null
+        val target = state.theirCombatant as? MapUnitCombatant ?: return null
+        val maximum = target.getMaxHealth()
+        val damage = maximum - target.getHealth()
+        return damage < (if (attacker.isRanged()) (maximum + 1) / 2 else maximum / 2)
     }
 
     @Readonly
@@ -261,7 +276,8 @@ object Conditionals {
                 checkOnCity { getCenterTile().militaryUnit?.canGarrison() == true }
 
             UniqueType.ConditionalVsCity -> state.theirCombatant?.matchesFilter("City", false) == true
-            UniqueType.ConditionalVsUnits,  UniqueType.ConditionalVsCombatant -> state.theirCombatant?.matchesFilter(conditional.params[0]) == true
+            UniqueType.ConditionalVsUnits,  UniqueType.ConditionalVsCombatant ->
+                state.theirCombatant.let { if (it is MapUnitCombatant) it.matchesOpponentFilter(conditional.params[0]) else it?.matchesFilter(conditional.params[0]) } == true
             UniqueType.ConditionalOurUnit, UniqueType.ConditionalOurUnitOnUnit ->
                 state.relevantUnit?.matchesFilter(conditional.params[0]) == true
             UniqueType.ConditionalUnitWithPromotion -> state.relevantUnit != null &&
@@ -272,6 +288,13 @@ object Conditionals {
                             || state.relevantUnit!!.hasStatus(conditional.params[0]) )
             UniqueType.ConditionalAttacking -> state.combatAction == CombatAction.Attack
             UniqueType.ConditionalDefending -> state.combatAction == CombatAction.Defend
+            UniqueType.ConditionalRangedAttack -> state.combatAction == CombatAction.Attack &&
+                (state.ourCombatant as? MapUnitCombatant)?.isRanged() == true
+            UniqueType.ConditionalVsFullyHealed -> state.combatAction == CombatAction.Attack &&
+                state.ourCombatant is MapUnitCombatant &&
+                (state.theirCombatant as? MapUnitCombatant)?.let { it.getHealth() >= it.getMaxHealth() } == true
+            UniqueType.ConditionalVsAboveHalfHealth -> isAttackedUnitAboveHalfHealth(state) == true
+            UniqueType.ConditionalVsHalfHealthOrBelow -> isAttackedUnitAboveHalfHealth(state) == false
             UniqueType.ConditionalAboveHP -> state.relevantUnit != null && state.relevantUnit!!.health > conditional.params[0].toInt()
                     || state.ourCombatant != null && state.ourCombatant.getHealth() > conditional.params[0].toInt()
             UniqueType.ConditionalBelowHP -> state.relevantUnit != null && state.relevantUnit!!.health < conditional.params[0].toInt()

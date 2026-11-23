@@ -162,7 +162,7 @@ class TacticalTargets private constructor(val all: List<TacticalTarget>) {
 
             // ... enemy unit?
             visibleEnemyDefender(civ, tile)?.let {
-                return TacticalTarget(TacticalTargetType.LowPriorityUnit, tile, zoneId, it.civ, unit = it, aux = 100 - it.health)
+                return TacticalTarget(TacticalTargetType.LowPriorityUnit, tile, zoneId, it.civ, unit = it, aux = it.getMaxHealth() - it.health)
             }
             // ... undefended camp?
             if (tile.isBarbarianEncampment())

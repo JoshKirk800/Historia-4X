@@ -34,6 +34,7 @@ object BlockadeMoves {
     private const val MAX_CITY_DISTANCE = 4
     private const val MAX_KEPT_POINTS = 10
     private const val TURNS_AWAY = 4
+    /** MAX_HIT_POINTS / 2, a global define and so an absolute number of hit points (CvTacticalAI.cpp:1313) */
     private const val MIN_HEALTH = 50
 
     /**

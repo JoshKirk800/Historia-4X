@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
+import com.unciv.models.ModConstants
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
@@ -29,6 +30,9 @@ class UnitSupplyTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // the original's supply and 10% production per unit over it, not VP's breakdown that the BNW ruleset has switched on
+        game.ruleset.modOptions.constants.unitSupplyLikeVp = false
+        game.ruleset.modOptions.constants.unitSupplyConstants = ModConstants.UnitSupplyConstants()
         game.makeHexagonalMap(7, Constants.grassland)
         // a pond for the ships
         for (t in game.getTile(HexCoord(5, 0)).getTilesInDistance(1)) game.setTileTerrain(t.position, Constants.coast)

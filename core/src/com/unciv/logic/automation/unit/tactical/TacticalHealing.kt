@@ -26,8 +26,8 @@ import kotlin.math.min
  */
 object TacticalHealing {
 
-    private const val MAX_HEALTH = 100
-    /** CvUnit::shouldHeal(true): below this many hit points a unit heals whatever it could attack; below a third only if it can heal here and has nothing to hit */
+    /** CvUnit::shouldHeal(true): below this many hit points a unit heals whatever it could attack; below a third only if it can heal here and has nothing to hit.
+     *  This and the two damages below are absolute hit points, whatever the unit's maximum (CvUnit.cpp:29658, 29682); the third is its own GetMaxHitPoints() / 3 (29663). */
     private const val HARD_HEALTH_LIMIT = 13
     /** FindClosestSafePlotForHealing: a plot that heals more than this can be stayed on while there is nothing to fear */
     private const val GOOD_HEAL_RATE = 5
@@ -48,14 +48,14 @@ object TacticalHealing {
      *  No conditional promotions (their damage limit) here.
      */
     fun shouldHeal(civ: Civilization, unit: MapUnit, beforeAttacks: Boolean): Boolean {
-        if (unit.isDestroyed || unit.health >= MAX_HEALTH || unit.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true)) return false
+        if (unit.isDestroyed || unit.health >= unit.getMaxHealth() || unit.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true)) return false
         val tile = unit.getTile()
         // Sometimes we should heal but we have to fight instead
         if (beforeAttacks) {
             // Sometimes there is no other option
             if (unit.health < HARD_HEALTH_LIMIT) return true
             // Also depends on what we can do with the unit
-            return unit.health < MAX_HEALTH / 3 && TacticalSafety.actualHealRate(unit) > 0 &&
+            return unit.health < unit.getMaxHealth() / 3 && TacticalSafety.actualHealRate(unit) > 0 &&
                 TargetHelper.getAttackableEnemies(unit, unit.movement.getDistanceToTiles()).isEmpty()
         }
         val enemyAdjacent = tile.neighbors.any { neighbor ->
@@ -74,7 +74,7 @@ object TacticalHealing {
         val allowMoreDamage = civ.isBarbarian || unit.hasUnique(UniqueType.NoDamagePenaltyWoundedUnits, checkCivInfoUniques = true)
         // Typically want to start healing before health becomes critical
         val acceptableDamage = if (allowMoreDamage || maxHealRate == 0) ACCEPTABLE_DAMAGE_WELL_DAMAGED else ACCEPTABLE_DAMAGE
-        return MAX_HEALTH - unit.health > acceptableDamage
+        return unit.getMaxHealth() - unit.health > acceptableDamage
     }
 
     /**

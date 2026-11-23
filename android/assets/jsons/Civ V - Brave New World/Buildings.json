@@ -909,7 +909,8 @@
 		"isWonder": true,
 		"requiredTech": "Physics",
 		"quote": "'Architecture has recorded the great ideas of the human race. Not only every religious symbol, but every human thought has its page in that vast book.' - Victor Hugo",
-		"cost": 400
+		"cost": 400,
+		"uniques": []
 	},
 	{
 		"name": "Armory",
@@ -1504,7 +1505,8 @@
 		"hurryCostModifier": 15,
 		"requiredBuilding": "Bank",
 		"requiredTech": "Electricity",
-		"cost": 360
+		"cost": 360,
+		"uniques": []
 	},
 	{
 		"name": "Police Station",
@@ -1528,7 +1530,8 @@
 		"requiredBuilding": "Zoo",
 		"maintenance": 2,
 		"requiredTech": "Refrigeration",
-		"cost": 500
+		"cost": 500,
+		"uniques": []
 	},
 	{
 		"name": "Broadcast Tower",
@@ -1604,7 +1607,8 @@
 		"uniques": [
 			"Destroyed when the city is captured",
 			"Allows airlifts to and from this city",
-			"Can carry [4] extra [Air] units"
+			"Can carry [4] extra [Air] units",
+			"[10] air defense"
 		]
 	},
 	{
@@ -1629,7 +1633,8 @@
 			"Destroyed when the city is captured",
 			"Reduces [Distress] by [1] [in this city]",
 			"Reduces the empire size need modifier by [5] [in this city]",
-			"[+25]% Production when constructing [Air] units [in this city]"
+			"[+25]% Production when constructing [Air] units [in this city]",
+			"[15] air defense"
 		]
 	},
 	{
@@ -1871,7 +1876,8 @@
 			"Gain [10] [Gold] <upon acquiring a [All] tile through [border growth]> <in this city> <(modified by game speed)> <for every [Era scaler]>",
 			"[+1 Gold] from [Farm] tiles [in this city]",
 			"[+1 Gold] from [Pasture] tiles [in this city]",
-			"[+1 Gold] from [Quarry] tiles [in this city]"
+			"[+1 Gold] from [Quarry] tiles [in this city]",
+			"Has a [100]% chance of surviving when the city is captured"
 		]
 	},
 	{
@@ -1898,7 +1904,8 @@
 			"Only available <when religion is enabled>",
 			"[+25]% Natural religion spread [in this city]",
 			"Reduces [Illiteracy] by [1] [in this city]",
-			"[+15]% [Culture] [in this city] <during a Golden Age>"
+			"[+15]% [Culture] [in this city] <during a Golden Age>",
+			"Has a [100]% chance of surviving when the city is captured"
 		]
 	},
 	{
@@ -1916,7 +1923,8 @@
 			"[+1 Gold] for each major religion with followers in the city [in this city]",
 			"[+1 Science] for each major religion with followers in the city [in this city]",
 			"[+1 Culture] for each major religion with followers in the city [in this city]",
-			"[+1 Faith] for each major religion with followers in the city [in this city]"
+			"[+1 Faith] for each major religion with followers in the city [in this city]",
+			"Has a [100]% chance of surviving when the city is captured"
 		]
 	},
 	{
@@ -2047,7 +2055,8 @@
 			"Only available <when nuclear weapons are enabled> <hidden from users>",
 			"Destroyed when the city is captured",
 			"Population loss from nuclear attacks [-75]% [in this city]",
-			"Damage to garrison from nuclear attacks [-75]% [in this city]"
+			"Damage to garrison from nuclear attacks [-75]% [in this city]",
+			"[10] air defense"
 		]
 	},
 	{
@@ -2599,7 +2608,8 @@
 			"Gain [5] [Gold] <upon population growth> <in this city> <(modified by game speed)> <for every [Triggering amount]> <for every [Era scaler]>",
 			"Gain [5] [Science] <upon population growth> <in this city> <(modified by game speed)> <for every [Triggering amount]> <for every [Era scaler]>",
 			"Gain [5] [Culture] <upon population growth> <in this city> <(modified by game speed)> <for every [Triggering amount]> <for every [Era scaler]>",
-			"Gain [5] [Faith] <upon population growth> <in this city> <(modified by game speed)> <for every [Triggering amount]> <for every [Era scaler]>"
+			"Gain [5] [Faith] <upon population growth> <in this city> <(modified by game speed)> <for every [Triggering amount]> <for every [Era scaler]>",
+			"Has a [100]% chance of surviving when the city is captured"
 		]
 	},
 	{
@@ -2610,7 +2620,8 @@
 		"uniques": [
 			"Unbuildable",
 			"Reduces [Distress] by [1] [in this city]",
-			"[+10]% [Science] [in this city] <during We Love The King Day>"
+			"[+10]% [Science] [in this city] <during We Love The King Day>",
+			"Has a [100]% chance of surviving when the city is captured"
 		]
 	},
 	{
@@ -2623,7 +2634,8 @@
 			"[+25]% Natural religion spread [in this city]",
 			"Reduces [Distress] by [1] [in this city]",
 			"New [Military] units start with [15] XP [in this city]",
-			"Gain [15]% of the triggering amount as [Gold] <upon completing a [All] unit> <in this city>"
+			"Gain [15]% of the triggering amount as [Gold] <upon completing a [All] unit> <in this city>",
+			"Has a [100]% chance of surviving when the city is captured"
 		]
 	},
 	{
@@ -2635,7 +2647,8 @@
 			"[+25]% Natural religion spread [in this city]",
 			"Reduces [Distress] by [1] [in this city]",
 			"Gain [8] [Faith] <upon defeating a [Military] unit> <in this city> <(modified by game speed)>",
-			"Gain [2] [Faith] <upon defeating a [Military] unit> <(modified by game speed)>"
+			"Gain [2] [Faith] <upon defeating a [Military] unit> <(modified by game speed)>",
+			"Has a [100]% chance of surviving when the city is captured"
 		]
 	},
 	{
@@ -2650,7 +2663,8 @@
 		"uniques": [
 			"Unbuildable",
 			"[+25]% Natural religion spread [in this city]",
-			"Reduces [Distress] by [1] [in this city]"
+			"Reduces [Distress] by [1] [in this city]",
+			"Has a [100]% chance of surviving when the city is captured"
 		]
 	},
 	{

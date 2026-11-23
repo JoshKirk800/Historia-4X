@@ -35,7 +35,7 @@ import kotlin.math.roundToInt
  *
  *  A combat unit is one with a strength (CvUnitEntry::GetCombat / GetRangedCombat above 0); nuclear weapons have none in BNW's
  *  database, so they count as civilians here. Input VP has and BNW lacks counts as none: the unit columns of VP's database (ResourceType,
- *  CityAttackSupport, CultureBoost, GreatWorkUnit, NoSupply, BaseLandAirDefense, MoveAfterPurchase and the policy a unit unlocks,
+ *  CityAttackSupport, CultureBoost, GreatWorkUnit, NoSupply, MoveAfterPurchase and the policy a unit unlocks (BaseLandAirDefense is the unique `[amount] air defense`, read with airDefenseLikeVp),
  *  YieldOnCompletion, the Messenger unit), investments, the policy unit class production modifiers (no BNW policy has one), the
  *  AICITYSTRATEGY_ENOUGH_SETTLERS and NEW_CONTINENT_FEEDER city strategies, the settle plot quality (CvGame::GetCityQualityReference),
  *  the traits' expansion WLTKD and artifact yields, the archaeological dig tourism of policies, the German unit gifts, the trade route
@@ -261,7 +261,9 @@ object UnitProductionAi {
             if (unit.isAirUnit()) {
                 val ourBombers = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.ATTACK_AIR, includeBeingTrained = true, includeWater = true)
                 val ourFighters = UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.DEFENSE_AIR, includeBeingTrained = true, includeWater = true)
-                val emptySlots = city.getMaxAirUnits() - city.getCenterTile().airUnits.size
+                // countNumAirUnits(team): with airBasingLikeVp the slots in use, by each unit's cost
+                val emptySlots = city.getMaxAirUnits() -
+                    if (civ.gameInfo.ruleset.modOptions.constants.airBasingLikeVp) city.getAirUnitSlotsUsed() else city.getCenterTile().airUnits.size
                 when (unitAi) {
                     UnitAiType.ATTACK_AIR -> {
                         if (ourBombers * 2 > ourFighters * 3) return ProductionSanityAi.SR_BALANCE
@@ -275,7 +277,11 @@ object UnitProductionAi {
                 }
             }
 
-            if (domainLand && unit.interceptRange > 0) bonus += airDefenseNeeded(civ) * 50
+            // CvUnitProductionAI: (land domain and an air intercept range) or BaseLandAirDefense above 20, the latter with airDefenseLikeVp (the unique is not read without it)
+            if ((domainLand && unit.interceptRange > 0) ||
+                (civ.gameInfo.ruleset.modOptions.constants.airDefenseLikeVp &&
+                    unit.getMatchingUniques(UniqueType.AirDefense, GameContext.IgnoreConditionals).sumOf { it.params[0].toInt() } > 20))
+                bonus += airDefenseNeeded(civ) * 50
 
             if (unit.strength > 0 && civ.ai.isEconomicStrategyActive("ECONOMICAISTRATEGY_GS_CONQUEST")) bonus += 50
 

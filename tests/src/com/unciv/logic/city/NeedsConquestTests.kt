@@ -31,6 +31,9 @@ class NeedsConquestTests {
 
     /** A city of the civilization with [population] citizens, taken as a puppet by a civilization that has not met it; the population left is checked */
     private fun conquer(population: Int, expectedLeft: Int, by: Civilization = conqueror()): City {
+        // These tests are about the needs model on top of the original conquest (1 + population / 4 citizens lost, resistance by the citizens left, no boost of the
+        // reduction); the Brave New World ruleset switches Vox Populi's conquest on, which keeps 75% of the citizens and adds 5% of reduction
+        world.constants.conquestLikeVp = false
         if (civ.cities.isEmpty()) world.addCity(3)
         val target = world.addCity(population)
         target.puppetCity(by)

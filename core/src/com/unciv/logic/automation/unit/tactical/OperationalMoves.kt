@@ -12,6 +12,7 @@ import com.unciv.logic.automation.strategy.OperationAbortReason
 import com.unciv.logic.automation.strategy.OperationMoveType
 import com.unciv.logic.automation.strategy.OperationState
 import com.unciv.logic.automation.unit.SettlerAutomation
+import com.unciv.logic.automation.unit.reachMovement
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.HexCoord
@@ -120,7 +121,7 @@ object OperationalMoves {
     fun movementRate(civ: Civilization, army: AiArmy): Int {
         val units = AiOperationLogic.armyUnits(civ, army)
         if (units.isEmpty()) return 0
-        return (units.sumOf { it.second.baseUnit.movement } + units.size / 2) / units.size
+        return (units.sumOf { it.second.reachMovement() } + units.size / 2) / units.size
     }
 
     /**

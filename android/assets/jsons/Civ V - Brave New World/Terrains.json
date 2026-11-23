@@ -98,7 +98,7 @@
 		"name": "Desert",
 		"influenceCost": 2,
 		"type": "Land",
-		"movementCost": 1,
+		"movementCost": 2,
 		"RGB": [230, 172, 0],
 		"uniques": ["Occurs at temperature between [-0.1] and [0.9] and humidity between [0] and [0.2]",
             "Occurs at temperature between [0.1] and [0.8] and humidity between [0.2] and [0.3]",
@@ -134,7 +134,7 @@
 		"influenceCost": 3,
 		"type": "Land",
 		"impassable": true,
-		"defenceBonus": 0.25,
+		"defenceBonus": 0.1,
 		"RGB": [102, 102, 102],
 		"uniques": ["Rough terrain",
             "Has an elevation of [2] for visibility calculations",
@@ -147,7 +147,7 @@
 		"name": "Snow",
 		"influenceCost": 2,
 		"type": "Land",
-		"movementCost": 1,
+		"movementCost": 2,
 		"RGB": [230, 238, 255], //Darker229, 229, 255
 		"uniques": [
             "Occurs at temperature between [-1] and [-0.9] and humidity between [0] and [1]",
@@ -170,7 +170,7 @@
 		"production": 2,
 		"movementCost": 2,
 		"overrideStats": true,
-		"defenceBonus": 0.25,
+		"defenceBonus": 0.1,
 		"RGB": [105,125,72],
 		"occursOn": ["Tundra","Plains","Grassland","Desert","Snow"],
 		// Terrain_HillsYieldChanges has no row for Snow: a snow hill yields nothing (CvPlot::calculateNatureYield)
@@ -241,7 +241,7 @@
 		"food": -1,
 		"movementCost": 3,
 		"unbuildable": true,
-		"defenceBonus": -0.15,
+		"defenceBonus": 0.05,
 		"occursOn": ["Grassland"],
 		"uniques": ["Rare feature", "Vegetation",
 					"[-2] to Fertility for Map Generation",
@@ -257,7 +257,7 @@
 		// For map editor only - the generator won't place it without code or enabling uniques
 		// If the map generator is ever updated to always take these into account, it should also take the "Doesn't generate naturally" unique into account
 		"occursOn": ["Grassland","Plains","Desert","Tundra","Snow","Forest","Jungle","Hill","Flood plains","Marsh","Oasis"],
-		"defenceBonus": -0.15
+		"defenceBonus": 0.05
 	},
 	{
 		"name": "Oasis",
@@ -267,7 +267,7 @@
 		"gold": 1,
 		"movementCost": 1,
 		"unbuildable": true,
-		"defenceBonus": -0.1,
+		"defenceBonus": 0.05,
 		"occursOn": ["Desert"],
 		"uniques": ["Fresh water", "Rare feature",
 					"Only [All Road] improvements may be built on this tile",
@@ -289,7 +289,7 @@
 		"type": "TerrainFeature",
 		"food": 2,
 		"movementCost": 1,
-		"defenceBonus": -0.1,
+		"defenceBonus": 0.05,
 		"occursOn": ["Desert"],
 		"uniques": ["Always Fertility [5] for Map Generation",
 					"Considered [Food] when determining start locations",

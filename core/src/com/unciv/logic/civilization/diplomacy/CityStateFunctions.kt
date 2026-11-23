@@ -50,13 +50,18 @@ class CityStateFunctions(val civInfo: Civilization) {
             civInfo.cityStateResource = allMercantileResources.randomOrNull(rng)
         }
 
+        // CvGame::GetRandomUniqueUnitType (cityStateGiftUnitFlagsLikeVp): a unit that can never be gifted is out, and one that can be gifted needs no civilization of its own
+        val giftFlags = ruleset.modOptions.constants.cityStateGiftUnitFlagsLikeVp
         fun possibleUnits(): ArrayList<BaseUnit> {
             val units = ArrayList<BaseUnit>()
             for (unit in ruleset.units.values) {
+                if (giftFlags && unit.hasUnique(UniqueType.CannotBeGiftedByCityStates)) continue // IsInvalidMinorCivGift
                 if (unit.availableInEra(ruleset, startingEra)) continue // Not from the start era or before
-                val uniqueNation = ruleset.nations[unit.uniqueTo]
-                if (uniqueNation == null || !uniqueNation.isMajorCiv) continue // Must be from a major civ
-                if (uniqueNation in usedMajorCivs) continue // But not from a major civ in the game
+                if (!(giftFlags && unit.hasUnique(UniqueType.CanBeGiftedByCityStates))) { // IsMinorCivGift
+                    val uniqueNation = ruleset.nations[unit.uniqueTo]
+                    if (uniqueNation == null || !uniqueNation.isMajorCiv) continue // Must be from a major civ
+                    if (uniqueNation in usedMajorCivs) continue // But not from a major civ in the game
+                }
                 if (!ruleset.unitTypes[unit.unitType]!!.isLandUnit()) continue // Must be a land unit
                 if (unit.strength <= 0 && unit.rangedStrength <= 0) continue // Must be a military unit
                 units.add(unit)
@@ -68,7 +73,12 @@ class CityStateFunctions(val civInfo: Civilization) {
         if (uniqueTypes.contains(UniqueType.CityStateMilitaryUnits)) {
             val possibleUnits = possibleUnits()
             if (possibleUnits.isNotEmpty())
-                civInfo.cityStateUniqueUnit = possibleUnits.random(rng).name
+                civInfo.cityStateUniqueUnit =
+                    if (!giftFlags) possibleUnits.random(rng).name
+                    else // a roll up to 300 for each unit, 5 more for one that can be gifted, then a weighted pick of the best few (the roll is at least 1 so that the sum is never 0)
+                        ReligionAutomation.chooseFromTopChoices(possibleUnits.map {
+                            it to rng.nextInt(300) + 1 + (if (it.hasUnique(UniqueType.CanBeGiftedByCityStates)) 5 else 0)
+                        }, UNIT_SPAWN_NUM_CHOICES, rng)!!.name
         }
 
         // TODO: Return false if attempting to put a religious city-state in a game without religion
@@ -178,6 +188,8 @@ class CityStateFunctions(val civInfo: Civilization) {
         fun randomGiftableUnit() =
                 city.cityConstructions.getConstructableUnits()
                 .filter { !it.isCivilian() && it.isLandUnit && it.uniqueTo == null && it.unitType != RECON_UNIT_TYPE }
+                // CvPlayer::GetCompetitiveSpawnUnitType with bMinorCivGift: IsInvalidMinorCivGift (cityStateGiftUnitFlagsLikeVp)
+                .filter { !(receivingCiv.gameInfo.ruleset.modOptions.constants.cityStateGiftUnitFlagsLikeVp && it.hasUnique(UniqueType.CannotBeGiftedByCityStates)) }
                 // Does not make us go over any resource quota
                 .filter { unit -> unit.getResourceRequirementsPerTurn(receivingCiv.state).none {
                     it.value > 0 && receivingCiv.getResourceAmount(it.key) < it.value

@@ -6,6 +6,7 @@ import com.unciv.logic.automation.strategy.StateAllWars
 import com.unciv.logic.automation.strategy.WarStateAi
 import com.unciv.logic.automation.unit.PlotDanger
 import com.unciv.logic.automation.unit.PlotDefense
+import com.unciv.logic.automation.unit.reachMovement
 import com.unciv.logic.battle.CityCombatant
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -145,7 +146,7 @@ class DominanceZone(
  *    cannot see at half strength, as Vox Populi does;
  *  - the strengths take a unit's base strength (see [PlotDanger]) and ranged strength, less what wounds take, and the zone's modifiers; the
  *    original's GetMaxAttackStrength and GetMaxRangedCombatStrength add the promotions, terrain, great generals and the rest;
- *  - a citadel is an improvement of the unit's owner that damages adjacent enemy units for more than [ENEMY_HEAL_RATE] and defends at
+ *  - a citadel is an improvement of the unit's owner that damages adjacent enemy units for more than [PlotDefense.enemyHealRate] and defends at
  *    [CITADEL_MIN_DEFENSE]% or more; "units at war with us are enemies" is as the original, one team being one civilization;
  *  - closest cities are chosen by hex distance within five tiles; equal-distance ties use civilization/city iteration order. Existing
  *    temporary operation zones remain until operations use VP focus areas, and all adjacent hexes define zone neighbors;
@@ -584,7 +585,7 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
     internal fun isPlayerCitadel(tile: Tile, owner: Civilization): Boolean {
         if (tile.getOwner() != owner) return false
         val improvement = tile.getUnpillagedTileImprovement() ?: return false
-        return PlotDefense.nearbyEnemyDamage(improvement) > ENEMY_HEAL_RATE && PlotDefense.defenseModifier(improvement) >= CITADEL_MIN_DEFENSE
+        return PlotDefense.nearbyEnemyDamage(improvement) > PlotDefense.enemyHealRate(owner) && PlotDefense.defenseModifier(improvement) >= CITADEL_MIN_DEFENSE
     }
 
     private fun strengthUnit(unit: MapUnit, side: Side, seen: BooleanArray): StrengthUnit {
@@ -787,7 +788,7 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
             if (areas[enemyTile.zeroBasedIndex] != area) continue
             val distance = enemyTile.aerialDistanceTo(tile)
             if (distance == 0) return SUBJECT_TO_ATTACK or CAN_MOVE_PAST
-            val baseMoves = enemy.baseUnit.movement
+            val baseMoves = enemy.reachMovement()
             if (distance > baseMoves) continue
             result = result or SUBJECT_TO_ATTACK
             if (distance < baseMoves) return SUBJECT_TO_ATTACK or CAN_MOVE_PAST
@@ -829,8 +830,6 @@ class TacticalMap(private val civ: Civilization, state: TacticalState) {
         const val RANGE_BONUS = 50
         const val CENTER_BONUS = 50
         const val CITADEL_BONUS = 100
-        /** ENEMY_HEAL_RATE of the Brave New World and Community Patch data (5 in Vox Populi): what a unit heals in enemy territory, below which an improvement's damage is no citadel's */
-        const val ENEMY_HEAL_RATE = 10
         /** TacticalAIHelpers::IsPlayerCitadel: a citadel defends at 50% or more */
         const val CITADEL_MIN_DEFENSE = 50
     }

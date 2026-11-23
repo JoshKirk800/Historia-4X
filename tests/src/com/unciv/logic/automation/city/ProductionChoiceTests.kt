@@ -177,10 +177,10 @@ class ProductionChoiceTests {
     @Test
     fun `with the Apollo Program the parts still needed that a known technology allows go to the planner's best cities`() {
         game.gameInfo.gameParameters.victoryTypes = ArrayList(game.ruleset.victories.keys)
-        civ.tech.addTechnology("Advanced Ballistics")
+        civ.tech.addTechnology("Nuclear Fusion")   // Vox Populi's UNIT_SS_BOOSTER needs TECH_NUCLEAR_FUSION (the original's Advanced Ballistics); Units.json requiredTech
         assertEquals("no Apollo Program yet", 0, SpaceshipProductionAi.numPartsBuildableNow(civ))
         city.cityConstructions.addBuilding("Apollo Program")
-        // the three SS Boosters of the six parts are what Advanced Ballistics allows
+        // the three SS Boosters of the six parts are what Nuclear Fusion allows (the Cockpit needs Globalization, the Engine Particle Physics, the Stasis Chamber Nanotechnology)
         assertEquals(3, SpaceshipProductionAi.numPartsBuildableNow(civ))
         assertEquals(listOf(city), SpaceshipProductionAi.bestCitiesForParts(civ))
         civ.victoryManager.currentsSpaceshipParts.add("SS Booster", 3)

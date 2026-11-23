@@ -469,7 +469,7 @@ object HomelandAi {
                         return unit.getTile() == oldTile || !unit.hasMovement()
                     }
                     AiDecisionLog.log(civ) { "Homeland Explore: ${unit.name} ${oldTile.position} cannot reach ${best.position}" }
-                } else if (unit.health < 100 && unit.getHealAmountForCurrentTile() > 0) return true
+                } else if (unit.health < unit.getMaxHealth() && unit.getHealAmountForCurrentTile() > 0) return true
             }
             if (unit.isExploring()) unit.action = null
             if (best == null) {

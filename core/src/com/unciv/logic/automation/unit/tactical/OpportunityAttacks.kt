@@ -24,7 +24,6 @@ object OpportunityAttacks {
     /** A killing blow counts like this much damage in the score, and the threshold a plan must beat grows by [SCORE_STEP] for each enemy found */
     private const val KILL_BONUS = 30
     private const val SCORE_STEP = 1000
-    private const val MAX_HEALTH = 100
 
     /** KillLoneEnemyIfPossible: the damage must beat the enemy's hit points by this margin for randomness, and the unit must keep more than [SAFE_HEALTH_AFTER_FIGHT] */
     private const val KILL_MARGIN = 3
@@ -71,15 +70,15 @@ object OpportunityAttacks {
                 if (dealt >= enemy.health) {
                     // A bonus for a kill, but no suicide
                     dealt += KILL_BONUS
-                    received -= minOf(healedByKilling(unit), MAX_HEALTH - unit.health + received)
+                    received -= minOf(healedByKilling(unit), unit.getMaxHealth() - unit.health + received)
                     if (!allowMovement && (!isFortification(ctx, origin) || unit.currentMovement < MOVES_TO_ADVANCE_AND_RETURN)) continue
                 }
                 // We have just a single attacker, avoid enemy clusters
                 if (received * 4 >= (unit.health - received) * 3 && numEnemyUnitsAdjacent(ctx, tile) > 0) continue
                 // If the attacker is (almost) unhurt, we can be a bit more aggressive and assume we'll heal up next turn
-                val damage = MAX_HEALTH - unit.health
+                val damage = unit.getMaxHealth() - unit.health
                 var healRate = TacticalSafety.actualHealRate(unit, origin)
-                if (damage < healRate / 2 && received < MAX_HEALTH / 2) {
+                if (damage < healRate / 2 && received < unit.getMaxHealth() / 2) {
                     if (healRate > damage + received) healRate = damage + received
                     received -= healRate
                 }

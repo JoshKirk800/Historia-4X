@@ -81,7 +81,7 @@ object Battle {
             // Now lets retroactively see if we can pillage any improvement on the path improvement to heal
             // while still being able to attack
             for (tileToPillage in tilesMovedThrough) {
-                if (attacker.unit.currentMovement <= 1f || attacker.unit.health > 90) break // We are done pillaging
+                if (attacker.unit.currentMovement <= 1f || attacker.unit.health > attacker.unit.getMaxHealth() - 10) break // We are done pillaging
 
                 if (UnitActionsPillage.canPillage(attacker.unit, tileToPillage)
                     && tileToPillage.canPillageTileImprovement()) {
@@ -131,6 +131,14 @@ object Battle {
         if (attacker is MapUnitCombatant && attacker.unit.baseUnit.isAirUnit()) {
             interceptDamage = AirInterception.tryInterceptAirAttack(attacker, attackedTile, defender.getCivInfo(), defender)
             if (attacker.isDefeated()) return interceptDamage
+            // CvUnitCombat::GenerateAirCombatInfo: "attack is aborted after successful interception" - the target takes and does nothing, the attack is spent,
+            // and a suicide attacker (a missile) is lost all the same (ResolveAirUnitVsCombat)
+            if (interceptDamage.defenderDealt > 0 && attacker.getCivInfo().gameInfo.ruleset.modOptions.constants.airInterceptionLikeVp) {
+                if (attacker.unit.hasUnique(UniqueType.SelfDestructs)) attacker.unit.destroy()
+                else if (attacker.unit.isMoving()) attacker.unit.action = null
+                reduceAttackerMovementPointsAndAttacks(attacker, defender, attackedTile)
+                return interceptDamage
+            }
         } else interceptDamage = DamageDealt.None
 
         val isAlreadyDefeatedCity = defender is CityCombatant && defender.isDefeated()
@@ -154,7 +162,9 @@ object Battle {
         if (!captureMilitaryUnitSuccess) // capture creates a new unit, but `defender` still is the original, so this function would still show a kill message
             postBattleNotifications(attacker, defender, attackedTile, attacker.getTile(), damageDealt)
 
-        if (defender.getCivInfo().isBarbarian && attackedTile.isBarbarianEncampment())
+        // StageBarbarians: CvUnit::UnitAttackWithMove calls CvBarbarians::DoBarbSpawnerAttacked for barbarian cities too (only read with `barbariansLikeVp`)
+        if (defender.getCivInfo().isBarbarian && (attackedTile.isBarbarianEncampment()
+                || (attackedTile.isCityCenter() && defender.getCivInfo().gameInfo.ruleset.modOptions.constants.barbariansLikeVp)))
             defender.getCivInfo().gameInfo.barbarians.campAttacked(attackedTile.position)
 
         // This needs to come BEFORE the move-to-tile, because if we haven't conquered it we can't move there =)
@@ -191,7 +201,7 @@ object Battle {
         reduceAttackerMovementPointsAndAttacks(attacker, defender, attackedTile)
 
         // Melee attackers get the XP for a city that was already at its minimum health too (CvUnitCombat::GenerateMeleeCombatInfo)
-        if (!isAlreadyDefeatedCity || attacker.isMelee()) postBattleAddXp(attacker, defender, attackedTile)
+        if (!isAlreadyDefeatedCity || attacker.isMelee()) postBattleAddXp(attacker, defender, attackedTile, killedByExtraRangedAttack)
 
         if (attacker is CityCombatant) {
             val cityCanBombardNotification = attacker.getCivInfo().notifications
@@ -409,11 +419,20 @@ object Battle {
         }
     }
 
-    internal fun takeDamage(attacker: ICombatant, defender: ICombatant): DamageDealt {
+    fun takeDamage(attacker: ICombatant, defender: ICombatant): DamageDealt {
         val attackerContext = GameContext(attacker, defender, defender.getTile(), CombatAction.Attack)
         val defenderContext = GameContext(defender, attacker, defender.getTile(), CombatAction.Defend)
-        val potentialDamageToDefender = BattleDamage.calculateDamageToDefender(attacker, defender)
+        val garrison = if (defender is CityCombatant && defender.getCivInfo().gameInfo.ruleset.modOptions.constants.cityCombatLikeVp)
+            defender.city.getGarrison() else null
+        val cityDamage = if (garrison != null) BattleDamage.calculateDamageToDefenderAndGarrison(attacker, defender) else null
+        val potentialDamageToDefender = cityDamage?.first ?: BattleDamage.calculateDamageToDefender(attacker, defender)
         var potentialDamageToAttacker = BattleDamage.calculateDamageToAttacker(attacker, defender)
+        if (defender is MapUnitCombatant && defender.getCivInfo().gameInfo.ruleset.modOptions.constants.cityCombatLikeVp) {
+            val key = attacker.getCivInfo().civName
+            defender.unit.timesAttackedBy[key] = defender.unit.getTimesAttackedBy(key) + 1
+        }
+        if (garrison != null && cityDamage != null && cityDamage.second > 0)
+            MapUnitCombatant(garrison).takeDamage(cityDamage.second)
 
         val attackerHealthBefore = attacker.getHealth()
         val defenderHealthBefore = defender.getHealth()
@@ -643,7 +662,7 @@ object Battle {
         attacker.unit.mostRecentMoveType = UnitMovementMemoryType.UnitAttacked
     }
 
-    private fun postBattleAddXp(attacker: ICombatant, defender: ICombatant, attackedTile: Tile) {
+    private fun postBattleAddXp(attacker: ICombatant, defender: ICombatant, attackedTile: Tile, killedByExtraRangedAttack: Boolean) {
         // CvUnitCombat::Generate*CombatInfo setInBorders, quirks included: in a melee attack on a unit each side is "in borders" when the
         // tile is its own civilization's, but in a melee attack on a city, a ranged attack or an air attack the attacker counts as in
         // borders when the tile is the defender's, and the defender when it is the attacker's
@@ -655,13 +674,20 @@ object Battle {
         val defenderInBorders = if (meleeOnUnit) tileOwner == defender.getCivInfo() else tileOwner == attacker.getCivInfo()
 
         fun addXp(attackerXp: Int, defenderXp: Int){
-            addXp(attacker, attackerXp, defender, attackerInBorders)
+            // VP 5.4.8 CvUnitCombat::ResolveMeleeCombat / ResolveCityMeleeCombat:
+            // the counter has already been incremented, and defence is not restricted.
+            val firstAttackOnly = attacker.getCivInfo().gameInfo.ruleset.modOptions.constants.combatXpFirstAttackOnly
+            if (!firstAttackOnly || attacker !is MapUnitCombatant || attacker.unit.attacksThisTurn <= 1)
+                addXp(attacker, attackerXp, defender, attackerInBorders)
             addXp(defender, defenderXp, attacker, defenderInBorders)
         }
         
         // CvUnitCombat::GenerateAirSweepCombatInfo: a sweep against an air unit gives EXPERIENCE_ATTACKING_AIR_SWEEP (5) to the attacker and
         // EXPERIENCE_DEFENDING_AIR_SWEEP_AIR (5) to the defender; a bombing mission (GenerateAirCombatInfo) 4 and 2
-        if (attacker.isAirUnit() && defender.isAirUnit()) addXp(5, 5)
+        if (killedByExtraRangedAttack && attacker.getCivInfo().gameInfo.ruleset.modOptions.constants.combatXpFirstAttackOnly) {
+            if (attacker is MapUnitCombatant && attacker.unit.attacksThisTurn <= 1)
+                addXp(attacker, 2, defender, attackerInBorders)
+        } else if (attacker.isAirUnit() && defender.isAirUnit()) addXp(5, 5)
         else if (attacker.isAirUnit()) addXp(4, 2)
         else if (attacker.isRanged()) { // ranged attack
             if (defender.isCity()) addXp(3,2)
@@ -691,7 +717,7 @@ object Battle {
 
     // XP!
     /** [inBorders]: the fight counts as in the territory of [thisCombatant]'s civilization, which raises the Great General points of a land unit */
-    internal fun addXp(thisCombatant: ICombatant, amount: Int, otherCombatant: ICombatant, inBorders: Boolean = false) {
+    fun addXp(thisCombatant: ICombatant, amount: Int, otherCombatant: ICombatant, inBorders: Boolean = false) {
         if (thisCombatant !is MapUnitCombatant) return
         replacePostCombatPromotion(thisCombatant)
         val civ = thisCombatant.getCivInfo()
@@ -699,8 +725,16 @@ object Battle {
         val promotions = thisCombatant.unit.promotions
         val modConstants = civ.gameInfo.ruleset.modOptions.constants
 
-        if (otherIsBarbarian && promotions.totalXpProduced() >= modConstants.maxXPfromBarbarians)
-            return
+        val rawCap = when {
+            otherIsBarbarian -> modConstants.maxXPfromBarbarians
+            modConstants.combatXpCapsLikeVp && otherCombatant.getCivInfo().isCityState -> modConstants.maxXPfromCityStates
+            else -> -1
+        }
+        val cap = if (modConstants.combatXpCapsLikeVp && rawCap > 0)
+            rawCap * civ.gameInfo.speed.experiencePercent / 100 else rawCap
+        if (modConstants.combatXpCapsLikeVp) {
+            if (cap >= 0 && promotions.totalXpProduced() >= cap) return
+        } else if (otherIsBarbarian && promotions.totalXpProduced() >= rawCap) return
         val unitCouldAlreadyPromote = promotions.canBePromoted()
 
         val gameContext = GameContext(civInfo = civ, ourCombatant = thisCombatant, theirCombatant = otherCombatant)
@@ -716,10 +750,12 @@ object Battle {
         val aiXpBonus = if (civ.isHuman()) 0.0 else civ.gameInfo.getDifficulty().aiFreeUnitExperiencePercent.toDouble()
         val xpModifier = 1.0 + xpBonus / 100 + aiXpBonus
 
-        val xpGained = (baseXP * xpModifier).toInt()
+        var xpGained = (baseXP * xpModifier).toInt()
+        if (modConstants.combatXpCapsLikeVp && cap >= 0)
+            xpGained = xpGained.coerceAtMost((cap - promotions.totalXpProduced()).coerceAtLeast(0))
         promotions.XP += xpGained
 
-        if (!otherIsBarbarian && civ.isMajorCiv) { // Can't get great generals from Barbarians
+        if (!otherIsBarbarian && civ.isMajorCiv && (!modConstants.combatXpCapsLikeVp || cap < 0)) { // VP awards global combat XP only against uncapped opponents
             var greatGeneralUnits = civ.gameInfo.ruleset.greatGeneralUnits
                 .filter { it.hasUnique(UniqueType.GreatPersonFromCombat, gameContext) &&
                         // Check if the unit is allowed for the Civ, ignoring build constrants

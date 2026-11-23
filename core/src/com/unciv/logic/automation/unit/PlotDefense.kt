@@ -101,6 +101,16 @@ object PlotDefense {
     fun nearbyEnemyDamage(improvement: TileImprovement) =
         improvement.getMatchingUniques(UniqueType.DamagesAdjacentEnemyUnits).sumOf { it.params[0].toInt() }
 
+    /**
+     *  ENEMY_HEAL_RATE of the tactical analysis: what a unit heals in a turn in enemy territory, which the damage of a citadel must beat to count as one
+     *  (TacticalAIHelpers::IsPlayerCitadel). It is the rate the units really heal at, [com.unciv.models.ModConstants.enemyUnitHeal] with `unitHealingLikeVp`
+     *  (5 in Vox Populi), else the 10 of Brave New World.
+     */
+    fun enemyHealRate(civ: Civilization): Int =
+        civ.gameInfo.ruleset.modOptions.constants.let { if (it.unitHealingLikeVp) it.enemyUnitHeal else BNW_ENEMY_HEAL_RATE }
+
+    private const val BNW_ENEMY_HEAL_RATE = 10
+
     /** CvImprovementEntry::GetCultureBombRadius: the largest radius of the improvement's "Gain control over [tiles] tiles in a [r]-tile radius" */
     fun cultureBombRadius(improvement: TileImprovement) =
         improvement.getMatchingUniques(UniqueType.OneTimeTakeOverTilesInRadius).maxOfOrNull { it.params[1].toInt() } ?: 0

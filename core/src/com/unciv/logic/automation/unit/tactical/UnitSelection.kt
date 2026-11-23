@@ -99,7 +99,7 @@ object UnitSelection {
 
     /**
      *  CvTacticalAI::FindUnitsForHarassing: the units of the tactical AI that can be at [target] (or next to it, if an enemy holds it) within [turnsAway]
-     *  turns, the nearest first, at most [maxUnits]. A unit must have [minHealth] to [maxHealth] hit points (0 or less: no limit) and, outside the
+     *  turns, the nearest first, at most [maxUnits]. A unit must have [minHealth] to [maxHealth] hit points (0 or less: no limit; absolute hit points, as the callers pass MAX_HIT_POINTS fractions, CvTacticalAI.cpp:4856) and, outside the
      *  exception of a trade route plundered where the unit stands ([plunder]), not be a siege unit or carrier, not cover a civilian, face no more danger at the
      *  target than it has hit points and not be a garrison its city needs; no barbarian in its camp; of [water]'s domain (null: any). [moveLeft]: it must get
      *  there with movement to spare. Aircraft, which the original never recruits for these moves, are left out.
@@ -155,11 +155,17 @@ object UnitSelection {
         if (UnitAiTypes.defaultOf(base, ctx.rules) == UnitAiType.EXPLORE) extra -= RECON_GARRISON_PENALTY
 
         // Score candidate by effective city-strength contribution relative to city strength without garrison
-        val garrisonShare = civ.gameInfo.ruleset.modOptions.constants.cityStrengthFromGarrison * 100
-        var cityStrength = CityCombatant(city).getCityStrength() * 100
-        city.getGarrison()?.let { cityStrength -= (max(it.baseUnit.strength, it.baseUnit.rangedStrength) * garrisonShare).toInt() }
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        val garrisonShare = constants.cityStrengthFromGarrison * 100
+        val combatant = CityCombatant(city)
+        var cityStrength = combatant.getCityStrength() * 100
+        city.getGarrison()?.let {
+            cityStrength -= if (constants.cityCombatLikeVp) combatant.vpGarrisonStrength(it)
+                else (max(it.baseUnit.strength, it.baseUnit.rangedStrength) * garrisonShare).toInt()
+        }
         cityStrength = max(1, cityStrength)
-        val contribution = (max(base.strength, base.rangedStrength) * garrisonShare).toInt()
+        val contribution = if (constants.cityCombatLikeVp) combatant.vpGarrisonStrength(unit)
+            else (max(base.strength, base.rangedStrength) * garrisonShare).toInt()
         extra += GARRISON_STRENGTH_WEIGHT * contribution / cityStrength
 
         // Don't put units with a defense boosted from promotions in cities, these boosts are ignored

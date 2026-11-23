@@ -272,7 +272,7 @@ object Deployment {
             if (unit.isDestroyed) continue
             if (unit.hasMovement()) {
                 val tile = unit.getTile()
-                if (UnitActionsPillage.canPillage(unit, tile) && unit.health < 100) {
+                if (UnitActionsPillage.canPillage(unit, tile) && unit.health < unit.getMaxHealth()) {
                     ctx.log { "already in position, will pillage with ${unit.name}, ${tile.position}" }
                     UnitActionsPillage.getPillageAction(unit, tile)?.action?.invoke()
                 } else if (unit.canFortify()) unit.fortify()
@@ -514,7 +514,8 @@ object Deployment {
         if (tile.isCityCenter()) {
             friendlyCity = true
             val city = tile.getCity()!!
-            val maxHitPoints = ctx.rules.define(AiDefine.MAX_CITY_HIT_POINTS)
+            val maxHitPoints = if (civ.gameInfo.ruleset.modOptions.constants.cityCombatLikeVp) city.getMaxHealth()
+                else ctx.rules.define(AiDefine.MAX_CITY_HIT_POINTS)
             friendlyCityStrength = CityCombatant(city).getCityStrength() * 100 * city.health / maxHitPoints
             dangerDivisor = dangerDivisorFor(ctx.danger.get(city), city.health)
         } else if (bestDefender != null && bestDefender != general) {

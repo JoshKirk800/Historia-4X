@@ -25,10 +25,13 @@ class UnitPowerTests {
     @Test
     fun powerFollowsTheOriginalFormulaAndIgnoresMovement() {
         // none of these has a free promotion with a power modifier in the XML (checked against the table the generator wrote)
-        val plain = listOf("Warrior", "Swordsman", "Longswordsman", "Musketman", "Knight", "Horseman", "Archer", "Tank", "Battleship")
+        val plain = listOf("Warrior", "Swordsman", "Longswordsman", "Musketman", "Knight", "Horseman", "Archer")
             .map { ruleset.units[it]!! }
         assertTrue("a unit that moves more than once is among them", plain.any { it.movement > 1 })
-        assertTrue("a ranged and a naval unit are among them", plain.any { it.rangedStrength > 0 } && plain.any { it.isWaterUnit })
+        assertTrue("a ranged unit is among them", plain.any { it.rangedStrength > 0 })
+        // Tank (649 by the formula) and Battleship (464) are in Vox Populi's table with 730 and 523: their promotions carry power modifiers there
+        assertEquals(730, ruleset.units["Tank"]!!.getAiPower())
+        assertEquals(523, ruleset.units["Battleship"]!!.getAiPower())
         for (unit in plain)
             assertEquals(unit.name, expectedPower(unit.strength, unit.rangedStrength, unit.isWaterUnit), unit.getAiPower())
     }
@@ -38,8 +41,8 @@ class UnitPowerTests {
     fun powerIncludesTheModifiersOfTheUnitsFreePromotions() {
         // 11^1.5 = 36; Anti-Mounted I: +50% against mounted, divisor 4 -> +4
         assertEquals(40, ruleset.units["Spearman"]!!.getAiPower())
-        // ranged 8^1.45 = 20 beats melee 7^1.5 = 18; City Siege 200% / 2 -> +20; Must Set Up -1/5 -> -8; Only Defensive does not apply to a ranged unit
-        assertEquals(32, ruleset.units["Catapult"]!!.getAiPower())
+        // Vox Populi's Catapult (ranged 13^1.45 = 41 beats melee 5^1.5 = 11) with its own uniques and promotions, from CvUnitEntry::DoUpdatePower (AI.json)
+        assertEquals(53, ruleset.units["Catapult"]!!.getAiPower())
         // 45^1.45 = 249; Anti-Air II: +150% vs bombers and +150% vs helicopters, divisor 4 -> +93, then +128
         assertEquals(470, ruleset.units["Fighter"]!!.getAiPower())
         // 65^1.5 = 524; Paradrop +1/4 -> +131

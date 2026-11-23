@@ -101,7 +101,8 @@ object HurryChoice {
 
         // bCanSupply = GetNumUnitsToSupply < GetNumUnitsSupplied; bOoS = !bCanSupply && IsMilitarySupport && !IsNoSupply
         val canSupply = civ.units.getNumUnitsToSupply() < civ.stats.getUnitSupply()
-        fun outOfSupply(unit: BaseUnit) = !canSupply && unit.usesUnitSupply
+        val noSupplyFlag = civ.gameInfo.ruleset.modOptions.constants.unitSupplyLikeVp
+        fun outOfSupply(unit: BaseUnit) = !canSupply && unit.usesUnitSupply && !(noSupplyFlag && unit.hasNoUnitSupply)
 
         val military = civ.ai.military
         val offense = civ.ai.personalityAndGrandStrategy(Flavor.Offense)

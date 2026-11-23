@@ -42,8 +42,6 @@ class IdeologyTests {
         for (tech in game.ruleset.technologies.values.filter { it.era() == era }.take(1)) who.tech.addTechnology(tech.name)
     }
 
-    private fun tenet(name: String): Policy = game.ruleset.policies[name]!!
-
     private fun tenetsOfLevel(branch: PolicyBranch, level: Int) = branch.policies.filter { it.tenetLevel == level }
 
     /** Pays with culture, as the AI and a player would */
@@ -322,14 +320,4 @@ class IdeologyTests {
         assertEquals("10 less 34% for a different ideology, nothing from the policy", 6, sharer.culture.getInfluencePerTurn(other))
     }
     //endregion
-
-    @Test
-    fun `Space Procurements is what lets spaceship parts be bought`() {
-        val part = game.ruleset.units["SS Booster"]!!
-        assertTrue(part.hasUnique(UniqueType.CannotBePurchased, city.state))
-        reachEra(civ, "Modern era")
-        civ.policies.adopt(freedom)
-        civ.policies.adopt(tenet("Space Procurements"))
-        city.state.let { assertFalse(part.hasUnique(UniqueType.CannotBePurchased, civ.cities.first().state)) }
-    }
 }

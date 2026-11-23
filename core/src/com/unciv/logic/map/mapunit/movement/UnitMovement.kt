@@ -16,6 +16,7 @@ import com.unciv.logic.map.pathingmap.PathingMap
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UnitActionType
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.ui.components.UnitMovementMemoryType
 import com.unciv.utils.Log
@@ -192,6 +193,8 @@ class UnitMovement(val unit: MapUnit) {
 
         var distance = 1
         val unitMaxMovement = unit.getMaxMovement().toFloat()
+        // embarkAwarePathingLikeVp: a turn that starts on a tile has the movement of the state the unit is in there (CvAStar baseMoves(needsEmbarkation(plot)))
+        val embarkAware = unit.civ.gameInfo.ruleset.modOptions.constants.embarkAwarePathingLikeVp
         val newTilesToCheck = ArrayList<Tile>()
         val visitedTilesBitset = BitSet(currentTile.tileMap.tileList.size)
         visitedTilesBitset.set(currentTile.zeroBasedIndex)
@@ -223,7 +226,7 @@ class UnitMovement(val unit: MapUnit) {
                 else {
                     getMovementToTilesAtPosition(
                         tileToCheck.position,
-                        unitMaxMovement,
+                        if (embarkAware) unit.getMaxMovementWhenEmbarked(unit.isEmbarkedAt(tileToCheck)).toFloat() else unitMaxMovement,
                         false,
                         visitedTilesBitset,
                         passThroughCacheNew,
@@ -890,7 +893,13 @@ class UnitMovement(val unit: MapUnit) {
     private fun getAirUnitCannotMoveToReason(tile: Tile, unit: MapUnit): CannotMoveToReason? {
         // landing in the city
         if (tile.isCityCenter()) {
-            if (tile.airUnits.filter { !it.isTransported }.size < tile.getCity()!!.getMaxAirUnits() && tile.getCity()?.civ == unit.civ)
+            val city = tile.getCity()!!
+            if (unit.civ.gameInfo.ruleset.modOptions.constants.airBasingLikeVp) {
+                // CvUnit::canRebaseAt: the slots in use there (not ours, if we already are one of them) must be fewer than the capacity
+                var used = city.getAirUnitSlotsUsed()
+                if (unit in tile.airUnits && !unit.isTransported) used -= unit.airUnitCapacityCost()
+                if (used < city.getMaxAirUnits() && city.civ == unit.civ) return null
+            } else if (tile.airUnits.filter { !it.isTransported }.size < city.getMaxAirUnits() && city.civ == unit.civ)
                 return null // if city is free - no problem, get in
         } // let's check whether it enters city on carrier now...
 
@@ -1015,6 +1024,9 @@ class UnitMovement(val unit: MapUnit) {
 
     @Readonly
     fun cannotPassThroughReason(tile: Tile, includeOtherEscortUnit: Boolean = true): CannotMoveToReason? {
+        if (unit.cache.hasTileEntryRestrictions && unit.getMatchingUniques(
+                UniqueType.CannotEnterFilteredTile, GameContext(unit.civ, unit = unit, tile = tile), checkCivInfoUniques = true
+            ).any { tile.matchesFilter(it.params[0]) }) return CannotMoveToReason.TerrainImpassable
         if (tile.isImpassible()) {
             // special exception - ice tiles are technically impassible, but some units can move through them anyway
             // helicopters can pass through impassable tiles like mountains
@@ -1157,6 +1169,8 @@ class PathfindingCache(private val unit: MapUnit) {
     private var destination: Tile? = null
     private var movement = -1f
     private var currentTile: Tile? = null
+    /** Whether the unit was embarked when the cache was cleared; only matters with `embarkAwarePathingLikeVp` */
+    private var embarked = false
     private var distanceToTilesCache: PathsToTilesWithinTurn? = null
     /** The tiles an exhausted shortest path search could reach (by zeroBasedIndex), valid like the other caches; null when no search was exhausted */
     private var searchedRegion: BitSet? = null
@@ -1164,7 +1178,9 @@ class PathfindingCache(private val unit: MapUnit) {
     /** Check if the caches are valid (only checking if the unit has moved or consumed movement points;
      * the isPlayerCivilization check is performed in the functions because we want isValid() == false
      * to have a specific behavior) */
-    @Readonly private fun isValid(): Boolean = (movement == unit.currentMovement) && (unit.getTile() == currentTile)
+    @Readonly private fun isValid(): Boolean = (movement == unit.currentMovement) && (unit.getTile() == currentTile) &&
+        // embarkAwarePathingLikeVp: the search spends the movement of the state the unit is in, so what was found for the other state does not hold
+        (embarked == unit.isEmbarked() || !unit.civ.gameInfo.ruleset.modOptions.constants.embarkAwarePathingLikeVp)
 
     fun getShortestPathCache(destination: Tile): List<Tile> {
         if (unit.civ.isHuman()) return listOf()
@@ -1208,6 +1224,7 @@ class PathfindingCache(private val unit: MapUnit) {
         distanceToTilesCache = null
         movement = unit.currentMovement
         currentTile = unit.getTile()
+        embarked = unit.isEmbarked()
         destination = null
         shortestPathCache = listOf()
     }

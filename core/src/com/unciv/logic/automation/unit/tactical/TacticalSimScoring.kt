@@ -77,12 +77,14 @@ class SimScoring(private val w: SimWorld) {
             val city = sim.city
             val previousCityDamage = overlay.city[cityIndex]
             result.cityIndex = cityIndex
-            val key = w.cachedAttack(unit.index, from, -1, cityIndex, unit.selfDamage, 0, previousCityDamage) {
-                val (dealt, taken) = w.damageOnCity(mu, attackerTile, attackerHealth, city)
-                intArrayOf(dealt, taken)
+            val previousGarrisonDamage = overlay.garrison[cityIndex]
+            val key = w.cachedAttack(unit.index, from, -1, cityIndex, unit.selfDamage, previousGarrisonDamage, previousCityDamage) {
+                val (dealt, taken, garrison) = w.damageOnCity(mu, attackerTile, attackerHealth, city, previousGarrisonDamage)
+                intArrayOf(dealt, taken, garrison)
             }
             cityDamageDealt = key[0]
             damageReceived = key[1]
+            result.garrisonDamage = key[2]
             previousCityHitPoints = (sim.health - previousCityDamage).coerceAtLeast(1)
             // A city that is surrounded cannot heal
             val blockaded = pos.adjacentFriendlies(enemyPlot, SimDomain.Both, -1) == w.passableNeighbors(enemyPlot)
@@ -101,7 +103,7 @@ class SimScoring(private val w: SimWorld) {
                     val scaledCounterattack = counterattack / aggressionBias
                     val remainingTurnsOnAttacker = attackerHealth / (damageReceived + scaledCounterattack + 1)
                     // No attack if it is too early yet
-                    val goodFirstAttack = 100 - mu.health < 13 && cityDamageDealt > damageReceived && damageReceived < 23
+                    val goodFirstAttack = mu.getMaxHealth() - mu.health < 13 && cityDamageDealt > damageReceived && damageReceived < 23
                     if (remainingTurnsOnAttacker < remainingTurnsOnCity && !goodFirstAttack) {
                         result.setImpossible()
                         return false
@@ -126,6 +128,13 @@ class SimScoring(private val w: SimWorld) {
                 val delta = pos.adjacentFriendlies(enemyPlot, domain, from) - pos.adjacentEnemies(from, domain)
                 dealt += delta * dealt / 10
                 damageReceived -= delta * damageReceived / 10
+                if (mu.civ.gameInfo.ruleset.modOptions.constants.combatHealthStrengthLikeVp) {
+                    val attackerCombatant = SimCombatant(mu, attackerTile, attackerHealth.coerceAtLeast(1))
+                    val defenderCombatant = SimCombatant(enemy, enemyTile, previousHitPoints.coerceAtLeast(1))
+                    val corrected = com.unciv.logic.battle.BattleDamage.resolveMeleeDeaths(attackerCombatant, defenderCombatant, dealt, damageReceived)
+                    dealt = corrected.first
+                    damageReceived = corrected.second
+                }
             }
             // Do not be as aggressive when attacking embarked units
             if (!TacticalAttacks.canAttack(enemy) || enemy.isEmbarked()) aggressionBias /= 2
@@ -165,7 +174,7 @@ class SimScoring(private val w: SimWorld) {
                 // A unit that heals by killing
                 var heal = 0
                 mu.forEachMatchingUnique(UniqueType.HealsAfterKilling, checkCivInfoUniques = true) { heal += it.params[0].toInt() }
-                if (heal > 0) damageReceived = max(damageReceived - heal, -(100 - mu.health))
+                if (heal > 0) damageReceived = max(damageReceived - heal, -(mu.getMaxHealth() - mu.health))
             }
         }
 
@@ -195,8 +204,9 @@ class SimScoring(private val w: SimWorld) {
             // Danger as well: with many enemies around we need our melee units as shields, do not waste hit points on attacks
             val tileAfterAttack = if (result.type == AssignmentType.MeleeKill) enemyTile else attackerTile
             val danger = w.danger(unit.index, tileAfterAttack, unit.selfDamage + damageReceived, pos.damageWith(result))
-            var belowHpLimit = danger > 100
-            // Self damage of previous attacks is not considered here, as in the original
+            // CvTacticalAI.cpp:7616: the danger is compared with the unit's own GetMaxHitPoints()
+            var belowHpLimit = danger > mu.getMaxHealth()
+            // Self damage of previous attacks is not considered here, as in the original; the limits are absolute hit points (CvTacticalAI.cpp:7272, 7618)
             if (mu.health - damageReceived < HP_LIMIT[aggression.ordinal]) belowHpLimit = true
             // The bias depends on the ratio of friendly to enemy units
             val scaledDamage = ((totalUnitDamageDealt + cityDamageDealt) * aggressionBias * factor + 0.5f).toInt()
@@ -213,7 +223,7 @@ class SimScoring(private val w: SimWorld) {
         // Finally the score: add the previous damage again and again to make concentrated fire attractive
         val actualCityDamage = min(cityDamageDealt, previousCityHitPoints + if (ranged) 2 else 10)
         var actualDamageTaken = min(damageReceived, attackerHealth)
-        if (actualDamageTaken < 0) actualDamageTaken = max(actualDamageTaken, -(100 - mu.health + unit.selfDamage))
+        if (actualDamageTaken < 0) actualDamageTaken = max(actualDamageTaken, -(mu.getMaxHealth() - mu.health + unit.selfDamage))
 
         // Focus on low hit point units and cities
         val totalActualDamage = actualCityDamage + totalActualUnitDamageDealt
@@ -226,7 +236,7 @@ class SimScoring(private val w: SimWorld) {
         if (scoreReduction) bonus -= 10
         if (cityKill) bonus += 100 else if (unitKill) bonus += 15
 
-        result.setScore(0, bonus, actualCityDamage + totalActualUnitDamageDealt - actualDamageTaken)
+        result.setScore(0, bonus, actualCityDamage + totalActualUnitDamageDealt + result.garrisonDamage - actualDamageTaken)
         return cityKill || unitKill
     }
     //endregion
@@ -256,7 +266,7 @@ class SimScoring(private val w: SimWorld) {
         if (adjacentEnemies > 3 || adjacentEnemies == 3 && pos.aggressionBias < 1)
             if (!frontlineCitadelOrCity) return Int.MAX_VALUE
 
-        val maxHitPoints = 100
+        val maxHitPoints = mu.getMaxHealth() // CvTacticalAI.cpp:7910: pUnit->GetMaxHitPoints()
         val currentHitPoints = mu.health - selfDamage
 
         // Unseen enemies might be hiding behind the edge, so assume danger there (unless it is a city)
@@ -362,7 +372,7 @@ class SimScoring(private val w: SimWorld) {
             // Move skirmishers in to fire
             if (skirmisher && enemyDistance == 1) plotScore += 3
             // If we are not in a good spot, try moving
-            if (plotScore <= 6 && tile == mu.getTile() && 100 - mu.health + unit.selfDamage < 10) plotScore -= 2
+            if (plotScore <= 6 && tile == mu.getTile() && mu.getMaxHealth() - mu.health + unit.selfDamage < 10) plotScore -= 2
             // Move melee units in to capture cities
             if (!simUnit.ranged && pos.enemyDistance(testPlot) == 1) {
                 for (n in w.neighbors[testPlot]) {
@@ -397,10 +407,10 @@ class SimScoring(private val w: SimWorld) {
         // A bonus for potential fortifying and healing
         if (result.type == AssignmentType.FinishTemp) {
             if (unit.moves >= simUnit.maxMoves - SimPosition.EPSILON) {
-                if (100 - mu.health + unit.selfDamage > 0 && !mu.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true) && !mu.isEmbarked()) {
+                if (mu.getMaxHealth() - mu.health + unit.selfDamage > 0 && !mu.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true) && !mu.isEmbarked()) {
                     var healRate = mu.healingAmountForTile(tile, noTerrainDamage = true)
                     if (healRate > 0) {
-                        healRate = min(healRate, 100 - mu.health + unit.selfDamage)
+                        healRate = min(healRate, mu.getMaxHealth() - mu.health + unit.selfDamage)
                         damageDelta += healRate
                         selfDamage -= healRate
                         result.type = AssignmentType.Heal
@@ -539,7 +549,7 @@ class SimScoring(private val w: SimWorld) {
         if (improvementDamage < 15 && strategic) bonus += 15
         else if (improvementDamage < 10 && tile.getOwner() != null && tile.roadStatus != RoadStatus.None && tile.isRoughTerrain()) bonus += 10
         if (tile.canPillageTileImprovement()) {
-            val heal = min(25, 100 - mu.health + unit.selfDamage)
+            val heal = min(25, mu.getMaxHealth() - mu.health + unit.selfDamage)
             if (heal > 0) {
                 selfDamage -= heal
                 damageDelta += heal

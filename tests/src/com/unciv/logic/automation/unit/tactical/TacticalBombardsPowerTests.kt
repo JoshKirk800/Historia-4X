@@ -19,13 +19,13 @@ class TacticalBombardsPowerTests {
         val civ = game.addCiv()
         val knight = game.addUnit("Knight", civ, game.getTile(HexCoord(0, 0)))
         val longswordsman = game.addUnit("Longswordsman", civ, game.getTile(HexCoord(1, 0)))
-        // 20^1.5 = 89 for the Knight against 21^1.5 = 96: the extra movement of the Knight is worth nothing in the original
-        assertTrue(longswordsman.getAiPower() > knight.getAiPower())
+        // Vox Populi's table: Knight 117 (24^1.5) against Longswordsman 96 (21^1.5); the Longswordsman is listed first, so only the power picks the Knight
+        assertTrue(knight.getAiPower() > longswordsman.getAiPower())
 
         val target = game.getTile(HexCoord(0, 3))
         val blocks = TacticalBombards.assign(
-            mapOf(target to listOf(Candidate(knight, 1, 3), Candidate(longswordsman, 1, 3))), canLeaveOpenings = false)!!
+            mapOf(target to listOf(Candidate(longswordsman, 1, 3), Candidate(knight, 1, 3))), canLeaveOpenings = false)!!
         assertEquals(1, blocks.size)
-        assertEquals(longswordsman, blocks.single().unit)
+        assertEquals(knight, blocks.single().unit)
     }
 }

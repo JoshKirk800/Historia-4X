@@ -401,6 +401,11 @@ enum class UniqueType(
     UsesUnitSupply("Uses unit supply", UniqueTarget.Unit,
         docDescription = "Marks a non-military unit as one that counts against the civilization's unit supply, as the original's MilitarySupport does for " +
             "the Caravan, the Cargo Ship and the Work Boat. Units with a combat strength use supply without it; the other civilians never do."),
+    // ---- (P6/M6) unit supply like Vox Populi ----
+    /** VP 5.4.8 CvUnit::isNoSupply (UnitPromotions.NoSupply, Units.NoSupply, CvUnit::changeNoSupply): the unit, or a promotion it has, takes no unit supply. */
+    NoUnitSupply("Does not use unit supply", UniqueTarget.Unit,
+        docDescription = "The unit does not count against the civilization's unit supply, whether the unit type or one of its promotions has it (CvUnit::isNoSupply). " +
+            "Conditionals are not evaluated. Only read with the ModConstants switch `unitSupplyLikeVp`."),
 
     // Units entering Tiles
     // ToDo: make per unit and use unit filters? "Enables embarkation <for [land] units>"
@@ -667,6 +672,12 @@ enum class UniqueType(
 
     DestroyedWhenCityCaptured("Destroyed when the city is captured", UniqueTarget.Building),
     NotDestroyedWhenCityCaptured("Never destroyed when the city is captured", UniqueTarget.Building),
+    // ---- (StageConquest / M5) building capture chance like Vox Populi ----
+    /** VP 5.4.8 CvPlayer::IsValidBuildingForPlayer, CvBuildingEntry::GetConquestProbability (Buildings.ConquestProb): the chance a building is kept in a conquered city. */
+    SurvivesCityCaptureChance("Has a [nonNegativeAmount]% chance of surviving when the city is captured", UniqueTarget.Building,
+        docDescription = "The chance, rolled once per building when a city is conquered, that this building is not destroyed (Buildings.ConquestProb). 0 destroys it, 100 keeps it. " +
+            "Buildings with `Destroyed when the city is captured` or `Never destroyed when the city is captured`, wonders and the capital's buildings are not rolled. " +
+            "Conditionals are not evaluated. Only read with the ModConstants switch `conquestLikeVp`; without a unique the chance is `conquestConstants.buildingSurvivalPercent`."),
     GoldFromCapturingCity("[relativeAmount]% Gold given to enemy if city is captured", UniqueTarget.Building),
 
     RemovesAnnexUnhappiness("Removes extra unhappiness from annexed cities", UniqueTarget.Building),
@@ -752,6 +763,10 @@ enum class UniqueType(
     Range("[amount] Range", UniqueTarget.Unit, UniqueTarget.Global),
     AirInterceptionRange("[relativeAmount] Air Interception Range", UniqueTarget.Unit, UniqueTarget.Global),
     Heal("[amount] HP when healing", UniqueTarget.Unit, UniqueTarget.Global),
+    /** VP 5.4.8 CvUnit::GetMaxHitPoints (UnitPromotions.MaxHitPointsChange, CvUnit::changeMaxHitPointsChange): added to the base 100 hit points. */
+    MaxHitPointsChange("[amount] maximum hit points", UniqueTarget.Unit,
+        docDescription = "Added to the unit's 100 maximum hit points; conditionals are not evaluated (the sum is kept with the unit's uniques). Only read with the ModConstants switch `unitMaxHitPointsLikeVp`; " +
+            "the lost health stays the same when the maximum changes (CvUnit::changeMaxHitPointsChange leaves the damage as it is)."),
     ExtraRangedAttack("Before engaging in combat performs an extra ranged attack with [amount]% of melee combat strength", UniqueTarget.Unit),
 
     SpreadReligionStrength("[relativeAmount]% Spread Religion Strength", UniqueTarget.Unit, UniqueTarget.Global,
@@ -764,6 +779,19 @@ enum class UniqueType(
     CannotAttack("Cannot attack", UniqueTarget.Unit),
     MustSetUp("Must set up to ranged attack", UniqueTarget.Unit),
     SelfDestructs("Self-destructs when attacking", UniqueTarget.Unit),
+    // VP 5.4.8 CvUnit::GetRangeCombatDamage excludes UNITAI_MISSILE_AIR from garrison absorption.
+    // Missile target selection against cities also selects a unit, and is owned by air combat; do not map this alone.
+    IgnoresGarrisonAbsorption("Attacks bypass garrison damage absorption", UniqueTarget.Unit),
+    CityRangeStrikeModifier("[relativeAmount]% City ranged strike strength", UniqueTarget.Global),
+    GarrisonedCityRangeStrikeModifier("[relativeAmount]% City ranged strike strength with a garrison", UniqueTarget.Global),
+    AdjacentCityDefenseModifier("[relativeAmount]% defense for this and adjacent cities", UniqueTarget.Unit),
+    CityDefensePerWonder("[amount] city strength per [amount] world wonders", UniqueTarget.Building),
+    CityDefensePerAirUnit("[amount] city strength per stationed air unit", UniqueTarget.Global),
+    AlliedCityStateDefenseModifier("[relativeAmount]% allied city-state defense", UniqueTarget.Global),
+    MultipleAttackCityStrikeModifier("[relativeAmount]% city strike strength per previous attack on target", UniqueTarget.Global),
+    CityFlatDamageReduction("Cities take [amount] less damage from attacks", UniqueTarget.Global),
+    DamageTakenModifier("[relativeAmount]% damage taken", UniqueTarget.Unit, UniqueTarget.Global),
+    CityAssaultDamageReduction("[amount]% less damage from cities", UniqueTarget.Unit, UniqueTarget.Global),
 
     // Attack unrestrictions
     AttackAcrossCoast("Eliminates combat penalty for attacking across a coast", UniqueTarget.Unit),
@@ -777,14 +805,70 @@ enum class UniqueType(
 
     NoDefensiveTerrainBonus("No defensive terrain bonus", UniqueTarget.Unit, UniqueTarget.Global),
     NoDefensiveTerrainPenalty("No defensive terrain penalty", UniqueTarget.Unit, UniqueTarget.Global),
+    // VP 5.4.8 CvUnit::canAcquirePromotion: an AND prerequisite and range bounds supplement the OR list.
+    PromotionRequiresPromotion("Requires [promotion] promotion", UniqueTarget.Promotion),
+    PromotionMinimumRange("Requires at least [amount] attack range", UniqueTarget.Promotion),
+    PromotionMaximumRange("Requires at most [amount] attack range", UniqueTarget.Promotion),
+    // --- Mounted flag (StageMounted), read only with ModConstants.mountedUnitFlagLikeVp ---
+    /** VP 5.4.8 Units.IsMounted (CvUnitEntry::IsMounted): the unit also counts as a Mounted target for `<vs [Mounted] units>` modifiers (CvUnit::unitCombatModifier). */
+    IsMountedUnit("Is a mounted unit", UniqueTarget.Unit),
+    /** VP 5.4.8 UnitPromotions.MountedOnly (CvUnit::canAcquirePromotion): only units with `Is a mounted unit` can take this promotion. */
+    PromotionMountedOnly("Only for mounted units", UniqueTarget.Promotion),
+    /** VP 5.4.8 CvUnit::GetReverseGreatGeneralModifier uses the strongest same-domain enemy aura. */
+    EnemyStrengthAura("[relativeAmount]% Strength for enemy [mapUnitFilter] units within [amount] tiles", UniqueTarget.Unit, UniqueTarget.Global),
+    StrongerWhenDamaged("Stronger when damaged", UniqueTarget.Unit, UniqueTarget.Global),
     NoDamagePenaltyWoundedUnits("No damage penalty for wounded units", UniqueTarget.Unit, UniqueTarget.Global),
     WoundedUnitDamagePenalty("[amount]% wounded unit damage penalty", UniqueTarget.Global,
         docDescription = "Percentage points added to the share of its lost health that a wounded unit loses in strength and damage dealt (33 by default), " +
             "so `[-25]` leaves 8. The sum is not reduced below 0. Does not apply to cities, and `No damage penalty for wounded units` still removes the penalty entirely."),
     Uncapturable("Uncapturable", UniqueTarget.Unit),
+    // Capture class block (VP 5.4.8 CvUnit::getCaptureUnitType, UnitInfo Capture)
+    /** VP 5.4.8 CvUnit::getCaptureUnitType: the capturer gets `GetSpecificUnitType(Units.Capture)`, its own unit of the captured unit's capture class. */
+    BecomesWhenCaptured("Becomes [baseUnitFilter] when captured", UniqueTarget.Unit,
+        docDescription = "The unit name the unit becomes for the capturer (the default unit of the capture class; the capturer's own unique replacement is looked up through `getEquivalentUnit`). " +
+            "Only read with the ModConstants switch `captureClassLikeVp`; with barbarians involved the unit stays as it is (CvUnit::getCaptureDefinition)."),
     WithdrawsBeforeMeleeCombat("Withdraws before melee combat", UniqueTarget.Unit),
     CannotCaptureCities("Unable to capture cities", UniqueTarget.Unit, UniqueTarget.Global),
     CannotPillage("Unable to pillage tiles", UniqueTarget.Unit, UniqueTarget.Global),
+
+    // ---- StageForms2: promotion columns of Vox Populi without a form, each read only with its ModConstants switch ----
+    /** VP 5.4.8 UnitPromotions.ExtraFlankPower (CvUnit::GetFlankPower, ChangeFlankPower; CvPlot::GetNumEnemyUnitsAdjacent with bConsiderFlanking): a unit counts as 1 plus this
+     *  when it supports a flank. */
+    ExtraFlankPower("[amount] extra flanking power", UniqueTarget.Unit,
+        docDescription = "Each flank-supporting unit counts as 1 plus the sum of its `extra flanking power` (VP CvUnit::GetFlankPower), so the flanking bonus of the unit it surrounds is " +
+            "10% x that sum. Only read with the ModConstants switch `flankPowerLikeVp`."),
+    /** VP 5.4.8 UnitPromotions_Terrains / _Features.IgnoreTerrainCostIn (CvUnit::isIgnoreTerrainCostIn, isIgnoreFeatureCostIn; CvUnitMovement::GetCostsForMove). */
+    IgnoresTerrainCostIn("Ignores terrain cost in [tileFilter] tiles", UniqueTarget.Unit,
+        docDescription = "Entering a matching tile costs 1 movement instead of the terrain's cost (the river crossing still takes the whole turn), before the unit's half-movement and extra movement cost " +
+            "uniques apply. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`."),
+    /** VP 5.4.8 UnitPromotions_Terrains / _Features.HalfMove (CvUnitMovement::GetMovementCostMultiplierFromPromotions: the cost is multiplied by 2). */
+    HalfMovementIn("Half movement in [tileFilter] tiles", UniqueTarget.Unit,
+        docDescription = "The mirror of `Double movement in`: the cost of entering a matching tile is doubled unless the unit also has double movement there. Only read with the " +
+            "ModConstants switch `terrainMovementPromotionsLikeVp`."),
+    /** VP 5.4.8 UnitPromotions_Terrains / _Features.ExtraMove (CvUnitMovement::GetMovementCostAdderFromPromotions: MOVE_DENOMINATOR x getTerrainExtraMoveCount). */
+    ExtraMovementCostIn("[amount] extra movement cost in [tileFilter] tiles", UniqueTarget.Unit,
+        docDescription = "Entering a matching tile costs this much more, after the unit's other movement cost modifiers. Only the most specific matching kind counts, in VP's order: " +
+            "a Mountain, a Hill, the base terrain, a terrain feature. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`."),
+    /** VP 5.4.8 UnitPromotions.GainsXPFromScouting (CvUnit::IsGainsXPFromScouting; CvPlot::setRevealed counts, CvUnit::setXY awards). */
+    GainsXpFromScouting("Gains XP from scouting", UniqueTarget.Unit,
+        docDescription = "Each tile the unit newly reveals to its civilization is worth 1 point, a visible resource scoutXpRandomValue / 4, ancient ruins scoutXpRandomValue / 3 and a natural wonder " +
+            "scoutXpRandomValue (ModConstants, 12 as in VP), and every `scoutXpDenominator` points are 1 experience point, scaled by the game speed. City-states and barbarians do not earn it. " +
+            "Only read with the ModConstants switch `scoutingXpLikeVp`."),
+    /** VP 5.4.8 UnitPromotions.XPFromPillaging (CvUnit::GetXPFromPillaging, CvUnit::pillage, CvUnit::shouldPillage). */
+    XpFromPillaging("[amount] XP when pillaging", UniqueTarget.Unit,
+        docDescription = "Experience for pillaging an improvement (not a road), scaled by the game speed; barbarians get none. Also makes the AI pillage (CvUnit::shouldPillage). " +
+            "Only read with the ModConstants switch `pillageXpLikeVp`."),
+    /** VP 5.4.8 UnitPromotions.LostOnGifting (CvUnit::convert bIsGift, CvMinorCivIncomingUnitGift::applyToUnit). */
+    LostWhenGifted("Lost when the unit is gifted", UniqueTarget.Promotion,
+        docDescription = "A unit that is gifted to another civilization loses this promotion, and gets it back only if its unit type gives it for free. Only read with the ModConstants " +
+            "switch `giftPromotionLossLikeVp`."),
+    /** VP 5.4.8 Units.MinorCivGift (CvUnitEntry::IsMinorCivGift): CvGame::GetRandomUniqueUnitType, CvPlayer::canTrainUnit. */
+    CanBeGiftedByCityStates("Can be gifted by city-states", UniqueTarget.Unit,
+        docDescription = "A militaristic city-state may be given this unit as its unique unit whoever it belongs to, even when no civilization of the game could build it, and is somewhat more likely to be; " +
+            "no civilization but the barbarians can build it. Only read with the ModConstants switch `cityStateGiftUnitFlagsLikeVp`."),
+    /** VP 5.4.8 Units.NoMinorCivGift (CvUnitEntry::IsInvalidMinorCivGift): CvGame::GetRandomUniqueUnitType, CvPlayer::GetCompetitiveSpawnUnitType with bMinorCivGift. */
+    CannotBeGiftedByCityStates("Cannot be gifted by city-states", UniqueTarget.Unit,
+        docDescription = "A city-state never gives this unit, neither as its unique unit nor as the military unit it gives its patron. Only read with the ModConstants switch `cityStateGiftUnitFlagsLikeVp`."),
     
     // allow any unit to destory cities instead of capturing them, also allows non melee units to destroy cities
     CanDestroyCities("Destroys [cityFilter] cities instead of capturing", UniqueTarget.Unit,
@@ -806,6 +890,14 @@ enum class UniqueType(
     HealOnlyByPillaging("Can only heal by pillaging", UniqueTarget.Unit, UniqueTarget.Global),
     HealsEvenAfterAction("Unit will heal every turn, even if it performs an action", UniqueTarget.Unit),
     HealAdjacentUnits("All adjacent units heal [amount] HP when healing", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::healRate takes the best same-tile or same-domain adjacent unit heal. */
+    HealSameTileUnits("Units on this tile heal [amount] HP when healing", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::GetHealFriendlyTerritoryFromNearbyUnit: with `unitHealingLikeVp`, only counts where CvUnit::healRate takes the friendly extra heal. */
+    HealTerritoryAura("[amount] HP healing for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::GetHealNeutralTerritoryFromNearbyUnit: counts where CvUnit::healRate takes the neutral extra heal (unowned or non-hostile foreign tiles, and cities of another team). */
+    HealNeutralTerritoryAura("[amount] HP healing in neutral territory for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::GetHealEnemyTerritoryFromNearbyUnit: counts on tiles owned by a civilization at war with the unit's owner. */
+    HealEnemyTerritoryAura("[amount] HP healing in enemy territory for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles", UniqueTarget.Unit),
 
     // Vision
     NoSight("No Sight", UniqueTarget.Unit),
@@ -817,6 +909,20 @@ enum class UniqueType(
     CarryExtraAirUnits("Can carry [amount] extra [mapUnitFilter] units", UniqueTarget.Unit, UniqueTarget.Building,
         docDescription = "For buildings, supports using `Air` for `mapUnitFilter` to increase city air unit capacity."),
     CannotBeCarriedBy("Cannot be carried by [mapUnitFilter] units", UniqueTarget.Unit),
+
+    // --- Air basing, land air defense and interception (StageAir) ---
+    /** VP 5.4.8 Units.AirUnitCap (CvUnitEntry::GetAirUnitCap, CvPlot::countNumAirUnits): the slots of a city's air unit capacity this unit uses up. */
+    CountsAgainstAirUnitCapacity("Counts [amount] against the air unit capacity", UniqueTarget.Unit,
+        docDescription = "Only read with the ModConstants switch `airBasingLikeVp`, for air units standing in a city untransported; an air unit without it counts 1. " +
+            "A carrier's cargo slots are counted by units and ignore it."),
+    /** VP 5.4.8 Units.BaseLandAirDefense and UnitPromotions.LandAirDefenseBonus (CvUnit::GetAirStrikeDefenseDamage), Buildings.CityAirStrikeDefense (CvCity::GetAirStrikeDefenseDamage). */
+    AirDefense("[amount] air defense", UniqueTarget.Unit, UniqueTarget.Building,
+        docDescription = "The damage this unit (the sum over its own uniques and promotions) or this city (the sum over its buildings) does to an air unit that attacks it, before the " +
+            "attacker's interception damage reduction and a random addition. Only read with the ModConstants switch `airDefenseLikeVp`."),
+    /** VP 5.4.8 UnitPromotions.EvasionChange (CvUnit::evasionProbability, CvUnitCombat::GenerateAirCombatInfo). */
+    EvadeInterception("[amount]% chance to evade interception", UniqueTarget.Unit,
+        docDescription = "An air attacker with it rolls this chance (summed, at most 100) before the interceptor rolls its own, and is not intercepted if it succeeds. " +
+            "Only read with the ModConstants switch `airInterceptionLikeVp`."),
 
     // Interception
     ChanceInterceptAirAttacks("[relativeAmount]% chance to intercept air attacks", UniqueTarget.Unit),
@@ -872,6 +978,8 @@ enum class UniqueType(
     CanEnterIceTiles("Can enter ice tiles", UniqueTarget.Unit),
     CannotEmbark("Cannot embark", UniqueTarget.Unit),
     CannotEnterOcean("Cannot enter ocean tiles", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::canEnterTerrain checks feature and terrain impassability from promotions. */
+    CannotEnterFilteredTile("Cannot enter [tileFilter] tiles", UniqueTarget.Unit, UniqueTarget.Global),
     CanEnterForeignTiles("May enter foreign tiles without open borders", UniqueTarget.Unit),
     CanEnterForeignTilesButLosesReligiousStrength("May enter foreign tiles without open borders, but loses [amount] religious strength each turn it ends there", UniqueTarget.Unit),
     ReducedDisembarkCost("[nonNegativeAmount] Movement point cost to disembark", UniqueTarget.Global, UniqueTarget.Unit),
@@ -1207,6 +1315,18 @@ enum class UniqueType(
     ConditionalVsLargerCiv("when fighting units from a Civilization with more Cities than you", UniqueTarget.Conditional),
     ConditionalAttacking("when attacking", UniqueTarget.Conditional),
     ConditionalDefending("when defending", UniqueTarget.Conditional),
+    /** VP 5.4.8 CvUnit::GetMaxRangedCombatStrength: `GetRangedAttackModifier` (UnitPromotions.RangedAttackModifier) is added only when the unit attacks (bAttacking), also on interceptions and air attacks. */
+    ConditionalRangedAttack("when making a ranged attack", UniqueTarget.Conditional,
+        docDescription = "True while a unit that has a ranged strength attacks (a unit, a city, or an interception by an air unit). Not true for a city's own strike or while defending."),
+    /** VP 5.4.8 CvUnit::GetMaxAttackStrength / GetMaxRangedCombatStrength: `attackFullyHealedModifier` (UnitPromotions.AttackFullyHealedMod) when the defender has no damage. */
+    ConditionalVsFullyHealed("vs fully healed units", UniqueTarget.Conditional,
+        docDescription = "True while a unit attacks a unit that has all its hit points. Never true against a city or while defending."),
+    /** VP 5.4.8 CvUnit::GetMaxAttackStrength (damage < maximum / 2) and GetMaxRangedCombatStrength (damage < (maximum + 1) / 2): `attackAbove50HealthModifier` (UnitPromotions.AttackAbove50HealthMod). */
+    ConditionalVsAboveHalfHealth("vs units above half health", UniqueTarget.Conditional,
+        docDescription = "True while a unit attacks a unit whose lost hit points are below half of its maximum (rounded down for a melee attacker, up for a ranged one). Never true against a city or while defending."),
+    /** VP 5.4.8 CvUnit::GetMaxAttackStrength / GetMaxRangedCombatStrength: `attackBelow50HealthModifier` (UnitPromotions.AttackBelowEqual50HealthMod), the case that is not [ConditionalVsAboveHalfHealth]. */
+    ConditionalVsHalfHealthOrBelow("vs units at or below half health", UniqueTarget.Conditional,
+        docDescription = "True while a unit attacks a unit that is not above half health (see `vs units above half health`). Never true against a city or while defending."),
     ConditionalFightingInTiles("when fighting in [tileFilter] tiles", UniqueTarget.Conditional),
     ConditionalForeignContinent("on foreign continents", UniqueTarget.Conditional),
     ConditionalAdjacentUnit("when adjacent to a [mapUnitFilter] unit", UniqueTarget.Conditional),

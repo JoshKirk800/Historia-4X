@@ -80,6 +80,11 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
     var attacksThisTurn = 0
 
+    /** VP 5.4.8 CvUnit::ChangeNumTimesAttackedThisTurn; keyed by the attacking civilization. */
+    var timesAttackedBy = HashMap<String, Int>()
+
+    @Readonly fun getTimesAttackedBy(civName: String): Int = timesAttackedBy[civName] ?: 0
+
     /** Damage taken since this unit's turn started and during the turn before (CvUnit::m_iDamageTakenThisTurn / m_iDamageTakenLastTurn), see [isProjectedToDieNextTurn] */
     var damageTakenThisTurn = 0
     var damageTakenLastTurn = 0
@@ -255,6 +260,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
         toReturn.escorting = escorting
         toReturn.automatedRoadConnectionDestination = automatedRoadConnectionDestination
         toReturn.attacksThisTurn = attacksThisTurn
+        toReturn.timesAttackedBy = HashMap(timesAttackedBy)
         toReturn.damageTakenThisTurn = damageTakenThisTurn
         toReturn.damageTakenLastTurn = damageTakenLastTurn
         toReturn.turnsFortified = turnsFortified
@@ -309,7 +315,23 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
     @Readonly fun isMilitary() = baseUnit.isMilitary
     @Readonly fun isCivilian() = baseUnit.isCivilian()
-    @Readonly fun usesUnitSupply() = baseUnit.usesUnitSupply
+    /**
+     *  Whether this unit counts in [com.unciv.logic.civilization.managers.UnitManager.getNumUnitsToSupply]: the unit type uses supply and, with
+     *  [com.unciv.models.ModConstants.unitSupplyLikeVp], the unit is not [isNoSupply]. VP keeps such a unit in the supply-free count
+     *  (CvUnit::init, CvPlayer::GetNumUnitsToSupply), which comes to the same.
+     */
+    @Readonly
+    fun usesUnitSupply(): Boolean =
+        baseUnit.usesUnitSupply && !(civ.gameInfo.ruleset.modOptions.constants.unitSupplyLikeVp && isNoSupply())
+
+    /**
+     *  CvUnit::isNoSupply: the unit type or any promotion of the unit has [UniqueType.NoUnitSupply] (the original's counter `m_iNoSupply` of
+     *  UnitPromotions.NoSupply plus CvUnitEntry::IsNoSupply). Read off the promotions, so [UnitPromotions.addPromotion] and
+     *  [UnitPromotions.removePromotion] reset the count of [com.unciv.logic.civilization.managers.UnitManager.getNumUnitsToSupply].
+     */
+    @Readonly
+    fun isNoSupply(): Boolean = baseUnit.hasNoUnitSupply ||
+        promotions.getPromotions().any { it.hasUnique(UniqueType.NoUnitSupply, GameContext.IgnoreConditionals) }
 
     @Readonly fun isActionUntilHealed() = action?.endsWith("until healed") == true
 
@@ -436,9 +458,14 @@ class MapUnit : IsPartOfGameInfoSerialization {
     @Readonly fun hasMovement() = currentMovement > 0
 
     @Readonly
-    fun getMaxMovement(ignoreOtherUnit: Boolean = false): Int {
+    fun getMaxMovement(ignoreOtherUnit: Boolean = false): Int = getMaxMovementWhenEmbarked(isEmbarked(), ignoreOtherUnit)
+
+    /** [getMaxMovement] as it would be if the unit were embarked ([embarked] true) or not: a path search with `embarkAwarePathingLikeVp`
+     *  asks for the budget of the state the unit is in where a turn starts (CvAStar `UnitPathCacheData::baseMoves(bEmbarked)`, CvUnit::baseMoves). */
+    @Readonly
+    fun getMaxMovementWhenEmbarked(embarked: Boolean, ignoreOtherUnit: Boolean = false): Int {
         var movement =
-                if (isEmbarked()) 2
+                if (embarked) civ.gameInfo.ruleset.modOptions.constants.embarkedUnitMovement
                 else baseUnit.movement
 
         movement += getMatchingUniques(UniqueType.Movement, checkCivInfoUniques = true)
@@ -511,8 +538,26 @@ class MapUnit : IsPartOfGameInfoSerialization {
     }
 
 
-    /** How many tiles away this air unit can relocate to or reach in one move */
-    @Readonly fun getAirUnitMovementRange(): Int = getRange() * 2
+    /** How many tiles away this air unit can relocate to or reach in one move. With `airBasingLikeVp` the rebase range of the original
+     *  (CvUnit::getRebaseRange: the range times AIR_UNIT_REBASE_RANGE_MULTIPLIER percent, rounded down) - not the attack range, which stays [getRange]. */
+    @Readonly fun getAirUnitMovementRange(): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        return if (constants.airBasingLikeVp) getRange() * constants.airBasing.rebaseRangeMultiplier / 100 else getRange() * 2
+    }
+
+    /** CvPlot::countNumAirUnits adds CvUnitEntry::GetAirUnitCap of each air unit in a city that is not cargo: the slots this air unit takes up with `airBasingLikeVp`
+     *  (the sum of its `Counts [amount] against the air unit capacity`, 1 without one; 0 for a unit that is not an air unit); without the switch every air unit takes one. */
+    @Readonly fun airUnitCapacityCost(): Int {
+        if (!baseUnit.isAirUnit()) return 0
+        if (!civ.gameInfo.ruleset.modOptions.constants.airBasingLikeVp) return 1
+        var cost = 0
+        var found = false
+        forEachMatchingUnique(UniqueType.CountsAgainstAirUnitCapacity) {
+            cost += it.params[0].toInt()
+            found = true
+        }
+        return if (found) cost.coerceAtLeast(0) else 1
+    }
 
     @Readonly
     fun isEmbarked(): Boolean = isEmbarkedAt(currentTile)
@@ -561,6 +606,27 @@ class MapUnit : IsPartOfGameInfoSerialization {
         else -> true
     }
 
+    /**
+     *  CvUnit::GetMaxHitPoints: 100 (MAX_HIT_POINTS, the same in every unit of Vox Populi) plus the promotions' [UniqueType.MaxHitPointsChange]
+     *  with `unitMaxHitPointsLikeVp`, else always 100. Departure: never below 1 (the original does not guard a negative sum, no data has one).
+     *  VP's MaxHitPointsModifier column has no non-zero row, so there is no percentage term.
+     */
+    @Readonly
+    fun getMaxHealth(): Int =
+        if (civ.gameInfo.ruleset.modOptions.constants.unitMaxHitPointsLikeVp) (BASE_MAX_HEALTH + cache.maxHealthChange).coerceAtLeast(1)
+        else BASE_MAX_HEALTH
+
+    /**
+     *  CvUnit::changeMaxHitPointsChange changes the maximum and leaves the damage as it is, so the hit points move with the maximum
+     *  ([oldMaximum] is the one before the change; never lets a promotion kill the unit, which the original's IsDead would on a negative change).
+     *  Nothing with `unitMaxHitPointsLikeVp` off.
+     */
+    internal fun keepDamageAfterMaxHealthChange(oldMaximum: Int) {
+        if (!civ.gameInfo.ruleset.modOptions.constants.unitMaxHitPointsLikeVp) return
+        val newMaximum = getMaxHealth()
+        if (newMaximum != oldMaximum) health = (health + newMaximum - oldMaximum).coerceIn(1, newMaximum)
+    }
+
     @Readonly
     private fun adjacentHealingBonus(): Int {
         return getMatchingUniques(UniqueType.HealAdjacentUnits).sumOf { it.params[0].toInt() }
@@ -569,7 +635,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
     @Readonly
     fun getHealAmountForCurrentTile() = when {
         isEmbarked() -> 0 // embarked units can't heal
-        health >= 100 -> 0 // No need to heal if at max health
+        health >= getMaxHealth() -> 0 // No need to heal if at max health
         hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true) -> 0
         ResourceShortage.cannotHeal(this) -> 0 // CvUnit::canHeal: short of a resource the unit needs (resourceShortageLikeVp)
         else -> healingAmountForTile(getTile(), noTerrainDamage = true)
@@ -580,9 +646,22 @@ class MapUnit : IsPartOfGameInfoSerialization {
     /** Returns the health points [MapUnit] will receive if healing on [tile] */
     @Readonly
     fun healingAmountForTile(tile: Tile, noTerrainDamage: Boolean = false): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (constants.unitHealingLikeVp && ResourceShortage.cannotHeal(this)) return 0
         val isFriendlyTerritory = tile.isFriendlyTerritory(civ)
-
-        var healing = when {
+        var healing = if (constants.unitHealingLikeVp) {
+            val city = tile.getCity()
+            when {
+                tile.isCityCenter() -> if (city != null && city.isInResistance() && !city.isBeingRazed)
+                    constants.enemyUnitHeal else constants.cityUnitHeal
+                tile.isWater && !(isFriendlyTerritory && (baseUnit.isWaterUnit || isTransported || cache.canMoveOnWater)) -> 0
+                isFriendlyTerritory && city?.isBeingRazed == true -> constants.cityUnitHeal
+                isFriendlyTerritory && city?.isInResistance() == true -> constants.enemyUnitHeal
+                isFriendlyTerritory -> constants.friendlyUnitHeal
+                tile.getOwner()?.isAtWarWith(civ) == true -> constants.enemyUnitHeal
+                else -> constants.neutralUnitHeal
+            }
+        } else when {
             tile.isCityCenter() -> 25
             tile.isWater && isFriendlyTerritory && (baseUnit.isWaterUnit || isTransported) -> 20 // Water unit on friendly water
             tile.isWater && isFriendlyTerritory && cache.canMoveOnWater -> 20 // Treated as a water unit on friendly water
@@ -599,21 +678,62 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
         healing += getMatchingUniques(UniqueType.Heal, checkCivInfoUniques = true).sumOf { it.params[0].toInt() }
 
-        val healingCity = tile.getTilesInDistance(1).firstOrNull {
+        // CvUnit::healRate: a city in resistance (occupied, not being razed) gives the unit on its tile only the enemy base rate
+        // and the territory extras, not the city's own heal rate
+        val occupiedCityTile = constants.unitHealingLikeVp && tile.isCityCenter() &&
+            tile.getCity()?.let { it.isInResistance() && !it.isBeingRazed } == true
+        // With stateReligionHealingLikeVp, belief healing comes from the state religion below, not from the religion of a nearby city
+        val beliefsFromState = constants.unitHealingLikeVp && constants.stateReligionHealingLikeVp
+        val healingCity = if (occupiedCityTile) null else tile.getTilesInDistance(1).firstOrNull {
             it.isCityCenter() && it.getCity()!!.getMatchingUniques(UniqueType.CityHealingUnits).any()
         }?.getCity()
         if (healingCity != null) {
             healingCity.forEachMatchingUnique(UniqueType.CityHealingUnits) { unique ->
-                if (matchesFilter(unique.params[0]) && isAlly(healingCity.civ)) // only heal our units or allied units
+                val fromBelief = unique.sourceObjectType == UniqueTarget.FollowerBelief || unique.sourceObjectType == UniqueTarget.FounderBelief
+                if (!(beliefsFromState && fromBelief) && matchesFilter(unique.params[0]) && isAlly(healingCity.civ)) // only heal our units or allied units
                     healing += unique.params[1].toInt()
             }
         }
 
-        val maxAdjacentHealingBonus = currentTile.neighbors
-            .flatMap { it.getUnits() }.filter { it.civ == civ }
-            .maxOfOrNull { it.adjacentHealingBonus() }
-        if (maxAdjacentHealingBonus != null)
-            healing += maxAdjacentHealingBonus
+        if (constants.unitHealingLikeVp) {
+            var best = getMatchingUniques(UniqueType.HealSameTileUnits).sumOf { it.params[0].toInt() }
+            for (other in tile.getUnits()) {
+                if (other == this || other.civ != civ) continue
+                best = maxOf(best, other.getMatchingUniques(UniqueType.HealSameTileUnits).sumOf { it.params[0].toInt() })
+            }
+            for (neighbor in tile.neighbors) for (other in neighbor.getUnits()) {
+                if (other == this || other.civ != civ || other.type.getMovementType() != type.getMovementType()) continue
+                best = maxOf(best, other.adjacentHealingBonus())
+            }
+            healing += best
+            // CvUnit::healRate adds the extra heal of the territory kind (friendly, neutral or enemy) of the tile; a city tile counts as
+            // friendly if it is ours, otherwise as neutral. Each kind has its own aura (Get*TerritoryHealFromNearbyUnit)
+            val auraType = when {
+                tile.isCityCenter() -> if (tile.getOwner() == civ) UniqueType.HealTerritoryAura else UniqueType.HealNeutralTerritoryAura
+                isFriendlyTerritory -> UniqueType.HealTerritoryAura
+                tile.getOwner()?.isAtWarWith(civ) == true -> UniqueType.HealEnemyTerritoryAura
+                else -> UniqueType.HealNeutralTerritoryAura
+            }
+            var territoryAura = 0
+            for (other in civ.units.getCivUnits()) {
+                if (other == this || !other.hasTile() || other.type.getMovementType() != type.getMovementType()) continue
+                val distance = tile.aerialDistanceTo(other.getTile())
+                if (distance > 4) continue
+                for (unique in other.getMatchingUniques(auraType)) {
+                    if (distance <= unique.params[3].toInt() && matchesFilter(unique.params[1]) && tile.matchesFilter(unique.params[2]))
+                        territoryAura = unique.params[0].toInt()
+                }
+            }
+            healing += territoryAura
+            // MOD_BALANCE_VP: beliefs heal on our own tiles as long as we have a capital; they work through the friendly extra heal
+            if (constants.stateReligionHealingLikeVp && civ.getCapital(firstCityIfNoCapital = false) != null && tile.getOwner() == civ)
+                healing += civ.religionManager.getBeliefHealingFor(this)
+        } else {
+            val maxAdjacentHealingBonus = currentTile.neighbors
+                .flatMap { it.getUnits() }.filter { it.civ == civ }
+                .maxOfOrNull { it.adjacentHealingBonus() }
+            if (maxAdjacentHealingBonus != null) healing += maxAdjacentHealingBonus
+        }
 
         if (noTerrainDamage) return healing
         healing -= getDamageFromTerrain(tile)
@@ -665,7 +785,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
     fun currentInterceptChance(): Int {
         val chance = interceptChance().coerceAtLeast(0)
         if (!baseUnit.isAirUnit() || !civ.gameInfo.ruleset.modOptions.constants.airInterceptionChanceScalesWithHealth) return chance
-        return chance * health / 100
+        return chance * health / getMaxHealth()
     }
 
     @Readonly
@@ -682,6 +802,22 @@ class MapUnit : IsPartOfGameInfoSerialization {
         }
         return damageFactor.coerceAtLeast(0f)
     }
+
+    // StageAir: the numbers of VP's air interception and air strike defence, read with airInterceptionLikeVp / airDefenseLikeVp (see AirInterception, BattleDamage)
+
+    /** CvUnit::GetInterceptionDefenseDamageModifier: the sum of `Damage taken from interception reduced by`, negated (negative when it helps; UnitPromotions.InterceptionDefenseDamageModifier) */
+    @Readonly
+    fun interceptionDefenseDamageModifier(): Int =
+        -getMatchingUniques(UniqueType.DamageFromInterceptionReduced).sumOf { it.params[0].toInt() }
+
+    /** CvUnit::evasionProbability: the chance not to be intercepted at all, the sum of `[amount]% chance to evade interception`, at least 0 */
+    @Readonly
+    fun evasionProbability(): Int =
+        getMatchingUniques(UniqueType.EvadeInterception).sumOf { it.params[0].toInt() }.coerceAtLeast(0)
+
+    /** CvUnit::interceptionProbability: the chance to intercept times health / max health, for any unit (rounded down) */
+    @Readonly
+    fun interceptionProbability(): Int = interceptChance().coerceAtLeast(0) * health / getMaxHealth()
 
     @Readonly
     fun getDamageFromTerrain(tile: Tile = currentTile): Int {
@@ -770,7 +906,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
     private fun matchesSingleFilter(filter: String, state: GameContext = GameContext.EmptyState): Boolean {
         return when (filter) {
             "other" -> state.unit != this
-            Constants.wounded, "wounded units" -> health < 100
+            Constants.wounded, "wounded units" -> health < getMaxHealth()
             Constants.barbarians, "Barbarian" -> civ.isBarbarian
             "City-State" -> civ.isCityState
             Constants.embarked -> isEmbarked()
@@ -829,18 +965,18 @@ class MapUnit : IsPartOfGameInfoSerialization {
         val promotionBonus = (promotions.numberOfPromotions + 1).toFloat().pow(0.3f)
         var power = (baseUnit.getForceEvaluation() * promotionBonus).toInt()
         power *= health
-        power /= 100
+        power /= getMaxHealth()
         return power
     }
 
     /**
      *  CvUnit::GetPower: the unit type's power ([BaseUnit.getAiPower]) x (1000 + 125 x level) / 1000, x health / maximum health.
-     *  The level is 1 + the promotions gained (CvUnit::getLevel starts at 1); Unciv's health is out of 100.
+     *  The level is 1 + the promotions gained (CvUnit::getLevel starts at 1); Unciv's health is out of 100, or of [getMaxHealth].
      */
     @Readonly
     fun getAiPower(): Int {
         val power = baseUnit.getAiPower() * (1000 + (1 + promotions.numberOfPromotions) * 125) / 1000
-        return power * health / 100
+        return power * health / getMaxHealth()
     }
 
     @Readonly
@@ -899,9 +1035,11 @@ class MapUnit : IsPartOfGameInfoSerialization {
     fun copyStatisticsTo(newUnit: MapUnit) {
         newUnit.originCityId = originCityId // CvUnit::convert
         newUnit.health = health
+        val damage = getMaxHealth() - health
         newUnit.instanceName = instanceName
         newUnit.currentMovement = currentMovement
         newUnit.attacksThisTurn = attacksThisTurn
+        newUnit.timesAttackedBy = HashMap(timesAttackedBy)
         newUnit.isTransported = isTransported
         for (promotion in newUnit.promotions.promotions)
             if (promotion !in promotions.promotions)
@@ -912,6 +1050,9 @@ class MapUnit : IsPartOfGameInfoSerialization {
         newUnit.action = action // Needed too for Unit Overview action column
 
         newUnit.updateUniques()
+        // CvUnit::convert: setDamage(min(old damage, new maximum - 1)), the unit keeps the damage, not the hit points, and is not killed by a smaller maximum
+        if (civ.gameInfo.ruleset.modOptions.constants.unitMaxHitPointsLikeVp)
+            newUnit.health = newUnit.getMaxHealth() - damage.coerceIn(0, newUnit.getMaxHealth() - 1)
         newUnit.updateVisibleTiles()
     }
 
@@ -952,7 +1093,31 @@ class MapUnit : IsPartOfGameInfoSerialization {
             }
         }
 
+        if (cache.gainsXpFromScouting) gainScoutingXp()
+
         civ.cache.updateViewableTiles(explorerPosition)
+    }
+
+    /**
+     *  StageForms2, CvPlot::setRevealed and CvUnit::setXY (scoutingXpLikeVp, the unique `Gains XP from scouting`): the tiles this unit sees that its civilization has not explored yet
+     *  count 1 each, a natural wonder BALANCE_SCOUT_XP_RANDOM_VALUE, ancient ruins a third of it and a resource the civilization can see a fourth; BALANCE_SCOUT_XP_DENOMINATOR of them
+     *  are one experience point. City-states and barbarians gain nothing. Called before the civilization explores the tiles, so that they are still new. The original awards the
+     *  experience when the unit has moved, this when the unit's sight has changed (it moved, or its sight range did).
+     */
+    private fun gainScoutingXp() {
+        if (civ.isBarbarian || civ.isCityState) return
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        var points = 0
+        for (tile in viewableTiles) {
+            if (tile.isExplored(civ)) continue
+            points += when {
+                tile.isNaturalWonder() -> constants.scoutXpRandomValue
+                tile.tileImprovement?.isAncientRuinsEquivalent(cache.state) == true -> constants.scoutXpRandomValue / 3
+                tile.tileResource != null && civ.canSeeResource(tile.tileResource) -> constants.scoutXpRandomValue / 4
+                else -> 1
+            }
+        }
+        if (points > 0) promotions.gainExperienceTimes100(points * 100 / constants.scoutXpDenominator)
     }
 
     /** Can accept a negative number to gain movement points */
@@ -1022,13 +1187,13 @@ class MapUnit : IsPartOfGameInfoSerialization {
         health += amount *
                 if (hasUnique(UniqueType.HealingEffectsDoubled, checkCivInfoUniques = true)) 2
                 else 1
-        if (health > 100) health = 100
+        if (health > getMaxHealth()) health = getMaxHealth() // CvUnit::setDamage: range(damage, 0, GetMaxHitPoints())
         cache.updateUniques()
     }
 
     fun takeDamage(amount: Int) {
         health -= amount
-        if (health > 100) health = 100 // For cheating modders, e.g. negative tile damage
+        if (health > getMaxHealth()) health = getMaxHealth() // For cheating modders, e.g. negative tile damage
         if (health < 0) health = 0
         if (health == 0) destroy()
         else cache.updateUniques()
@@ -1068,17 +1233,29 @@ class MapUnit : IsPartOfGameInfoSerialization {
         isDestroyed = true
     }
 
-    fun gift(recipient: Civilization) {
+    /** @param keepsPromotions `false` for a gift by the player (CvUnit::gift): the unit then loses its `Lost when the unit is gifted` promotions (giftPromotionLossLikeVp, see [losePromotionsOnGift]) */
+    fun gift(recipient: Civilization, keepsPromotions: Boolean = true) {
         stopEscorting()
         civ.units.removeUnit(this)
         civ.cache.updateViewableTiles()
         // all transported units should be gift as well
         currentTile.getUnits().filter { it.isTransported && isTransportTypeOf(it) }
-                .forEach { unit -> unit.gift(recipient) }
+                .forEach { unit -> unit.gift(recipient, keepsPromotions) }
         val giver = civ
         assignOwner(recipient)
         if (recipient.isCityState && giver.isMajorCiv) giftedBy = giver.civID
+        if (!keepsPromotions) losePromotionsOnGift()
         recipient.cache.updateViewableTiles()
+    }
+
+    /**
+     *  StageForms2, CvUnit::convert with bIsGift (the new unit gets a promotion of the old one only if it is not LostOnGifting, else only the free promotions of its unit type):
+     *  with ModConstants.giftPromotionLossLikeVp the promotions with the unique `Lost when the unit is gifted` that the unit's type does not give for free are removed.
+     */
+    private fun losePromotionsOnGift() {
+        if (!civ.gameInfo.ruleset.modOptions.constants.giftPromotionLossLikeVp) return
+        for (promotion in promotions.getPromotions().filter { it.hasUnique(UniqueType.LostWhenGifted) && it.name !in baseUnit.promotions }.toList())
+            promotions.removePromotion(promotion.name)
     }
 
     /** Destroys the unit and gives stats if its a great person */
@@ -1163,9 +1340,12 @@ class MapUnit : IsPartOfGameInfoSerialization {
         if (baseUnit.isAirUnit()){
             if (!tile.isCityCenter()) isTransported = true
             else {
-                val currentUntransportedUnits = tile.getUnits().count { it.type.isAirUnit() && !it.isTransported }
-                // Tile units includes us, we were just added
-                isTransported = currentUntransportedUnits > tile.getCity()!!.getMaxAirUnits()
+                val city = tile.getCity()!!
+                // Tile units includes us, we were just added. With airBasingLikeVp a unit enters while the slots in use without it are fewer than
+                // the capacity (CvUnit::canRebaseAt), so the one that was already full is the overflow, whatever the unit's cost
+                isTransported = if (civ.gameInfo.ruleset.modOptions.constants.airBasingLikeVp)
+                    city.getAirUnitSlotsUsed() - airUnitCapacityCost() >= city.getMaxAirUnits()
+                else tile.getUnits().count { it.type.isAirUnit() && !it.isTransported } > city.getMaxAirUnits()
             }
         }
         moveThroughTile(tile)
@@ -1207,7 +1387,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
             goldGained += unique.params[0].toInt()
             val recruitedUnit = civ.gameInfo.barbarians.spawnBarbarian(tile, civ)
                 ?: return@forEachMatchingUnique
-            recruitedUnit.health = 100
+            recruitedUnit.health = recruitedUnit.getMaxHealth()
             recruitedUnit.currentMovement = 0f
             civ.addNotification(
                 "An enemy [${recruitedUnit.name}] has joined us!",
@@ -1235,7 +1415,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
     /** CvUnit::GetScrapGold: what disbanding this unit in its own territory gives, with the units it carries */
     @Readonly
-    fun getScrapGold(): Int = baseUnit.getDisbandGold(civ, health) +
+    fun getScrapGold(): Int = baseUnit.getDisbandGold(civ, 100 * health / getMaxHealth()) +
         currentTile.getUnits().filter { it.isTransported && isTransportTypeOf(it) }.sumOf { it.getScrapGold() }
 
     fun disband() {
@@ -1352,4 +1532,9 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
     @Readonly fun isNuclearWeapon() = hasUnique(UniqueType.NuclearWeapon)
     //endregion
+
+    companion object {
+        /** MAX_HIT_POINTS, and the `MaxHitPoints` of every unit of Vox Populi: the maximum of a unit before the promotions' `[amount] maximum hit points` */
+        const val BASE_MAX_HEALTH = 100
+    }
 }

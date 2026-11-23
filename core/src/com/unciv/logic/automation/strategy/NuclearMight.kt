@@ -23,7 +23,7 @@ object NuclearMight {
     @Readonly
     internal fun attackStrength(unit: MapUnit): Int {
         val strength = maxOf(unit.baseUnit.strength, unit.baseUnit.rangedStrength)
-        val woundedPenalty = (100 - unit.health) * 33 / 100
+        val woundedPenalty = (unit.getMaxHealth() - unit.health) * 33 / 100
         return strength * (100 - woundedPenalty) / 100
     }
 

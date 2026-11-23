@@ -56,7 +56,7 @@ object GarrisonMoves {
             // Note that garrisons do not need to be "recruited" into tactical AI; allow valid land garrisons, but don't use recon units as garrisons
             var garrison = city.getGarrison()?.takeIf { UnitAiTypes.defaultOf(it.baseUnit, ctx.rules) != UnitAiType.EXPLORE }
             if (garrison != null) {
-                if (garrison.health >= MAX_HEALTH) {
+                if (garrison.health >= garrison.getMaxHealth()) {
                     val upgraded = UseGoldAutomation.upgradeNow(garrison)
                     if (upgraded != null) {
                         ctx.unitProcessed(upgraded)
@@ -109,7 +109,7 @@ object GarrisonMoves {
         for (ship in ships) {
             if (ship.isDestroyed || ship in ctx.cache.processedUnits) continue
             // Upgrade, or else an opportunity attack that may move the ship
-            if (ship.health >= MAX_HEALTH) {
+            if (ship.health >= ship.getMaxHealth()) {
                 val upgraded = UseGoldAutomation.upgradeNow(ship)
                 if (upgraded != null) {
                     ctx.unitProcessed(upgraded)
@@ -146,5 +146,4 @@ object GarrisonMoves {
         Battle.attackOrNuke(shooter, AttackableTile(city.getCenterTile(), target.getTile(), 0f, target))
     }
 
-    private const val MAX_HEALTH = 100
 }

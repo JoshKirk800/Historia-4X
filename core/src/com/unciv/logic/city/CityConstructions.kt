@@ -740,9 +740,9 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         val civ = city.civ
 
         if (building.cityHealth > 0) {
-            // city built a building that increases health so add a portion of this added health that is
-            // proportional to the city's current health
-            city.health += (building.cityHealth.toFloat() * city.health.toFloat() / city.getMaxHealth().toFloat()).toInt()
+            // VP CvCity::ChangeExtraHitPoints preserves absolute damage when maximum HP changes.
+            city.health += if (civ.gameInfo.ruleset.modOptions.constants.cityCombatLikeVp) building.cityHealth
+            else (building.cityHealth.toFloat() * city.health.toFloat() / city.getMaxHealth().toFloat()).toInt()
         }
         builtBuildingObjects = builtBuildingObjects.withItem(building)
         builtBuildings.add(buildingName)
@@ -752,6 +752,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
             civ.ai.apolloProgramBuilt = true
 
         updateUniques()
+        applyRetroactivePromotions(building)
 
         /** Support for [UniqueType.CreatesOneImprovement] */
         applyCreateOneImprovement(building)
@@ -826,12 +827,32 @@ class CityConstructions : IsPartOfGameInfoSerialization {
             triggerFilter = { building.matchesFilter(it.params[0], stateForConditionals) && city.matchesFilter(it.params[1]) }, effectFilter = allowed)
     }
 
+    /** VP CvCity::processBuilding and SetRetroactivePromotion: grant, including when the building is removed. */
+    private fun applyRetroactivePromotions(building: Building) {
+        if (!city.civ.gameInfo.ruleset.modOptions.constants.retroactiveCityPromotionsLikeVp) return
+        for (unique in building.getMatchingUniques(UniqueType.UnitStartingPromotions, city.state)) {
+            if (!city.matchesFilter(unique.params[1])) continue
+            val promotion = city.getRuleset().unitPromotions[unique.params[2]] ?: continue
+            for (unit in city.civ.units.getCivUnits()) {
+                val origin = unit.getOriginCity()
+                if (origin != city && (origin != null || !city.isCapital())) continue
+                val filter = unique.params[0]
+                if (!unit.promotions.isApplicableToUnit(promotion) ||
+                    filter != "relevant" && !unit.matchesFilter(filter)) continue
+                unit.promotions.addPromotion(promotion.name, isFree = true)
+            }
+        }
+    }
+
     fun removeBuilding(buildingName: String) {
         val buildingObject = city.getRuleset().buildings[buildingName]
         if (buildingObject != null) removeBuilding(buildingObject)
     }
 
     fun removeBuilding(building: Building) {
+        if (building in builtBuildingObjects) applyRetroactivePromotions(building)
+        if (city.civ.gameInfo.ruleset.modOptions.constants.cityCombatLikeVp && building in builtBuildingObjects)
+            city.health = (city.health - building.cityHealth).coerceAtLeast(1)
         builtBuildingObjects = builtBuildingObjects.withoutItem(building)
         builtBuildings.remove(building.name)
         // CvCityBuildings::SetNumRealBuildingTimed: a building that is gone takes its investment with it

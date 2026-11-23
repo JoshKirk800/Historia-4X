@@ -121,8 +121,8 @@ enum class UnitOverviewTabColumn(
 
     Health(isNumeric = true) {
         override fun getEntryValue(item: MapUnitView) = item.unitHealth
-        override fun getEntryString(item: MapUnitView) = if (item.unitHealth == 100) null else item.unitHealth.tr()
-        override fun getTotalsActor(items: Iterable<MapUnitView>) = items.count { it.unitHealth < 100 }.toCenteredLabel()
+        override fun getEntryString(item: MapUnitView) = if (item.unitHealth == item.unitMaxHealth) null else item.unitHealth.tr()
+        override fun getTotalsActor(items: Iterable<MapUnitView>) = items.count { it.unitHealth < it.unitMaxHealth }.toCenteredLabel()
     },
 
     XP {

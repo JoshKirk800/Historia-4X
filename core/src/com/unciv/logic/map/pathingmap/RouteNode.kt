@@ -115,6 +115,7 @@ value class RouteNode(val bits: Long=0L) {
         parentTile: Tile,
         damagingTiles: Int,
         damaging: Boolean,
+        turnEmbarked: Boolean = false,
     ) : this(
         toTileIdxBits(tile) or
             toRelationshipLevelBits(relationshipLevel) or
@@ -123,7 +124,8 @@ value class RouteNode(val bits: Long=0L) {
             toTurnsBits(turns) or
             toParentClockDirBits(tile, parentTile) or
             toDamagingTilesBits(damagingTiles) or
-            toDamagingBits(damaging)
+            toDamagingBits(damaging) or
+            toTurnEmbarkedBits(turnEmbarked)
     ) {
         require(tile.zeroBasedIndex < tile.tileMap.tileList.size) { "tileList ${tile.zeroBasedIndex} exceeds max ${tile.tileMap.tileList.size}" }
         require(tile.tileMap.tileList.size <= TILE_IDX_LO_MASK) { "tileList ${tile.tileMap.tileList.size} exceeds max $TILE_IDX_LO_MASK" }
@@ -172,6 +174,9 @@ value class RouteNode(val bits: Long=0L) {
     val canStopOn: Boolean get() = moveSinceStoppable == FixedPointMovement.FPM_ZERO
 
     val endTurnWithoutMoreDamage: Boolean get() { require(initialized); return ((bits shr DAMAGING_OFFSET) and 1L) == 0L }
+
+    /** Whether the turn this node is in began with the unit embarked (`embarkAwarePathingLikeVp`), so that the movement of the turn is [PathingMapCacheKey.embarkedFullMove] */
+    val turnEmbarked: Boolean get() { require(initialized); return ((bits shr TURN_EMBARKED_OFFSET) and 1L) != 0L }
 
     val damagingTiles: Int get() { require(initialized); return ((bits shr DAMAGE_TILES_OFFSET) and DAMAGE_TILES_LO_MASK).toInt() }
 
@@ -228,7 +233,9 @@ value class RouteNode(val bits: Long=0L) {
         private const val NO_PARENT_TILE_VALUE = 14
         // [RouteNode] bit 50 tracks whether THIS tile itself is damaging, unconditionally.
         private const val DAMAGING_OFFSET = PARENT_TILE_OFFSET + PARENT_TILE_BIT_COUNT
-        // [RouteNode] bits 51-60 (10b) are also padding, only used by PrioritizedNode's
+        // [RouteNode] bit 51 tracks whether the turn this node is in began embarked (always 0 unless `embarkAwarePathingLikeVp`).
+        private const val TURN_EMBARKED_OFFSET = DAMAGING_OFFSET + 1
+        // [RouteNode] bits 52-60 (9b) are also padding, only used by PrioritizedNode's
         // underestimatedTotal field.
         // bits 61-62 (2b = 4turns) are the number of turns ended in damaging tiles.
         private const val DAMAGE_TILES_OFFSET = UNDERESTIMATED_TOTAL_OFFSET + UNDERESTIMATED_TOTAL_BIT_COUNT
@@ -258,6 +265,9 @@ value class RouteNode(val bits: Long=0L) {
         private fun toDamagingBits(damaging: Boolean): Long
             = (if (damaging) 1L else 0L) shl DAMAGING_OFFSET
         @Pure
+        private fun toTurnEmbarkedBits(turnEmbarked: Boolean): Long
+            = (if (turnEmbarked) 1L else 0L) shl TURN_EMBARKED_OFFSET
+        @Pure
         private fun toRelationshipLevelBits(relationshipLevel: RelationshipLevel): Long
             = (MAX_RELATIONSHIP_LEVEL - relationshipLevel.ordinal).toLong() shl RELATIONSHIP_LEVEL_OFFSET
 
@@ -273,7 +283,7 @@ value class RouteNode(val bits: Long=0L) {
             false,
         )
         @Pure
-        fun rootNode(tile: Tile, moveThisTurn: FixedPointMovement) = RouteNode(
+        fun rootNode(tile: Tile, moveThisTurn: FixedPointMovement, turnEmbarked: Boolean = false) = RouteNode(
             tile,
             RelationshipLevel.Favorable, // irrelevant since we start here
             FixedPointMovement.FPM_ZERO,
@@ -282,6 +292,7 @@ value class RouteNode(val bits: Long=0L) {
             tile,
             0,
             false, // irrelevant: the root is never a candidate parentTile in pathAsListNoDamage
+            turnEmbarked,
         )
     }
 }

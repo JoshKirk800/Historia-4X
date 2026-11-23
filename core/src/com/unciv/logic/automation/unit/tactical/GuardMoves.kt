@@ -26,7 +26,6 @@ object GuardMoves {
     private const val GOODY_RANGE_AT_WAR = 6
     private const val GOODY_RANGE_AT_PEACE = 11
     private const val CAMP_UNITS = 3
-    private const val MAX_HEALTH = 100
 
     /** CvTacticalAI::PlotBastionMoves([turnsAway]) */
     fun plotBastionMoves(ctx: TacticalContext, turnsAway: Int) {
@@ -50,7 +49,7 @@ object GuardMoves {
         ctx.unitProcessed(unit)
         // Move may fail if the plot is already occupied (can happen if another unit moved there during this turn)
         if (!arrived) return null
-        if (unit.health >= MAX_HEALTH) UseGoldAutomation.upgradeNow(unit)?.let { ctx.unitProcessed(it) }
+        if (unit.health >= unit.getMaxHealth()) UseGoldAutomation.upgradeNow(unit)?.let { ctx.unitProcessed(it) }
         unit.takeUnless { it.isDestroyed }?.fortifyIfCan()
         return unit
     }

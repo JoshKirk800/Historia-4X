@@ -285,7 +285,7 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
         val landUnit = unit.baseUnit.isLandUnit
         if (landUnit == tile.isWater) return false
         if (landUnit && tile.getContinent() != unit.getTile().getContinent() && !civ.tech.unitsCanEmbark) return false
-        if (unit.health < MAX_HEALTH / 2 && tile.terrainFeatures.any { ruleset.terrains[it]?.hasUnique(UniqueType.NullifyYields) == true }) return false
+        if (unit.health < unit.getMaxHealth() / 2 && tile.terrainFeatures.any { ruleset.terrains[it]?.hasUnique(UniqueType.NullifyYields) == true }) return false
         return tile == unit.getTile() || tile.civilianUnit == null
     }
 
@@ -380,6 +380,5 @@ class BuilderTaskingAi(val civ: Civilization, val routes: PlannedRoutes = Planne
 
     companion object {
         private const val FOREST = "Forest"
-        private const val MAX_HEALTH = 100
     }
 }

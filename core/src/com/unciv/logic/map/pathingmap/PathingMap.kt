@@ -73,6 +73,9 @@ class PathingMap(
     private val cost: TileMovementCost,
     private val tileRoadCost: TileRoadCost,
     private val relationshipLevel: (Tile) -> RelationshipLevel,
+    /** Whether a turn that starts on the tile is one of an embarked unit, and so has [PathingMapCacheKey.embarkedFullMove]
+     *  (only the unit's map with `embarkAwarePathingLikeVp` says yes: CvAStar baseMoves(needsEmbarkation(plot)) at each turn start) */
+    private val turnEmbarkedAt: TilePredicate = TilePredicate { false },
 ) {
     @Cache
     private val cacheRef = AtomicReference<PathingMapCache?>(null)
@@ -107,7 +110,7 @@ class PathingMap(
             MAX_MOVE_THIS_TURN
         )
         val tile = tileMap[latestKey.startingPoint]
-        val root = RouteNode.rootNode(tile, movementUsedThisTurn)
+        val root = RouteNode.rootNode(tile, movementUsedThisTurn, turnEmbarkedAt(tile))
         newCache.routeNodes[tile.zeroBasedIndex] = root.bits
         newCache.nodesNeedingNeighbors[tile.zeroBasedIndex] = true
         // compareAndSet, in case another thread tried to initialize in parallel
@@ -212,7 +215,7 @@ class PathingMap(
 
         // now recalculate the optimal stop positions
         val startTile = tileMap[cache.key.startingPoint]
-        val fpmFullMovement = cache.key.fullMove
+        var fpmFullMovement = cache.key.fullMove // the movement of the turn in progress; follows the state of the tile each turn starts on
         val result = mutableListOf<Tile>()
         fun addWaypoint(tile: Tile) {
             if (tile != startTile && (result.isEmpty() || result.last() != tile)) result.add(tile)
@@ -256,6 +259,7 @@ class PathingMap(
                     moveThisTurn = moveCost
                 }
                 addWaypoint(endTurnTile)
+                fpmFullMovement = cache.key.fullMoveOfTurn(turnEmbarkedAt(endTurnTile))
                 lastFullSafeTile = endTurnTile
                 lastStoppableTile = endTurnTile
                 moveSinceFullSafe = moveThisTurn
@@ -404,6 +408,7 @@ class PathingMap(
             cache.forkForPathfinding(),
             timeLimitTurns.coerceAtMost(MAX_VALID_TURNS),
             tileMap,
+            turnEmbarkedAt,
         )
         finder.stepUntilDestination()
 
@@ -431,6 +436,7 @@ class PathingMap(
             cache.forkForPathfinding(),
             timeLimitTurns.coerceAtMost(MAX_VALID_TURNS),
             tileMap,
+            turnEmbarkedAt,
         )
         val result = finder.stepUntilDestination()
 
@@ -496,13 +502,31 @@ class PathingMap(
             // These two precalculated because for some reason they're ridiculously slow
             val selfFullMove = unit.getMaxMovement()
             val otherUntilFullMove = if (includeEscortUnit) unit.getOtherEscortUnit()?.getMaxMovement() ?: MAX_VALID_TURNS else MAX_VALID_TURNS
+            // embarkAwarePathingLikeVp: each turn has the movement of the state the unit is in where the turn starts, so unlike the two values
+            // above the budgets are asked again whenever the key is (the unit can embark or disembark between two searches)
+            val embarkAware = { unit.civ.gameInfo.ruleset.modOptions.constants.embarkAwarePathingLikeVp }
             val getCurrentCacheKey = {
                 val escort = if (includeEscortUnit && unit.isEscorting()) unit.getOtherEscortUnit() else null
-                PathingMapCacheKey(
-                    unit.currentTile.position,
-                    fpmFromMovement(unit.currentMovement).coerceAtMost(escort?.currentMovement?.toFixedPointMove() ?: MAX_MOVE_THIS_TURN),
-                    fpmFromMovement(selfFullMove.coerceAtMost(if (escort != null) otherUntilFullMove else MAX_VALID_TURNS)),
+                val moveRemaining = fpmFromMovement(unit.currentMovement).coerceAtMost(escort?.currentMovement?.toFixedPointMove() ?: MAX_MOVE_THIS_TURN)
+                if (!embarkAware()) {
+                    PathingMapCacheKey(
+                        unit.currentTile.position,
+                        moveRemaining,
+                        fpmFromMovement(selfFullMove.coerceAtMost(if (escort != null) otherUntilFullMove else MAX_VALID_TURNS)),
                     )
+                } else {
+                    fun turnMovement(embarked: Boolean) = fpmFromMovement(
+                        unit.getMaxMovementWhenEmbarked(embarked).coerceAtMost(escort?.getMaxMovementWhenEmbarked(embarked) ?: MAX_VALID_TURNS))
+                    val startsEmbarked = unit.isEmbarked()
+                    PathingMapCacheKey(
+                        unit.currentTile.position,
+                        moveRemaining,
+                        turnMovement(startsEmbarked),
+                        turnMovement(false),
+                        turnMovement(true),
+                        startsEmbarked,
+                    )
+                }
             }
             return PathingMap(
                 unit.currentTile.tileMap,
@@ -524,7 +548,8 @@ class PathingMap(
                     )
                 },
                 { fpmFromMovement(it.getConnectionStatus(unit.civ).movement) },
-                { tile -> tile.getOwner()?.getDiplomacyManager(unit.civ)?.relationshipIgnoreAfraid() ?: RelationshipLevel.Favorable }
+                { tile -> tile.getOwner()?.getDiplomacyManager(unit.civ)?.relationshipIgnoreAfraid() ?: RelationshipLevel.Favorable },
+                { embarkAware() && unit.isEmbarkedAt(it) }
             )
         }
 

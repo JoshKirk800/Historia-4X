@@ -596,6 +596,113 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         return if (civInfo.cities.any { it.religion.religionThisIsTheHolyCityOf == founded.name }) founded else null
     }
 
+    /** The pantheon this civilization founded, which it keeps for good even when its major religion also carries the belief
+     *  (CvGameReligions::GetPantheonCreatedByPlayer). */
+    @Readonly
+    private fun getOwnPantheon(): Religion? =
+        civInfo.gameInfo.religions.values.filter { it.foundingCiv == civInfo && it.isPantheon() }
+            .sortedWith(compareBy<Religion>({ it.foundingTurn }, { it.name })).firstOrNull()
+
+    /** The religions in the order the original keeps them in CvGameReligions::m_CurrentReligions (order of founding), for ties. */
+    @Readonly
+    private fun religionsInFoundingOrder(): List<Religion> =
+        civInfo.gameInfo.religions.values.sortedWith(compareBy<Religion>({ it.foundingTurn }, { it.name }))
+
+    /** What the civilization's state religion is, as CvPlayerReligions::UpdateStateReligion settles it (Vox Populi, MOD_BALANCE_VP):
+     *  1. the religion it founded, while it still owns its holy city; else
+     *  2. of the holy cities of other major religions it owns (conquered), the religion with the most followers in its cities
+     *     (CvPlayerReligions::GetNumDomesticFollowers), a tie going to the older religion; else
+     *  3. the religion followed by most of its cities (CvPlayerReligions::ComputeMajority: a true majority; every pantheon counts as one religion,
+     *     which for the owner is its own pantheon, or none).
+     *  The original's forced override (SetStateReligionOverride, used only by scripts) is not modelled. */
+    @Readonly
+    fun getStateReligion(): Religion? {
+        getFounderBenefitsReligion()?.let { return it }
+
+        val owned = religionsInFoundingOrder().filter { candidate ->
+            candidate.isMajorReligion() && civInfo.cities.any { it.religion.religionThisIsTheHolyCityOf == candidate.name }
+        }
+        if (owned.isNotEmpty()) {
+            var best = owned.first()
+            var bestFollowers = civInfo.cities.sumOf { it.religion.getFollowersOf(best.name) }
+            for (candidate in owned.drop(1)) {
+                val followers = civInfo.cities.sumOf { it.religion.getFollowersOf(candidate.name) }
+                if (followers > bestFollowers) { best = candidate; bestFollowers = followers }
+            }
+            return best
+        }
+
+        val numCities = civInfo.cities.size
+        var pantheonCities = 0
+        val cityCounts = Counter<String>()
+        for (city in civInfo.cities) {
+            val majority = city.religion.getMajorityReligion() ?: continue
+            if (majority.isPantheon()) pantheonCities++ else cityCounts.add(majority.name, 1)
+        }
+        if (pantheonCities * 2 > numCities) return getOwnPantheon()
+        val majority = cityCounts.entries.firstOrNull { it.value * 2 > numCities } ?: return null
+        return civInfo.gameInfo.religions[majority.key]
+    }
+
+    /** Whether the belief counts for [religion] in the way CvReligionBeliefs::IsBeliefValid answers it when CvUnit::healRate asks for the friendly heal change
+     *  (with the holy city as city, so beliefs that act through cities need that city to be ours and to follow the religion). */
+    @Readonly
+    private fun isBeliefValidForHealing(belief: Belief, religion: Religion): Boolean {
+        val holyCity = civInfo.gameInfo.getCities().firstOrNull { it.religion.religionThisIsTheHolyCityOf == religion.name }
+        val eligibleForFounderBenefits = if (holyCity == null) religion.isPantheon() && religion.foundingCiv == civInfo else holyCity.civ == civInfo
+        val pantheonInReligion = { getOwnPantheon()?.hasBelief(belief.name) == true && religion.hasBelief(belief.name) }
+        val majorityHere = holyCity?.religion?.getMajorityReligion() == religion
+        return when (belief.type) {
+            BeliefType.Founder, BeliefType.Enhancer -> eligibleForFounderBenefits
+            BeliefType.Follower -> holyCity == null || (majorityHere && holyCity.civ == civInfo)
+            BeliefType.Reformation -> (holyCity == null || majorityHere) && (eligibleForFounderBenefits || getStateReligion() == religion)
+            BeliefType.Pantheon -> holyCity == null || ((majorityHere || pantheonInReligion()) && holyCity.civ == civInfo)
+            else -> true
+        }
+    }
+
+    /** The first belief of the pantheon of this civilization, as CvGameReligions::GetBeliefInPantheon finds it: the first religion in founding order
+     *  that is the pantheon founded by us, or is the (non-pantheon) state religion, gives its first belief. */
+    @Readonly
+    private fun getBeliefInPantheon(stateReligion: Religion?): Belief? {
+        for (candidate in religionsInFoundingOrder()) {
+            if (candidate.foundingCiv == civInfo && candidate.isPantheon()) return candidate.getAllBeliefsOrdered().firstOrNull()
+            if (!candidate.isPantheon() && candidate == stateReligion) return candidate.getAllBeliefsOrdered().firstOrNull()
+        }
+        return null
+    }
+
+    /** The HP per turn [unit] heals in territory of this civilization through beliefs, as CvUnit::healRate adds them (MOD_BALANCE_VP) to its friendly heal:
+     *  the state religion's beliefs, the belief of the second religion of the capital if the civilization may use it (secondary pantheon), and the
+     *  civilization's own pantheon belief, which it keeps for good (MOD_BALANCE_PERMANENT_PANTHEONS) unless the state religion already has it.
+     *  The caller checks that the tile is ours and that we have a capital. The belief effect that the original calls FriendlyHealChange is
+     *  [UniqueType.CityHealingUnits] here. */
+    @Readonly
+    fun getBeliefHealingFor(unit: MapUnit): Int {
+        val stateReligion = getStateReligion()
+        var total = 0
+        var secondary: Belief? = null
+        if (stateReligion != null) {
+            secondary = civInfo.getCapital(firstCityIfNoCapital = false)?.religion?.getSecondaryPantheonBelief()
+            for (belief in stateReligion.getAllBeliefsOrdered())
+                if (isBeliefValidForHealing(belief, stateReligion)) total += healingOfBelief(belief, unit)
+            if (secondary != null) total += healingOfBelief(secondary, unit)
+        }
+
+        if (civInfo.gameInfo.religions.values.none { it.foundingCiv == civInfo }) return total // CvGameReligions::HasCreatedPantheon
+        val pantheonBelief = getBeliefInPantheon(stateReligion) ?: return total
+        if (pantheonBelief == secondary) return total
+        val ownPantheon = getOwnPantheon()
+        val alreadyInReligion = stateReligion != null && ownPantheon?.hasBelief(pantheonBelief.name) == true && stateReligion.hasBelief(pantheonBelief.name)
+        if (ownPantheon != null && !alreadyInReligion) total += healingOfBelief(pantheonBelief, unit)
+        return total
+    }
+
+    @Readonly
+    private fun healingOfBelief(belief: Belief, unit: MapUnit): Int =
+        belief.uniqueMap.getMatchingUniques(UniqueType.CityHealingUnits, unit.cache.state)
+            .filter { unit.matchesFilter(it.params[0]) }.sumOf { it.params[1].toInt() }
+
     @Readonly
     fun getMajorityReligion(): Religion? {
         // let's count for each religion (among those actually presents in civ's cities)

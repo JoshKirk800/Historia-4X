@@ -192,13 +192,12 @@ object TacticalAi {
             if (safePlot != unit.getTile()) TacticalMoves.moveSwapping(unit, safePlot)
             var current = unit
             // Do not upgrade a hurt unit
-            if (!current.isDestroyed && current.health >= MAX_HEALTH) UseGoldAutomation.upgradeNow(current)?.let { current = it }
+            if (!current.isDestroyed && current.health >= current.getMaxHealth()) UseGoldAutomation.upgradeNow(current)?.let { current = it }
             if (!current.isDestroyed && !current.hasMovement()) ctx.unitProcessed(current)
         }
         if (ctx.civ.isAIOrAutoPlaying()) TacticalAttacks.cityFallbackShots(ctx)
     }
 
-    private const val MAX_HEALTH = 100
 
     /**
      *  CvTacticalAI::PlotDefensiveAirlifts for one zone: not for city-states. In the zone around one of our cities that allows airlifts

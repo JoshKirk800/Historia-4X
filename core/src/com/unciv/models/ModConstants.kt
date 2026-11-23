@@ -1,5 +1,6 @@
 package com.unciv.models
 
+import com.unciv.models.ruleset.CityCombatConstants
 import com.unciv.utils.withHash
 import java.lang.reflect.Modifier
 
@@ -19,6 +20,203 @@ class ModConstants {
     // Max amount of experience that can be gained from combat with barbarians
     @Suppress("SpellCheckingInspection") // Pfrom is not a word ;)
     var maxXPfromBarbarians = 30
+
+    /** VP 5.4.8 CvUnitCombat::ResolveMeleeCombat: only the first attack each turn grants attacker XP. */
+    var combatXpFirstAttackOnly = false
+
+    /** VP 5.4.8 CvCity::SetRetroactivePromotion grants trained promotions to existing units. */
+    var retroactiveCityPromotionsLikeVp = false
+
+    /** VP 5.4.8 IsPromotionValidForCivilianUnitType checks the specific civilian unit type. */
+    var civilianPromotionApplicabilityLikeVp = false
+
+    /** VP 5.4.8 CvUnit::maxXPValue and changeExperienceTimes100 cap awards against barbarians and minors. */
+    var combatXpCapsLikeVp = false
+
+    // --- Mounted flag (StageMounted) ---
+    /** VP 5.4.8 CvUnitEntry::IsMounted, CvUnit::unitCombatModifier / GetMaxAttackStrength / GetMaxDefenseStrength ("hack: mounted units can have secondary
+     *  combat class") and CvUnit::canAcquirePromotion (`MountedOnly`): a unit with the unique `Is a mounted unit` is also matched by `<vs [Mounted] units>`
+     *  strength conditionals when its own unit type is not Mounted, and a promotion with `Only for mounted units` is refused to other units. false: neither unique is read. */
+    var mountedUnitFlagLikeVp = false
+    var maxXPfromCityStates = -1
+
+    /** VP 5.4.8 CvUnit::GetDamageCombatModifier applies wound penalties to strength, except ranged defence. */
+    var combatHealthStrengthLikeVp = false
+    var enemyCombatAurasLikeVp = false
+
+    /** VP 5.4.8 CvUnit::GetMaxHitPoints: a unit's maximum hit points are the base 100 plus the sum of the promotions' `MaxHitPointsChange`
+     *  (the unique `[amount] maximum hit points`) instead of always 100. Health, healing, damage, the wounded test, the captured and the
+     *  upgraded unit's health follow the unit's own maximum (CvUnit::setDamage, GetScrapGold, CvUnit::convert, CvUnit::GetMaxHitPoints);
+     *  the health lost stays the same when a promotion changes the maximum (CvUnit::changeMaxHitPointsChange). false: 100 and the unique is not read. */
+    var unitMaxHitPointsLikeVp = false
+
+    /** VP 5.4.8 CvUnit::getCaptureUnitType, getCaptureDefinition, createCaptureUnit: a captured civilian becomes the capturer's own unit of the unit's `Capture` class
+     *  (the unique `Becomes [baseUnitFilter] when captured`, resolved with the capturer's unique replacements) instead of the hard-coded Settler to Worker rule.
+     *  With barbarians involved (owner or capturer) the unit stays as it is; a city-state destroys a resulting settler. Units without the unique follow the old rules. false: Settlers become Workers. */
+    var captureClassLikeVp = false
+
+    // ---- StageForms2: promotion and unit columns of Vox Populi, each off (the uniques are not read) until the military flip ----
+    /** VP 5.4.8 CvUnit::GetFlankPower (UnitPromotions.ExtraFlankPower), read by CvPlot::GetNumEnemyUnitsAdjacent with bConsiderFlanking in CvPlot::GetEffectiveFlankingBonus:
+     *  a unit that supports a flank counts as 1 plus the sum of its `[amount] extra flanking power` instead of always 1. */
+    var flankPowerLikeVp = false
+
+    /** VP 5.4.8 CvUnitMovement::GetCostsForMove, GetMovementCostMultiplierFromPromotions, GetMovementCostAdderFromPromotions (UnitPromotions_Terrains / _Features IgnoreTerrainCostIn,
+     *  HalfMove, ExtraMove, with MOD_BALANCE_SANE_UNIT_MOVEMENT_COST off as in VP): the uniques `Ignores terrain cost in [tileFilter] tiles`, `Half movement in [tileFilter] tiles` and
+     *  `[amount] extra movement cost in [tileFilter] tiles` change the cost of entering a tile, in every movement cost, path search and reach calculation. */
+    var terrainMovementPromotionsLikeVp = false
+
+    /** VP 5.4.8 CvPlot::setRevealed (counts the tiles a unit reveals, weighted by BALANCE_SCOUT_XP_RANDOM_VALUE) and CvUnit::setXY (awards BALANCE_SCOUT_XP_DENOMINATOR points per XP):
+     *  the unique `Gains XP from scouting`. */
+    var scoutingXpLikeVp = false
+    /** VP 5.4.8 BALANCE_SCOUT_XP_RANDOM_VALUE: the points of a natural wonder a unit reveals (a third of it for ancient ruins, a fourth for a resource). Read with [scoutingXpLikeVp]. */
+    var scoutXpRandomValue = 12
+    /** VP 5.4.8 BALANCE_SCOUT_XP_DENOMINATOR: the points of revealed tiles that make one experience point. Read with [scoutingXpLikeVp]. */
+    var scoutXpDenominator = 10
+
+    /** VP 5.4.8 CvUnit::pillage (changeExperienceTimes100(GetXPFromPillaging() * 100) for an improvement) and CvUnit::shouldPillage (a unit with XP from pillaging pillages whenever it can):
+     *  the unique `[amount] XP when pillaging`. */
+    var pillageXpLikeVp = false
+
+    /** VP 5.4.8 CvUnit::convert (bIsGift), CvMinorCivIncomingUnitGift::applyToUnit: a gifted unit does not keep the promotions with the unique `Lost when the unit is gifted`, unless its
+     *  unit type gives them for free. */
+    var giftPromotionLossLikeVp = false
+
+    /** VP 5.4.8 CvGame::GetRandomUniqueUnitType (IsMinorCivGift, IsInvalidMinorCivGift), CvPlayer::GetCompetitiveSpawnUnitType with bMinorCivGift, CvPlayer::canTrainUnit: the uniques
+     *  `Can be gifted by city-states` and `Cannot be gifted by city-states` take part in the choice of a city-state's unique unit and of the unit it gives its patron. */
+    var cityStateGiftUnitFlagsLikeVp = false
+
+    // --- Barbarian camps (StageBarbarians, VP slice M8) ---
+    /** VP 5.4.8 CvBarbarians::DoCamps, ActivateBarbSpawner, DoBarbSpawnerAttacked, DoBarbCampCleared, SpawnBarbarianUnits and GetRandomBarbarianUnitType, read through
+     *  [barbarianConstants] (see [com.unciv.logic.automation.civilization.BarbarianCampsLikeVp]): camps are scheduled by the game turns elapsed (a percentage of the valid tiles on
+     *  the initial turn, then one every [BarbarianConstants.campSpawnRate] turns, no cap on their number), keep minimum distances from capitals, camps, barbarian cities and
+     *  recently cleared camps, and a per-camp spawn counter drives the units (several at once, capped by the barbarians nearby, boats from [BarbarianConstants.navalUnitStartTurn]).
+     *  false: the Brave New World model of [com.unciv.logic.automation.civilization.BarbarianManager] (a camp target from the fog, a roll each turn, 8 to 12 turns between spawns). */
+    var barbariansLikeVp = false
+
+    /** The GlobalDefines BARBARIAN_* and MAX_BARBARIANS_FROM_* of Vox Populi, read only with [barbariansLikeVp] (can only be modded all-or-nothing, a data class so the Json serializer
+     *  can omit it when default). Values of Vox Populi 5.4.8 after the Community Patch and Vox Populi DefineChanges; the original game's CHILL option does not exist in
+     *  Unciv, so only the RAGING variants are modelled. Percentages and the `CampFirstTurnPercent*` are as in the source: the initial camp count is
+     *  `(CampFirstTurnPercentOfTarget + startEra * CampFirstTurnPercentPerEra) * validTiles / 1000`, so 10 means 1%. */
+    data class BarbarianConstants(
+        /** BARBARIAN_INITIAL_SPAWN_TURN: camps begin once this many game turns have elapsed (0 in Community Patch) */
+        val initialSpawnTurn: Int = 2,
+        /** BARBARIAN_INITIAL_SPAWN_TURN_FROM_SPAWNER: camps and cities start spawning units after this many turns */
+        val initialSpawnTurnFromSpawner: Int = 10,
+        /** BARBARIAN_INITIAL_SPAWN_SPAWNER_DELAY: turns added to the first counter of camps made on the initial turn */
+        val initialSpawnSpawnerDelay: Int = 0,
+        /** BARBARIAN_CAMP_FIRST_TURN_PERCENT_OF_TARGET_TO_ADD (VP 10, CP 33) */
+        val campFirstTurnPercentOfTarget: Int = 10,
+        /** BARBARIAN_CAMP_FIRST_TURN_PERCENT_PER_ERA, times the starting era's number */
+        val campFirstTurnPercentPerEra: Int = 5,
+        /** BARBARIAN_CAMP_SPAWN_RATE and ..._RAGING: a camp is placed every this many turns after the initial turn (at least 1) */
+        val campSpawnRate: Int = 2,
+        val campSpawnRateRaging: Int = -1,
+        /** BARBARIAN_CAMP_NUM_AFTER_INITIAL and ..._RAGING: camps placed on such a turn */
+        val campNumAfterInitial: Int = 1,
+        val campNumAfterInitialRaging: Int = 0,
+        /** BARBARIAN_CAMP_MINIMUM_DISTANCE_CAPITAL / _ANOTHER_CAMP (camps and barbarian cities) / _RECENTLY_CLEARED_CAMP; 0 turns the rule off */
+        val campMinimumDistanceCapital: Int = 4,
+        val campMinimumDistanceAnotherCamp: Int = 4,
+        val campMinimumDistanceRecentlyClearedCamp: Int = 2,
+        /** BARBARIAN_CAMP_CLEARED_MIN_TURNS_TO_RESPAWN: turns a cleared camp or city counts as recently cleared */
+        val campClearedMinTurnsToRespawn: Int = 15,
+        /** BARBARIAN_CAMP_MINIMUM_ISLAND_SIZE (CP 2) */
+        val campMinimumIslandSize: Int = 1,
+        /** BARBARIAN_CAMP_COASTAL_SPAWN_ROLL: percent chance that a camp is placed on the coast if a coastal tile is valid */
+        val campCoastalSpawnRoll: Int = 33,
+        /** CustomModOptions BALANCE_ENCAMPMENTS_SPAWN_ON_VISIBLE_TILES, enabled by Vox Populi: camps may appear on tiles a civilization can see */
+        val campsOnVisibleTiles: Boolean = true,
+        /** BARBARIAN_MIN_SPAWN_DELAY */
+        val minSpawnDelay: Int = 2,
+        /** BARBARIAN_SPAWN_DELAY_FROM_ENCAMPMENT, _RAND, _RAGING_MULTIPLIER, BARBARIAN_ENCAMPMENT_SPAWN_DELAY_REDUCTION_PER_SPAWN, _MAX_SPAWN_DELAY_REDUCTION,
+         *  BARBARIAN_ENCAMPMENT_ATTACKED_DELAY_MULTIPLIER */
+        val encampmentSpawnDelay: Int = 12,
+        val encampmentSpawnDelayRand: Int = 9,
+        val encampmentSpawnDelayRagingMultiplier: Int = 50,
+        val encampmentSpawnDelayReductionPerSpawn: Int = -1,
+        val encampmentMaxSpawnDelayReduction: Int = -3,
+        val encampmentAttackedDelayMultiplier: Int = 50,
+        /** The same for cities: BARBARIAN_SPAWN_DELAY_FROM_CITY, _RAND, _RAGING_MULTIPLIER, BARBARIAN_CITY_SPAWN_DELAY_REDUCTION_PER_SPAWN, BARBARIAN_CITY_MAX_SPAWN_DELAY_REDUCTION,
+         *  BARBARIAN_CITY_ATTACKED_DELAY_MULTIPLIER */
+        val citySpawnDelay: Int = 6,
+        val citySpawnDelayRand: Int = 4,
+        val citySpawnDelayRagingMultiplier: Int = 50,
+        val citySpawnDelayReductionPerSpawn: Int = -1,
+        val cityMaxSpawnDelayReduction: Int = -3,
+        val cityAttackedDelayMultiplier: Int = 50,
+        /** BARBARIAN_NUM_UNITS_INITIAL_ENCAMPMENT_CREATION_SPAWN (+_RAGING, +_PER_ERA in percent of an era): units of a camp made on the initial turn */
+        val numUnitsInitialEncampmentCreation: Int = 2,
+        val numUnitsInitialEncampmentCreationRaging: Int = 0,
+        val numUnitsInitialEncampmentCreationPerEra: Int = 0,
+        /** BARBARIAN_NUM_UNITS_ENCAMPMENT_CREATION_SPAWN: units of a camp made later */
+        val numUnitsEncampmentCreation: Int = 2,
+        val numUnitsEncampmentCreationRaging: Int = 0,
+        val numUnitsEncampmentCreationPerEra: Int = 0,
+        /** BARBARIAN_NUM_UNITS_PER_ENCAMPMENT_SPAWN: units a camp spawns when its counter runs out */
+        val numUnitsPerEncampmentSpawn: Int = 1,
+        val numUnitsPerEncampmentSpawnRaging: Int = 0,
+        val numUnitsPerEncampmentSpawnPerEra: Int = 0,
+        /** BARBARIAN_NUM_UNITS_PER_CITY_SPAWN: units a barbarian city spawns */
+        val numUnitsPerCitySpawn: Int = 1,
+        val numUnitsPerCitySpawnRaging: Int = 0,
+        val numUnitsPerCitySpawnPerEra: Int = 0,
+        /** MAX_BARBARIANS_FROM_CAMP_NEARBY / _RANGE and MAX_BARBARIANS_FROM_CITY_NEARBY / _RANGE: no spawn while this many barbarian military units are within the range */
+        val maxBarbariansFromCampNearby: Int = 2,
+        val maxBarbariansFromCampNearbyRange: Int = 4,
+        val maxBarbariansFromCityNearby: Int = 4,
+        val maxBarbariansFromCityNearbyRange: Int = 4,
+        /** BARBARIAN_NAVAL_UNIT_START_TURN_SPAWN (CP 30): game turn from which boats may be spawned next to a camp or city */
+        val navalUnitStartTurn: Int = 20,
+        /** BARBARIAN_UNIT_SPAWN_NO_RESOURCE_MULTIPLIER, _PREFERRED_TYPE (percent), _NUM_CANDIDATES (the best n are drawn from by weight) */
+        val unitSpawnNoResourceMultiplier: Int = 150,
+        val unitSpawnPreferredTypeMultiplier: Int = 200,
+        val unitSpawnNumCandidates: Int = 5,
+        /** The ruleset has no `DefaultUnitAI`, so the preferred AI types of GetRandomBarbarianUnitType are approximated: UNITAI_FAST_ATTACK is a melee land unit of one of
+         *  [fastAttackUnitTypes], UNITAI_DEFENSE a melee land unit of one of [defenseUnitTypes]; UNITAI_RANGED is any ranged land unit without indirect fire,
+         *  UNITAI_ATTACK_SEA any melee ship */
+        val fastAttackUnitTypes: List<String> = listOf("Mounted", "Armored"),
+        val defenseUnitTypes: List<String> = listOf("Gunpowder"),
+    )
+    var barbarianConstants = BarbarianConstants()
+
+    /** VP CvUnitCombat::DoDamageMath uses separate melee and ranged defines in hundredths. */
+    data class CombatDamageConstants(
+        val meleeBase: Int = 2400,
+        val meleeRandom: Int = 1200,
+        val rangedBase: Int = 2400,
+        val rangedRandom: Int = 1200,
+        val meleeCityDamagePercent: Int = 100,
+        val cityMeleeRetaliationPercent: Int = 100,
+        val rangedCivilianDamage: Int = 40,
+    )
+    var combatDamage = CombatDamageConstants()
+
+    /** VP 5.4.8 CvUnit::baseMoves uses EMBARKED_UNIT_MOVEMENT before movement bonuses. */
+    var embarkedUnitMovement = 2
+
+    /** VP 5.4.8 CvUnit::baseMoves / CvUnitMovement::GetMovementCostChecked and CvAStar (UnitPathValid, PathCost): a path search spends the movement of
+     *  the state the unit is in at each node, not that of the starting tile. An embarked unit (or a land unit on a water node) has [embarkedUnitMovement]
+     *  as its budget (plus embarked-movement bonuses), landing on a tile ends the embarked state with its own full land budget on the next turn, and the
+     *  path cache keys include the embarked state. Off: the search assumes one fixed full-move budget and the unit's current embarked state. */
+    var embarkAwarePathingLikeVp = false
+
+    /** VP 5.4.8 CvUnit::healRate: territory and occupation determine base healing. The territory auras of nearby units
+     *  (GetHealFriendlyTerritoryFromNearbyUnit, ...Neutral..., ...Enemy...) apply only on tiles of their own kind, and a city in resistance
+     *  that is not being razed gives its unit the enemy base rate without the heal rate of the city's own buildings. */
+    var unitHealingLikeVp = false
+    /** VP 5.4.8 CvUnit::healRate with MOD_BALANCE_VP: beliefs heal on own tiles for a civilization with a capital: those of the state religion
+     *  (CvPlayerReligions::UpdateStateReligion, [com.unciv.logic.civilization.managers.ReligionManager.getStateReligion]) that CvReligionBeliefs::IsBeliefValid
+     *  accepts, the pantheon belief of the second religion of the capital, and the civilization's own pantheon belief that it keeps for good
+     *  (MOD_BALANCE_PERMANENT_PANTHEONS). The healing of a city's own religion next to the city is then not added again. Needs [unitHealingLikeVp]. */
+    var stateReligionHealingLikeVp = false
+    var cityUnitHeal = 25
+    var friendlyUnitHeal = 20
+    var neutralUnitHeal = 10
+    var enemyUnitHeal = 10
+
+    /** Staged city model; its values are only used when enabled. */
+    var cityCombatLikeVp = false
+    var cityCombat = CityCombatConstants()
 
     // Formula for city Strength:
     // Strength = baseStrength + strengthPerPop + strengthFromTiles +
@@ -44,6 +242,72 @@ class ModConstants {
     // An AI major civilization and a city-state take base, per city and population share (instead of unitSupplyPerPopulation) from the difficulty's
     // aiUnitSupply... and cityStateUnitSupply... fields, and the sum is increased by their bonus percent.
     var unitSupplyPerPopulation = 0.5
+
+    // ---- (P6/M6) Vox Populi's unit supply, staged ----
+    /** VP 5.4.8 CvPlayer::GetUnitSupplyBreakdown, GetNumUnitsSuppliedByHandicap/Cities/Population, calculateUnitProductionMaintenanceMod, calculateUnitGrowthMaintenanceMod,
+     *  CvUnit::isNoSupply. true: the supply is the breakdown of [unitSupplyConstants] (era reduction of the base supply, the technology divisors of the cities' and the population's
+     *  supply, the empire size divisor, the puppet share of a city's supply), a unit with the unique `Does not use unit supply` (its own or from a promotion) uses no supply,
+     *  the production penalty and the growth penalty per unit over the supply are [unitSupplyConstants]'. false: the supply of [unitSupplyPerPopulation] and the difficulty, -10% production
+     *  per unit over the supply (at most -70%), no growth penalty, and the unique is not read. */
+    var unitSupplyLikeVp = false
+
+    /**
+     *  The GlobalDefines of VP's unit supply, read only with [unitSupplyLikeVp] (can only be modded all-or-nothing, a data class so the Json serializer can omit it when default). The
+     *  defaults are the numbers of the original / Community Patch (nothing reduces the supply, 10% production per unit over it); `DEF-VP` is `(2) Vox Populi/Database Changes/DefineChanges.sql:160-195`.
+     *  The puppet share of the supply of a city and of its citizens is [NeedsConstants.puppetYieldMultiplier] (one define, `PUPPET_YIELD_AND_SUPPLY_MODIFIER_MULTIPLICATIVE`, for yield and supply).
+     */
+    data class UnitSupplyConstants(
+        /** Hundredths of a unit taken off the base supply per era of the civilization (`UNIT_SUPPLY_BASE_TECH_REDUCTION_PER_ERA`, 100 in VP) */
+        val baseTechReductionPerEra: Int = 0,
+        /** Percent of the technologies known that divide the supply of the cities, and of the citizens: divisor = 100 + progress x this / 100, progress 0-100
+         *  (`UNIT_SUPPLY_CITIES_TECH_REDUCTION_MULTIPLIER`, `UNIT_SUPPLY_POPULATION_TECH_REDUCTION_MULTIPLIER`, both 100 in VP) */
+        val citiesTechReductionMultiplier: Int = 0,
+        val populationTechReductionMultiplier: Int = 0,
+        /** Percent the supply loses per effective city (the cities but the puppets): divisor = 100 + cities x this (the column `NumCitiesUnitSupplyMod` of VP's `Worlds`, 5 for every
+         *  world size in VP, 0 in Community Patch; we have no per-world table) */
+        val empireSizePenaltyPerCity: Int = 0,
+        /** Percent production lost per unit over the supply, and the most that can be lost (`PRODUCTION_PENALTY_PER_UNIT_OVER_SUPPLY` 10 in CP, 5 in VP; `MAX_UNIT_SUPPLY_PRODMOD` 70) */
+        val productionPenaltyPerUnit: Int = 10,
+        val maxProductionPenalty: Int = 70,
+        /** Percent growth lost per unit over the supply, and the most that can be lost (`GROWTH_PENALTY_PER_UNIT_OVER_SUPPLY` 0 in CP, 5 in VP; `MAX_UNIT_SUPPLY_GROWTH_MOD` 70) */
+        val growthPenaltyPerUnit: Int = 0,
+        val maxGrowthPenalty: Int = 70,
+    )
+    var unitSupplyConstants = UnitSupplyConstants()
+
+    // ---- (StageConquest / M5) conquest and capture like Vox Populi, staged ----
+    /** VP 5.4.8 CvPlayer::acquireCity, CvPlayerCulture::GetInfluenceCityConquestReduction, CvUnit::createCaptureUnit. true: a conquered city keeps [ConquestConstants.capturePopulationPercent]
+     *  of its citizens (plus the share of the rest that the influence reduction gives back; at least 1, never when the conqueror is the founder, the city was a barbarian one or was in resistance),
+     *  the reduction by influence is [ConquestConstants]'s table plus the boost (resistance only between two major civilizations), the city keeps its damage up to [ConquestConstants.cityCaptureDamagePercent]
+     *  of its maximum hit points, a building that is not destroyed by its own unique survives with the chance of `Has a [n]% chance of surviving when the city is captured`
+     *  (default [ConquestConstants.buildingSurvivalPercent]), a captured military unit gets [ConquestConstants.combatCaptureHealthPercent] as VP's COMBAT_CAPTURE_HEALTH, and keeps its moves.
+     *  false: a city loses 1 + population / 4 citizens less the influence share, has half of its maximum hit points, buildings are destroyed with 34% chance, captured units have 50% health and no moves. */
+    var conquestLikeVp = false
+
+    /** The numbers of VP's conquest, read only with [conquestLikeVp] (all-or-nothing, a data class so the Json serializer can omit it when default). `DEF-VP` is `(2) Vox Populi/Database Changes/DefineChanges.sql:105-115`. */
+    data class ConquestConstants(
+        /** Percent of the citizens a conquered city keeps (`CITY_CAPTURE_POPULATION_PERCENT`, 50 in CP, 75 in VP; used up to 100) */
+        val capturePopulationPercent: Int = 75,
+        /** Percent added to the influence reduction of population loss and resistance, also with no influence (`BALANCE_CONQUEST_REDUCTION_BOOST`, 0 in CP, 5 in VP) */
+        val conquestReductionBoost: Int = 5,
+        /** CvPlayerCulture::GetInfluenceCityConquestReduction by influence level of the conqueror over the old owner (Exotic 10, Familiar 25, Popular 50, Influential 75, Dominant 100 in VP; Unknown 0) */
+        val influenceReductionExotic: Int = 10,
+        val influenceReductionFamiliar: Int = 25,
+        val influenceReductionPopular: Int = 50,
+        val influenceReductionInfluential: Int = 75,
+        val influenceReductionDominant: Int = 100,
+        /** Percent of its maximum hit points the damage of a conquered city is capped at (`CITY_CAPTURE_DAMAGE_PERCENT`, 50 in CP and VP) */
+        val cityCaptureDamagePercent: Int = 50,
+        /** Percent of the buildings that survive a conquest when the building has no unique for it (`Buildings.ConquestProb`, 66 in CP, 80 in VP's base setting) */
+        val buildingSurvivalPercent: Int = 80,
+        /** `COMBAT_CAPTURE_HEALTH`: 50 in CP, 75 in VP */
+        val combatCaptureHealthPercent: Int = 75,
+        /** VP's CvUnit::createCaptureUnit passes this share of the unit's maximum hit points to CvUnit::setDamage, so the captured unit has what is left (25% with 75): true like the source, false: it is the health */
+        val combatCaptureHealthIsDamage: Boolean = true,
+        /** CvUnit::createCaptureUnit with MOD_BALANCE_VP: the captured unit has its full moves back, but has made all its attacks of the turn */
+        val capturedUnitMovesButCannotAttack: Boolean = true,
+    )
+    var conquestConstants = ConquestConstants()
 
     // Gold maintenance of units (CvTreasury::CalculateUnitCost), with 0.5 gold per unit that is not free:
     // cost = (paidUnits * 0.5 * (1 + unitMaintenanceGameMultiplier * progress)) ^ (1 + progress / unitMaintenanceExponentDivisor)
@@ -92,6 +356,39 @@ class ModConstants {
     
     // Number of air units that can be stationed in a city
     var cityAirUnitCapacity = 6
+
+    // --- Air basing, land air defense and interception (StageAir) ---
+    /** VP 5.4.8 CvPlot::countNumAirUnits, CvUnit::canRebaseAt, CvUnit::getRebaseRange, CvCity::GetMaxAirUnits, CvCity::CanTrain: the air units standing in a city use
+     *  up its slots by the amount of the unique `Counts [amount] against the air unit capacity` (an air unit without it counts 1, as every air unit of VP's data has AirUnitCap 1;
+     *  units carried by a carrier or an overflow marked as transported count nothing), a unit may enter (be built in, rebase to) a city while the slots in use of
+     *  its owner's air units there (not counting the unit itself when it is already there) are fewer than the capacity, which starts from [AirBasingConstants.cityAirUnitCapacity]
+     *  instead of [cityAirUnitCapacity], and an air unit can rebase `range * rebaseRangeMultiplier / 100` tiles away instead of twice its range. Aircraft that exceed the capacity
+     *  after the switch is turned on are kept; only new ones are refused. A carrier's capacity is unchanged: each aircraft takes one cargo slot (CvUnit::cargoSpaceAvailable).
+     *  false: every untransported air unit in the tile counts 1 against [cityAirUnitCapacity] and the range is twice the range of the unit. */
+    var airBasingLikeVp = false
+    /** The GlobalDefines of VP's air basing, read only with [airBasingLikeVp]; the defaults are the numbers of the original (`BASE_CITY_AIR_STACKING`, `AIR_UNIT_REBASE_RANGE_MULTIPLIER`),
+     *  VP's are 2 and 500 (`DefineChanges.sql`). */
+    data class AirBasingConstants(
+        val cityAirUnitCapacity: Int = 6,
+        /** Percent of the unit's range it can rebase over */
+        val rebaseRangeMultiplier: Int = 200,
+    )
+    var airBasing = AirBasingConstants()
+
+    /** VP 5.4.8 CvUnit::GetAirStrikeDefenseDamage and CvCity::GetAirStrikeDefenseDamage with MOD_BALANCE_AIR_UNIT_CHANGES (on in VP): the damage a unit or a city does to an air unit
+     *  that attacks it (CvUnitCombat::GenerateAirCombatInfo) is the flat value of the unique `[amount] air defense` (the unit's own and its promotions', the city's buildings'; reduced by the
+     *  attacker's interception damage reduction, plus a random 0-4 for a unit and 0-9 for a city, a unit's also changed by the attacker's `[amount]% damage taken`), not a comparison of strengths.
+     *  false: the damage follows from the strengths and the unique is not read. */
+    var airDefenseLikeVp = false
+
+    /** VP 5.4.8 CvPlot::GetBestInterceptor, CvPlot::GetInterceptorCount, CvUnit::interceptionProbability, CvUnit::evasionProbability, CvUnit::GetInterceptionDamage,
+     *  CvUnitCombat::GenerateAirCombatInfo / ResolveAirUnitVsCombat: every civilization at war with the attacker (barbarians never) may intercept, over a third party's land only at war with
+     *  its owner or on friendly land; the interceptor is the one with the highest (strength after `Damage when intercepting`) x (chance x health) - for an air unit x health again -,
+     *  the nearest of equals, and the defender may be it; the attacker first rolls its `[amount]% chance to evade interception`, then the interceptor its chance x health / max health (any unit);
+     *  the damage is VP's damage math with the interceptor's strength raised by `Damage when intercepting` and the attacker's `Damage taken from interception reduced by` (summed) as the
+     *  modifier; an interception that does damage ends the attack (the target is not hit), and a suicide attacker is lost. false: the defender's civilization intercepts, with the highest
+     *  chance, the interceptor is rolled by its chance, the damage is multiplied by `Damage when intercepting` and by the product of the reductions, and the attack goes on. */
+    var airInterceptionLikeVp = false
 
     /** The extras of the Civ V resource placement (see CivVResourceExtras): a bonus at the third ring of each start, more bonuses in hills regions,
      *  small coal, oil or aluminum at the city states, top-ups of iron, horses, coal, oil, aluminum and uranium per civ, and no sugar on jungle.

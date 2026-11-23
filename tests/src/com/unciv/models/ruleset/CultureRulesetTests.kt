@@ -62,7 +62,7 @@ class CultureRulesetTests {
         assertEquals(450, archaeologist.cost)   // Vox Populi's Units.Cost (Brave New World: 200)
         assertEquals("Archaeology", archaeologist.requiredTech)
         assertTrue("Can build [Archaeological Dig] improvements on tiles" in archaeologist.uniques)
-        assertTrue("Only available <in cities with a [University]>" in archaeologist.uniques)
+        assertTrue("Only available <in cities with a [Museum]>" in archaeologist.uniques)   // Vox Populi's Unit_BuildingClassRequireds (Brave New World: University)
     }
 
     @Test

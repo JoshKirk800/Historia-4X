@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.automation.strategy.UnitAiType
 import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.PlotDefense
+import com.unciv.logic.automation.unit.reachMovement
 import com.unciv.logic.battle.BattleDamage
 import com.unciv.logic.battle.CityCombatant
 import com.unciv.logic.battle.MapUnitCombatant
@@ -45,8 +46,8 @@ class SimCity(val city: City, val plot: Int) {
 class DangerSource(val unit: MapUnit, val index: Int)
 
 /** The damage already dealt in a plan, per enemy unit and enemy city (CvTacticalPosition::unitDamageDealt), which danger and attacks take into account */
-class DamageOverlay(val enemy: IntArray, val city: IntArray) {
-    val hash get() = enemy.contentHashCode() * 31 + city.contentHashCode()
+class DamageOverlay(val enemy: IntArray, val city: IntArray, val garrison: IntArray = IntArray(city.size)) {
+    val hash get() = (enemy.contentHashCode() * 31 + city.contentHashCode()) * 31 + garrison.contentHashCode()
 }
 
 /** Enemy distances of all plots for one set of living enemies (CvTacticalPlot's distance transform), indexed by [SimDomain.ordinal] */
@@ -87,8 +88,7 @@ const val CITADEL_BONUS = 67
  *  Deviations from the original:
  *  - the damage is [BattleDamage] at the mean of the randomness; a hypothetical position of a unit is a [SimCombatant], flanking is left out
  *    of the damage (the original's bIgnoreUnitAdjacencyBoni) and added by the simulation as 10% per unit;
- *  - an attack on a city hits the city alone: in this ruleset the garrison takes no damage until the city falls, so the original's garrison
- *    damage and its absorption of city damage have no counterpart;
+ *  - with cityCombatLikeVp, city attacks also track hypothetical garrison damage and remove its strength after it dies;
  *  - danger is the expected damage of the visible enemy units that can get within range (their distance within their movement and range, on
  *    their own domain unless they shoot) and of enemy cities within bombard range, without the original's path finder and fog-of-war counts;
  *  - the tiles a unit can reach are found by [reach], which follows Unciv's movement costs with zones of control of the enemies still alive in the plan;
@@ -364,7 +364,7 @@ class SimWorld(
         if (tile.getOwner() != civ) return false
         val improvement = tile.getUnpillagedTileImprovement() ?: return false
         // IsPlayerCitadel: damage must exceed enemy healing and defense must be at least 50%.
-        return PlotDefense.nearbyEnemyDamage(improvement) > 10 && PlotDefense.defenseModifier(improvement) >= 50
+        return PlotDefense.nearbyEnemyDamage(improvement) > PlotDefense.enemyHealRate(civ) && PlotDefense.defenseModifier(improvement) >= 50
     }
 
     private fun buildDangerSources() {
@@ -373,7 +373,7 @@ class SimWorld(
             if (!other.isAlive() || !isAtWar(other)) continue
             for (enemy in other.units.getCivUnits()) {
                 if (!enemy.isMilitary() || enemy.baseUnit.isAirUnit() || !enemy.baseUnit.isMelee() && !enemy.baseUnit.isRanged() || !enemy.isVisibleTo(civ)) continue
-                val reach = enemy.baseUnit.movement.coerceAtLeast(1) + if (enemy.baseUnit.isRanged()) enemy.getRange() else 1
+                val reach = enemy.reachMovement().coerceAtLeast(1) + if (enemy.baseUnit.isRanged()) enemy.getRange() else 1
                 if (enemy.getTile().aerialDistanceTo(target) > reachRing + reach) continue
                 val index = plotOf(enemy.getTile()).let { if (it >= 0) enemyAt[it] else -1 }
                 dangerUnits.add(DangerSource(enemy, if (index >= 0 && enemies[index].unit == enemy) index else -1))
@@ -488,17 +488,21 @@ class SimWorld(
     fun damageOnUnit(
         attacker: MapUnit, attackerTile: Tile, attackerHealth: Int, defender: MapUnit, defenderTile: Tile, defenderHealth: Int,
         ignoreFlanking: Boolean,
-    ): Pair<Int, Int> = Companion.damageOnUnit(attacker, attackerTile, attackerHealth, defender, defenderTile, defenderHealth, ignoreFlanking)
+    ): Pair<Int, Int> = Companion.damageOnUnit(attacker, attackerTile, attackerHealth, defender, defenderTile, defenderHealth, ignoreFlanking, resolveDeaths = false)
 
     /** CvTacticalAI GetSimulatedDamageFromAttackOnCity: (damage the city takes, damage the attacker takes) */
-    fun damageOnCity(attacker: MapUnit, attackerTile: Tile, attackerHealth: Int, city: City): Pair<Int, Int> {
+    fun damageOnCity(attacker: MapUnit, attackerTile: Tile, attackerHealth: Int, city: City, previousGarrisonDamage: Int): Triple<Int, Int, Int> {
         val attackerCombatant = SimCombatant(attacker, attackerTile, attackerHealth.coerceAtLeast(1))
-        val cityCombatant = CityCombatant(city)
-        if (attacker.baseUnit.isRanged() && attacker.baseUnit.isWaterUnit && attackerTile.isCityCenter()) return 0 to 0
-        val dealt = BattleDamage.calculateDamageToDefender(attackerCombatant, cityCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = true)
+        val garrison = city.getGarrison()
+        val remaining = ((garrison?.health ?: 0) - previousGarrisonDamage).coerceAtLeast(0)
+        val cityCombatant = CityCombatant(city, ignoreGarrison = garrison != null && remaining == 0)
+        if (attacker.baseUnit.isRanged() && attacker.baseUnit.isWaterUnit && attackerTile.isCityCenter()) return Triple(0, 0, 0)
+        val (dealt, garrisonDamage) = BattleDamage.calculateDamageToDefenderAndGarrison(
+            attackerCombatant, cityCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = true,
+            garrisonMaxHealth = if (remaining > 0) garrison?.getMaxHealth() ?: 0 else 0)
         val taken = if (attacker.baseUnit.isRanged()) 0
             else BattleDamage.calculateDamageToAttacker(attackerCombatant, cityCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = true)
-        return dealt to taken
+        return Triple(dealt, taken, garrisonDamage.coerceAtMost(remaining))
     }
 
     /** What the city does to a unit of ours that stands next to it (CvCity::rangeCombatDamage) */
@@ -534,7 +538,7 @@ class SimWorld(
             val distance = attackerTile.aerialDistanceTo(tile)
             val ranged = attacker.baseUnit.isRanged()
             val range = if (ranged) attacker.getRange() else 1
-            if (distance > attacker.baseUnit.movement.coerceAtLeast(1) + range) continue
+            if (distance > attacker.reachMovement().coerceAtLeast(1) + range) continue
             // A unit that does not shoot attacks its own domain
             if (!ranged && attacker.baseUnit.isLandUnit != tile.isLand && !tile.isCityCenter()) continue
             val attackerCombatant = SimCombatant(attacker, attackerTile, attackerHealth)
@@ -559,11 +563,11 @@ class SimWorld(
             // Capturing a city destroys its garrison: the unit takes its share of what the city would take
             val maxHealth = cityHere.getMaxHealth()
             return if (sum + (maxHealth - cityHere.health) < maxHealth + 50) {
-                if (unit.canGarrison()) sum * 2 * 100 / maxHealth + improvementDamageAt(tile) else 0
-            } else 10 * 100
+                if (unit.canGarrison()) sum * 2 * unit.getMaxHealth() / maxHealth + improvementDamageAt(tile) else 0
+            } else 10 * unit.getMaxHealth()
         }
         sum += improvementDamageAt(tile) + unit.getDamageFromTerrain(tile)
-        return minOf(sum, 10 * 100)
+        return minOf(sum, 10 * unit.getMaxHealth())
     }
 
     private fun improvementDamageAt(tile: Tile): Int {
@@ -770,6 +774,7 @@ class SimWorld(
         fun damageOnUnit(
             attacker: MapUnit, attackerTile: Tile, attackerHealth: Int, defender: MapUnit, defenderTile: Tile, defenderHealth: Int,
             ignoreFlanking: Boolean,
+            resolveDeaths: Boolean = true,
         ): Pair<Int, Int> {
             val attackerCombatant = SimCombatant(attacker, attackerTile, attackerHealth.coerceAtLeast(1))
             val defenderCombatant = SimCombatant(defender, defenderTile, defenderHealth.coerceAtLeast(1))
@@ -778,6 +783,8 @@ class SimWorld(
             val dealt = BattleDamage.calculateDamageToDefender(attackerCombatant, defenderCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = ignoreFlanking)
             val taken = if (attacker.baseUnit.isRanged()) 0
                 else BattleDamage.calculateDamageToAttacker(attackerCombatant, defenderCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = ignoreFlanking)
+            if (resolveDeaths && !attacker.baseUnit.isRanged() && attacker.civ.gameInfo.ruleset.modOptions.constants.combatHealthStrengthLikeVp)
+                return BattleDamage.resolveMeleeDeaths(attackerCombatant, defenderCombatant, dealt, taken)
             return dealt to taken
         }
 

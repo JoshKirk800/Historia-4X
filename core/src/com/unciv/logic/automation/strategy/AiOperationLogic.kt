@@ -484,7 +484,7 @@ object AiOperationLogic {
         if (unitAi == UnitAiType.EXPLORE || unitAi == UnitAiType.EXPLORE_SEA || unitAi == UnitAiType.SETTLE) return false
         if (unit.hasUnique(UniqueType.MayParadrop)) return false
         val operations = civ.ai.operations
-        if (unit.health < operations.minHealth()) return false
+        if (unit.health * 100 < operations.minHealth() * unit.getMaxHealth()) return false // a percentage of the unit's own maximum
         if (operations.deployFromOperationTurn(unit.id) + civ.gameInfo.ruleset.ai.define(AiDefine.AI_TACTICAL_MAP_TEMP_ZONE_TURNS) >= civ.gameInfo.turns) return false
         if (target != null && unit.getTile().aerialDistanceTo(target) < MAX_TARGET_DISTANCE) return false
         if (mustBeDeepWater && unit.baseUnit.isWaterUnit && unit.cache.cannotEnterOceanTiles) return false

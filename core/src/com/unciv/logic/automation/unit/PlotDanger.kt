@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.automation.unit.tactical.SimCombatant
 import com.unciv.logic.automation.unit.tactical.TacticalTargets
+import com.unciv.logic.battle.AirInterception
 import com.unciv.logic.battle.BattleConstants
 import com.unciv.logic.battle.BattleDamage
 import com.unciv.logic.battle.CityCombatant
@@ -60,7 +61,8 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
     private val sourceCities = ArrayList<City>()
     /** The units that were in sight (or counted as in a city or camp) when this map was made, CvDangerPlots::m_knownUnits: the next turn's [previouslyKnown] */
     val knownUnits: Set<Int>
-    private val enemyHealRate = rules.define(AiDefine.ENEMY_HEAL_RATE)
+    /** What a unit heals in enemy territory: the engine's rate with `unitHealingLikeVp`, else the AI define */
+    private val enemyHealRate = civ.gameInfo.ruleset.modOptions.constants.let { if (it.unitHealingLikeVp) it.enemyUnitHeal else rules.define(AiDefine.ENEMY_HEAL_RATE) }
 
     private class Contents(val units: List<MapUnit>, val capturers: List<MapUnit>, val cities: List<City>)
 
@@ -111,7 +113,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
         for (attacker in contentsOf(tile).units) {
             if (attacker.isDestroyed) continue
             val from = attackFrom(attacker, tile)
-            val equal = SimCombatant(attacker, tile, MAX_HEALTH)
+            val equal = SimCombatant(attacker, tile, attacker.getMaxHealth())
             damage += BattleDamage.calculateDamageToDefender(MapUnitCombatant(attacker), equal, from, EXPECTED_RANDOMNESS, ignoreFlanking = true)
         }
         return damage
@@ -241,7 +243,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
         val maxHealth = city.getMaxHealth()
         if (cityDanger + (maxHealth - city.health) >= maxHealth + CITY_FALLS_MARGIN) return Int.MAX_VALUE
         // Reconstruct the amount of damage the garrison would absorb for the city
-        return if (unit.canGarrison()) cityDanger * 2 * MAX_HEALTH / maxHealth + improvementDamageAt(tile) else 0
+        return if (unit.canGarrison()) cityDanger * 2 * unit.getMaxHealth() / maxHealth + improvementDamageAt(tile) else 0
     }
 
     /** What an attacker whose civilization does not see [tile] does: only 4/5 of [damage], there is a chance it will not spot the target */
@@ -300,7 +302,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
      */
     private fun canCapture(unit: MapUnit, tile: Tile): Boolean {
         if (unit.baseUnit.isAirUnit()) return false
-        if (unit.getTile().aerialDistanceTo(tile) > unit.baseUnit.movement.coerceAtLeast(1)) return false
+        if (unit.getTile().aerialDistanceTo(tile) > unit.reachMovement().coerceAtLeast(1)) return false
         val native = if (unit.baseUnit.isWaterUnit) tile.isWater || tile.isCityCenter() else !unit.isEmbarkedAt(tile)
         if (!native) return false
         if (unit.baseUnit.isRanged()) return true
@@ -331,6 +333,9 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
 
     /** CvPlot::GetBestInterceptor(owner of [target], target): the unit of a civilization at war with [target]'s that can intercept at [tile], the likeliest to succeed first */
     private fun bestInterceptor(target: MapUnit, tile: Tile): MapUnit? {
+        // airInterceptionLikeVp: the one the interception itself picks
+        if (civ.gameInfo.ruleset.modOptions.constants.airInterceptionLikeVp)
+            return AirInterception.bestInterceptorLikeVp(target.civ, MapUnitCombatant(target), tile).interceptor
         var best: MapUnit? = null
         for (other in civ.gameInfo.civilizations) {
             if (other == target.civ || !other.isAlive() || !other.isAtWarWith(target.civ)) continue
@@ -343,6 +348,9 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
     /** CvUnit::GetInterceptionDamage: the damage [interceptor] would do to [target] on [targetTile], proportional to its full health, as the interception itself computes it */
     private fun interceptionDamage(interceptor: MapUnit?, target: MapUnit, targetTile: Tile): Int {
         if (interceptor == null || target.hasUnique(UniqueType.CannotBeIntercepted)) return 0
+        if (civ.gameInfo.ruleset.modOptions.constants.airInterceptionLikeVp)
+            return AirInterception.interceptionDamageLikeVp(interceptor,
+                SimCombatant(target, targetTile, target.health.coerceAtLeast(1)), targetTile, EXPECTED_RANDOMNESS).coerceAtMost(target.health)
         val damage = BattleDamage.calculateDamageToDefender(MapUnitCombatant(interceptor), SimCombatant(target, targetTile, target.health.coerceAtLeast(1)),
             targetTile, EXPECTED_RANDOMNESS, fullHealthScale = true)
         val factor = (1f + interceptor.interceptDamagePercentBonus() / 100f) * target.receivedInterceptDamageFactor()
@@ -354,7 +362,6 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
     companion object {
         private const val NOT_COMPUTED = -1
         private const val EXPECTED_RANDOMNESS = TacticalTargets.EXPECTED_RANDOMNESS
-        private const val MAX_HEALTH = 100
         /** FOG_DEFAULT_DANGER: what each hidden plot that could hold an enemy adds */
         private const val FOG_DEFAULT_DANGER = 1
         /** GetDanger(bool): terrain and features cannot be told apart from a unit's promotions, so 20 is assumed */
@@ -372,7 +379,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
             if (unit.baseUnit.isAirUnit()) return distance <= unit.getRange()
             val ranged = unit.baseUnit.isRanged()
             val range = if (ranged) unit.getRange() else 1
-            if (distance > unit.baseUnit.movement.coerceAtLeast(1) + range) return false
+            if (distance > unit.reachMovement().coerceAtLeast(1) + range) return false
             return ranged || unit.baseUnit.isLandUnit == tile.isLand || tile.isCityCenter()
         }
 
@@ -381,7 +388,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
 
         /** CvUnit::GetDamageCombatModifier: [value] less the share a wounded [unit] loses (WOUNDED_DAMAGE_MULTIPLIER percent of its missing health) */
         fun valueConsideringDamage(value: Int, unit: MapUnit, rules: AiRuleset): Int {
-            val damageMod = (100 - unit.health) * rules.define(AiDefine.WOUNDED_DAMAGE_MULTIPLIER) / 100
+            val damageMod = (unit.getMaxHealth() - unit.health) * rules.define(AiDefine.WOUNDED_DAMAGE_MULTIPLIER) / 100
             return value - value * damageMod / 100
         }
     }

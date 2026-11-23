@@ -89,6 +89,9 @@ class MapUnit : IsPartOfGameInfoSerialization {
     var due: Boolean = true
 
     var isTransported: Boolean = false
+
+    /** The civID of the major that gave this unit to the city-state that owns it now (CvUnit::m_eGiftedByPlayer): it gets influence each turn for it with [com.unciv.models.ruleset.unique.UniqueType.CityStateInfluencePerGiftedUnit] */
+    var giftedBy: String? = null
     var turnsFortified = 0
 
     // New - track only *how many have been used*, derive max from uniques, left = max - used
@@ -257,6 +260,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
         toReturn.turnsFortified = turnsFortified
         toReturn.promotions = promotions.clone(toReturn)
         toReturn.isTransported = isTransported
+        toReturn.giftedBy = giftedBy
         toReturn.abilityToTimesUsed = HashMap(abilityToTimesUsed)
         toReturn.religion = religion
         toReturn.religiousStrengthLost = religiousStrengthLost
@@ -1071,7 +1075,9 @@ class MapUnit : IsPartOfGameInfoSerialization {
         // all transported units should be gift as well
         currentTile.getUnits().filter { it.isTransported && isTransportTypeOf(it) }
                 .forEach { unit -> unit.gift(recipient) }
+        val giver = civ
         assignOwner(recipient)
+        if (recipient.isCityState && giver.isMajorCiv) giftedBy = giver.civID
         recipient.cache.updateViewableTiles()
     }
 

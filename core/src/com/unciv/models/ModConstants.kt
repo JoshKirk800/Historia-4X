@@ -500,7 +500,11 @@ class ModConstants {
      *  [sharedReligionRatePercent] `MINOR_FRIENDSHIP_RATE_MOD_SHARED_RELIGION` (recovery faster by this, decay slower by half of it); [scalingDecayExponent] `MINOR_INFLUENCE_SCALING_DECAY_EXPONENT`
      *  with [scalingDecayStart] and [scalingDecayFull], the points over the resting point from which the decay grows and where the exponent takes over (50 and 100 in the source's code);
      *  [damagedCapitalDecayPercent] `MINOR_FRIENDSHIP_DROP_PER_TURN_DAMAGED_CAPITAL_MULTIPLIER` (CP 100, VP 300); [anchorProtected] `MINOR_FRIENDSHIP_ANCHOR_MOD_PROTECTED` and [anchorWary]
-     *  `MINOR_FRIENDSHIP_ANCHOR_MOD_WARY_OF`: the resting point of a protector and against a civilization the city-state is wary of.
+     *  `MINOR_FRIENDSHIP_ANCHOR_MOD_WARY_OF`: the resting point of a protector and against a civilization the city-state is wary of; [unitGift] `FRIENDSHIP_PER_UNIT_GIFTED`, doubled
+     *  ([unitGiftProxyWarMultiplier]) in a proxy war; [barbarianKilled] `FRIENDSHIP_PER_BARB_KILLED`; [civilianReturned] `RETURN_CIVILIAN_FRIENDSHIP`; [unitIntruding]
+     *  `FRIENDSHIP_PER_UNIT_INTRUDING` (5 taken for each unit); [liberationPerEra] `MINOR_LIBERATION_FRIENDSHIP`, [liberationMinimum] the ally threshold and 10 more,
+     *  [liberationRestingPoint] `MINOR_LIBERATION_RESTING_INFLUENCE`; [jerkTurns] `BALANCE_CS_WAR_COOLDOWN_RATE` (times the speed's production cost percentage, in which the resting
+     *  point is lowered after an attack); [recentlyLiberatedTurns] the turns after its liberation in which a city-state's tribute score is lowered ([CityStateBullyConstants.liberatedPenalty]).
      */
     data class CityStateInfluenceConstants(
         val dropTimes100: Int = 100,
@@ -515,8 +519,24 @@ class ModConstants {
         val anchorProtected: Int = 5,
         val anchorWary: Int = -20,
         val tradeRouteBonusRoutes: Int = 5,
+        val unitGift: Int = 15,
+        val unitGiftProxyWarMultiplier: Int = 2,
+        val barbarianKilled: Int = 15,
+        val civilianReturned: Int = 50,
+        val unitIntruding: Int = 5,
+        val liberationPerEra: Int = 105,
+        val liberationMinimum: Int = 70,
+        val liberationRestingPoint: Int = 100,
+        val jerkTurns: Int = 50,
+        val recentlyLiberatedTurns: Int = 50,
     )
     var cityStateInfluence = CityStateInfluenceConstants()
+
+    /**
+     *  Whether a major can give gold to a city-state for influence (the original's `CSD_GOLD_GIFT_DISABLED` is 1 in Vox Populi, whose human gift menu has units and tile improvements
+     *  instead, and `MINOR_GOLD_GIFT_SMALL`, `_MEDIUM` and `_LARGE` are 0, V:CvDiplomacyAI.cpp:36765). false: no gold gift, for the player and the AI
+     */
+    var cityStateGoldGifts = true
 
     /**
      *  Demanding tribute from a city-state as in Vox Populi (CvMinorCivAI::CalculateBullyScore, V:CvMinorCivAI.cpp:14015-14400, GetBullyGoldAmount, 13969-14012, CanMajorBullyGold,
@@ -551,6 +571,7 @@ class ModConstants {
         val protectorPenalty: Int = 15,
         val hostilePenalty: Int = 10,
         val militaristicPenalty: Int = 10,
+        val liberatedPenalty: Int = 100,
         val scoreCap: Int = 100,
     )
     var cityStateBully = CityStateBullyConstants()

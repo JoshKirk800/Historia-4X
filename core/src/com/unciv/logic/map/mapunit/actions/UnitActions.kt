@@ -229,20 +229,8 @@ object UnitActions {
         }
 
         val giftAction = {
-            if (recipient.isCityState) {
-                for (unique in unit.getMatchingUniques(
-                    UniqueType.GainInfluenceWithUnitGiftToCityState,
-                    checkCivInfoUniques = true
-                )) {
-                    if (unit.matchesFilter(unique.params[1])) {
-                        recipient.getDiplomacyManager(unit.civ)!!
-                            .addInfluence(unique.params[0].toFloat() - 5f)
-                        break
-                    }
-                }
-
-                recipient.getDiplomacyManager(unit.civ)!!.addInfluence(5f)
-            }
+            if (recipient.isCityState)
+                recipient.getDiplomacyManager(unit.civ)!!.addInfluence(recipient.cityStateFunctions.unitGiftInfluence(unit.civ, unit.baseUnit, unit))
 
             if (recipient.isCityState && unit.isGreatPerson())
                 unit.destroy()  // City states don't get GPs

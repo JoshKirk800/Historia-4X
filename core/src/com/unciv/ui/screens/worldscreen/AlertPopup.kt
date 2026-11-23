@@ -571,7 +571,8 @@ class AlertPopup(
             }
 
             if (originalOwner.isCityState) {
-                originalOwner.getDiplomacyManagerOrMeet(captor).addInfluence(45f)
+                val returnConstants = originalOwner.gameInfo.ruleset.modOptions.constants
+                originalOwner.getDiplomacyManagerOrMeet(captor).addInfluence(if (returnConstants.cityStateInfluenceLikeVp) returnConstants.cityStateInfluence.civilianReturned.toFloat() else 45f)
             } else if (originalOwner.isMajorCiv) {
                 originalOwner.getDiplomacyManagerOrMeet(captor)
                 // CvPlayer::DoCivilianReturnLogic: each returned civilian is remembered (CvDiplomacyAI::GetCiviliansReturnedToMeScore)

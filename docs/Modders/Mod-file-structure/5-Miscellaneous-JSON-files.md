@@ -379,6 +379,7 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | workboatAutomationSearchMaxTiles         | Int    | 37                            | [^M]  |
 | cityStateInfluenceLikeVp                 | Boolean | false                        | How the influence with a City-State changes each turn as in Vox Populi instead of Brave New World's: a protector's resting point is 5 (not 10), the decay grows with the points over the resting point, is three times as fast towards a protector whose capital is damaged, the trade route bonus is multiplied by the number of routes to City-States (at most 5), the change is divided by the game speed's production cost percentage, and an ally stays until another civilization has more influence |
 | cityStateInfluence                       | Object  | [See below](#citystateinfluenceconstants) | The defines of that model, only read with `cityStateInfluenceLikeVp` |
+| cityStateGoldGifts                       | Boolean | true                         | Whether gold can be given to a City-State for influence, by the player and by the AI. Vox Populi has none (`CSD_GOLD_GIFT_DISABLED`) |
 | cityStateBullyLikeVp                     | Boolean | false                        | Demanding tribute as in Vox Populi instead of Brave New World's: the score is the share of the military might and the local power with no base reluctance and no penalty for low influence, gold needs a score of 20 and the heavy tribute (the worker) 100, a demand costs 30 influence and what the civilization has over its resting point, and the `upon demanding tribute from a City-State` yields are paid |
 | cityStateBully                           | Object  | [See below](#citystatebullyconstants) | The defines of that model, only read with `cityStateBullyLikeVp` |
 | spyPointsLikeVp                          | Boolean | false                        | Vox Populi's spy points instead of whole spies: `Gain [n] Spy Points` counts points and makes a spy each time they reach the threshold (100 in Vox Populi), `Gain an extra spy` is one threshold of points, a negative amount is a debt. Without it `Gain [n] Spy Points` does nothing |
@@ -678,6 +679,16 @@ The defines of `cityStateInfluenceLikeVp`, in hundredths of influence where the 
 | anchorProtected | Int | 5 | `MINOR_FRIENDSHIP_ANCHOR_MOD_PROTECTED`: the resting point of a protector |
 | anchorWary | Int | -20 | `MINOR_FRIENDSHIP_ANCHOR_MOD_WARY_OF`: the resting point against a civilization the City-State is wary of |
 | tradeRouteBonusRoutes | Int | 5 | The most routes to City-States that multiply the trade route bonus of policies |
+| unitGift | Int | 15 | `FRIENDSHIP_PER_UNIT_GIFTED`: the influence of a military unit gift, less 1 for each military unit the City-State has (at most half of it) without a proxy war |
+| unitGiftProxyWarMultiplier | Int | 2 | What the gift is multiplied by while the giver is at peace with the City-State and it is at war with another major civilization the giver has met |
+| barbarianKilled | Int | 15 | `FRIENDSHIP_PER_BARB_KILLED` |
+| civilianReturned | Int | 50 | `RETURN_CIVILIAN_FRIENDSHIP` |
+| unitIntruding | Int | 5 | `FRIENDSHIP_PER_UNIT_INTRUDING`: taken each turn for each military unit in the borders of a City-State that is not a friend |
+| liberationPerEra | Int | 105 | `MINOR_LIBERATION_FRIENDSHIP`: the liberator gets this times its era over the highest influence of the others or its own |
+| liberationMinimum | Int | 70 | At least this, enough to be the ally |
+| liberationRestingPoint | Int | 100 | `MINOR_LIBERATION_RESTING_INFLUENCE`: what a liberation adds to the resting point of the liberator |
+| jerkTurns | Int | 50 | `BALANCE_CS_WAR_COOLDOWN_RATE`: the turns (times the game speed's production cost percentage) after an attack in which the resting point is lowered |
+| recentlyLiberatedTurns | Int | 50 | The turns after its liberation in which a tribute from a City-State counts against the score |
 
 #### CityStateBullyConstants
 
@@ -699,6 +710,7 @@ The defines of `cityStateBullyLikeVp`, with the penalties as positive numbers. T
 | protectorPenalty | Int | 15 | For each other civilization that protects it |
 | hostilePenalty | Int | 10 | For a hostile City-State |
 | militaristicPenalty | Int | 10 | For a Militaristic City-State |
+| liberatedPenalty | Int | 100 | Taken off the score for a City-State liberated within `recentlyLiberatedTurns` |
 | scoreCap | Int | 100 | The highest score |
 
 #### EspionageConstants

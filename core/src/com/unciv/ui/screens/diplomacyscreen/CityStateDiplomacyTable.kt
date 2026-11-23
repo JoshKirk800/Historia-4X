@@ -46,7 +46,8 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
             diplomacyScreen.rightSideTable.clear()
             diplomacyScreen.rightSideTable.add(ScrollPane(getGoldGiftTable(otherCiv)))
         }
-        diplomacyTable.add(giveGiftButton).row()
+        // without gold gifts (Vox Populi's) the units are the gifts, and they have their own action
+        if (otherCiv.cityStateFunctions.goldGiftsAllowed()) diplomacyTable.add(giveGiftButton).row()
         if (diplomacyScreen.isNotPlayersTurn() || viewingCiv.isAtWarWith(otherCiv)) giveGiftButton.disable()
 
         val improveTileButton = getImproveTilesButton(otherCiv, otherCivDiplomacyManager)

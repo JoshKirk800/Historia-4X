@@ -212,6 +212,43 @@ class CityStateFunctions(val civInfo: Civilization) {
         )
     }
 
+    /** Whether a major can give gold to this city-state (`cityStateGoldGifts`) */
+    @Readonly
+    fun goldGiftsAllowed() = civInfo.gameInfo.ruleset.modOptions.constants.cityStateGoldGifts
+
+    /**
+     *  CvMinorCivAI::IsProxyWarActiveForMajor (V:CvMinorCivAI.cpp:6089-6158): [major] is at peace with this city-state, which is at war with another major civilization that has cities
+     *  and that [major] has met, unless the city-state's ally is at war with it (the ally decides the peace then). The original's test of permanent wars is left out: there is none here.
+     */
+    @Readonly
+    fun isProxyWarActiveFor(major: Civilization): Boolean {
+        if (!civInfo.isAlive() || civInfo.getCapital() == null || !major.isAlive() || civInfo.isAtWarWith(major)) return false
+        return civInfo.gameInfo.getAliveMajorCivs().any { enemy ->
+            enemy != major && enemy.cities.isNotEmpty() && civInfo.isAtWarWith(enemy) && major.knows(enemy) && major.knows(civInfo) &&
+                civInfo.allyCiv?.isAtWarWith(enemy) != true
+        }
+    }
+
+    /**
+     *  What the influence of [giver] with this city-state grows by when it gives [baseUnit]: Brave New World's 5 or what the first matching unique of the unit or the giver says, with
+     *  `cityStateInfluenceLikeVp` Vox Populi's (CvMinorCivAI::GetFriendshipFromUnitGift, [CityStateInfluence.unitGiftInfluence]; [unit] is the unit when it is a gift inside the borders)
+     */
+    @Readonly
+    fun unitGiftInfluence(giver: Civilization, baseUnit: BaseUnit, unit: MapUnit? = null): Float {
+        val modConstants = civInfo.gameInfo.ruleset.modOptions.constants
+        if (!modConstants.cityStateInfluenceLikeVp) {
+            val matching = if (unit != null) unit.getMatchingUniques(UniqueType.GainInfluenceWithUnitGiftToCityState, checkCivInfoUniques = true)
+                .firstOrNull { unit.matchesFilter(it.params[1]) }
+            else giver.getMatchingUniques(UniqueType.GainInfluenceWithUnitGiftToCityState).firstOrNull { baseUnit.matchesFilter(it.params[1]) }
+            return matching?.params?.get(0)?.toFloat() ?: 5f
+        }
+        var extra = 0
+        if (baseUnit.isMilitary) giver.forEachMatchingUnique(UniqueType.MilitaryUnitGiftExtraInfluence) { extra += it.params[0].toInt() }
+        return CityStateInfluence.unitGiftInfluence(
+            modConstants.cityStateInfluence, baseUnit.isGreatPerson, isProxyWarActiveFor(giver), extra, civInfo.units.getCivUnits().count { it.isMilitary() }
+        ).toFloat()
+    }
+
     //region Units gifted from afar (CvUnit::CanDistanceGift, CvPlayer::DoDistanceGift, AddIncomingUnit, DoIncomingUnits)
 
     /** CvUnit::CanDistanceGift: whether [unit] can be sent to this city-state from anywhere on the map (needs `unitGiftTravelTurns`) */
@@ -255,12 +292,15 @@ class CityStateFunctions(val civInfo: Civilization) {
             civInfo.incomingUnitGifts.remove(giverName)
             val baseUnit = civInfo.gameInfo.ruleset.units[gift.unitName] ?: continue
             val capital = civInfo.getCapital() ?: continue
-            if (!baseUnit.isGreatPerson) civInfo.units.placeUnitNearTile(capital.location.toHexCoord(), baseUnit)
             val giver = civInfo.gameInfo.civilizations.firstOrNull { it.civName == giverName }
+            // the worth is worked out before the unit joins the city-state's units
+            val influence = if (giver == null || !giver.isAlive()) 0f else unitGiftInfluence(giver, baseUnit)
+            if (!baseUnit.isGreatPerson) {
+                val placed = civInfo.units.placeUnitNearTile(capital.location.toHexCoord(), baseUnit)
+                if (giver != null && giver.isMajorCiv) placed?.giftedBy = giver.civID
+            }
             if (giver == null || !giver.isAlive()) continue
-            // The same worth as a gift inside the borders: 5 influence, or what the first matching unique says
-            val influence = giver.getMatchingUniques(UniqueType.GainInfluenceWithUnitGiftToCityState)
-                .firstOrNull { baseUnit.matchesFilter(it.params[1]) }?.params?.get(0)?.toFloat() ?: 5f
+            // The same worth as a gift inside the borders
             civInfo.getDiplomacyManager(giver)?.addInfluence(influence)
         }
     }
@@ -290,6 +330,7 @@ class CityStateFunctions(val civInfo: Civilization) {
 
     fun receiveGoldGift(donorCiv: Civilization, giftAmount: Int) {
         if (!civInfo.isCityState) throw Exception("You can only gain influence with City-States!")
+        if (!goldGiftsAllowed()) return
         donorCiv.addGold(-giftAmount)
         civInfo.addGold(giftAmount)
         civInfo.getDiplomacyManager(donorCiv)!!.addInfluence(influenceGainedByGift(donorCiv, giftAmount).toFloat())
@@ -639,7 +680,9 @@ class CityStateFunctions(val civInfo: Civilization) {
             otherProtectors = getProtectorCivs().count { it != demandingCiv },
             ignorePenalties = demandingCiv.hasUnique(UniqueType.IgnoresBullyPenalties),
             hostile = civInfo.cityStatePersonality == CityStatePersonality.Hostile,
-            militaristic = civInfo.cityStateType.name == "Militaristic"
+            militaristic = civInfo.cityStateType.name == "Militaristic",
+            recentlyLiberated = civInfo.turnLiberated >= 0 &&
+                civInfo.gameInfo.turns - civInfo.turnLiberated <= civInfo.gameInfo.ruleset.modOptions.constants.cityStateInfluence.recentlyLiberatedTurns
         )
     }
 
@@ -785,8 +828,8 @@ class CityStateFunctions(val civInfo: Civilization) {
         InstantYields.fire(UniqueType.TriggerUponDemandingTribute, demandingCiv, demandingCiv.getCapital(), gold)
 
         val diplomacy = civInfo.getDiplomacyManager(demandingCiv)!!
-        // the resting point change of the civilization (a Great Diplomat's mission, a liberation) is 0 until a rule gives it one
-        val change = CityStateBully.influenceChangeTimes100(constants.cityStateBully, 0, (diplomacy.getInfluence() * 100).roundToInt())
+        // what is over the resting point change of the civilization (a Great Diplomat's mission, a liberation)
+        val change = CityStateBully.influenceChangeTimes100(constants.cityStateBully, (diplomacy.restingPointChange * 100).roundToInt(), (diplomacy.getInfluence() * 100).roundToInt())
         bulliedReaction(demandingCiv, change)
         civInfo.addFlag(CivFlags.RecentlyBullied.name, 20)
     }
@@ -868,7 +911,9 @@ class CityStateFunctions(val civInfo: Civilization) {
 
             val unitsInBorder = otherCiv.units.getCivUnits().count { !it.isCivilian() && it.getTile().getOwner() == civInfo }
             if (unitsInBorder > 0 && diplomacy.isRelationshipLevelLT(RelationshipLevel.Friend)) {
-                diplomacy.addInfluence(-10f)
+                val intrusion = civInfo.gameInfo.ruleset.modOptions.constants
+                // CvMinorCivAI::DoIntrusion (V:CvMinorCivAI.cpp:11694-11772): for each military unit of the civilization in the borders
+                diplomacy.addInfluence(if (intrusion.cityStateInfluenceLikeVp) -(intrusion.cityStateInfluence.unitIntruding * unitsInBorder).toFloat() else -10f)
                 if (!diplomacy.hasFlag(DiplomacyFlags.BorderConflict)) {
                     otherCiv.popupAlerts.add(PopupAlert(AlertType.BorderConflict, civInfo.civID))
                     diplomacy.setFlag(DiplomacyFlags.BorderConflict, 10)
@@ -905,7 +950,8 @@ class CityStateFunctions(val civInfo: Civilization) {
         val diplomacy = civInfo.getDiplomacyManager(otherCiv)!!
         if (diplomacy.diplomaticStatus == DiplomaticStatus.War) return // No reward for enemies
 
-        diplomacy.addInfluence(12f)
+        val vpConstants = civInfo.gameInfo.ruleset.modOptions.constants
+        diplomacy.addInfluence(if (vpConstants.cityStateInfluenceLikeVp) vpConstants.cityStateInfluence.barbarianKilled.toFloat() else 12f)
 
         if (diplomacy.hasFlag(DiplomacyFlags.AngerFreeIntrusion))
             diplomacy.setFlag(DiplomacyFlags.AngerFreeIntrusion, diplomacy.getFlag(DiplomacyFlags.AngerFreeIntrusion) + 5)
@@ -950,6 +996,12 @@ class CityStateFunctions(val civInfo: Civilization) {
         if (attacker.isCityState) return // City states can't be upset with each other
         val context = GameContext(civInfo, attacker)
         val rng = context.stateBasedRandom("CityStateFunctions.cityStateAttacked")
+
+        // CvMinorCivAI::DoChangeAggressorStatus (V:CvMinorCivAI.cpp:16235-16258): for a while its resting point is lowered and no quest is offered, unless it is a friend or was liberated by the attacker
+        val modConstants = civInfo.gameInfo.ruleset.modOptions.constants
+        val attackerDiplomacy = civInfo.getDiplomacyManager(attacker)
+        if (modConstants.cityStateInfluenceLikeVp && attackerDiplomacy != null && attackerDiplomacy.isRelationshipLevelLT(RelationshipLevel.Friend))
+            attackerDiplomacy.setFlag(DiplomacyFlags.JerkTurns, modConstants.cityStateInfluence.jerkTurns * max(1, (civInfo.gameInfo.speed.productionCostModifier * 100).roundToInt()) / 100)
 
         // We might become wary!
         if (attacker.isMinorCivWarmonger()) { // They've attacked a lot of city-states

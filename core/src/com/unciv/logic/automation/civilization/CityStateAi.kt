@@ -627,7 +627,7 @@ object CityStateAi {
                 }
             }
             var giving = false
-            if (wishes.goldGift && !buyingOut) {
+            if (wishes.goldGift && !buyingOut && minor.cityStateFunctions.goldGiftsAllowed()) {
                 val gift = GoldGift(minor)
                 val value = goldGiftValue(civ, minor, approach, gift)
                 if (value != null && value > civ.define(AiDefine.MC_GIFT_WEIGHT_THRESHOLD)) {

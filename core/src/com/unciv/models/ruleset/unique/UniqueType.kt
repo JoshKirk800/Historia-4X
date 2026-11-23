@@ -166,6 +166,12 @@ enum class UniqueType(
 
     CityStateCanGiftGreatPeople("Allied City-States will occasionally gift Great People", UniqueTarget.Global),  // used in Policy
     CityStateInfluenceDegradation("[relativeAmount]% City-State Influence degradation", UniqueTarget.Global),
+    CityStateInfluencePerGiftedUnit("[amount] Influence per turn with City-States for each of their military units we gifted", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `cityStateInfluenceLikeVp`: the original's `Traits.MinorInfluencePerGiftedUnit` (Germany, CvMinorCivAI::GetFriendshipChangePerTurnTimes100, " +
+            "V:CvMinorCivAI.cpp:10401, 10426-10437), added to the change of each turn for each living military unit of the City-State that we gave it"),
+    MilitaryUnitGiftExtraInfluence("[amount] additional Influence with military unit gifts to City-States", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `cityStateInfluenceLikeVp`: the original's `Policies.MilitaryUnitGiftExtraInfluence` (V:CvMinorCivAI.cpp:15520-15524), added to the " +
+            "influence of a gift of a military unit. `Gain [amount] Influence with a [baseUnitFilter] gift to a City-State` is Brave New World's total instead"),
     CityStateAllyRestingPointAtWar("Resting point for Influence with City-States we are the Ally of is increased by [amount] while we are at war", UniqueTarget.Global,
         docDescription = "Only with the ModConstants `cityStateInfluenceLikeVp`: the original's `Policies.MinimumAllyInfluenceIncreaseAtWar` (CvMinorCivAI::GetFriendshipAnchorWithMajor, " +
             "V:CvMinorCivAI.cpp:10701-10704), added to the resting point of the ally of a city-state while the civilization is at war with anyone"),

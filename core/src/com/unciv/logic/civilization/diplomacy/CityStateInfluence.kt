@@ -72,6 +72,33 @@ object CityStateInfluence {
     }
 
     /**
+     *  CvMinorCivAI::GetFriendshipFromUnitGift (V:CvMinorCivAI.cpp:15500-15545): a military unit is worth [ModConstants.CityStateInfluenceConstants.unitGift], doubled in a proxy
+     *  war, plus the policy's [policyExtra]; without a proxy war 1 less for each military unit the city-state already has, at most half of the base (7). A great person is worth what
+     *  the trait of its giver says, which no trait of Vox Populi does.
+     */
+    @Readonly
+    fun unitGiftInfluence(constants: ModConstants.CityStateInfluenceConstants, greatPerson: Boolean, proxyWar: Boolean, policyExtra: Int, cityStateMilitaryUnits: Int): Int {
+        if (greatPerson) return 0
+        var influence = constants.unitGift
+        if (proxyWar) influence *= constants.unitGiftProxyWarMultiplier
+        if (policyExtra > 0) influence += policyExtra
+        if (!proxyWar) influence -= min(constants.unitGift / 2, cityStateMilitaryUnits)
+        return influence
+    }
+
+    /**
+     *  CvMinorCivAI::DoLiberationByMajor (V:CvMinorCivAI.cpp:11937-11965): the influence of the liberator in hundredths: the more of the highest influence of the other civilizations
+     *  ([highestOtherTimes100], at least the war value) and its own, over by the liberation influence times the era (at least 1; half of it from the barbarians), and at least enough
+     *  to be the ally
+     */
+    @Readonly
+    fun liberationInfluenceTimes100(constants: ModConstants.CityStateInfluenceConstants, highestOtherTimes100: Int, ownTimes100: Int, era: Int, fromBarbarians: Boolean): Int {
+        var gain = constants.liberationPerEra * max(era, 1)
+        if (fromBarbarians) gain /= 2
+        return max(constants.liberationMinimum * 100, max(highestOtherTimes100, ownTimes100) + gain * 100)
+    }
+
+    /**
      *  Who is the ally after the influence of [changed] went from [oldTimes100] to [newTimes100] (CvMinorCivAI::DoFriendshipChangeEffects, V:CvMinorCivAI.cpp:11393-11452): the new
      *  influence is above the ally threshold ([aboveAllyThreshold]: 60 or more and not at war) and there is no ally, or it is more than the ally's ([effectiveTimes100] of the old ally;
      *  equal does not take the place); the ally is none when it falls under the threshold; an ally that lost influence is replaced by the one of [others] with the most, if more than its own.

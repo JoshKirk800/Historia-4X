@@ -16,11 +16,13 @@ object CityStateBully {
      *  [bullyPower] and [cityStatePower] the unit power of the demanding civilization and of the city-state, its capital's included, near the city-state's capital (the latter at least 1),
      *  [militaryModifier] the percent that the traits add to both military parts (the Zulu's 50), [policyModifier] the percent of the sum that the policies add, [turnsSinceBullied] the
      *  turns since the civilization's last tribute from it (null: never), [trainPercent] the game speed's production cost percentage, [hasOtherAlly] whether another civilization is its ally,
-     *  [otherProtectors] the other civilizations that protect it, [ignorePenalties] the trait of the Zulu, and the [hostile] personality and [militaristic] type of the city-state.
+     *  [otherProtectors] the other civilizations that protect it, [ignorePenalties] the trait of the Zulu, the [hostile] personality and [militaristic] type of the city-state and
+     *  whether it was [recentlyLiberated] (V:14230-14246).
      */
     class Inputs(
         val globalMilitaryPercent: Int, val bullyPower: Int, val cityStatePower: Int, val militaryModifier: Int, val policyModifier: Int, val turnsSinceBullied: Int?,
-        val trainPercent: Int, val hasOtherAlly: Boolean, val otherProtectors: Int, val ignorePenalties: Boolean, val hostile: Boolean, val militaristic: Boolean
+        val trainPercent: Int, val hasOtherAlly: Boolean, val otherProtectors: Int, val ignorePenalties: Boolean, val hostile: Boolean, val militaristic: Boolean,
+        val recentlyLiberated: Boolean = false
     )
 
     /** The terms of the score by their names (the table of the tribute screen), their sum capped is [score]. A tribute too soon after the last is the only term, -1000 (V:14056-14070) */
@@ -49,6 +51,7 @@ object CityStateBully {
         val policies = (global + local) * i.policyModifier / 100
         if (policies != 0) terms["From Uniques"] = policies
 
+        if (i.recentlyLiberated) terms["Recently liberated"] = -constants.liberatedPenalty
         if (turnsSince != null) {
             val cooldown = constants.cooldownTurns * train / 100
             if (turnsSince < cooldown) terms["Recently paid tribute"] = (cooldown - turnsSince) * -constants.recentlyBulliedPerTurn

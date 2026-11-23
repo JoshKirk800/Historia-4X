@@ -211,6 +211,8 @@ class Civilization : IsPartOfGameInfoSerialization {
     private var permanentAllyCivID: String? = null
     /** No civilization can be the ally of this city-state (CvMinorCivAI::SetNoAlly, World Congress). Only read with [com.unciv.models.ModConstants.cityStateInfluenceLikeVp] */
     var noAlly = false
+    /** The game turn this city-state was liberated, -1 if it never was (CvMinorCivAI::m_iTurnLiberated): a tribute from it counts against the score for a while */
+    var turnLiberated = -1
     var naturalWonders = ArrayList<String>()
 
     var notifications = ArrayList<Notification>()
@@ -383,6 +385,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.allyCivName = allyCivName
         toReturn.permanentAllyCivID = permanentAllyCivID
         toReturn.noAlly = noAlly
+        toReturn.turnLiberated = turnLiberated
         for (diplomacyManager in diplomacy.values.map { it.clone() })
             toReturn.diplomacy[diplomacyManager.otherCivName] = diplomacyManager
         toReturn.proximity.putAll(proximity)

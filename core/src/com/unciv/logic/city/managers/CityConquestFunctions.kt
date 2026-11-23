@@ -15,6 +15,9 @@ import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.civilization.TileAcquisition
+import com.unciv.logic.civilization.diplomacy.CityStateInfluence
+import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
+import com.unciv.logic.civilization.diplomacy.DiplomacyManager
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.map.mapunit.UnitPromotions
 import com.unciv.logic.trade.TradeLogic
@@ -326,15 +329,20 @@ class CityConquestFunctions(val city: City) {
         } else {
             // Liberating a city state gives a large amount of influence, and peace
             // as per discussion in #15226 
-            val maxOtherInfluence = foundingCiv.diplomacy.values
-                .filter { it.otherCiv != conqueringCiv && it.otherCiv.isMajorCiv && it.otherCiv.isAlive() }
-                .fold(MINOR_FRIENDSHIP_AT_WAR) { a, b -> a.coerceAtLeast(b.getInfluence()) }
             val diplomacy = foundingCiv.getDiplomacyManagerOrMeet(conqueringCiv)
-            val liberatorOldInfluence = diplomacy.getInfluence()
-            val liberatorNewInfluence = maxOtherInfluence.coerceAtLeast(liberatorOldInfluence)
-                .plus(MINOR_LIBERATION_FRIENDSHIP)
-                .coerceAtLeast(60f)  // TODO that should be a const val, hardcoded in several places
-            diplomacy.setInfluence(liberatorNewInfluence)
+            val modConstants = conqueringCiv.gameInfo.ruleset.modOptions.constants
+            if (modConstants.cityStateInfluenceLikeVp) {
+                liberateCityStateLikeVp(conqueringCiv, conqueredCiv, foundingCiv, diplomacy)
+            } else {
+                val maxOtherInfluence = foundingCiv.diplomacy.values
+                    .filter { it.otherCiv != conqueringCiv && it.otherCiv.isMajorCiv && it.otherCiv.isAlive() }
+                    .fold(MINOR_FRIENDSHIP_AT_WAR) { a, b -> a.coerceAtLeast(b.getInfluence()) }
+                val liberatorOldInfluence = diplomacy.getInfluence()
+                val liberatorNewInfluence = maxOtherInfluence.coerceAtLeast(liberatorOldInfluence)
+                    .plus(MINOR_LIBERATION_FRIENDSHIP)
+                    .coerceAtLeast(60f)  // TODO that should be a const val, hardcoded in several places
+                diplomacy.setInfluence(liberatorNewInfluence)
+            }
             // Peace with anyone else the city state is stuck at war with
             // Note that currently, a liberated city state does NOT automatically declare war against other civs 
             //   the liberator may be at war with - if it just returned to life it's weird to have it immediately 
@@ -351,6 +359,28 @@ class CityConquestFunctions(val city: City) {
         }
     }
 
+
+    /**
+     *  CvMinorCivAI::DoLiberationByMajor (V:CvMinorCivAI.cpp:11878-11965) and CvPlayer::DoLiberatePlayer (V:CvPlayer.cpp:8968): the city-state forgives [liberator], the civilization that
+     *  held the city ([conqueror]) is at war value with it, from the barbarians all the others start again from 0; the liberator's influence is worked out by
+     *  [CityStateInfluence.liberationInfluenceTimes100], its resting point rises by a hundred and the turn is kept (it lowers a tribute's score for a while)
+     */
+    private fun liberateCityStateLikeVp(liberator: Civilization, conqueror: Civilization, cityState: Civilization, diplomacy: DiplomacyManager) {
+        val constants = liberator.gameInfo.ruleset.modOptions.constants.cityStateInfluence
+        diplomacy.removeFlag(DiplomacyFlags.WaryOf)
+        diplomacy.removeFlag(DiplomacyFlags.JerkTurns)
+        val fromBarbarians = conqueror.isBarbarian
+        var highestOther = (MINOR_FRIENDSHIP_AT_WAR * 100).toInt()
+        for (other in cityState.diplomacy.values.filter { it.otherCiv != liberator && it.otherCiv.isMajorCiv }) {
+            if (other.otherCiv == conqueror) other.setInfluence(MINOR_FRIENDSHIP_AT_WAR)
+            else if (fromBarbarians) other.setInfluence(0f)
+            highestOther = maxOf(highestOther, (other.influence * 100).toInt())
+        }
+        val new = CityStateInfluence.liberationInfluenceTimes100(constants, highestOther, (diplomacy.influence * 100).toInt(), liberator.getEraNumber(), fromBarbarians)
+        diplomacy.setInfluence(new / 100f)
+        diplomacy.restingPointChange += constants.liberationRestingPoint
+        cityState.turnLiberated = liberator.gameInfo.turns
+    }
 
     fun moveToCiv(newCiv: Civilization) {
         val oldCiv = city.civ

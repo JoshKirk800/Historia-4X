@@ -106,6 +106,8 @@ enum class DiplomacyFlags {
 
     Denunciation,
     WaryOf,
+    /** The turns left in which a city-state that this major attacked has the resting point of its influence lowered and no quest for it (CvMinorCivAI::GetJerkTurnsRemaining), only with `cityStateInfluenceLikeVp` */
+    JerkTurns,
     Bullied,
     RecentlyAttacked,
     ResourceTradesCutShort,
@@ -276,6 +278,10 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
     /** For city-states: the game turn this major last demanded tribute from it (CvMinorCivAI::m_aiTurnLastBullied), -1 if it never did. Only kept with [com.unciv.models.ModConstants.cityStateBullyLikeVp] */
     var turnLastBullied = -1
 
+    /** For city-states: what a Great Diplomat's mission or the liberation of the city-state added to the resting point of this major's influence (CvMinorCivAI::GetRestingPointChange).
+     *  Only with [com.unciv.models.ModConstants.cityStateInfluenceLikeVp] */
+    var restingPointChange = 0f
+
     /** Total of each turn Science during Research Agreement */
     internal var totalOfScienceDuringRA = 0
 
@@ -286,6 +292,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         toReturn.trades.addAll(trades.map { it.clone() })
         toReturn.influence = influence
         toReturn.turnLastBullied = turnLastBullied
+        toReturn.restingPointChange = restingPointChange
         toReturn.flagsCountdown.putAll(flagsCountdown)
         toReturn.diplomaticModifiers.putAll(diplomaticModifiers)
         toReturn.negativeArchaeologyPoints = negativeArchaeologyPoints
@@ -495,8 +502,10 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         if (vp) {
             // CvMinorCivAI::GetFriendshipAnchorWithMajor (V:CvMinorCivAI.cpp:10679-10704)
             val constants = civInfo.gameInfo.ruleset.modOptions.constants.cityStateInfluence
+            restingPoint += restingPointChange
             if (diplomaticStatus == DiplomaticStatus.Protector) restingPoint += constants.anchorProtected
             if (hasFlag(DiplomacyFlags.WaryOf)) restingPoint += constants.anchorWary
+            if (hasFlag(DiplomacyFlags.JerkTurns)) restingPoint += constants.anchorWary
             // United Front: the ally, while at war with anyone
             if (civInfo.allyCiv == otherCiv && otherCiv.isAtWar())
                 otherCiv.forEachMatchingUnique(UniqueType.CityStateAllyRestingPointAtWar) { restingPoint += it.params[0].toInt() }
@@ -538,6 +547,12 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         }
         if (otherCiv.hasUnique(UniqueType.CityStateInfluenceGainWhenAfraid) && civInfo.cityStateFunctions.canBullyGold(otherCiv))
             otherCiv.forEachMatchingUnique(UniqueType.CityStateInfluenceGainWhenAfraid) { shift += it.params[0].toInt() * 100 }
+
+        // a trait: for each living military unit of the city-state that this major gave it (V:CvMinorCivAI.cpp:10426-10437)
+        if (otherCiv.hasUnique(UniqueType.CityStateInfluencePerGiftedUnit)) {
+            val gifted = civInfo.units.getCivUnits().count { it.giftedBy == otherCiv.civID && !it.isCivilian() }
+            otherCiv.forEachMatchingUnique(UniqueType.CityStateInfluencePerGiftedUnit) { shift += it.params[0].toInt() * gifted * 100 }
+        }
 
         var recoveryPercent = 100 + if (shared) constants.sharedReligionRatePercent else 0
         if (otherCiv.hasUnique(UniqueType.CityStateInfluenceRecoversTwiceNormalRate)) recoveryPercent += 100

@@ -727,6 +727,13 @@ The defines of `cityStateQuestsLikeVp`. These values are not merged individually
 | protectionBoost | Int | 15 | `BALANCE_INFLUENCE_BOOST_PROTECTION_MINOR`: added to the modifier if the civilization protects the City-State |
 | friendlyModifier | Int | 25 | `MINOR_CIV_QUEST_REWARD_FRIENDLY`: added to the modifier for a Friendly City-State |
 | hostileModifier | Int | -25 | `MINOR_CIV_QUEST_REWARD_HOSTILE`: added for a Hostile one |
+| firstPossibleTurn | Int | 4 | `MINOR_CIV_PERSONAL_QUEST_FIRST_POSSIBLE_TURN` and the global one: times the square root of the speed's percentage over 10 (4 on Standard, 6 on Marathon) |
+| firstTurnRandom | Int | 0 | The random turns of the first countdown |
+| personalMinTurnsBetween | Int | 10 | The turns between personal quests, then a random 0 to `personalRandTurnsBetween` less one, times the speed |
+| personalRandTurnsBetween | Int | 20 | |
+| globalMinTurnsBetween | Int | 25 | The same for the global quests |
+| globalRandTurnsBetween | Int | 20 | |
+| hostileRandMultiplier | Int | 200 | The percent a Hostile City-State multiplies the random turns by |
 | typeMultipliers | Map | Vox Populi's | The percent of the reward of a kind (Gold, Science, Culture, Faith, GoldenAgePoints, Food, Production, Tourism, GreatPersonPoints, GreatPersonPointsEverywhere, GeneralPoints, AdmiralPoints, Experience) by City-State type; no entry is 100 |
 | personalityMultipliers | Map | Vox Populi's | The same by personality (Neutral, Irrational) |
 

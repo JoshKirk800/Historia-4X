@@ -10,6 +10,7 @@ import com.unciv.logic.civilization.NotificationAction
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.civilization.Proximity
+import com.unciv.logic.civilization.diplomacy.CityStatePersonality
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.city.City
@@ -170,6 +171,18 @@ class QuestManager : IsPartOfGameInfoSerialization {
 
     ////////// Internal Implementation //////////
 
+    /** CvMinorCivAI::IsEnabledQuest (V:CvMinorCivAI.cpp:6671-6735) with the table: the quest is on and its weight in the era is above 0 (always for [eraName] null, the old rules) */
+    @Readonly
+    private fun isEnabledInEra(quest: Quest, eraName: String?) = eraName == null || (quest.enabled && getQuestWeight(quest.name, eraName) > 0f)
+
+    /** CvGame::UpdateGameEra (V:CvGame.cpp:4648-4668): the average era of the living major civilizations, rounded half up; the era of the global quests */
+    @Readonly
+    private fun getGameEraName(): String {
+        val majors = civ.gameInfo.civilizations.filter { it.isMajorCiv && it.isAlive() }
+        val average = if (majors.isEmpty()) 0 else (majors.sumOf { it.getEraNumber() }.toFloat() / majors.size + 0.5f).toInt()
+        return ruleset.eras.values.firstOrNull { it.eraNumber == average }?.name ?: ruleset.eras.values.maxByOrNull { it.eraNumber }!!.name
+    }
+
     private fun Civilization.addQuestNotification(text: String, actions: Iterable<NotificationAction>) =
         addNotification(text, actions, NotificationCategory.Diplomacy, civ.civName, NotificationIcon.Quest)
     private fun Civilization.addDiplomacyNotification(text: String) =
@@ -193,14 +206,24 @@ class QuestManager : IsPartOfGameInfoSerialization {
                 entry.setValue(entry.value - 1)
     }
 
+    @Readonly private fun questsLikeVp() = civ.gameInfo.ruleset.modOptions.constants.cityStateQuestsLikeVp
+
     private fun seedGlobalQuestCountdown() {
-        if (civ.gameInfo.turns < GLOBAL_QUEST_FIRST_POSSIBLE_TURN)
+        val vp = questsLikeVp()
+        val questConstants = civ.gameInfo.ruleset.modOptions.constants.cityStateQuests
+        val firstTurn = if (vp) CityStateQuestSchedule.firstPossibleTurn(questConstants, civ.gameInfo.speed.modifier) else GLOBAL_QUEST_FIRST_POSSIBLE_TURN
+        if (civ.gameInfo.turns < firstTurn)
             return
 
         if (globalQuestCountdown != UNSET)
             return
 
         val rng = civ.state.stateBasedRandom("QuestManager.seedGlobalQuestCooldown")
+        if (vp) {
+            globalQuestCountdown = CityStateQuestSchedule.countdown(questConstants, global = true, firstTime = civ.gameInfo.turns == firstTurn,
+                hostile = civ.cityStatePersonality == CityStatePersonality.Hostile, speedModifier = civ.gameInfo.speed.modifier, random = rng)
+            return
+        }
         val countdown =
                 if (civ.gameInfo.turns == GLOBAL_QUEST_FIRST_POSSIBLE_TURN)
                     rng.nextInt(GLOBAL_QUEST_FIRST_POSSIBLE_TURN_RAND)
@@ -211,7 +234,9 @@ class QuestManager : IsPartOfGameInfoSerialization {
     }
 
     private fun seedIndividualQuestsCountdowns() {
-        if (civ.gameInfo.turns < INDIVIDUAL_QUEST_FIRST_POSSIBLE_TURN)
+        val firstTurn = if (questsLikeVp()) CityStateQuestSchedule.firstPossibleTurn(civ.gameInfo.ruleset.modOptions.constants.cityStateQuests, civ.gameInfo.speed.modifier)
+            else INDIVIDUAL_QUEST_FIRST_POSSIBLE_TURN
+        if (civ.gameInfo.turns < firstTurn)
             return
 
         @Suppress("DEPRECATION") // At the time of writing this. the ReplaceWith is the deprecated function itself
@@ -223,6 +248,13 @@ class QuestManager : IsPartOfGameInfoSerialization {
 
     private fun seedIndividualQuestsCountdown(challenger: Civilization) {
         val rng = civ.state.copy(otherCiv = challenger).stateBasedRandom("QuestManager.seedIndividualQuestCooldown")
+        if (questsLikeVp()) {
+            val questConstants = civ.gameInfo.ruleset.modOptions.constants.cityStateQuests
+            val firstTurn = CityStateQuestSchedule.firstPossibleTurn(questConstants, civ.gameInfo.speed.modifier)
+            individualQuestCountdown[challenger.civID] = CityStateQuestSchedule.countdown(questConstants, global = false, firstTime = civ.gameInfo.turns == firstTurn,
+                hostile = civ.cityStatePersonality == CityStatePersonality.Hostile, speedModifier = civ.gameInfo.speed.modifier, random = rng)
+            return
+        }
         val countdown: Int =
                 if (civ.gameInfo.turns == INDIVIDUAL_QUEST_FIRST_POSSIBLE_TURN)
                     rng.nextInt(INDIVIDUAL_QUEST_FIRST_POSSIBLE_TURN_RAND)
@@ -246,12 +278,13 @@ class QuestManager : IsPartOfGameInfoSerialization {
         @Suppress("DEPRECATION") // We want a Sequence
         val majorCivs = civ.getKnownCivs().filter { it.isMajorCiv && !it.isAtWarWith(civ) } // A Sequence - fine because the count below can be different for each Quest
         @Readonly fun Quest.isAssignable() = majorCivs.count { civ -> isQuestValid(this, civ) } >= minimumCivs
+        val gameEra = if (questsLikeVp()) getGameEraName() else null
         val assignableQuests = getQuests {
-            it.isGlobal() && it.isAssignable()
+            it.isGlobal() && it.isAssignable() && isEnabledInEra(it, gameEra)
         }
 
         if (assignableQuests.isNotEmpty()) {
-            val quest = assignableQuests.randomWeighted(civ.getRandom()) { getQuestWeight(it.name) }
+            val quest = assignableQuests.randomWeighted(civ.getRandom()) { getQuestWeight(it.name, gameEra) }
             @Suppress("DEPRECATION") // At the time of writing this. the ReplaceWith is the deprecated function itself
             val assignees = civ.gameInfo.getAliveMajorCivs().filter { !it.isAtWarWith(civ) && isQuestValid(quest, it) }
 
@@ -270,10 +303,11 @@ class QuestManager : IsPartOfGameInfoSerialization {
             if (getAssignedQuestsFor(challenger).count { it.isIndividual() } >= INDIVIDUAL_QUEST_MAX_ACTIVE)
                 continue
 
-            val assignableQuests = getQuests { it.isIndividual() && isQuestValid(it, challenger) }
+            val era = if (questsLikeVp()) challenger.getEra().name else null
+            val assignableQuests = getQuests { it.isIndividual() && isQuestValid(it, challenger) && isEnabledInEra(it, era) }
 
             if (assignableQuests.isNotEmpty()) {
-                val quest = assignableQuests.randomWeighted(civ.getRandom(challenger)) { getQuestWeight(it.name) }
+                val quest = assignableQuests.randomWeighted(civ.getRandom(challenger)) { getQuestWeight(it.name, era) }
                 val assignees = arrayListOf(challenger)
 
                 assignNewQuest(quest, assignees)
@@ -746,9 +780,11 @@ class QuestManager : IsPartOfGameInfoSerialization {
      * Returns the weight of the [questName], depends on city state trait and personality
      */
     @Readonly
-    private fun getQuestWeight(questName: String): Float {
+    private fun getQuestWeight(questName: String, eraName: String? = null): Float {
         var weight = 1f
         val quest = ruleset.quests[questName] ?: return 0f
+        // CvMinorCivAI::GetQuestWeight (V:CvMinorCivAI.cpp:7421-7426): the table by type, personality and era
+        if (eraName != null) return quest.weightByEra[eraName]?.get("${civ.cityStateType.name}|${civ.cityStatePersonality.name}")?.toFloat() ?: 0f
 
         val personalityWeight = quest.weightForCityStateType[civ.cityStatePersonality.name]
         if (personalityWeight != null) weight *= personalityWeight

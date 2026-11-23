@@ -83,6 +83,12 @@ class Quest : INamed {
     /** `SmallAwards.Random`: the random share of the rewards is 0 to this, twice */
     var randomMod = 0
 
+    /**
+     *  The weight of the quest for the era (the era's name) and the type and personality of the city-state ("Cultured|Friendly"), `MinorCivilizations_QuestWeights`; a missing entry is 0,
+     *  and a quest with weight 0 is not given in the era. Only with [com.unciv.models.ModConstants.cityStateQuestsLikeVp], which ignores [weightForCityStateType]
+     */
+    var weightByEra = HashMap<String, HashMap<String, Int>>()
+
     /** Whether Vox Populi enables the quest (the types with weight 0 in all eras are off); only with [com.unciv.models.ModConstants.cityStateQuestsLikeVp] */
     var enabled = true
 

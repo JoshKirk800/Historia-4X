@@ -578,7 +578,9 @@ class ModConstants {
     /**
      *  The defines of [cityStateQuestsLikeVp]. Can only be modded all-or-nothing; the defaults are Vox Populi 5.4.8's. [eraScalerPercent] the growth of a reward for each era after the
      *  first (`iEraScaler`, V:CvMinorCivAI.cpp:347); [protectionBoost] `BALANCE_INFLUENCE_BOOST_PROTECTION_MINOR`, [friendlyModifier] `MINOR_CIV_QUEST_REWARD_FRIENDLY` and
-     *  [hostileModifier] `MINOR_CIV_QUEST_REWARD_HOSTILE` the percent added to the modifier of the civilization; [typeMultipliers] and [personalityMultipliers] the percent of a reward
+     *  [hostileModifier] `MINOR_CIV_QUEST_REWARD_HOSTILE` the percent added to the modifier of the civilization; [firstPossibleTurn] `MINOR_CIV_PERSONAL_QUEST_FIRST_POSSIBLE_TURN` and
+     *  `_GLOBAL_`, [firstTurnRandom] `..._FIRST_POSSIBLE_TURN_RAND`, [personalMinTurnsBetween], [personalRandTurnsBetween], [globalMinTurnsBetween], [globalRandTurnsBetween] the
+     *  `..._MIN_TURNS_BETWEEN` and `..._RAND_TURNS_BETWEEN` (a hostile city-state multiplies the random span by [hostileRandMultiplier] percent), see [com.unciv.logic.civilization.managers.quests.CityStateQuestSchedule]; [typeMultipliers] and [personalityMultipliers] the percent of a reward
      *  of a [com.unciv.logic.civilization.managers.quests.QuestRewardKind] name by city-state type and by personality name (the `MINOR_CIV_QUEST_REWARD_*` defines; no entry is 100).
      */
     data class CityStateQuestConstants(
@@ -586,6 +588,13 @@ class ModConstants {
         val protectionBoost: Int = 15,
         val friendlyModifier: Int = 25,
         val hostileModifier: Int = -25,
+        val firstPossibleTurn: Int = 4,
+        val firstTurnRandom: Int = 0,
+        val personalMinTurnsBetween: Int = 10,
+        val personalRandTurnsBetween: Int = 20,
+        val globalMinTurnsBetween: Int = 25,
+        val globalRandTurnsBetween: Int = 20,
+        val hostileRandMultiplier: Int = 200,
         val typeMultipliers: Map<String, Map<String, Int>> = mapOf(
             "Gold" to mapOf("Mercantile" to 150, "Maritime" to 125),
             "Science" to mapOf("Religious" to 60),

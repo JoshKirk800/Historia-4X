@@ -689,6 +689,10 @@ enum class UniqueType(
     Range("[amount] Range", UniqueTarget.Unit, UniqueTarget.Global),
     AirInterceptionRange("[relativeAmount] Air Interception Range", UniqueTarget.Unit, UniqueTarget.Global),
     Heal("[amount] HP when healing", UniqueTarget.Unit, UniqueTarget.Global),
+    /** VP 5.4.8 CvUnit::GetMaxHitPoints (UnitPromotions.MaxHitPointsChange, CvUnit::changeMaxHitPointsChange): added to the base 100 hit points. */
+    MaxHitPointsChange("[amount] maximum hit points", UniqueTarget.Unit,
+        docDescription = "Added to the unit's 100 maximum hit points; conditionals are not evaluated (the sum is kept with the unit's uniques). Only read with the ModConstants switch `unitMaxHitPointsLikeVp`; " +
+            "the lost health stays the same when the maximum changes (CvUnit::changeMaxHitPointsChange leaves the damage as it is)."),
     ExtraRangedAttack("Before engaging in combat performs an extra ranged attack with [amount]% of melee combat strength", UniqueTarget.Unit),
 
     SpreadReligionStrength("[relativeAmount]% Spread Religion Strength", UniqueTarget.Unit, UniqueTarget.Global,
@@ -1174,6 +1178,18 @@ enum class UniqueType(
     ConditionalVsLargerCiv("when fighting units from a Civilization with more Cities than you", UniqueTarget.Conditional),
     ConditionalAttacking("when attacking", UniqueTarget.Conditional),
     ConditionalDefending("when defending", UniqueTarget.Conditional),
+    /** VP 5.4.8 CvUnit::GetMaxRangedCombatStrength: `GetRangedAttackModifier` (UnitPromotions.RangedAttackModifier) is added only when the unit attacks (bAttacking), also on interceptions and air attacks. */
+    ConditionalRangedAttack("when making a ranged attack", UniqueTarget.Conditional,
+        docDescription = "True while a unit that has a ranged strength attacks (a unit, a city, or an interception by an air unit). Not true for a city's own strike or while defending."),
+    /** VP 5.4.8 CvUnit::GetMaxAttackStrength / GetMaxRangedCombatStrength: `attackFullyHealedModifier` (UnitPromotions.AttackFullyHealedMod) when the defender has no damage. */
+    ConditionalVsFullyHealed("vs fully healed units", UniqueTarget.Conditional,
+        docDescription = "True while a unit attacks a unit that has all its hit points. Never true against a city or while defending."),
+    /** VP 5.4.8 CvUnit::GetMaxAttackStrength (damage < maximum / 2) and GetMaxRangedCombatStrength (damage < (maximum + 1) / 2): `attackAbove50HealthModifier` (UnitPromotions.AttackAbove50HealthMod). */
+    ConditionalVsAboveHalfHealth("vs units above half health", UniqueTarget.Conditional,
+        docDescription = "True while a unit attacks a unit whose lost hit points are below half of its maximum (rounded down for a melee attacker, up for a ranged one). Never true against a city or while defending."),
+    /** VP 5.4.8 CvUnit::GetMaxAttackStrength / GetMaxRangedCombatStrength: `attackBelow50HealthModifier` (UnitPromotions.AttackBelowEqual50HealthMod), the case that is not [ConditionalVsAboveHalfHealth]. */
+    ConditionalVsHalfHealthOrBelow("vs units at or below half health", UniqueTarget.Conditional,
+        docDescription = "True while a unit attacks a unit that is not above half health (see `vs units above half health`). Never true against a city or while defending."),
     ConditionalFightingInTiles("when fighting in [tileFilter] tiles", UniqueTarget.Conditional),
     ConditionalForeignContinent("on foreign continents", UniqueTarget.Conditional),
     ConditionalAdjacentUnit("when adjacent to a [mapUnitFilter] unit", UniqueTarget.Conditional),

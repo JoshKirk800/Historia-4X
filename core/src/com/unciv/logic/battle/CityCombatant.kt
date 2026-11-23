@@ -69,7 +69,7 @@ class CityCombatant(val city: City, private val ignoreGarrison: Boolean = false)
 
         // Garrisoned unit gives up to 20% of strength to city, health-dependant
         if (cityTile.militaryUnit != null)
-            strength += cityTile.militaryUnit!!.baseUnit.strength * (cityTile.militaryUnit!!.health / 100f) * modConstants.cityStrengthFromGarrison
+            strength += cityTile.militaryUnit!!.baseUnit.strength * (cityTile.militaryUnit!!.health / cityTile.militaryUnit!!.getMaxHealth().toFloat()) * modConstants.cityStrengthFromGarrison
 
         val buildingsDefense = city.getStrength()
         var buildingsStrength = buildingsDefense

@@ -111,7 +111,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
         for (attacker in contentsOf(tile).units) {
             if (attacker.isDestroyed) continue
             val from = attackFrom(attacker, tile)
-            val equal = SimCombatant(attacker, tile, MAX_HEALTH)
+            val equal = SimCombatant(attacker, tile, attacker.getMaxHealth())
             damage += BattleDamage.calculateDamageToDefender(MapUnitCombatant(attacker), equal, from, EXPECTED_RANDOMNESS, ignoreFlanking = true)
         }
         return damage
@@ -241,7 +241,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
         val maxHealth = city.getMaxHealth()
         if (cityDanger + (maxHealth - city.health) >= maxHealth + CITY_FALLS_MARGIN) return Int.MAX_VALUE
         // Reconstruct the amount of damage the garrison would absorb for the city
-        return if (unit.canGarrison()) cityDanger * 2 * MAX_HEALTH / maxHealth + improvementDamageAt(tile) else 0
+        return if (unit.canGarrison()) cityDanger * 2 * unit.getMaxHealth() / maxHealth + improvementDamageAt(tile) else 0
     }
 
     /** What an attacker whose civilization does not see [tile] does: only 4/5 of [damage], there is a chance it will not spot the target */
@@ -354,7 +354,6 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
     companion object {
         private const val NOT_COMPUTED = -1
         private const val EXPECTED_RANDOMNESS = TacticalTargets.EXPECTED_RANDOMNESS
-        private const val MAX_HEALTH = 100
         /** FOG_DEFAULT_DANGER: what each hidden plot that could hold an enemy adds */
         private const val FOG_DEFAULT_DANGER = 1
         /** GetDanger(bool): terrain and features cannot be told apart from a unit's promotions, so 20 is assumed */
@@ -381,7 +380,7 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
 
         /** CvUnit::GetDamageCombatModifier: [value] less the share a wounded [unit] loses (WOUNDED_DAMAGE_MULTIPLIER percent of its missing health) */
         fun valueConsideringDamage(value: Int, unit: MapUnit, rules: AiRuleset): Int {
-            val damageMod = (100 - unit.health) * rules.define(AiDefine.WOUNDED_DAMAGE_MULTIPLIER) / 100
+            val damageMod = (unit.getMaxHealth() - unit.health) * rules.define(AiDefine.WOUNDED_DAMAGE_MULTIPLIER) / 100
             return value - value * damageMod / 100
         }
     }

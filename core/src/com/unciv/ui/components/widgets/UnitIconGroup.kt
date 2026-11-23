@@ -133,8 +133,8 @@ class UnitIconGroup(val unitView: ForeignMapUnitView, val size: Float) : NonTran
             addActor(actionGroup)
         }
 
-        if (unitView.unitHealth < 100) { // add health bar
-            val hp = ImageGetter.getHealthBar(unitView.unitHealth.toFloat(), 100f, size * 0.78f)
+        if (unitView.unitHealth < unitView.unitMaxHealth) { // add health bar
+            val hp = ImageGetter.getHealthBar(unitView.unitHealth.toFloat(), unitView.unitMaxHealth.toFloat(), size * 0.78f)
             addActor(hp)
             hp.centerX(this)
         }

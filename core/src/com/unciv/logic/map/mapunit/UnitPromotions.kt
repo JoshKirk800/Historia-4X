@@ -142,6 +142,7 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
         for (unique in unit.getTriggeredUniques(UniqueType.TriggerUponPromotionGain){ it.params[0] == promotionName })
             UniqueTriggerActivation.triggerUnique(unique, unit)
 
+        val maximumBefore = unit.getMaxHealth()
         if (!promotion.hasUnique(UniqueType.SkipPromotion))
             promotions.add(promotionName)
 
@@ -150,6 +151,7 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
         doDirectPromotionEffects(promotion)
 
         unit.updateUniques()
+        unit.keepDamageAfterMaxHealthChange(maximumBefore)
 
         // Since some units get promotions upon construction, they will get the addPromotion from the unit.postBuildEvent
         // upon creation, BEFORE they are assigned to a tile, so the updateVisibleTiles() would crash.
@@ -162,8 +164,10 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
         val promotion = ruleset.unitPromotions[promotionName]!!
 
         if (getPromotions().contains(promotion)) {
+            val maximumBefore = unit.getMaxHealth()
             promotions.remove(promotionName)
             unit.updateUniques()
+            unit.keepDamageAfterMaxHealthChange(maximumBefore)
             unit.updateVisibleTiles()
             
             for (unique in unit.getTriggeredUniques(UniqueType.TriggerUponPromotionLoss){ it.params[0] == promotionName })

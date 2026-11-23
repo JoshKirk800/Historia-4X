@@ -27,7 +27,6 @@ object PillageRules {
     private const val DESERT = "Desert"
     private const val MARSH = "Marsh"
     private const val FOREST = "Forest"
-    private const val MAX_HEALTH = 100
 
     /** CvUnit::hasFreePillageMove */
     fun hasFreePillageMove(unit: MapUnit) = unit.hasUnique(UniqueType.NoMovementToPillage, checkCivInfoUniques = true)
@@ -79,7 +78,7 @@ object PillageRules {
         if (owner != null && hasRoute &&
             (tile.isHill() || tile.baseTerrain == DESERT || tile.terrainFeatures.any { it == MARSH || it == FOREST } || tile.isAdjacentToRiver())) return true
 
-        val damage = MAX_HEALTH - unit.health
+        val damage = unit.getMaxHealth() - unit.health
         if (conservative) return damage >= heal && heal >= civ.gameInfo.ruleset.ai.define(AiDefine.PILLAGE_HEAL_AMOUNT)
         return damage > 0
     }

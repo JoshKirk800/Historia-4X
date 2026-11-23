@@ -393,8 +393,9 @@ object BattleDamage {
             // (CvUnit.cpp:2796-2802, strength reduction 9851-9862, projected damage 10893-10899)
             var multiplier = BattleConstants.WOUNDED_DAMAGE_MULTIPLIER
             combatant.unit.forEachMatchingUnique(UniqueType.WoundedUnitDamagePenalty, checkCivInfoUniques = true) { multiplier += it.params[0].toInt() }
-            // A third of the lost health, in whole numbers: WOUNDED_DAMAGE_MULTIPLIER is 33% (CvUnit::getCombatDamage)
-            (100 - (100 - combatant.getHealth()) * max(multiplier, 0) / 100) / 100f
+            // A third of the lost health, in whole numbers: WOUNDED_DAMAGE_MULTIPLIER is 33% (CvUnit::getCombatDamage); the lost health is
+            // the damage of the unit, so with unitMaxHitPointsLikeVp it is counted from the unit's own maximum, not from 100
+            (100 - (combatant.getMaxHealth() - combatant.getHealth()) * max(multiplier, 0) / 100) / 100f
         }
     }
 
@@ -504,7 +505,7 @@ object BattleDamage {
         var damage = rawDamageToDefender(attacker, defender, tileToAttackFrom, randomnessFactor, fullHealthScale, ignoreFlanking)
         if (defender is CityCombatant) damage = (damage - defender.getFlatDamageReduction()).coerceAtLeast(0)
         if (defender !is CityCombatant || !sharesGarrisonDamage(attacker, defender)) return damage
-        val garrisonMaxHealth = if (defender.city.getGarrison() == null) 0 else 100
+        val garrisonMaxHealth = defender.city.getGarrison()?.getMaxHealth() ?: 0 // CvUnit::GetRangeCombatDamage: iGarrisonMaxHP
         return damage - garrisonShare(damage, defender.getMaxHealth(), garrisonMaxHealth)
     }
 
@@ -523,7 +524,7 @@ object BattleDamage {
         var damage = rawDamageToDefender(attacker, defender, tileToAttackFrom, randomnessFactor, fullHealthScale, ignoreFlanking)
         if (defender is CityCombatant) damage = (damage - defender.getFlatDamageReduction()).coerceAtLeast(0)
         if (defender !is CityCombatant || !sharesGarrisonDamage(attacker, defender)) return damage to 0
-        val maxHealth = garrisonMaxHealth ?: if (defender.city.getGarrison() == null) 0 else 100
+        val maxHealth = garrisonMaxHealth ?: defender.city.getGarrison()?.getMaxHealth() ?: 0
         val share = garrisonShare(damage, defender.getMaxHealth(), maxHealth)
         return damage - share to share
     }

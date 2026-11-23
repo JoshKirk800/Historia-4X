@@ -38,6 +38,12 @@ class ModConstants {
     var combatHealthStrengthLikeVp = false
     var enemyCombatAurasLikeVp = false
 
+    /** VP 5.4.8 CvUnit::GetMaxHitPoints: a unit's maximum hit points are the base 100 plus the sum of the promotions' `MaxHitPointsChange`
+     *  (the unique `[amount] maximum hit points`) instead of always 100. Health, healing, damage, the wounded test, the captured and the
+     *  upgraded unit's health follow the unit's own maximum (CvUnit::setDamage, GetScrapGold, CvUnit::convert, CvUnit::GetMaxHitPoints);
+     *  the health lost stays the same when a promotion changes the maximum (CvUnit::changeMaxHitPointsChange). false: 100 and the unique is not read. */
+    var unitMaxHitPointsLikeVp = false
+
     /** VP CvUnitCombat::DoDamageMath uses separate melee and ranged defines in hundredths. */
     data class CombatDamageConstants(
         val meleeBase: Int = 2400,

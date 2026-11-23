@@ -70,7 +70,11 @@ class MapUnitCache(private val mapUnit: MapUnit) {
     var hasStrengthBonusInRadiusUnique = false
     var hasSappingBonusUnique = false
     var hasHeavyChargeUnique = false
-    
+
+    /** The sum of the unit's `[amount] maximum hit points` (CvUnit::m_iMaxHitPointsChange); [MapUnit.getMaxHealth] adds it to 100 with unitMaxHitPointsLikeVp */
+    var maxHealthChange = 0
+        private set
+
     var state = GameContext.EmptyState
 
     fun updateUniques() {
@@ -128,6 +132,10 @@ class MapUnitCache(private val mapUnit: MapUnit) {
         hasStrengthBonusInRadiusUnique = mapUnit.hasUnique(UniqueType.StrengthBonusInRadius, GameContext.IgnoreConditionals)
         hasSappingBonusUnique = mapUnit.hasUnique(UniqueType.SappingBonusInRadius, GameContext.IgnoreConditionals)
         hasHeavyChargeUnique = mapUnit.hasUnique(UniqueType.HeavyCharge, GameContext.IgnoreConditionals)
+        maxHealthChange = 0
+        mapUnit.forEachMatchingUnique(UniqueType.MaxHitPointsChange, gameContext = GameContext.IgnoreConditionals) {
+            maxHealthChange += it.params[0].toInt()
+        }
     }
 
     companion object {

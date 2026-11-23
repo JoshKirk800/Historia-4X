@@ -163,7 +163,7 @@ object TacticalAttacks {
 
             var strength = maxAttackStrength(unit)
             val health = unit.health
-            if (preferredDamage > 0 && 100 - health > preferredDamage) strength *= 3
+            if (preferredDamage > 0 && unit.getMaxHealth() - health > preferredDamage) strength *= 3
 
             if (targetUndefended) {
                 if (canMoveOnto(unit, tile, turns)) result.add(Striker(unit, strength / 2, health))

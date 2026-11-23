@@ -184,7 +184,7 @@ object TacticalSimulation {
                 AssignmentType.Heal, AssignmentType.Finish -> {
                     // The difference to a blocked unit: nobody else may move it, unless it should heal; this lets civilians use it as cover
                     unit.fortifyIfCan()
-                    if (unit.health >= 100 || !unit.hasMovement() || civ.isBarbarian) finishedUnits.add(unit)
+                    if (unit.health >= unit.getMaxHealth() || !unit.hasMovement() || civ.isBarbarian) finishedUnits.add(unit)
                     pre = true
                     post = true
                 }
@@ -287,7 +287,7 @@ object TacticalSimulation {
             val attacker = MapUnitCombatant(unit)
             val dealt = BattleDamage.calculateDamageToDefender(attacker, defender, unit.getTile(), EXPECTED_RANDOMNESS, ignoreFlanking = true)
             val taken = if (unit.baseUnit.isRanged()) 0 else BattleDamage.calculateDamageToAttacker(attacker, defender, unit.getTile(), EXPECTED_RANDOMNESS, ignoreFlanking = true)
-            val accepted = if (defender is CityCombatant) dealt > taken || dealt * 2 > taken && unit.health - taken > 50
+            val accepted = if (defender is CityCombatant) dealt > taken || dealt * 2 > taken && unit.health - taken > unit.getMaxHealth() / 2
                 else dealt > taken / 5 && unit.health > taken / 2
             if (!accepted) continue
             // With many melee units do not assume they all can be executed at once
@@ -543,7 +543,7 @@ object TacticalSimulation {
 
         val initial = LinkedHashMap<Int, MapUnit>()
         for (unit in armyUnits.sortedBy { it.id }) {
-            if (unit.isDestroyed || !unit.hasMovement() || unit in ctx.cache.processedUnits || unit.health < 50) continue
+            if (unit.isDestroyed || !unit.hasMovement() || unit in ctx.cache.processedUnits || unit.health * 2 < unit.getMaxHealth()) continue
             // Can we attack somebody? Who can attack us?
             val canAttack = TacticalAttacks.canAttack(unit) && TargetHelper.getAttackableEnemies(unit, unit.movement.getDistanceToTiles()).isNotEmpty()
             val attackers = enemies.filter { canThreaten(it, unit.getTile()) }

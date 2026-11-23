@@ -82,7 +82,8 @@ object BattleUnitCapture {
         val defenderTile = defender.getTile()
         val addedUnit = attacker.getCivInfo().units.placeUnitNearTile(defenderTile.position, defender.getName()) ?: return false
         addedUnit.currentMovement = 0f
-        addedUnit.health = 50
+        // CvUnit::createCaptureUnit: the captured unit's health is a share of its own GetMaxHitPoints (COMBAT_CAPTURE_HEALTH, 50 here)
+        addedUnit.health = addedUnit.getMaxHealth() * 50 / 100
         attacker.getCivInfo().addNotification("An enemy [${defender.getName()}] has joined us!", MapUnitAction(addedUnit), NotificationCategory.War, defender.getName())
 
         defender.getCivInfo().addNotification(

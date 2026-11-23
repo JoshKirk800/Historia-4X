@@ -34,11 +34,8 @@ object AirMoves {
     /** The share of hit points a base may lose before the aircraft in it want to leave (MAX_HIT_POINTS / 5) */
     private const val BASE_DAMAGE_DIVISOR = 5
 
-    /** Half the hit points: an aircraft with this many or fewer is not combat ready (CvUnit::getDamage() * 2 < MAX_HIT_POINTS) */
-    private const val HALF_HEALTH = 50
-
-    /** An aircraft with more than half its hit points: the tactical AI recruits it, uses it for strikes and sweeps, and the homeland AI rebases it */
-    fun isCombatReady(unit: MapUnit) = unit.health > HALF_HEALTH
+    /** An aircraft with more than half its hit points (CvUnit::getDamage() * 2 < GetMaxHitPoints()): the tactical AI recruits it, uses it for strikes and sweeps, and the homeland AI rebases it */
+    fun isCombatReady(unit: MapUnit) = unit.health * 2 > unit.getMaxHealth()
 
     /** CvUnit::IsAirSweepCapable */
     fun isAirSweepCapable(unit: MapUnit) = unit.hasUnique(UniqueType.CanAirsweep)
@@ -93,7 +90,7 @@ object AirMoves {
 
     /** Whether a base (city or carrier) has lost more than a fifth of its hit points */
     private fun cityInDanger(city: com.unciv.logic.city.City) = city.getMaxHealth() - city.health > city.getMaxHealth() / BASE_DAMAGE_DIVISOR
-    private fun carrierDamaged(carrier: MapUnit) = 100 - carrier.health > 100 / BASE_DAMAGE_DIVISOR
+    private fun carrierDamaged(carrier: MapUnit) = carrier.getMaxHealth() - carrier.health > carrier.getMaxHealth() / BASE_DAMAGE_DIVISOR
 
     /** The carrier [unit] is on, if it is on one */
     private fun carrierOf(unit: MapUnit): MapUnit? = if (unit.isTransported) unit.getTile().getUnits().firstOrNull { it != unit && it.isTransportTypeOf(unit) } else null

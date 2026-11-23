@@ -45,7 +45,7 @@ object TacticalBombards {
             val base = unit.baseUnit
             // Units with no combat strength of their own are not used: civilians, and aircraft (the original gives them ranged strength only)
             if (base.isAirUnit() || base.strength == 0 && base.rangedStrength == 0) continue
-            if (mustHaveHalfHp && unit.health < 50) continue
+            if (mustHaveHalfHp && unit.health * 2 < unit.getMaxHealth()) continue
             if (mustBeRanged) {
                 if (tile.isWater && base.isLandUnit || !tile.isWater && !tile.isCityCenter() && base.isWaterUnit) continue
                 if (!base.isRanged() || unit.getRange() < rangeRequired || TacticalAttacks.isOutOfAttacks(unit)) continue
@@ -206,7 +206,7 @@ object TacticalBombards {
             if (unit.getTile() != block.tile) {
                 ctx.log { "moving to cover a protected bombard with ${unit.name}, to ${block.tile.position}" }
                 unit.movement.tryHeadTowards(block.tile)
-            } else if (UnitActionsPillage.canPillage(unit, unit.getTile()) && unit.health < 100) {
+            } else if (UnitActionsPillage.canPillage(unit, unit.getTile()) && unit.health < unit.getMaxHealth()) {
                 ctx.log { "pillaging during a protected bombard with ${unit.name}" }
                 UnitActionsPillage.getPillageAction(unit, unit.getTile())?.action?.invoke()
             } else if (unit.canFortify()) unit.fortify()

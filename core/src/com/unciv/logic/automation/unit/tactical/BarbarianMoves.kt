@@ -50,7 +50,7 @@ object BarbarianMoves {
             val camp = target.tile
             val defender = camp.militaryUnit?.takeIf { it.civ == ctx.civ && !it.isDestroyed }
             if (defender != null) {
-                val upgraded = if (defender.health >= MAX_HEALTH) UseGoldAutomation.upgradeNow(defender, free = true) else null
+                val upgraded = if (defender.health >= defender.getMaxHealth()) UseGoldAutomation.upgradeNow(defender, free = true) else null
                 if (upgraded != null) {
                     ctx.unitProcessed(upgraded)
                     continue
@@ -82,7 +82,6 @@ object BarbarianMoves {
         }
     }
 
-    private const val MAX_HEALTH = 100
     private const val CAMP_DEFENSE_TURNS = 5
     //endregion
 

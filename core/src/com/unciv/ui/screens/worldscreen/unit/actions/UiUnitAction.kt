@@ -145,7 +145,7 @@ enum class UiUnitActionType private constructor(
     Sleep(UnitActionType.Sleep, portrait("Sleep"), useFrequency = 29f) {
         // Sleep moves to second page if current action is SleepUntilHealed or if unit is wounded and it's not already the current action
         override fun getPage(unit: MapUnit) =
-            if (unit.isSleepingUntilHealed() || unit.health < 100 && !(unit.isSleeping() && !unit.isActionUntilHealed())) 1 else 0
+            if (unit.isSleepingUntilHealed() || unit.health < unit.getMaxHealth() && !(unit.isSleeping() && !unit.isActionUntilHealed())) 1 else 0
         override fun getDefaultUseFrequency(unit: MapUnit, unitAction: UnitAction?) = if (unit.isSleeping()) 21f else defaultUseFrequency
     },
     SleepUntilHealed(UnitActionType.SleepUntilHealed, portrait("Sleep"), useFrequency = 44f) {
@@ -157,7 +157,7 @@ enum class UiUnitActionType private constructor(
     Fortify(UnitActionType.Fortify, portrait("Fortify"), uncivSound = UncivSound.Fortify, useFrequency = 30f) {
         // Fortify moves to second page if current action is FortifyUntilHealed or if unit is wounded and it's not already the current action
         override fun getPage(unit: MapUnit) =
-            if (unit.isFortifyingUntilHealed() || unit.health < 100 && !(unit.isFortified() && !unit.isActionUntilHealed())) 1 else 0
+            if (unit.isFortifyingUntilHealed() || unit.health < unit.getMaxHealth() && !(unit.isFortified() && !unit.isActionUntilHealed())) 1 else 0
         override fun getDefaultUseFrequency(unit: MapUnit, unitAction: UnitAction?) = if (unitAction?.isCurrentAction == true) 10f else defaultUseFrequency
     },
     FortifyUntilHealed(UnitActionType.FortifyUntilHealed, portrait("FortifyUntilHealed"), uncivSound = UncivSound.Fortify, useFrequency = 45f) {

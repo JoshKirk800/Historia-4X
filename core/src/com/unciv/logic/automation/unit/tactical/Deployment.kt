@@ -272,7 +272,7 @@ object Deployment {
             if (unit.isDestroyed) continue
             if (unit.hasMovement()) {
                 val tile = unit.getTile()
-                if (UnitActionsPillage.canPillage(unit, tile) && unit.health < 100) {
+                if (UnitActionsPillage.canPillage(unit, tile) && unit.health < unit.getMaxHealth()) {
                     ctx.log { "already in position, will pillage with ${unit.name}, ${tile.position}" }
                     UnitActionsPillage.getPillageAction(unit, tile)?.action?.invoke()
                 } else if (unit.canFortify()) unit.fortify()

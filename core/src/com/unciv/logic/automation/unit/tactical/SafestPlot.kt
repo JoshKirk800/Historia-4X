@@ -26,7 +26,6 @@ class ReachedTile(val tile: Tile, val movesLeft: Float)
  */
 object SafestPlot {
 
-    private const val MAX_HEALTH = 100
     private const val LINEAR_DANGER = 144
     private const val UNLIMITED_DANGER = 10000
     /** PlotMovesToSafety's sorting keys for the units that flee: ranged units start at 30, the others at 20, less their movement */
@@ -94,7 +93,7 @@ object SafestPlot {
         val dangerList = ArrayList<Option>()
         val enemies = civ.getCivsAtWarWith()
         val alwaysHeals = unit.hasUnique(UniqueType.HealsEvenAfterAction)
-        val damage = MAX_HEALTH - unit.health
+        val damage = unit.getMaxHealth() - unit.health
         for (tile in tiles) {
             // Don't attack though
             if (TacticalTargets.visibleEnemyDefender(civ, tile) != null || ctx.isEnemyCity(tile)) continue
@@ -205,7 +204,7 @@ object SafestPlot {
                 if (!unit.isMilitary() || unit.baseUnit.strength <= 0 || (isGarrison && !unit.baseUnit.isWaterUnit)) continue
                 if (civ.ai.operations.armyOf(unit) != null) continue
                 // If danger is high or we took a lot of damage last turn; counterintuitively, barbarians always flee, because if we get here it means we did not attack this turn!
-                if (level > MAX_HEALTH || unit.isProjectedToDieNextTurn() || civ.isBarbarian) fleeing.add(Fleeing(unit, retreatKey(unit)))
+                if (level > unit.getMaxHealth() || unit.isProjectedToDieNextTurn() || civ.isBarbarian) fleeing.add(Fleeing(unit, retreatKey(unit)))
             } else if (!TacticalSafety.canDefend(unit)) fleeing.add(Fleeing(unit, retreatKey(unit))) // Civilian (or embarked) units always flee from danger
         }
         // Melee units should retreat last: std::stable_sort, the highest key first
@@ -242,7 +241,7 @@ object SafestPlot {
 
             if (origin == target) {
                 // Typical citadel case
-                if (unit.health * HEALTHY_FRACTION_DENOMINATOR > MAX_HEALTH * HEALTHY_FRACTION_NUMERATOR) TacticalSimulation.performRangedOpportunityAttack(ctx, unit)
+                if (unit.health * HEALTHY_FRACTION_DENOMINATOR > unit.getMaxHealth() * HEALTHY_FRACTION_NUMERATOR) TacticalSimulation.performRangedOpportunityAttack(ctx, unit)
                 // Make sure the unit stays put!
                 unit.fortifyIfCan()
             } else {
@@ -260,7 +259,7 @@ object SafestPlot {
                 }
             }
             ctx.unitProcessed(unit)
-        } else if (civ.ai.plotDanger.get(unit) < min(unit.health + TacticalSafety.actualHealRate(unit, origin), MAX_HEALTH)) {
+        } else if (civ.ai.plotDanger.get(unit) < min(unit.health + TacticalSafety.actualHealRate(unit, origin), unit.getMaxHealth())) {
             // Do nothing and hope for the best
             unit.fortifyIfCan()
             ctx.unitProcessed(unit)

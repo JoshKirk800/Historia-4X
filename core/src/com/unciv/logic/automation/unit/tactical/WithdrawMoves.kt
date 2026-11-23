@@ -34,7 +34,7 @@ object WithdrawMoves {
         for (unit in ctx.liveUnits()) {
             if (!unit.hasMovement() || unit.baseUnit.isAirUnit()) continue
             // Recent, healthy deployments need to attack!
-            if (civ.ai.deployFromOperationTurn(unit) + recent >= ctx.turn && unit.health > MAX_HEALTH / 2) continue
+            if (civ.ai.deployFromOperationTurn(unit) + recent >= ctx.turn && unit.health > unit.getMaxHealth() / 2) continue
             // Am I in the current dominance zone? Units in other dominance zones need to fend for themselves, depending on their own posture
             if (ctx.map.zoneOf(unit.getTile())?.id != zone.id) continue
             // However, zones might overlap borders, so double check that we don't give up our border forts
@@ -113,5 +113,4 @@ object WithdrawMoves {
         return score
     }
 
-    private const val MAX_HEALTH = 100
 }

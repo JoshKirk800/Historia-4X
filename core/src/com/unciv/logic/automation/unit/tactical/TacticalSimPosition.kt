@@ -151,7 +151,7 @@ class SimPosition private constructor(val world: SimWorld, val parent: SimPositi
 
     /** setCombatUnitEndTurn is called for a finished unit that is not blocked and will not run off to heal */
     private fun endsTurn(unit: Int) = last[unit] != AssignmentType.Blocked &&
-        (moves[unit] <= EPSILON || world.civ.isBarbarian || world.units[unit].unit.health >= 100)
+        (moves[unit] <= EPSILON || world.civ.isBarbarian || world.units[unit].unit.let { it.health >= it.getMaxHealth() })
 
     /** CvTacticalPlot::getNumAdjacentFriendliesEndTurn: units that have finished their turn next to the plot */
     fun adjacentFriendliesEndTurn(p: Int, domain: SimDomain): Int {

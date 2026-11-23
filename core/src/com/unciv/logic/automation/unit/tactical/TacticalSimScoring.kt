@@ -103,7 +103,7 @@ class SimScoring(private val w: SimWorld) {
                     val scaledCounterattack = counterattack / aggressionBias
                     val remainingTurnsOnAttacker = attackerHealth / (damageReceived + scaledCounterattack + 1)
                     // No attack if it is too early yet
-                    val goodFirstAttack = 100 - mu.health < 13 && cityDamageDealt > damageReceived && damageReceived < 23
+                    val goodFirstAttack = mu.getMaxHealth() - mu.health < 13 && cityDamageDealt > damageReceived && damageReceived < 23
                     if (remainingTurnsOnAttacker < remainingTurnsOnCity && !goodFirstAttack) {
                         result.setImpossible()
                         return false
@@ -174,7 +174,7 @@ class SimScoring(private val w: SimWorld) {
                 // A unit that heals by killing
                 var heal = 0
                 mu.forEachMatchingUnique(UniqueType.HealsAfterKilling, checkCivInfoUniques = true) { heal += it.params[0].toInt() }
-                if (heal > 0) damageReceived = max(damageReceived - heal, -(100 - mu.health))
+                if (heal > 0) damageReceived = max(damageReceived - heal, -(mu.getMaxHealth() - mu.health))
             }
         }
 
@@ -222,7 +222,7 @@ class SimScoring(private val w: SimWorld) {
         // Finally the score: add the previous damage again and again to make concentrated fire attractive
         val actualCityDamage = min(cityDamageDealt, previousCityHitPoints + if (ranged) 2 else 10)
         var actualDamageTaken = min(damageReceived, attackerHealth)
-        if (actualDamageTaken < 0) actualDamageTaken = max(actualDamageTaken, -(100 - mu.health + unit.selfDamage))
+        if (actualDamageTaken < 0) actualDamageTaken = max(actualDamageTaken, -(mu.getMaxHealth() - mu.health + unit.selfDamage))
 
         // Focus on low hit point units and cities
         val totalActualDamage = actualCityDamage + totalActualUnitDamageDealt
@@ -371,7 +371,7 @@ class SimScoring(private val w: SimWorld) {
             // Move skirmishers in to fire
             if (skirmisher && enemyDistance == 1) plotScore += 3
             // If we are not in a good spot, try moving
-            if (plotScore <= 6 && tile == mu.getTile() && 100 - mu.health + unit.selfDamage < 10) plotScore -= 2
+            if (plotScore <= 6 && tile == mu.getTile() && mu.getMaxHealth() - mu.health + unit.selfDamage < 10) plotScore -= 2
             // Move melee units in to capture cities
             if (!simUnit.ranged && pos.enemyDistance(testPlot) == 1) {
                 for (n in w.neighbors[testPlot]) {
@@ -406,10 +406,10 @@ class SimScoring(private val w: SimWorld) {
         // A bonus for potential fortifying and healing
         if (result.type == AssignmentType.FinishTemp) {
             if (unit.moves >= simUnit.maxMoves - SimPosition.EPSILON) {
-                if (100 - mu.health + unit.selfDamage > 0 && !mu.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true) && !mu.isEmbarked()) {
+                if (mu.getMaxHealth() - mu.health + unit.selfDamage > 0 && !mu.hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true) && !mu.isEmbarked()) {
                     var healRate = mu.healingAmountForTile(tile, noTerrainDamage = true)
                     if (healRate > 0) {
-                        healRate = min(healRate, 100 - mu.health + unit.selfDamage)
+                        healRate = min(healRate, mu.getMaxHealth() - mu.health + unit.selfDamage)
                         damageDelta += healRate
                         selfDamage -= healRate
                         result.type = AssignmentType.Heal
@@ -548,7 +548,7 @@ class SimScoring(private val w: SimWorld) {
         if (improvementDamage < 15 && strategic) bonus += 15
         else if (improvementDamage < 10 && tile.getOwner() != null && tile.roadStatus != RoadStatus.None && tile.isRoughTerrain()) bonus += 10
         if (tile.canPillageTileImprovement()) {
-            val heal = min(25, 100 - mu.health + unit.selfDamage)
+            val heal = min(25, mu.getMaxHealth() - mu.health + unit.selfDamage)
             if (heal > 0) {
                 selfDamage -= heal
                 damageDelta += heal

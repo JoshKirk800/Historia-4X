@@ -91,13 +91,12 @@ object PromotionAi {
 
     /** CvUnit::isPromotionValid beyond the promotion tree: a heal needs damage, interception and air sweep promotions need the ability */
     private fun canTake(unit: MapUnit, def: PromotionAiDef): Boolean {
-        if (def.instaHeal && unit.health >= MAX_HEALTH) return false
+        if (def.instaHeal && unit.health >= unit.getMaxHealth()) return false
         if (def.interceptionCombatModifier != 0 && !canAirDefend(unit)) return false
         if (def.airSweepCombatModifier != 0 && !canAirSweep(unit)) return false
         return true
     }
 
-    private const val MAX_HEALTH = 100
 
     private val offensiveTypes = setOf(UnitAiType.ATTACK, UnitAiType.FAST_ATTACK)
     private val defensiveTypes = setOf(UnitAiType.DEFENSE, UnitAiType.COUNTER)
@@ -139,7 +138,7 @@ object PromotionAi {
         var value = 0
 
         // If we are damaged, insta heal is the way to go (half health or less)
-        if (p.instaHeal && MAX_HEALTH - unit.health >= MAX_HEALTH / 2) value += 1000
+        if (p.instaHeal && unit.getMaxHealth() - unit.health >= unit.getMaxHealth() / 2) value += 1000
 
         if (p.openAttack != 0) {
             var t = p.openAttack * (100 + own.sum { it.openAttack } * 2) / 100

@@ -498,7 +498,7 @@ class SimWorld(
         if (attacker.baseUnit.isRanged() && attacker.baseUnit.isWaterUnit && attackerTile.isCityCenter()) return Triple(0, 0, 0)
         val (dealt, garrisonDamage) = BattleDamage.calculateDamageToDefenderAndGarrison(
             attackerCombatant, cityCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = true,
-            garrisonMaxHealth = if (remaining > 0) 100 else 0)
+            garrisonMaxHealth = if (remaining > 0) garrison?.getMaxHealth() ?: 0 else 0)
         val taken = if (attacker.baseUnit.isRanged()) 0
             else BattleDamage.calculateDamageToAttacker(attackerCombatant, cityCombatant, attackerTile, EXPECTED_RANDOMNESS, ignoreFlanking = true)
         return Triple(dealt, taken, garrisonDamage.coerceAtMost(remaining))
@@ -562,8 +562,8 @@ class SimWorld(
             // Capturing a city destroys its garrison: the unit takes its share of what the city would take
             val maxHealth = cityHere.getMaxHealth()
             return if (sum + (maxHealth - cityHere.health) < maxHealth + 50) {
-                if (unit.canGarrison()) sum * 2 * 100 / maxHealth + improvementDamageAt(tile) else 0
-            } else 10 * 100
+                if (unit.canGarrison()) sum * 2 * unit.getMaxHealth() / maxHealth + improvementDamageAt(tile) else 0
+            } else 10 * unit.getMaxHealth()
         }
         sum += improvementDamageAt(tile) + unit.getDamageFromTerrain(tile)
         return minOf(sum, 10 * 100)

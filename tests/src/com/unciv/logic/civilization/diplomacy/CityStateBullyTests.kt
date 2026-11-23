@@ -77,6 +77,12 @@ class CityStateBullyTests {
     }
 
     @Test
+    fun `a city-state that was liberated lately takes 100 off the score`() {
+        val inputs = CityStateBully.Inputs(100, 0, 100, 0, 0, null, 100, false, 0, false, false, false, recentlyLiberated = true)
+        assertEquals(50 - 100, CityStateBully.score(constants, inputs))
+    }
+
+    @Test
     fun `tribute needs a score of 20 for gold and 100 for heavy tribute`() {
         assertFalse(CityStateBully.canBullyGold(constants, 0))
         assertFalse(CityStateBully.canBullyGold(constants, 19))

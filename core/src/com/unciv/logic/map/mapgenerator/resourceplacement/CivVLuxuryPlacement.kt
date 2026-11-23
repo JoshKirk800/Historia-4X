@@ -104,6 +104,14 @@ class CivVLuxuryPlacement(
             CivVWorldSize.Standard to 4, CivVWorldSize.Large to 2, CivVWorldSize.Huge to 1
         )
 
+        /** Vox Populi's GetRandomLuxuriesTargetNumber (V:(2) Vox Populi/Core Files/Overrides/AssignStartingPlots.lua:6042-6054, used at 6128-6140): how many of the kinds that no region and no city state
+         *  has are placed anywhere, whatever the number of kinds; the rest are left out. ("With more luxuries available, this ensures that the total luxuries used each game still
+         *  match the default game": Brave New World's [disabledByWorldSize] is the same number for its 20 kinds.) */
+        private val randomTypesByWorldSize = mapOf(
+            CivVWorldSize.Duel to 4, CivVWorldSize.Tiny to 5, CivVWorldSize.Small to 5,
+            CivVWorldSize.Standard to 5, CivVWorldSize.Large to 7, CivVWorldSize.Huge to 9
+        )
+
         private val randomRatios = listOf(
             listOf(1.0), listOf(0.55, 0.45), listOf(0.40, 0.33, 0.27), listOf(0.35, 0.25, 0.25, 0.15),
             listOf(0.25, 0.25, 0.20, 0.15, 0.15), listOf(0.20, 0.20, 0.20, 0.15, 0.15, 0.10),
@@ -196,7 +204,8 @@ class CivVLuxuryPlacement(
         val toDisable = min(unassigned, disabledByWorldSize[worldSize]!!)
         val remaining = fallbackWeights.keys.filter { it in ruleset.tileResources && it !in assignedToRegions && it !in cityStateLuxuries }
             .shuffled(rng)
-        val random = remaining.drop(toDisable)
+        // Brave New World leaves out a number by world size, Vox Populi places a number by world size: with 29 kinds that is not the same
+        val random = if (viaVoxPopuli) remaining.drop(max(0, remaining.size - randomTypesByWorldSize[worldSize]!!)) else remaining.drop(toDisable)
         roles = Roles(cityStateLuxuries, random, order)
         return roles
     }

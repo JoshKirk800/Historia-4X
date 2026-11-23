@@ -479,6 +479,26 @@ enum class Countables(
         override fun eval(parameterText: String, gameContext: GameContext) =
             gameContext.civInfo?.goldenAges?.numberOfGoldenAges
     },
+    ErasEntered("Eras entered", shortDocumentation = "The number of eras the civilization has entered since the starting era") {
+        override val documentationStrings = listOf(
+            "The original adds `Feature_EraYieldChanges` to a team's feature yields once at each change of its era but the entry into its starting era (`CvTeam::SetCurrentEra`), " +
+                "so a natural wonder's yield is the amount times this count: `[+2 Science] <for every [Eras entered]>` on the terrain. " +
+                "It counts the difference of the era numbers, where the original counts the changes: a technology that skips an era counts the skipped one too."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val civ = gameContext.civInfo ?: return null
+            return (civ.getEraNumber() - civ.gameInfo.getStartingEra().eraNumber).coerceAtLeast(0)
+        }
+    },
+    SpecialistsOfKindInCity("[specialist] Specialists in this city", shortDocumentation = "The number of specialists of the kind in the city") {
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val city = gameContext.city ?: return null
+            return city.population.specialistAllocations[parameterText.getPlaceholderParameters()[0]]
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.Specialist.getTranslatedErrorSeverity(parameterText, ruleset)
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
+    },
     GoldenAgesUpTo("Golden Ages up to [positiveAmount]", shortDocumentation = "The number of Golden Ages the civilization has had, at most the amount") {
         override val documentationStrings = listOf(
             "The original's `YieldCap` of `Building_YieldChangesPerGoldenAge` and `Trait_ResourceYieldChangesFromGoldenAge`: the yield per golden age is capped as a total, " +

@@ -534,8 +534,26 @@ class MapUnit : IsPartOfGameInfoSerialization {
     }
 
 
-    /** How many tiles away this air unit can relocate to or reach in one move */
-    @Readonly fun getAirUnitMovementRange(): Int = getRange() * 2
+    /** How many tiles away this air unit can relocate to or reach in one move. With `airBasingLikeVp` the rebase range of the original
+     *  (CvUnit::getRebaseRange: the range times AIR_UNIT_REBASE_RANGE_MULTIPLIER percent, rounded down) - not the attack range, which stays [getRange]. */
+    @Readonly fun getAirUnitMovementRange(): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        return if (constants.airBasingLikeVp) getRange() * constants.airBasing.rebaseRangeMultiplier / 100 else getRange() * 2
+    }
+
+    /** CvPlot::countNumAirUnits adds CvUnitEntry::GetAirUnitCap of each air unit in a city that is not cargo: the slots this air unit takes up with `airBasingLikeVp`
+     *  (the sum of its `Counts [amount] against the air unit capacity`, 1 without one; 0 for a unit that is not an air unit); without the switch every air unit takes one. */
+    @Readonly fun airUnitCapacityCost(): Int {
+        if (!baseUnit.isAirUnit()) return 0
+        if (!civ.gameInfo.ruleset.modOptions.constants.airBasingLikeVp) return 1
+        var cost = 0
+        var found = false
+        forEachMatchingUnique(UniqueType.CountsAgainstAirUnitCapacity) {
+            cost += it.params[0].toInt()
+            found = true
+        }
+        return if (found) cost.coerceAtLeast(0) else 1
+    }
 
     @Readonly
     fun isEmbarked(): Boolean = isEmbarkedAt(currentTile)
@@ -780,6 +798,22 @@ class MapUnit : IsPartOfGameInfoSerialization {
         }
         return damageFactor.coerceAtLeast(0f)
     }
+
+    // StageAir: the numbers of VP's air interception and air strike defence, read with airInterceptionLikeVp / airDefenseLikeVp (see AirInterception, BattleDamage)
+
+    /** CvUnit::GetInterceptionDefenseDamageModifier: the sum of `Damage taken from interception reduced by`, negated (negative when it helps; UnitPromotions.InterceptionDefenseDamageModifier) */
+    @Readonly
+    fun interceptionDefenseDamageModifier(): Int =
+        -getMatchingUniques(UniqueType.DamageFromInterceptionReduced).sumOf { it.params[0].toInt() }
+
+    /** CvUnit::evasionProbability: the chance not to be intercepted at all, the sum of `[amount]% chance to evade interception`, at least 0 */
+    @Readonly
+    fun evasionProbability(): Int =
+        getMatchingUniques(UniqueType.EvadeInterception).sumOf { it.params[0].toInt() }.coerceAtLeast(0)
+
+    /** CvUnit::interceptionProbability: the chance to intercept times health / max health, for any unit (rounded down) */
+    @Readonly
+    fun interceptionProbability(): Int = interceptChance().coerceAtLeast(0) * health / getMaxHealth()
 
     @Readonly
     fun getDamageFromTerrain(tile: Tile = currentTile): Int {
@@ -1300,9 +1334,12 @@ class MapUnit : IsPartOfGameInfoSerialization {
         if (baseUnit.isAirUnit()){
             if (!tile.isCityCenter()) isTransported = true
             else {
-                val currentUntransportedUnits = tile.getUnits().count { it.type.isAirUnit() && !it.isTransported }
-                // Tile units includes us, we were just added
-                isTransported = currentUntransportedUnits > tile.getCity()!!.getMaxAirUnits()
+                val city = tile.getCity()!!
+                // Tile units includes us, we were just added. With airBasingLikeVp a unit enters while the slots in use without it are fewer than
+                // the capacity (CvUnit::canRebaseAt), so the one that was already full is the overflow, whatever the unit's cost
+                isTransported = if (civ.gameInfo.ruleset.modOptions.constants.airBasingLikeVp)
+                    city.getAirUnitSlotsUsed() - airUnitCapacityCost() >= city.getMaxAirUnits()
+                else tile.getUnits().count { it.type.isAirUnit() && !it.isTransported } > city.getMaxAirUnits()
             }
         }
         moveThroughTile(tile)

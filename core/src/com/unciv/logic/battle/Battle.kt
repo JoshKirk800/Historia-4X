@@ -131,6 +131,14 @@ object Battle {
         if (attacker is MapUnitCombatant && attacker.unit.baseUnit.isAirUnit()) {
             interceptDamage = AirInterception.tryInterceptAirAttack(attacker, attackedTile, defender.getCivInfo(), defender)
             if (attacker.isDefeated()) return interceptDamage
+            // CvUnitCombat::GenerateAirCombatInfo: "attack is aborted after successful interception" - the target takes and does nothing, the attack is spent,
+            // and a suicide attacker (a missile) is lost all the same (ResolveAirUnitVsCombat)
+            if (interceptDamage.defenderDealt > 0 && attacker.getCivInfo().gameInfo.ruleset.modOptions.constants.airInterceptionLikeVp) {
+                if (attacker.unit.hasUnique(UniqueType.SelfDestructs)) attacker.unit.destroy()
+                else if (attacker.unit.isMoving()) attacker.unit.action = null
+                reduceAttackerMovementPointsAndAttacks(attacker, defender, attackedTile)
+                return interceptDamage
+            }
         } else interceptDamage = DamageDealt.None
 
         val isAlreadyDefeatedCity = defender is CityCombatant && defender.isDefeated()

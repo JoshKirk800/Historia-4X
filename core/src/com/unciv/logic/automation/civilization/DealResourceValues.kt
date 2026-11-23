@@ -236,7 +236,9 @@ object DealResourceValues {
             for (i in 0 until 3) (if (unit.isAirUnit()) airUnits else otherUnits).add(value * (10 - i) / 10)
         }
         if (airUnits.isNotEmpty()) {
-            val freeSlots = us.cities.sumOf { it.getMaxAirUnits() - it.getCenterTile().airUnits.size }
+            // CvDealAI: GetMaxAirUnits - countNumAirUnits(team); with airBasingLikeVp the slots in use, by each unit's cost
+            val slotsLikeVp = us.gameInfo.ruleset.modOptions.constants.airBasingLikeVp
+            val freeSlots = us.cities.sumOf { it.getMaxAirUnits() - if (slotsLikeVp) it.getAirUnitSlotsUsed() else it.getCenterTile().airUnits.size }
             if (freeSlots > 0) total.addAll(airUnits.sortedDescending().take(min(freeSlots, airUnits.size)))
         }
         if (otherUnits.isNotEmpty() && supplyLeft > 0) {

@@ -893,7 +893,13 @@ class UnitMovement(val unit: MapUnit) {
     private fun getAirUnitCannotMoveToReason(tile: Tile, unit: MapUnit): CannotMoveToReason? {
         // landing in the city
         if (tile.isCityCenter()) {
-            if (tile.airUnits.filter { !it.isTransported }.size < tile.getCity()!!.getMaxAirUnits() && tile.getCity()?.civ == unit.civ)
+            val city = tile.getCity()!!
+            if (unit.civ.gameInfo.ruleset.modOptions.constants.airBasingLikeVp) {
+                // CvUnit::canRebaseAt: the slots in use there (not ours, if we already are one of them) must be fewer than the capacity
+                var used = city.getAirUnitSlotsUsed()
+                if (unit in tile.airUnits && !unit.isTransported) used -= unit.airUnitCapacityCost()
+                if (used < city.getMaxAirUnits() && city.civ == unit.civ) return null
+            } else if (tile.airUnits.filter { !it.isTransported }.size < city.getMaxAirUnits() && city.civ == unit.civ)
                 return null // if city is free - no problem, get in
         } // let's check whether it enters city on carrier now...
 

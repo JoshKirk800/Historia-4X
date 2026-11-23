@@ -841,6 +841,20 @@ enum class UniqueType(
         docDescription = "For buildings, supports using `Air` for `mapUnitFilter` to increase city air unit capacity."),
     CannotBeCarriedBy("Cannot be carried by [mapUnitFilter] units", UniqueTarget.Unit),
 
+    // --- Air basing, land air defense and interception (StageAir) ---
+    /** VP 5.4.8 Units.AirUnitCap (CvUnitEntry::GetAirUnitCap, CvPlot::countNumAirUnits): the slots of a city's air unit capacity this unit uses up. */
+    CountsAgainstAirUnitCapacity("Counts [amount] against the air unit capacity", UniqueTarget.Unit,
+        docDescription = "Only read with the ModConstants switch `airBasingLikeVp`, for air units standing in a city untransported; an air unit without it counts 1. " +
+            "A carrier's cargo slots are counted by units and ignore it."),
+    /** VP 5.4.8 Units.BaseLandAirDefense and UnitPromotions.LandAirDefenseBonus (CvUnit::GetAirStrikeDefenseDamage), Buildings.CityAirStrikeDefense (CvCity::GetAirStrikeDefenseDamage). */
+    AirDefense("[amount] air defense", UniqueTarget.Unit, UniqueTarget.Building,
+        docDescription = "The damage this unit (the sum over its own uniques and promotions) or this city (the sum over its buildings) does to an air unit that attacks it, before the " +
+            "attacker's interception damage reduction and a random addition. Only read with the ModConstants switch `airDefenseLikeVp`."),
+    /** VP 5.4.8 UnitPromotions.EvasionChange (CvUnit::evasionProbability, CvUnitCombat::GenerateAirCombatInfo). */
+    EvadeInterception("[amount]% chance to evade interception", UniqueTarget.Unit,
+        docDescription = "An air attacker with it rolls this chance (summed, at most 100) before the interceptor rolls its own, and is not intercepted if it succeeds. " +
+            "Only read with the ModConstants switch `airInterceptionLikeVp`."),
+
     // Interception
     ChanceInterceptAirAttacks("[relativeAmount]% chance to intercept air attacks", UniqueTarget.Unit),
     DamageFromInterceptionReduced("Damage taken from interception reduced by [relativeAmount]%", UniqueTarget.Unit),

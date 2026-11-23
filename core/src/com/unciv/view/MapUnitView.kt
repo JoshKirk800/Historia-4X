@@ -303,7 +303,7 @@ class MapUnitView internal constructor(
     return canBuildImprovement(tile.getRuleset().tileImprovements[improvementInProgress]!!)
 }
 /** How many tiles away this unit can relocate to or reach in one move, or `null` if it isn't an air unit */
-@Readonly fun MapUnitView.getAirUnitMovementRange(): Int? = if (isAirUnit()) getRange() * 2 else null
+@Readonly fun MapUnitView.getAirUnitMovementRange(): Int? = if (isAirUnit()) unit.getAirUnitMovementRange() else null
 @Readonly fun MapUnitView.isNuclearWeapon(): Boolean = hasUnique(UniqueType.NuclearWeapon)
 @Readonly fun MapUnitView.getNukeBlastRadius(): Int =
     getMatchingUniques(UniqueType.BlastRadius).firstOrNull()?.params?.get(0)?.toInt() ?: 2

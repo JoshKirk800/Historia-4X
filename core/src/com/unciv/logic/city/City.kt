@@ -442,10 +442,23 @@ class City : IsPartOfGameInfoSerialization, INamed {
     @Readonly fun getStrength() = cityConstructions.getBuiltBuildings().sumOf { it.cityStrength }.toFloat()
 
     /** Gets max air units that can remain in the city untransported */
-    @Readonly fun getMaxAirUnits(): Int = civ.gameInfo.ruleset.modOptions.constants.cityAirUnitCapacity +
-        getMatchingUniques(UniqueType.CarryExtraAirUnits)
+    @Readonly fun getMaxAirUnits(): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        // CvCity::GetMaxAirUnits: BASE_CITY_AIR_STACKING (m_iMaxAirUnits starts from it) plus the buildings' and the player's changes
+        val base = if (constants.airBasingLikeVp) constants.airBasing.cityAirUnitCapacity else constants.cityAirUnitCapacity
+        return base + getMatchingUniques(UniqueType.CarryExtraAirUnits)
             .filter { it.params[1] == "Air" }
             .sumOf { it.params[0].toInt() }
+    }
+
+    /** The slots of [getMaxAirUnits] in use: without `airBasingLikeVp` the air units in the city that are not transported, whoever owns them; with it
+     *  CvPlot::countNumAirUnits(team of the city): those of the city's civilization, each by its [MapUnit.airUnitCapacityCost]. */
+    @Readonly fun getAirUnitSlotsUsed(): Int {
+        val airUnits = getCenterTile().airUnits
+        return if (civ.gameInfo.ruleset.modOptions.constants.airBasingLikeVp)
+            airUnits.sumOf { if (!it.isTransported && it.civ == civ) it.airUnitCapacityCost() else 0 }
+        else airUnits.count { !it.isTransported }
+    }
 
     override fun toString() = name // for debug
 

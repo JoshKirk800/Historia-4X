@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.automation.unit.tactical.SimCombatant
 import com.unciv.logic.automation.unit.tactical.TacticalTargets
+import com.unciv.logic.battle.AirInterception
 import com.unciv.logic.battle.BattleConstants
 import com.unciv.logic.battle.BattleDamage
 import com.unciv.logic.battle.CityCombatant
@@ -331,6 +332,9 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
 
     /** CvPlot::GetBestInterceptor(owner of [target], target): the unit of a civilization at war with [target]'s that can intercept at [tile], the likeliest to succeed first */
     private fun bestInterceptor(target: MapUnit, tile: Tile): MapUnit? {
+        // airInterceptionLikeVp: the one the interception itself picks
+        if (civ.gameInfo.ruleset.modOptions.constants.airInterceptionLikeVp)
+            return AirInterception.bestInterceptorLikeVp(target.civ, MapUnitCombatant(target), tile).interceptor
         var best: MapUnit? = null
         for (other in civ.gameInfo.civilizations) {
             if (other == target.civ || !other.isAlive() || !other.isAtWarWith(target.civ)) continue
@@ -343,6 +347,9 @@ class PlotDanger(private val civ: Civilization, previouslyKnown: Set<Int> = empt
     /** CvUnit::GetInterceptionDamage: the damage [interceptor] would do to [target] on [targetTile], proportional to its full health, as the interception itself computes it */
     private fun interceptionDamage(interceptor: MapUnit?, target: MapUnit, targetTile: Tile): Int {
         if (interceptor == null || target.hasUnique(UniqueType.CannotBeIntercepted)) return 0
+        if (civ.gameInfo.ruleset.modOptions.constants.airInterceptionLikeVp)
+            return AirInterception.interceptionDamageLikeVp(interceptor,
+                SimCombatant(target, targetTile, target.health.coerceAtLeast(1)), targetTile, EXPECTED_RANDOMNESS).coerceAtMost(target.health)
         val damage = BattleDamage.calculateDamageToDefender(MapUnitCombatant(interceptor), SimCombatant(target, targetTile, target.health.coerceAtLeast(1)),
             targetTile, EXPECTED_RANDOMNESS, fullHealthScale = true)
         val factor = (1f + interceptor.interceptDamagePercentBonus() / 100f) * target.receivedInterceptDamageFactor()

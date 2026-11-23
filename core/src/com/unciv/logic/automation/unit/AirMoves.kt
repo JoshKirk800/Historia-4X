@@ -257,7 +257,8 @@ object AirMoves {
      *  intercept an air attack on [tile] now. Barbarians never intercept (CvPlot::GetBestInterceptor does not look at them).
      */
     fun interceptorCount(civ: Civilization, tile: Tile): Int =
-        civ.gameInfo.civilizations.asSequence().filter { it != civ && !it.isBarbarian && it.isAlive() && civ.isAtWarWith(it) }
+        if (civ.gameInfo.ruleset.modOptions.constants.airInterceptionLikeVp) AirInterception.interceptorCountLikeVp(civ, tile)
+        else civ.gameInfo.civilizations.asSequence().filter { it != civ && !it.isBarbarian && it.isAlive() && civ.isAtWarWith(it) }
             .flatMap { it.units.getCivUnits() }.count { it.getTile().isVisible(civ) && it.canIntercept(tile) }
 
     /**

@@ -229,6 +229,39 @@ class ModConstants {
     // Number of air units that can be stationed in a city
     var cityAirUnitCapacity = 6
 
+    // --- Air basing, land air defense and interception (StageAir) ---
+    /** VP 5.4.8 CvPlot::countNumAirUnits, CvUnit::canRebaseAt, CvUnit::getRebaseRange, CvCity::GetMaxAirUnits, CvCity::CanTrain: the air units standing in a city use
+     *  up its slots by the amount of the unique `Counts [amount] against the air unit capacity` (an air unit without it counts 1, as every air unit of VP's data has AirUnitCap 1;
+     *  units carried by a carrier or an overflow marked as transported count nothing), a unit may enter (be built in, rebase to) a city while the slots in use of
+     *  its owner's air units there (not counting the unit itself when it is already there) are fewer than the capacity, which starts from [AirBasingConstants.cityAirUnitCapacity]
+     *  instead of [cityAirUnitCapacity], and an air unit can rebase `range * rebaseRangeMultiplier / 100` tiles away instead of twice its range. Aircraft that exceed the capacity
+     *  after the switch is turned on are kept; only new ones are refused. A carrier's capacity is unchanged: each aircraft takes one cargo slot (CvUnit::cargoSpaceAvailable).
+     *  false: every untransported air unit in the tile counts 1 against [cityAirUnitCapacity] and the range is twice the range of the unit. */
+    var airBasingLikeVp = false
+    /** The GlobalDefines of VP's air basing, read only with [airBasingLikeVp]; the defaults are the numbers of the original (`BASE_CITY_AIR_STACKING`, `AIR_UNIT_REBASE_RANGE_MULTIPLIER`),
+     *  VP's are 2 and 500 (`DefineChanges.sql`). */
+    data class AirBasingConstants(
+        val cityAirUnitCapacity: Int = 6,
+        /** Percent of the unit's range it can rebase over */
+        val rebaseRangeMultiplier: Int = 200,
+    )
+    var airBasing = AirBasingConstants()
+
+    /** VP 5.4.8 CvUnit::GetAirStrikeDefenseDamage and CvCity::GetAirStrikeDefenseDamage with MOD_BALANCE_AIR_UNIT_CHANGES (on in VP): the damage a unit or a city does to an air unit
+     *  that attacks it (CvUnitCombat::GenerateAirCombatInfo) is the flat value of the unique `[amount] air defense` (the unit's own and its promotions', the city's buildings'; reduced by the
+     *  attacker's interception damage reduction, plus a random 0-4 for a unit and 0-9 for a city, a unit's also changed by the attacker's `[amount]% damage taken`), not a comparison of strengths.
+     *  false: the damage follows from the strengths and the unique is not read. */
+    var airDefenseLikeVp = false
+
+    /** VP 5.4.8 CvPlot::GetBestInterceptor, CvPlot::GetInterceptorCount, CvUnit::interceptionProbability, CvUnit::evasionProbability, CvUnit::GetInterceptionDamage,
+     *  CvUnitCombat::GenerateAirCombatInfo / ResolveAirUnitVsCombat: every civilization at war with the attacker (barbarians never) may intercept, over a third party's land only at war with
+     *  its owner or on friendly land; the interceptor is the one with the highest (strength after `Damage when intercepting`) x (chance x health) - for an air unit x health again -,
+     *  the nearest of equals, and the defender may be it; the attacker first rolls its `[amount]% chance to evade interception`, then the interceptor its chance x health / max health (any unit);
+     *  the damage is VP's damage math with the interceptor's strength raised by `Damage when intercepting` and the attacker's `Damage taken from interception reduced by` (summed) as the
+     *  modifier; an interception that does damage ends the attack (the target is not hit), and a suicide attacker is lost. false: the defender's civilization intercepts, with the highest
+     *  chance, the interceptor is rolled by its chance, the damage is multiplied by `Damage when intercepting` and by the product of the reductions, and the attack goes on. */
+    var airInterceptionLikeVp = false
+
     /** The extras of the Civ V resource placement (see CivVResourceExtras): a bonus at the third ring of each start, more bonuses in hills regions,
      *  small coal, oil or aluminum at the city states, top-ups of iron, horses, coal, oil, aluminum and uranium per civ, and no sugar on jungle.
      *  Replaces Unciv's own versions of these. It names the resources of Civ V. */

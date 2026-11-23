@@ -468,6 +468,30 @@ object BattleDamage {
     @Readonly
     fun isAirStrike(attacker: ICombatant, defender: ICombatant) = attacker.isAirUnit() && !defender.isAirUnit()
 
+    /**
+     *  With `airDefenseLikeVp`: the damage a unit or a city does to an air unit that bombs it (CvUnitCombat::GenerateAirCombatInfo, the damage the attacker takes),
+     *  as MOD_BALANCE_AIR_UNIT_CHANGES (on in VP) has CvUnit::GetAirStrikeDefenseDamage and CvCity::GetAirStrikeDefenseDamage compute it. A unit: its [UniqueType.AirDefense]
+     *  (Units.BaseLandAirDefense plus the promotions' LandAirDefenseBonus), times 100 plus the attacker's interception damage modifier (negative when good, at least 0) over 100,
+     *  plus 0-4 (randRangeExclusive(0, 5), from [randomnessFactor]), times 100 plus the attacker's damage taken modifier over 100. A city: the sum of its [UniqueType.AirDefense]
+     *  (Buildings.CityAirStrikeDefense), changed by the attacker's modifier, plus 0-9. Neither depends on health or strength, and a city has no minimum damage here.
+     *  The original also adds the attacker's `getChangeDamageValue` and ends the fight at `getForcedDamageValue`; Unciv has neither.
+     */
+    @Readonly
+    fun airStrikeDefenseDamage(attacker: MapUnitCombatant, defender: ICombatant, randomnessFactor: Float): Int {
+        val modifier = attacker.unit.interceptionDefenseDamageModifier()
+        if (defender is CityCombatant) {
+            var damage = defender.city.getMatchingUniques(UniqueType.AirDefense).sumOf { it.params[0].toInt() }
+            if (modifier != 0) damage = damage * (100 + modifier) / 100
+            return max(0, damage + (10 * randomnessFactor).toInt().coerceIn(0, 9))
+        }
+        val unit = (defender as? MapUnitCombatant)?.unit ?: return 0
+        var damage = unit.getMatchingUniques(UniqueType.AirDefense).sumOf { it.params[0].toInt() }
+        damage = damage * max(0, 100 + modifier) / 100
+        damage += (5 * randomnessFactor).toInt().coerceIn(0, 4)
+        damage = damage * (100 + damageTakenModifier(attacker)) / 100
+        return max(0, damage)
+    }
+
     @Readonly
     fun calculateDamageToAttacker(
         attacker: ICombatant,
@@ -479,11 +503,13 @@ object BattleDamage {
         ignoreFlanking: Boolean = false
     ): Int {
         if (attacker.isRanged() && !attacker.isAirUnit()) return 0
+        val constants = attacker.getCivInfo().gameInfo.ruleset.modOptions.constants
+        if (constants.airDefenseLikeVp && attacker is MapUnitCombatant && isAirStrike(attacker, defender))
+            return airStrikeDefenseDamage(attacker, defender, randomnessFactor)
         if (defender.isCivilian()) return 0
         val attackStrength = getAttackingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking)
         val defenceStrength = getDefendingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking)
         val minimum = if (defender is CityCombatant && isAirStrike(attacker, defender)) BattleConstants.MIN_CITY_STRIKE_DAMAGE else 1
-        val constants = attacker.getCivInfo().gameInfo.ruleset.modOptions.constants
         if (constants.combatHealthStrengthLikeVp) {
             val damage = constants.combatDamage
             var percent = if (defender is CityCombatant && attacker.isMelee()) damage.cityMeleeRetaliationPercent else 100
@@ -614,7 +640,7 @@ object BattleDamage {
 
     /** VP 5.4.8 CvUnitCombat::DoDamageMath, strengths and intermediate damage in hundredths. */
     @Pure
-    internal fun vpDamageMath(attackerStrength: Int, defenderStrength: Int, randomnessFactor: Float,
+    fun vpDamageMath(attackerStrength: Int, defenderStrength: Int, randomnessFactor: Float,
         base: Int = 2400, random: Int = 1200, percent: Int = 100): Int {
         val stronger = max(attackerStrength, defenderStrength).toDouble()
         val weaker = max(1, minOf(attackerStrength, defenderStrength))

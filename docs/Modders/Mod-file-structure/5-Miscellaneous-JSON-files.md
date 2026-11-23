@@ -357,7 +357,7 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | unitMaintenanceFreeUnits                 | Int    | 3                             | [^U]  |
 | unitMaintenanceGameMultiplier            | Float  | 1.0                           | [^U]  |
 | unitMaintenanceExponentDivisor           | Float  | 3.0                           | [^U]  |
-| sciencePerPopulation                     | Float  | 1.0                           | Science each citizen of a city gives (`SCIENCE_PER_POPULATION`: 1 in Brave New World, 0 in Vox Populi) |
+| sciencePerPopulation                     | Float  | 1.0                           | Science each citizen of a city gives (`SCIENCE_PER_POPULATION`: 1 in Brave New World, 0 in Vox Populi). The Brave New World ruleset keeps 1 until the science sources that replace it in Vox Populi (policies, traits, wonders, specialists in buildings) are flipped: with 0 now its research halves |
 | cityGrowth                               | Object | [See below](#citygrowthconstants) | Food a city needs to grow (`CITY_GROWTH_MULTIPLIER` and the others) |
 | borderCulture                            | Object | [See below](#borderculturecostconstants) | Culture a city needs for its next tile with `cultureCostLikeCivV` (`CULTURE_COST_FIRST_PLOT` and the others) |
 | greatPersonThresholdBase                 | Int    | 100                           | Points a city needs for the first Great Person of a group (`GREAT_PERSON_THRESHOLD_BASE`: Brave New World 100, Vox Populi 150) |

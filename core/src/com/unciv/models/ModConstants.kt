@@ -54,7 +54,8 @@ class ModConstants {
     var unitMaintenanceExponentDivisor = 3f
 
     // The science each citizen of a city gives (the "Population" entry of the city's stats): Defines SCIENCE_PER_POPULATION, 1 in Brave New World and
-    // Community Patch, 0 in Vox Populi (DefineChanges.sql:350, CvCity.cpp: CvCity::setPopulation)
+    // Community Patch, 0 in Vox Populi (DefineChanges.sql:350, CvCity.cpp: CvCity::setPopulation). The Brave New World ruleset keeps 1 until the science sources
+    // that replace it in Vox Populi are flipped
     var sciencePerPopulation = 1f
 
     /** The food a city of population p needs to grow, before the speed, the starting era and the handicaps (CvPlayer::getGrowthThreshold, V:CvPlayer.cpp:46530-46537):

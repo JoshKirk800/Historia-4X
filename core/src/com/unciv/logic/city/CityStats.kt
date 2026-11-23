@@ -382,6 +382,14 @@ class CityStats(val city: City) {
                 addUniqueStats(unique, Stat.valueOf(unique.params[1]), unique.params[0].toFloat())
         }
 
+        // "[relativeAmount]% [stat] [cityFilter] per [positiveAmount] Spy Points ever accumulated, up to [positiveAmount]%" (CvCity::getBaseYieldRateModifier, Policy_YieldModifierFromActiveSpies):
+        // whole steps of the points over the second amount, never more than the cap
+        if (city.getRuleset().modOptions.constants.spyPointsLikeVp) city.forEachMatchingUnique(UniqueType.StatPercentPerSpyPoints) { unique ->
+            if (!city.matchesFilter(unique.params[2])) return@forEachMatchingUnique
+            val percent = minOf(unique.params[4].toInt(), unique.params[0].toInt() * city.civ.espionageManager.spyPointsTotal / unique.params[3].toInt())
+            if (percent != 0) addUniqueStats(unique, Stat.valueOf(unique.params[1]), percent.toFloat())
+        }
+
         val uniquesToCheck = productionUniquesToCheck(currentConstruction)
 
         for (unique in uniquesToCheck) {

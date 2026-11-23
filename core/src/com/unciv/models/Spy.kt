@@ -10,6 +10,8 @@ import com.unciv.logic.civilization.managers.EspionageManager
 import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.IntrigueFunctions
 import com.unciv.logic.map.HexCoord
+import com.unciv.models.ruleset.SpyBonus
+import com.unciv.models.ruleset.SpyBonusKind
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
@@ -26,6 +28,8 @@ enum class SpyAction(val displayString: String, val hasCountdownTurns: Boolean, 
     MakingIntroductions("Making Introductions", true, true, false, true),
     Schmoozing("Schmoozing", false, false, true, true),
     StealingTech("Stealing Tech", false, true, true, true),
+    /** The spy gathers Network Points in a foreign major's city, only with [com.unciv.models.ModConstants.espionageLikeVp] (SPY_STATE_GATHERING_INTEL) */
+    GatheringIntel("Gathering Intel", false, false, true, true),
     RiggingElections("Rigging Elections", false, true, true) {
         override fun isDoingWork(spy: Spy) = !spy.civInfo.isAtWarWith(spy.getCity().civ)
     },
@@ -60,6 +64,13 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
     /** AI: the spy should reconsider its post at the next espionage AI turn (CvEspionageSpy::m_bEvaluateReassignment), set after a theft or a coup */
     var evaluateReassignment = false
 
+    /** The Network Points stored in the city the spy is in, which missions spend (CvCityEspionage::m_aiAmount); 0 when the spy has just moved. Only with [com.unciv.models.ModConstants.espionageLikeVp] */
+    var networkPoints = 0
+        private set
+    /** The most Network Points ever stored in this city, which the passive bonuses are earned on (CvCityEspionage::m_aiMaxAmount) */
+    var maxNetworkPoints = 0
+        private set
+
     @Transient
     lateinit var civInfo: Civilization
         private set
@@ -83,6 +94,8 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         toReturn.turnsRemainingForAction = turnsRemainingForAction
         toReturn.progressTowardsStealingTech = progressTowardsStealingTech
         toReturn.evaluateReassignment = evaluateReassignment
+        toReturn.networkPoints = networkPoints
+        toReturn.maxNetworkPoints = maxNetworkPoints
         return toReturn
     }
 
@@ -102,7 +115,8 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         when (action) {
             SpyAction.None -> return
             SpyAction.Moving -> {
-                if (isDiplomat)
+                if (likeVp()) arriveLikeVp()
+                else if (isDiplomat)
                     setAction(SpyAction.MakingIntroductions, (5 * civInfo.gameInfo.speed.modifier).toInt().coerceAtLeast(1))
                 else if (getCity().civ == civInfo)
                     // Your own cities are certainly familiar surroundings, so skip establishing a network
@@ -111,7 +125,10 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
                     setAction(SpyAction.EstablishNetwork, civInfo.culture.getSurveillanceTurns(getCity().civ))
             }
             SpyAction.MakingIntroductions -> setAction(SpyAction.Schmoozing)
-            SpyAction.Schmoozing -> IntrigueFunctions.uncover(this) // CvPlayerEspionage::ProcessSpy, SPY_STATE_SCHMOOZE
+            SpyAction.Schmoozing ->
+                if (likeVp()) schmoozeLikeVp()
+                else IntrigueFunctions.uncover(this) // CvPlayerEspionage::ProcessSpy, SPY_STATE_SCHMOOZE
+            SpyAction.GatheringIntel -> gatherIntel()
             SpyAction.EstablishNetwork -> {
                 val city = getCity() // This should never throw an exception, as going to the hideout sets your action to None.
                 if (city.civ.isCityState)
@@ -169,6 +186,70 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
             }
         }
     }
+
+    @Readonly private fun likeVp() = civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp
+
+    /** CvPlayerEspionage::ProcessSpy for a spy that has travelled to its city (V:CvEspionageClasses.cpp:790-870): a diplomat schmoozes at once, a spy in an own city counters spies, in a city-state
+     *  rigs the election, and in a foreign major's city gathers Network Points */
+    private fun arriveLikeVp() {
+        val city = getCity()
+        when {
+            isDiplomat -> { setAction(SpyAction.Schmoozing); schmoozeLikeVp() }
+            city.civ == civInfo -> setAction(SpyAction.CounterIntelligence, 10)
+            city.civ.isCityState ->
+                setAction(SpyAction.RiggingElections, (city.civ.flagsCountdown[CivFlags.TurnsTillCityStateElection.name] ?: 1) - 1)
+            else -> setAction(SpyAction.GatheringIntel)
+        }
+    }
+
+    /** SPY_STATE_GATHERING_INTEL (V:CvEspionageClasses.cpp:972-984): the Network Points of the turn, and a world wonder or project in production is found out */
+    private fun gatherIntel() {
+        val city = getCityOrNull() ?: return
+        val rate = espionageManager.networkPointsPerTurn(this, city)
+        if (rate > 0) addNetworkPoints(rate)
+        IntrigueFunctions.uncoverWonder(this)
+    }
+
+    /** SPY_STATE_SCHMOOZE (V:CvEspionageClasses.cpp:1309-1330): the diplomat gathers Network Points in the capital and, once it has the bonus, finds out intrigue */
+    private fun schmoozeLikeVp() {
+        val city = getCityOrNull() ?: return
+        val rate = espionageManager.networkPointsPerTurn(this, city)
+        if (rate > 0) addNetworkPoints(rate)
+        if (getBonuses().any { it.hasUnique(UniqueType.DiplomatUncoversIntrigue) }) IntrigueFunctions.uncoverIntrigue(this)
+    }
+
+    /**
+     *  CvCityEspionage::AddNetworkPoints (V:CvEspionageClasses.cpp:7043-7153): stores the points and raises the maximum; a passive bonus whose points the maximum has just reached is
+     *  announced. Missions spend the points through [spendNetworkPoints], which leaves the maximum
+     */
+    fun addNetworkPoints(points: Int) {
+        val before = maxNetworkPoints
+        networkPoints += points
+        maxNetworkPoints = maxOf(maxNetworkPoints, networkPoints)
+        val city = getCityOrNull() ?: return
+        for (bonus in bonusesFor(isDiplomat))
+            if (bonusPoints(bonus) in (before + 1)..maxNetworkPoints)
+                addNotification("Your spy [$name] in [${city.name}] has earned the passive bonus [${bonus.name}]")
+    }
+
+    /** Takes the cost of a mission from the stored Network Points (CvCityEspionage::SetAmount, V:CvEspionageClasses.cpp:7239-7252); the maximum stays */
+    fun spendNetworkPoints(points: Int) {
+        networkPoints = maxOf(0, networkPoints - points)
+    }
+
+    @Readonly
+    private fun bonusPoints(bonus: SpyBonus): Int =
+        if (bonus.scaledBySpeed) (bonus.networkPoints * civInfo.gameInfo.speed.productionCostModifier).toInt() else bonus.networkPoints
+
+    @Readonly
+    private fun bonusesFor(diplomat: Boolean): List<SpyBonus> {
+        val kind = if (diplomat) SpyBonusKind.Diplomat else SpyBonusKind.Passive
+        return civInfo.gameInfo.ruleset.spyBonuses.values.filter { it.kind == kind }
+    }
+
+    /** The passive bonuses the spy has earned in its city: those of the spy's kind (spy or diplomat) whose Network Points the most it ever stored here has reached */
+    @Readonly
+    fun getBonuses(): List<SpyBonus> = bonusesFor(isDiplomat).filter { bonusPoints(it) <= maxNetworkPoints }
 
     private fun startStealingTech() {
         progressTowardsStealingTech = 0
@@ -398,12 +479,17 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         if (city == null) { // Moving to spy hideout
             location = null
             this.city = null
+            networkPoints = 0
+            maxNetworkPoints = 0
             setAction(SpyAction.None)
             return
         }
         location = city.location
         this.city = city
-        setAction(SpyAction.Moving, 1)
+        // the Network Points of a spy are those of its city: it begins again in the next
+        networkPoints = 0
+        maxNetworkPoints = 0
+        setAction(SpyAction.Moving, if (likeVp()) espionageManager.getTravelTurns(city) else 1)
     }
 
     @Readonly
@@ -453,6 +539,8 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
     @Readonly
     fun getEffectiveRank(): Int {
         val maxRank = civInfo.gameInfo.ruleset.modOptions.constants.maxSpyRank
+        // Vox Populi: rank only, no bonus of the influence level (that is read by the old rigging rate and the coup, which the model does not have)
+        if (likeVp()) return rank.coerceIn(1, maxRank)
         var effective = rank
         val city = getCityOrNull() ?: return effective.coerceIn(1, maxRank)
         val influenceTarget = if (city.civ.isCityState) city.civ.allyCiv else city.civ

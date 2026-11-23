@@ -27,6 +27,9 @@ class Difficulty : RulesetObject() {
      *  Only with `cityNeedsLikeVp` */
     var empireSizeNeedModifier: Int = 0
     var aiEmpireSizeNeedModifier: Int = 0
+    /** Added to the security of the cities of a civilization with this difficulty (`HandicapInfos.SpySecurityModifier`, CvCity::CalculateCitySecurity, V:CvCity.cpp:26007-26013); the cities of an AI
+     *  civilization also get the one of the game's chosen difficulty. Only with [com.unciv.models.ModConstants.espionageLikeVp] */
+    var spySecurityModifier: Int = 0
     var researchCostModifier: Float = 1f
     var unitCostModifier: Float = 1f
     var unitSupplyBase: Int = 5

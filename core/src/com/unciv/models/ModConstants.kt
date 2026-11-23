@@ -669,6 +669,14 @@ class ModConstants {
     var spyPointsLikeVp = false
 
     /**
+     *  Vox Populi's espionage model (BALANCE_VP in CvEspionageClasses.cpp), instead of Brave New World's: a spy in a foreign city gathers Network Points each turn (`GatheringIntel`), reduced by the city's
+     *  security, and the spy owner gets the passive bonuses (`SpyBonuses.json`) at the highest amount ever stored; the diplomat gets them in the capital at once; a spy needs a number of turns to
+     *  travel that grows with the distance of the civilizations; the old surveillance, establishing a network and the theft of technology by progress are never entered. The rates are
+     *  [EspionageConstants]. Staged off: missions, the counterspy focus and the rigging of elections follow in their own slices. Needs [spyPointsLikeVp] to give spies in the same terms
+     */
+    var espionageLikeVp = false
+
+    /**
      *  The defines of spy points and of the time a dead spy needs, `spyToPlayerRatio`, `majorPlayerMultiplier`, `thresholdMin`, `thresholdMax` and `pointUnit` read only with [spyPointsLikeVp].
      *  The threshold is `100 x spyToPlayerRatio / (city-states + majorPlayerMultiplier x majors)` of the players at the start, at least 1 of each, kept between the minimum and the
      *  maximum (CvGame::initSpyThreshold, V:CvGame.cpp:10722-10767: BALANCE_SPY_TO_PLAYER_RATIO 20, BALANCE_SPY_POINT_MAJOR_PLAYER_MULTIPLIER 2,
@@ -683,6 +691,26 @@ class ModConstants {
         val thresholdMax: Int = 100,
         val pointUnit: Int = 1,
         val respawnTurns: Int = 5,
+        /** The Network Points a spy in a foreign city gathers each turn (CvPlayerEspionage::CalcNetworkPointsPerTurn, V:CvEspionageClasses.cpp:3262-3379), read only with [espionageLikeVp]:
+         *  `ESPIONAGE_NP_BASE` 50, `..._PER_SPY_RANK` 0 (per rank, ours counts from 1 where the original counts from 0, so this is multiplied by rank - 1), `..._CULTURAL_INFLUENCE` 15 per
+         *  influence level above Exotic, `..._MAX_NUM_TECH` 10 and `..._PER_TECHNOLOGY_BEHIND` 0, `..._REDUCTION_PER_SECURITY_POINT` 100 (percent of the points lost per point of security, over 100) */
+        val networkPointsBase: Int = 50,
+        val networkPointsPerSpyRank: Int = 0,
+        val networkPointsPerInfluenceLevel: Int = 15,
+        val networkPointsMaxTechDifference: Int = 10,
+        val networkPointsPerTechBehind: Int = 0,
+        val networkPointsReductionPerSecurity: Int = 100,
+        /** The security of a city (CvCity::CalculateCitySecurity, V:CvCity.cpp:25992-26085): `ESPIONAGE_SECURITY_BASE` 20, `..._PER_POPULATION` -2, `..._PER_TRADE_ROUTE` -5,
+         *  `..._PER_EXCESS_UNHAPPINESS` -4 (per point of the city's happiness delta below 0), kept between 0 and `ESPIONAGE_MAX_NUM_SECURITY_POINTS` 100. Read only with [espionageLikeVp] */
+        val securityBase: Int = 20,
+        val securityMax: Int = 100,
+        val securityPerCitizen: Int = -2,
+        val securityPerTradeRoute: Int = -5,
+        val securityPerExcessUnhappiness: Int = -4,
+        /** The turns a spy needs to reach a city (CvPlayerEspionage::CalcRequired(SPY_STATE_TRAVELLING), V:CvEspionageClasses.cpp:3137-3182): [travelBaseTurns] (`iSpyTurnsToTravel`) plus the entry of
+         *  [travelTurnsByProximity] (the neighbours, close, far and distant civilizations of the city's owner; not for an own city), halved (at least 1) when the city's owner gives the spy's owner open borders */
+        val travelBaseTurns: Int = 1,
+        val travelTurnsByProximity: List<Int> = listOf(1, 2, 3, 4),
     )
     var espionage = EspionageConstants()
 

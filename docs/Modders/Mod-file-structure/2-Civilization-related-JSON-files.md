@@ -341,6 +341,20 @@ quest with weight 1.
 This is just a list of Strings specifying all predefined religion names. Corresponding icons must
 exist, that's all to it. After all, they're just containers for [beliefs](#beliefsjson).
 
+## SpyBonuses.json
+
+The passive bonuses of spies (Vox Populi's `SpyPassiveBonuses` and `SpyPassiveBonusesDiplomat`), only with the ModConstants `espionageLikeVp`. A spy in a foreign city, and a diplomat
+in a capital, store Network Points; each bonus is earned once the most the spy has ever stored in that city reaches `networkPoints`, and is lost when the spy leaves.
+A ruleset without this file has no passive bonuses.
+
+| Attribute      | Type    | Default   | Notes |
+|----------------|---------|-----------|-------|
+| name           | String  | Required  | Must be unique |
+| kind           | Enum    | `Passive` | `Passive` for a spy gathering intel, `Diplomat` for a diplomat in a capital |
+| networkPoints  | Integer | 0         | The Network Points the spy must have stored in the city, at standard speed |
+| scaledBySpeed  | Boolean | false     | Whether `networkPoints` is multiplied by the game speed's production cost modifier |
+| uniques        | List    | empty     | What the bonus gives (unique target `SpyBonus`): `[positiveAmount]% of the city's Science goes to the spy's owner`, `[positiveAmount] more tile(s) of vision around the city`, `Reveals the city screen to the spy's owner`, and for a diplomat `[positiveAmount]% of Congress votes can be traded with this civilization`, `[positiveAmount]% Gold on trade routes between us`, `The spy uncovers intrigue`, `The spy reveals the true approaches of this civilization` |
+
 ## Resolutions.json
 
 This file contains the resolutions that the World Congress can enact (Brave New World). A ruleset without this file has no World Congress.

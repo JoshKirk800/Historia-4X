@@ -91,6 +91,12 @@ object IntrigueFunctions {
      *  and for every owner, a world wonder or project in production.
      */
     fun uncover(spy: Spy) {
+        uncoverIntrigue(spy)
+        uncoverWonder(spy)
+    }
+
+    /** CvPlayerEspionage::UncoverIntrigue without [uncoverWonder]: the plans of the civilization the spy is in the city of */
+    fun uncoverIntrigue(spy: Spy) {
         val city = spy.getCityOrNull() ?: return
         val civ = spy.civInfo
         val owner = city.civ
@@ -145,7 +151,17 @@ object IntrigueFunctions {
                 break // intrigue reported
             }
         }
+    }
 
+    /**
+     *  CvPlayerEspionage::UncoverCityBuildingWonder: a world wonder or project the civilization of the spy's city has in production, which a spy gathering intel finds every turn
+     *  (V:CvEspionageClasses.cpp:983), where only a diplomat finds the rest of the intrigue
+     */
+    fun uncoverWonder(spy: Spy) {
+        val city = spy.getCityOrNull() ?: return
+        val civ = spy.civInfo
+        val owner = city.civ
+        if (owner == civ || !owner.isMajorCiv) return
         if (isWonderOrProject(city)) civ.espionageManager.addIntrigueMessage(
             civ, owner, null, false, city.cityConstructions.currentConstructionName(), IntrigueType.ConstructingWonder, city, notify = true, spy = spy)
     }

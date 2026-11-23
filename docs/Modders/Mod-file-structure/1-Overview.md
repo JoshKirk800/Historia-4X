@@ -18,6 +18,7 @@ The JSON files that make up mods can have many different fields, and as not all 
     -   [Religions.json](2-Civilization-related-JSON-files.md#religionsjson)
     -   [Resolutions.json](2-Civilization-related-JSON-files.md#resolutionsjson)
     -   [Specialists.json](2-Civilization-related-JSON-files.md#specialistsjson)
+    -   [SpyBonuses.json](2-Civilization-related-JSON-files.md#spybonusesjson)
     -   [Techs.json](2-Civilization-related-JSON-files.md#techsjson)
 -   [Map-related JSON files](3-Map-related-JSON-files.md)
     -   [Terrains.json](3-Map-related-JSON-files.md#terrainsjson)

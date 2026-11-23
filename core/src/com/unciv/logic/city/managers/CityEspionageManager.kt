@@ -23,6 +23,28 @@ class CityEspionageManager {
         this.city = city
     }
 
+    /**
+     *  How well the city keeps foreign spies out (CvCity::CalculateCitySecurity, V:CvCity.cpp:25992-26085), only with [com.unciv.models.ModConstants.espionageLikeVp]: -1 for a city of a
+     *  city-state or the barbarians; otherwise the base, the security modifier of the difficulty (of the civilization's, and for an AI also the game's chosen one), the citizens, the trade routes
+     *  the civilization has with it and the points of unhappiness the city has over its happiness, between 0 and the maximum. The buildings, policies and the counterspy focus come with their
+     *  own slices. [com.unciv.models.ModConstants.EspionageConstants.networkPointsReductionPerSecurity] turns it into the percent of the Network Points of a spy gathering intel here that is lost
+     */
+    @Readonly
+    fun getSecurity(): Int {
+        val civ = city.civ
+        if (!civ.isMajorCiv) return -1
+        val constants = civ.gameInfo.ruleset.modOptions.constants.espionage
+        var security = constants.securityBase
+        security += civ.getDifficulty().spySecurityModifier
+        if (!civ.isHuman()) security += civ.gameInfo.getDifficulty().spySecurityModifier
+        security += city.population.population * constants.securityPerCitizen
+        val routes = civ.tradeRoutes.routes.count { it.origin == city.location || it.destination == city.location }
+        security += routes * constants.securityPerTradeRoute
+        val delta = city.cityStats.needs.delta
+        if (delta < 0) security += -delta * constants.securityPerExcessUnhappiness
+        return security.coerceIn(0, constants.securityMax)
+    }
+
     @Readonly fun hasSpyOf(civInfo: Civilization): Boolean = civInfo.espionageManager.spyList.any { it.getCityOrNull() == city }
 
     @Readonly fun getAllStationedSpies(): List<Spy> =

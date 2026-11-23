@@ -6,8 +6,10 @@ import com.unciv.logic.city.managers.CityEspionageManager
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
+import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.Spy
+import com.unciv.models.SpyAction
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.ui.screens.devconsole.ConsoleCivCommands
 import yairm210.purity.annotations.Readonly
@@ -75,6 +77,20 @@ class EspionageManager : IsPartOfGameInfoSerialization {
         }
         // Saves from before the field existed: espionage started at the latest now
         if (turnEspionageStarted == -1 && spyList.isNotEmpty()) turnEspionageStarted = civInfo.gameInfo.turns
+        if (civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp) migrateToNetworkPoints()
+    }
+
+    /**
+     *  A game saved under Brave New World's espionage and loaded with [com.unciv.models.ModConstants.espionageLikeVp]: a spy that was establishing a network, observing or stealing
+     *  gathers Network Points from nothing, one making introductions schmoozes, one preparing a coup rigs the election. A spy that counters spies stays
+     */
+    private fun migrateToNetworkPoints() {
+        for (spy in spyList) when (spy.action) {
+            SpyAction.EstablishNetwork, SpyAction.Surveillance, SpyAction.StealingTech -> spy.setAction(SpyAction.GatheringIntel)
+            SpyAction.MakingIntroductions -> spy.setAction(SpyAction.Schmoozing)
+            SpyAction.Coup -> spy.setAction(SpyAction.RiggingElections)
+            else -> {}
+        }
     }
 
     fun endTurn() {
@@ -210,11 +226,115 @@ class EspionageManager : IsPartOfGameInfoSerialization {
 
     @Readonly
     fun getTilesVisibleViaSpies(): Sequence<Tile> {
+        val likeVp = civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp
         return spyList.asSequence()
             .filter { it.isSetUp() }
-            .mapNotNull { it.getCityOrNull() }
-            .flatMap { it.getCenterTile().getTilesInDistance(1) }
+            .flatMap { spy ->
+                val city = spy.getCityOrNull() ?: return@flatMap emptySequence()
+                // Vox Populi: a spy gathering intel sees only what its passive bonuses show (SpyExtraVision), every other set up spy one ring (V:CvEspionageClasses.cpp:3401-3430)
+                val radius = if (likeVp && spy.action == SpyAction.GatheringIntel) spy.getBonuses().sumOf { b -> b.getMatchingUniques(UniqueType.SpyExtraVision).sumOf { it.params[0].toInt() } } else 1
+                if (radius <= 0) emptySequence() else city.getCenterTile().getTilesInDistance(radius)
+            }
     }
+
+    /**
+     *  The turns a spy needs to reach [city] (CvPlayerEspionage::CalcRequired(SPY_STATE_TRAVELLING), V:CvEspionageClasses.cpp:3137-3182), only with
+     *  [com.unciv.models.ModConstants.espionageLikeVp]: the base plus the turns of the proximity of the city's owner to us (none for an own city), halved, at least 1, when
+     *  the city's owner gives us open borders
+     */
+    @Readonly
+    fun getTravelTurns(city: City): Int {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants.espionage
+        var turns = constants.travelBaseTurns
+        if (city.civ != civInfo) {
+            val index = when (civInfo.getProximity(city.civ)) {
+                Proximity.Neighbors -> 0
+                Proximity.Close -> 1
+                Proximity.Far -> 2
+                Proximity.Distant -> 3
+                Proximity.None -> -1
+            }
+            turns += constants.travelTurnsByProximity.getOrElse(index) { 0 }
+            if (civInfo.getDiplomacyManager(city.civ)?.hasOpenBorders == true) turns = maxOf(turns / 2, 1)
+        }
+        return maxOf(turns, 1)
+    }
+
+    /**
+     *  The Network Points [spy] gathers a turn in [city] (CvPlayerEspionage::CalcNetworkPointsPerTurn, V:CvEspionageClasses.cpp:3262-3379), only with
+     *  [com.unciv.models.ModConstants.espionageLikeVp]; 0 unless the spy gathers intel or schmoozes. The base; the rank (ours is the original's plus 1); 15 for each level of cultural influence over the
+     *  city's owner above Exotic; the technologies the owner is ahead by; the points of policies and of the state religion's beliefs ([UniqueType.EspionageNetworkPoints]); the spy effectiveness
+     *  uniques of Brave New World's buildings and policies, which count as percent of what the spy gathers (`SpyEffectiveness`, `EnemySpyEffectiveness`; Vox Populi has no such column); at least 0;
+     *  and for a spy gathering intel, less the security of the city ([CityEspionageManager.getSecurity]) as percent. The counterspy focus of the city is not read yet.
+     */
+    @Readonly
+    fun networkPointsPerTurn(spy: Spy, city: City): Int {
+        if (!civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp) return 0
+        val gathering = spy.action == SpyAction.GatheringIntel
+        if (!gathering && spy.action != SpyAction.Schmoozing) return 0
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants.espionage
+        var points = constants.networkPointsBase
+        points += (spy.getEffectiveRank() - 1) * constants.networkPointsPerSpyRank
+        val level = civInfo.culture.getInfluenceLevel(city.civ)?.ordinal ?: 0
+        points += maxOf(0, (level - 1) * constants.networkPointsPerInfluenceLevel)
+        val techsAhead = city.civ.tech.researchedTechnologies.size - civInfo.tech.researchedTechnologies.size
+        points += maxOf(0, minOf(techsAhead, constants.networkPointsMaxTechDifference)) * constants.networkPointsPerTechBehind
+        points += civInfo.getMatchingUniques(UniqueType.EspionageNetworkPoints).sumOf { it.params[0].toInt() }
+        val effectiveness = getSpyEffectivenessPercent(city)
+        if (effectiveness != 100) points = points * effectiveness / 100
+        points = maxOf(points, 0)
+        if (gathering) {
+            val security = city.espionage.getSecurity()
+            if (points > 0 && security > 0) points = points * (100 - security * constants.networkPointsReductionPerSecurity / 100) / 100
+        }
+        return points
+    }
+
+    /** The percent that the city owner's [UniqueType.EnemySpyEffectiveness] and our [UniqueType.SpyEffectiveness] make of what a spy of ours does in [city] */
+    @Readonly
+    private fun getSpyEffectivenessPercent(city: City): Int {
+        var percent = 100
+        for (unique in city.getMatchingUniques(UniqueType.EnemySpyEffectiveness, city.state, includeCivUniques = true))
+            if (city.matchesFilter(unique.params[1])) percent += unique.params[0].toInt()
+        for (unique in civInfo.getMatchingUniques(UniqueType.SpyEffectiveness))
+            if (city.matchesFilter(unique.params[1], civInfo)) percent += unique.params[0].toInt()
+        return percent
+    }
+
+    /**
+     *  The science the passive bonuses of our spies bring in a turn, times 100 (CvPlayer::GetSciencePerTurnFromPassiveSpyBonusesTimes100, V:CvPlayer.cpp:35264-35291): for each spy
+     *  in a city the percent of the city's science its bonuses give ([UniqueType.SpyStealsSciencePercent]), summed, changed by [UniqueType.PassiveSpyBonusPercent]. Only with
+     *  [com.unciv.models.ModConstants.espionageLikeVp]
+     */
+    @Readonly
+    fun getPassiveScienceTimes100(): Int {
+        if (!civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp) return 0
+        var total = 0
+        for (spy in spyList) {
+            if (spy.isDiplomat) continue
+            val city = spy.getCityOrNull() ?: continue
+            val percent = spy.getBonuses().sumOf { b -> b.getMatchingUniques(UniqueType.SpyStealsSciencePercent).sumOf { it.params[0].toInt() } }
+            total += (city.cityStats.currentCityStats.science * 100).toInt() * percent / 100
+        }
+        val modifier = civInfo.getMatchingUniques(UniqueType.PassiveSpyBonusPercent).sumOf { it.params[0].toInt() }
+        return total * (100 + modifier) / 100
+    }
+
+    /** What the bonuses of our diplomat in [other]'s capital say, summed; 0 without an active diplomat */
+    @Readonly
+    private fun sumDiplomatBonus(other: Civilization, type: UniqueType): Int =
+        getActiveDiplomatFor(other)?.getBonuses()?.sumOf { b -> b.getMatchingUniques(type).sumOf { it.params[0].toInt() } } ?: 0
+
+    /** The percent of Congress votes our diplomat in [other]'s capital makes tradable with [other] (`SpyPassiveBonusesDiplomat.VoteTradePercent`, read by the World Congress) */
+    @Readonly fun getDiplomatVoteTradePercent(other: Civilization): Int = sumDiplomatBonus(other, UniqueType.DiplomatVoteTradePercent)
+
+    /** The percent gold more on trade routes between us and [other] our diplomat there makes (`TradeRouteGoldBonus`, V:CvTradeClasses.cpp:3483) */
+    @Readonly fun getDiplomatTradeBonus(other: Civilization): Int = sumDiplomatBonus(other, UniqueType.DiplomatTradeRouteGoldPercent)
+
+    /** Whether our diplomat in [other]'s capital sees through what [other] shows (`RevealTrueApproaches`) */
+    @Readonly
+    fun getDiplomatRevealsTrueApproaches(other: Civilization): Boolean =
+        getActiveDiplomatFor(other)?.getBonuses()?.any { it.hasUnique(UniqueType.DiplomatRevealsTrueApproaches) } == true
 
     @Readonly
     fun getTechsToSteal(otherCiv: Civilization): Set<String> {
@@ -235,11 +355,7 @@ class EspionageManager : IsPartOfGameInfoSerialization {
      */
     @Readonly
     fun getBaseStealRateTimes100(city: City): Int {
-        var percent = 100
-        for (unique in city.getMatchingUniques(UniqueType.EnemySpyEffectiveness, city.state, includeCivUniques = true))
-            if (city.matchesFilter(unique.params[1])) percent += unique.params[0].toInt()
-        for (unique in civInfo.getMatchingUniques(UniqueType.SpyEffectiveness))
-            if (city.matchesFilter(unique.params[1], civInfo)) percent += unique.params[0].toInt()
+        val percent = getSpyEffectivenessPercent(city)
         val science = (city.cityStats.currentCityStats.science * 100).toInt()
         return maxOf(science * percent / 100, 1)
     }

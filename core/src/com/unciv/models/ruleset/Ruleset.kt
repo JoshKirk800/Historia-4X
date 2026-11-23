@@ -78,6 +78,7 @@ enum class RulesetFile(
     Specialists("Specialists.json", getINamed = { specialists.values.asSequence() }),
     GreatWorks("GreatWorks.json", getINamed = { greatWorks.values.asSequence() }),
     Resolutions("Resolutions.json", { resolutions.values.asSequence() }),
+    SpyBonuses("SpyBonuses.json", { spyBonuses.values.asSequence() }),
     Units("Units.json", { units.values.asSequence() }),
     UnitPromotions("UnitPromotions.json", { unitPromotions.values.asSequence() }),
     UnitNameGroup("UnitNameGroups.json", { unitNameGroups.values.asSequence() }, getNames = {
@@ -147,6 +148,7 @@ class Ruleset {
     val specialists = LinkedHashMap<String, Specialist>()
     val greatWorks = LinkedHashMap<String, GreatWork>()
     val resolutions = LinkedHashMap<String, Resolution>()
+    val spyBonuses = LinkedHashMap<String, SpyBonus>()
     val technologies = LinkedHashMap<String, Technology>()
     val techColumns = ArrayList<TechColumn>()
     val terrains = LinkedHashMap<String, Terrain>()
@@ -272,6 +274,7 @@ class Ruleset {
         greatWorks.putAll(ruleset.greatWorks)
         resolutions.selectiveRemove(ruleset.modOptions.resolutionsToRemove)
         resolutions.putAll(ruleset.resolutions)
+        spyBonuses.putAll(ruleset.spyBonuses)
         mergeTechnologies(ruleset)
         terrains.selectiveRemove(ruleset.modOptions.terrainsToRemove) { matchesFilter(it) }
         terrains.putAll(ruleset.terrains)
@@ -518,6 +521,7 @@ class Ruleset {
         specialists.clear()
         greatWorks.clear()
         resolutions.clear()
+        spyBonuses.clear()
         technologies.clear()
         techColumns.clear()
         terrains.clear()
@@ -627,6 +631,9 @@ class Ruleset {
 
         val resolutionsFile = RulesetFile.Resolutions.file()
         if (resolutionsFile.exists()) resolutions += createHashmap(json().fromJsonFile(Array<Resolution>::class.java, resolutionsFile))
+
+        val spyBonusesFile = RulesetFile.SpyBonuses.file()
+        if (spyBonusesFile.exists()) spyBonuses += createHashmap(json().fromJsonFile(Array<SpyBonus>::class.java, spyBonusesFile))
 
         val policiesFile = RulesetFile.Policies.file()
         if (policiesFile.exists()) {

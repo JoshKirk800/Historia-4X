@@ -511,6 +511,29 @@ enum class UniqueType(
     CounterIntelligenceSpyRankBonus("Spies in [cityFilter] cities act as though they have [relativeAmount] levels for [spyAction]", UniqueTarget.Global,
         docDescription = "Temporary effective rank change ([relativeAmount] added to rank, e.g. +1) for spies doing the given action in a matching city. " +
             "Does not permanently level the spy. Stacks additively, capped by maxSpyRank."),
+    EspionageNetworkPoints("[relativeAmount] Network Points per turn for our spies in foreign cities", UniqueTarget.Global, UniqueTarget.FounderBelief,
+        docDescription = "Only with the ModConstants `espionageLikeVp`. Added to the base of every spy's Network Points a turn (Policies.EspionageNetworkPoints and the Enhancer belief's " +
+            "`Beliefs.EspionageNetworkPoints`: CvPlayerEspionage::CalcNetworkPointsPerTurn)"),
+    PassiveSpyBonusPercent("[relativeAmount]% Science from the passive bonuses of our spies", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `espionageLikeVp`. Changes the science the spies' passive bonuses (`SpyStealsSciencePercent`) bring in " +
+            "(CvPlayer::GetSciencePerTurnFromPassiveSpyBonusesTimes100, Policies.PassiveEspionageBonusModifier)"),
+    StatPercentPerSpyPoints("[relativeAmount]% [stat] [cityFilter] per [positiveAmount] Spy Points ever accumulated, up to [positiveAmount]%", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `spyPointsLikeVp`. The percent grows by the first amount for every second amount of spy points the civilization has ever gained " +
+            "(not those it spent on spies), in whole steps of that size, up to the last amount (Policy_YieldModifierFromActiveSpies, CvCity::getBaseYieldRateModifier)"),
+    SpyRevealsCityScreen("Reveals the city screen to the spy's owner", UniqueTarget.SpyBonus,
+        docDescription = "The spy's owner can look into the city's screen (SpyPassiveBonuses.RevealCityScreen)"),
+    SpyStealsSciencePercent("[positiveAmount]% of the city's Science goes to the spy's owner", UniqueTarget.SpyBonus,
+        docDescription = "Every turn the spy's owner gets this percent of the science the city makes, summed over the owner's spies (SpyPassiveBonuses.SciencePercentAdded)"),
+    SpyExtraVision("[positiveAmount] more tile(s) of vision around the city", UniqueTarget.SpyBonus,
+        docDescription = "The spy's owner sees this many more rings of tiles around the city (SpyPassiveBonuses.TilesRevealed), on top of the one a set up spy sees"),
+    DiplomatVoteTradePercent("[positiveAmount]% of Congress votes can be traded with this civilization", UniqueTarget.SpyBonus,
+        docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.VoteTradePercent), read by the World Congress"),
+    DiplomatTradeRouteGoldPercent("[positiveAmount]% Gold on trade routes between us", UniqueTarget.SpyBonus,
+        docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.TradeRouteGoldBonus), read by the trade route model"),
+    DiplomatUncoversIntrigue("The spy uncovers intrigue", UniqueTarget.SpyBonus,
+        docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.ReceiveIntrigues): the diplomat finds out what the civilization plans"),
+    DiplomatRevealsTrueApproaches("The spy reveals the true approaches of this civilization", UniqueTarget.SpyBonus,
+        docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.RevealTrueApproaches)"),
 
     /// Things you get at the start of the game
     StartingTech("Starting tech", UniqueTarget.Tech),

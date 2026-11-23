@@ -16,6 +16,7 @@ Each difficulty level has the following structure:
 | baseHappiness                     | Integer         | 0        |                                                                                                                                                                                                                            |
 | extraHappinessPerLuxury           | Float           | 0        |                                                                                                                                                                                                                            |
 | baseHappinessCapital              | Integer         | 0        | Happiness of the capital on top of `baseHappiness` (the original's `HappinessDefaultCapital`). Only with the ModConstants `cityNeedsLikeVp` |
+| spySecurityModifier               | Integer         | 0        | Added to the security of the cities of a civilization at this level (`HandicapInfos.SpySecurityModifier`); the cities of an AI civilization also get that of the game's chosen difficulty. Only with `espionageLikeVp` |
 | aiBaseHappiness                   | Integer         | 0        | Added to `baseHappiness` of an AI civilization, from the game's chosen difficulty (`AIHappinessDefault`). Only with `cityNeedsLikeVp` |
 | aiBaseHappinessCapital            | Integer         | 0        | Added to `baseHappinessCapital` of the capital of an AI civilization, from the chosen difficulty (`AIHappinessDefaultCapital`). Only with `cityNeedsLikeVp` |
 | populationNeedModifier            | Integer         | 0        | Percent points added to every need of every city (`PopulationUnhappinessMod`). Only with `cityNeedsLikeVp` |
@@ -387,6 +388,7 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | cityStateBullyLikeVp                     | Boolean | false                        | Demanding tribute as in Vox Populi instead of Brave New World's: the score is the share of the military might and the local power with no base reluctance and no penalty for low influence, gold needs a score of 20 and the heavy tribute (the worker) 100, a demand costs 30 influence and what the civilization has over its resting point, and the `upon demanding tribute from a City-State` yields are paid |
 | cityStateBully                           | Object  | [See below](#citystatebullyconstants) | The defines of that model, only read with `cityStateBullyLikeVp` |
 | spyPointsLikeVp                          | Boolean | false                        | Vox Populi's spy points instead of whole spies: `Gain [n] Spy Points` counts points and makes a spy each time they reach the threshold (100 in Vox Populi), `Gain an extra spy` is one threshold of points, a negative amount is a debt. Without it `Gain [n] Spy Points` does nothing |
+| espionageLikeVp                          | Boolean | false                        | Vox Populi's espionage: a spy in a foreign major's city gathers Network Points each turn (less the city's security), the owner gets the passive bonuses of [SpyBonuses.json](2-Civilization-related-JSON-files.md#spybonusesjson), a diplomat gathers them in the capital, and a spy needs turns to travel that grow with the distance of the civilizations. The old establishing of a network, surveillance and the theft of technology by progress are never entered |
 | espionage                                | Object  | [See below](#espionageconstants) | The threshold of spy points and the time a killed spy stays dead |
 | maxSpyRank                               | Int    | 3                             | [^N]  |
 | spyRankSkillPercentBonus                 | Float  | 30                            | [^O]  |
@@ -764,6 +766,19 @@ The defines of spy points (`spyPointsLikeVp`) and of how long a killed spy stays
 | thresholdMax | Int | 100 | `BALANCE_SPY_POINT_THRESHOLD_MAX`: 100. With both at 100 a spy costs 100 points on every map |
 | pointUnit | Int | 1 | `ESPIONAGE_SPY_POINT_UNIT`: the points of 1 in the tables of Vox Populi, applied by the ruleset generator |
 | respawnTurns | Int | 5 | `BALANCE_SPY_RESPAWN_TIMER`: turns a killed spy stays dead. Brave New World 5, Vox Populi 10. Read without `spyPointsLikeVp` too |
+| networkPointsBase | Int | 50 | `ESPIONAGE_NP_BASE`: the Network Points a spy gathers a turn before anything else (`espionageLikeVp`) |
+| networkPointsPerSpyRank | Int | 0 | `ESPIONAGE_NP_PER_SPY_RANK`, for each rank above the first |
+| networkPointsPerInfluenceLevel | Int | 15 | `ESPIONAGE_NP_CULTURAL_INFLUENCE`: for each level of cultural influence over the city's owner above Exotic |
+| networkPointsMaxTechDifference | Int | 10 | `ESPIONAGE_NP_MAX_NUM_TECH`: the technologies the owner is ahead by that count |
+| networkPointsPerTechBehind | Int | 0 | `ESPIONAGE_NP_PER_TECHNOLOGY_BEHIND` |
+| networkPointsReductionPerSecurity | Int | 100 | `ESPIONAGE_NP_REDUCTION_PER_SECURITY_POINT`: percent of the points a spy gathering intel loses for each point of security, over 100 |
+| securityBase | Int | 20 | `ESPIONAGE_SECURITY_BASE`: the security of a city before the difficulty, citizens, trade routes and unhappiness (`espionageLikeVp`) |
+| securityMax | Int | 100 | `ESPIONAGE_MAX_NUM_SECURITY_POINTS` |
+| securityPerCitizen | Int | -2 | `ESPIONAGE_SECURITY_PER_POPULATION` |
+| securityPerTradeRoute | Int | -5 | `ESPIONAGE_SECURITY_PER_TRADE_ROUTE`: for each route the civilization has that starts or ends in the city |
+| securityPerExcessUnhappiness | Int | -4 | `ESPIONAGE_SECURITY_PER_EXCESS_UNHAPPINESS`: for each point the city's happiness is below 0 |
+| travelBaseTurns | Int | 1 | `iSpyTurnsToTravel`: the turns to travel before the distance |
+| travelTurnsByProximity | List of Int | 1, 2, 3, 4 | The turns more for a city of a civilization that is a neighbour, close, far and distant. Halved (at least 1) when the city's owner gives us open borders |
 
 #### MonopolyConstants
 

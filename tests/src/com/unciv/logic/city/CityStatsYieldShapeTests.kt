@@ -75,6 +75,15 @@ class CityStatsYieldShapeTests {
         assertEquals(0f, second.expansion.borderCulturePerTurn(0f), 1e-3f)
     }
 
+    @Test
+    fun `fractional population yield retains hundredths`() {
+        val before = capital.total(Stat.Science)
+        val other = second.total(Stat.Science)
+        capital.build("[+34 Science] per [100] population proportionally [in this city]")
+        assertEquals(before + 1.02f, capital.total(Stat.Science), 1e-3f)
+        assertEquals(other, second.total(Stat.Science), 1e-3f)
+    }
+
     //region Processes
 
     @Test

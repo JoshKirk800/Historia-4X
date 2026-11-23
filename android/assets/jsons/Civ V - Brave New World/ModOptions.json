@@ -134,6 +134,39 @@
         // The purchase cooldowns of units (CvCity::Purchase, CvCity.cpp:2485-2503): no unit of this ruleset has one yet
         "purchaseCooldownEnabled": true,
         // CvPlayer::doInstantYield: the speed's InstantYieldPercent
-        "instantYieldsUseInstantYieldPercent": true
+        "instantYieldsUseInstantYieldPercent": true,
+        // Vox Populi's whole trade route model: CvPlayerTrade::GetTradeConnectionValueTimes100 (CvTradeClasses.cpp:3604-4247) under BALANCE_VP ((2) Vox Populi/Database Changes/
+        // CustomModOptionChanges.sql:2), with BALANCE_TRADE_ROUTE_PROXIMITY_PENALTY and BALANCE_TRADE_ROUTE_DESTINATION_RESTRICTION (:58-59). The eras' tradeRouteFoodBonus and
+        // tradeRouteProductionBonus (Eras.TradeRouteFoodBonusTimes100 and ProductionBonusTimes100: 0, 100, 200, 400, 600, 800, 1000, 1200), the speeds' tradeRouteSpeedModifier
+        // (GameSpeeds.TradeRouteSpeedMod 67, 100, 150, 300) and the route yields of buildings, improvements, traits and promotions are the data of the same model
+        "tradeRouteModelLikeVp": true,
+        // The defines of the model: INTERNATIONAL_TRADE_BASE 80, INTERNATIONAL_TRADE_CITY_GPT_DIVISOR 80, TRADE_ROUTE_BASE_SEA_MODIFIER 25 ((2) Vox Populi/Database Changes/
+        // DefineChanges.sql:405-414, with TRADE_ROUTE_BASE_FOOD_VALUE and TRADE_ROUTE_BASE_PRODUCTION_VALUE 600, TRADE_ROUTE_DIFFERENT_RESOURCE_VALUE 5, TRADE_ROUTE_SCIENCE_DIVISOR_TIMES100
+        // and TRADE_ROUTE_CULTURE_DIVISOR_TIMES100 125); the (1) Community Patch/Database Changes/Defines/CoreDefineChanges.sql:101, 1007-1025 ones Vox Populi keeps:
+        // TRADE_ROUTE_BASE_LAND_MODIFIER 0, TRADE_ROUTE_RIVER_CITY_MODIFIER 25, TRADE_ROUTE_CS_ALLY_GOLD 2, TRADE_ROUTE_CS_FRIEND_GOLD 1, TRADE_ROUTE_CS_ALLY_SCIENCE_DELTA and
+        // ..._CULTURE_DELTA 1, OPEN_BORDERS_MODIFIER_TRADE_GOLD 20, TRADE_ROUTE_BASE_TARGET_TURNS 30. proximityMax 50 is the cap in CvTradeClasses.cpp:3372-3418
+        "tradeRouteVp": {
+            "internationalTradeBase": 80, "cityGoldDivisor": 80, "seaModifier": 25, "landModifier": 0, "differentResourceValue": 5,
+            "scienceDivisorTimes100": 125, "cultureDivisorTimes100": 125, "baseFoodValue": 600, "baseProductionValue": 600,
+            "cityStateAllyGold": 2, "cityStateFriendGold": 1, "allyScienceDelta": 1, "allyCultureDelta": 1,
+            "openBordersModifier": 20, "riverModifier": 25, "proximityMax": 50, "targetTurns": 30
+        },
+        // Worlds.TradeRouteDistanceMod (CvTradeClasses.cpp:5332-5390) is by world size, which this ruleset has no rule tables for (D22 O8): no entry, so 100 percent of the range
+        // on every map (the table of the original is 80 Duel and Tiny, 90 Small, 100 Standard, 130 Large, 160 Huge)
+        "worldTradeRouteDistance": [],
+        // BALANCE_RESOURCE_SHORTAGE_UNIT_HEALING and BALANCE_RESOURCE_SHORTAGE_BUILDING_REFUND ((2) Vox Populi/Database Changes/CustomModOptionChanges.sql:47-48), with
+        // STRATEGIC_RESOURCE_EXHAUSTED_PENALTY 0 (the combat malus of the original is off)
+        "resourceShortageLikeVp": true,
+        // CvDeal::BlockTemporaryForPermanentTrade (CvDealClasses.cpp:1368-1470) always applies in Vox Populi: only MOD_DEALAI_GLOBAL_PERMANENT_FOR_TEMPORARY (0, (1) Community Patch/
+        // Database Changes/NewCustomModOptions.xml:652) lifts it between an AI and a human. DEALAI_HUMAN_PERMANENT_FOR_AI_TEMPORARY 1 (:131) and
+        // DEALAI_NO_PEACETIME_SELLING_FOUNDED_CITIES 1 (:134, CvDealClasses.cpp:649) are on
+        "dealsBlockTemporaryForPermanent": true,
+        "dealHumanPermanentForAiTemporary": true,
+        "dealNoPeacetimeSellingFoundedCities": true,
+        // CvDealAI::GetLuxuryResourceValue, the BALANCE_VP branch (CvDealAI.cpp:1290-1590)
+        "dealLuxuryValueLikeVp": true,
+        // BALANCE_RESOURCE_MONOPOLIES and BALANCE_STRATEGIC_RESOURCE_MONOPOLIES ((2) Vox Populi/Database Changes/CustomModOptionChanges.sql:33-34), with
+        // GLOBAL_RESOURCE_MONOPOLY_THRESHOLD 50 and STRATEGIC_RESOURCE_MONOPOLY_THRESHOLD 25 ((1) Community Patch/Database Changes/Defines/CoreDefineChanges.sql:108-109)
+        "monopoly": { "globalThreshold": 50, "strategicThreshold": 25 }
     },
 }

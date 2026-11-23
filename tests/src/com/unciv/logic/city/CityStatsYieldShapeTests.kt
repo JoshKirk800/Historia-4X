@@ -43,6 +43,14 @@ class CityStatsYieldShapeTests {
     private fun City.build(vararg uniques: String) = game.createBuilding(*uniques).also { cityConstructions.addBuilding(it) }
     private fun City.total(stat: Stat): Float { cityStats.update(); return cityStats.finalStatList.values.sumOf { it[stat].toDouble() }.toFloat() }
 
+    @Test
+    fun `owned city tiles countable counts only the context city`() {
+        val countable = "Owned [All] Tiles in this city"
+        assertTrue(Countables.isKnownValue(countable, game.ruleset))
+        assertEquals(capital.getTiles().count(), Countables.getCountableAmount(countable, GameContext(civ, city = capital)))
+        assertEquals(second.getTiles().count(), Countables.getCountableAmount(countable, GameContext(civ, city = second)))
+    }
+
     //region Processes
 
     @Test

@@ -357,6 +357,7 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | unitMaintenanceFreeUnits                 | Int    | 3                             | [^U]  |
 | unitMaintenanceGameMultiplier            | Float  | 1.0                           | [^U]  |
 | unitMaintenanceExponentDivisor           | Float  | 3.0                           | [^U]  |
+| sciencePerPopulation                     | Float  | 1.0                           | Science each citizen of a city gives (`SCIENCE_PER_POPULATION`: 1 in Brave New World, 0 in Vox Populi) |
 | minimalCityDistance                      | Int    | 3                             | [^D]  |
 | minimalCityDistanceOnDifferentContinents | Int    | 2                             | [^D]  |
 | unitUpgradeCost                          | Object | [See below](#unitupgradecost) | [^J]  |

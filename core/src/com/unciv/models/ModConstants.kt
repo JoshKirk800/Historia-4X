@@ -53,6 +53,10 @@ class ModConstants {
     var unitMaintenanceGameMultiplier = 1f
     var unitMaintenanceExponentDivisor = 3f
 
+    // The science each citizen of a city gives (the "Population" entry of the city's stats): Defines SCIENCE_PER_POPULATION, 1 in Brave New World and
+    // Community Patch, 0 in Vox Populi (DefineChanges.sql:350, CvCity.cpp: CvCity::setPopulation)
+    var sciencePerPopulation = 1f
+
     // The minimal distance that must be between any two cities, not counting the tiles cities are on
     // The number is the amount of tiles between two cities, not counting the tiles the cities are on.
     // e.g. "C__C", where "C" is a tile with a city and "_" is a tile without a city, has a distance of 2.

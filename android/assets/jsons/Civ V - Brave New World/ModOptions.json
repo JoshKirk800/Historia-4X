@@ -21,6 +21,9 @@
         "unitMaintenanceFreeUnits": 0,
         "unitMaintenanceGameMultiplier": 8,
         "unitMaintenanceExponentDivisor": 5,
+        // CvCity::setPopulation: GlobalDefines SCIENCE_PER_POPULATION, 1 in Community Patch, 0 in Vox Populi (DefineChanges.sql:350);
+        // the science of a city comes from its buildings, specialists and tiles
+        "sciencePerPopulation": 0,
         // CvCity::GetJONSCultureThreshold
         "cultureCostLikeCivV": true,
         // CvTreasury::DoGold

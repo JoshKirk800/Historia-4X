@@ -666,7 +666,7 @@ class CityStats(val city: City) {
         val newBaseStatList = StatMap()
 
         newBaseStatTree.addStats(Stats(
-            science = city.population.population.toFloat(),
+            science = city.population.population * city.getRuleset().modOptions.constants.sciencePerPopulation,
             production = city.population.getFreePopulation().toFloat()
         ), "Population")
         newBaseStatList["Tile yields"] = statsFromTiles
@@ -831,7 +831,8 @@ class CityStats(val city: City) {
         if (needsModel && isOwnStats())
             updateNeeds(newFinalStatList, foodEaten, productionBeforeBonuses, statsFromTradeRoutes, currentConstruction)
 
-        newFinalStatList["Population"]!!.food -= foodEaten
+        // The "Population" entry has no stats, and so is not in the tree, while the citizens give no science (sciencePerPopulation 0) and none of them is unemployed
+        newFinalStatList.getOrPut("Population") { Stats() }.food -= foodEaten
 
         var totalFood = newFinalStatList.values.map { it.food }.sum()
         excessFood = totalFood

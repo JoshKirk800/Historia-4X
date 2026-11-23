@@ -15,11 +15,12 @@
         // CvMinorCivAI::CalculateBullyMetric: up to 75 for the military rank, up to 125 for the military near the City-State
         "tributeGlobalModifier": 75,
         "tributeLocalModifier": 125,
-        // CvTreasury::CalculateUnitCost: GlobalDefines UNIT_MAINTENANCE_GAME_MULTIPLIER 8 and UNIT_MAINTENANCE_GAME_EXPONENT_DIVISOR 7;
-        // no unit is free (the handicaps have GoldFreeUnits 0)
+        // CvTreasury::CalculateUnitCost: GlobalDefines UNIT_MAINTENANCE_GAME_MULTIPLIER 8 (DefineChanges.sql:197) and UNIT_MAINTENANCE_GAME_EXPONENT_DIVISOR,
+        // 7 in Brave New World and 5 in Vox Populi (DefineChanges.sql:200; the "6 in VP" comment of CvTreasury.cpp is stale);
+        // no unit is free (the MaintenanceFreeUnits of the handicaps are 0 from Prince up)
         "unitMaintenanceFreeUnits": 0,
         "unitMaintenanceGameMultiplier": 8,
-        "unitMaintenanceExponentDivisor": 7,
+        "unitMaintenanceExponentDivisor": 5,
         // CvCity::GetJONSCultureThreshold
         "cultureCostLikeCivV": true,
         // CvTreasury::DoGold

@@ -47,7 +47,8 @@ class ModConstants {
 
     // Gold maintenance of units (CvTreasury::CalculateUnitCost), with 0.5 gold per unit that is not free:
     // cost = (paidUnits * 0.5 * (1 + unitMaintenanceGameMultiplier * progress)) ^ (1 + progress / unitMaintenanceExponentDivisor)
-    // where progress is the turn divided by the number of turns of the game speed. The defaults are the original Unciv values; the Civ V rulesets use 0, 8 and 7.
+    // where progress is the turn divided by the number of turns of the game speed. The defaults are the original Unciv values; Gods & Kings uses 0, 8 and 7, Brave New World 0, 8 and 5 (Vox Populi's value).
+    // Departure: Vox Populi takes progress from the techs known (CvTeam::GetTechProgressPercent, CvTreasury.cpp:522-525), we from the turn.
     var unitMaintenanceFreeUnits = 3
     var unitMaintenanceGameMultiplier = 1f
     var unitMaintenanceExponentDivisor = 3f

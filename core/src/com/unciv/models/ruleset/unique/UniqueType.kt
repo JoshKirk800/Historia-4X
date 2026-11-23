@@ -748,6 +748,11 @@ enum class UniqueType(
         docDescription = "Percentage points added to the share of its lost health that a wounded unit loses in strength and damage dealt (33 by default), " +
             "so `[-25]` leaves 8. The sum is not reduced below 0. Does not apply to cities, and `No damage penalty for wounded units` still removes the penalty entirely."),
     Uncapturable("Uncapturable", UniqueTarget.Unit),
+    // Capture class block (VP 5.4.8 CvUnit::getCaptureUnitType, UnitInfo Capture)
+    /** VP 5.4.8 CvUnit::getCaptureUnitType: the capturer gets `GetSpecificUnitType(Units.Capture)`, its own unit of the captured unit's capture class. */
+    BecomesWhenCaptured("Becomes [baseUnitFilter] when captured", UniqueTarget.Unit,
+        docDescription = "The unit name the unit becomes for the capturer (the default unit of the capture class; the capturer's own unique replacement is looked up through `getEquivalentUnit`). " +
+            "Only read with the ModConstants switch `captureClassLikeVp`; with barbarians involved the unit stays as it is (CvUnit::getCaptureDefinition)."),
     WithdrawsBeforeMeleeCombat("Withdraws before melee combat", UniqueTarget.Unit),
     CannotCaptureCities("Unable to capture cities", UniqueTarget.Unit, UniqueTarget.Global),
     CannotPillage("Unable to pillage tiles", UniqueTarget.Unit, UniqueTarget.Global),

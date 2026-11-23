@@ -12,6 +12,7 @@ import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.ruleset.unit.BaseUnit
 import yairm210.purity.annotations.Readonly
 import kotlin.math.min
 import kotlin.random.Random
@@ -132,8 +133,7 @@ object BattleUnitCapture {
             }
             // City states can never capture settlers at all
             // Same with puppet city sttlers
-             attacker.getCivInfo().isCityState && (capturedUnit.hasUnique(UniqueType.FoundCity, GameContext.IgnoreConditionals) ||
-                 capturedUnit.hasUnique(UniqueType.FoundPuppetCity, GameContext.IgnoreConditionals)) -> {
+             attacker.getCivInfo().isCityState && capturedUnitFoundsCity(capturedUnit, attacker.getCivInfo()) -> {
                 capturedUnit.destroy()
                 wasDestroyedInstead = true
             }
@@ -193,24 +193,66 @@ object BattleUnitCapture {
      *  @see MapUnit.capturedBy
      */
     fun captureOrConvertToWorker(capturedUnit: MapUnit, capturingCiv: Civilization): HexCoord? {
+        val captureClassUnit = captureClassUnit(capturedUnit, capturingCiv)
+        if (captureClassUnit != null) {
+            // CvUnit::createCaptureUnit makes a new unit of the capture class; a unit that already is that type keeps its state here
+            if (captureClassUnit.name == capturedUnit.name) {
+                capturedUnit.capturedBy(capturingCiv)
+                return capturedUnit.currentTile.position
+            }
+            return convertCapturedUnit(capturedUnit, capturingCiv, captureClassUnit)
+        }
+
         // Captured settlers are converted to workers unless captured by barbarians (so they can be returned later).
         if (!capturedUnit.hasUnique(UniqueType.FoundCity, GameContext.IgnoreConditionals) || capturingCiv.isBarbarian) {
             capturedUnit.capturedBy(capturingCiv)
             return capturedUnit.currentTile.position // if capturedBy has moved the unit, this is updated
         }
 
+        val workerTypeUnit = capturingCiv.gameInfo.ruleset.units.values
+            .firstOrNull { it.isCivilian() && it.getMatchingUniques(UniqueType.BuildImprovements, GameContext.IgnoreConditionals)
+            .any { unique -> unique.params[0] == "Land" } }
+        return convertCapturedUnit(capturedUnit, capturingCiv, workerTypeUnit)
+    }
+
+    /** Destroys [capturedUnit] and places a unit of type [replacement] for [capturingCiv] near its tile, keeping its id; `null` if there is no [replacement] or no place for it. */
+    private fun convertCapturedUnit(capturedUnit: MapUnit, capturingCiv: Civilization, replacement: BaseUnit?): HexCoord? {
         capturedUnit.destroy()
         // This is so that future checks which check if a unit has been captured are caught give the right answer
         //  For example, in postBattleMoveToAttackedTile
         capturedUnit.civ = capturingCiv
         capturedUnit.cache.state = GameContext(capturedUnit)
 
-        val workerTypeUnit = capturingCiv.gameInfo.ruleset.units.values
-            .firstOrNull { it.isCivilian() && it.getMatchingUniques(UniqueType.BuildImprovements, GameContext.IgnoreConditionals)
-            .any { unique -> unique.params[0] == "Land" } }
-            ?: return null
-        return capturingCiv.units.placeUnitNearTile(capturedUnit.currentTile.position, workerTypeUnit, capturedUnit.id)
+        if (replacement == null) return null
+        return capturingCiv.units.placeUnitNearTile(capturedUnit.currentTile.position, replacement, capturedUnit.id)
             ?.currentTile?.position
+    }
+
+    /**
+     *  The unit [capturingCiv] gets for [capturedUnit] under the switch `captureClassLikeVp`: CvUnit::getCaptureDefinition and CvUnit::getCaptureUnitType.
+     *  Barbarians involved (as owner or capturer, and the unit can be captured at all): the unit type stays as it is.
+     *  Otherwise the capturer's own unit of the capture class (`GetSpecificUnitType`): the default unit named by the unique,
+     *  or the capturer's unique replacement of it ([Civilization.getEquivalentUnit]).
+     *  `null`: switch off, no [UniqueType.BecomesWhenCaptured] on the unit (those units follow the old rules), or the named unit is not in the ruleset.
+     */
+    private fun captureClassUnit(capturedUnit: MapUnit, capturingCiv: Civilization): BaseUnit? {
+        val ruleset = capturingCiv.gameInfo.ruleset
+        if (!ruleset.modOptions.constants.captureClassLikeVp) return null
+        val unique = capturedUnit.baseUnit.getMatchingUniques(UniqueType.BecomesWhenCaptured, GameContext.IgnoreConditionals).firstOrNull()
+            ?: return null
+        val captureClass = ruleset.units[unique.params[0]] ?: return null
+        if (capturedUnit.civ.isBarbarian || capturingCiv.isBarbarian) return capturedUnit.baseUnit
+        return capturingCiv.getEquivalentUnit(captureClass)
+    }
+
+    /** CvUnit::createCaptureUnit: a city-state kills a captured unit that founds cities - judged on the unit it would get ([captureClassUnit]) when the switch gives one. */
+    private fun capturedUnitFoundsCity(capturedUnit: MapUnit, capturingCiv: Civilization): Boolean {
+        val captureClassUnit = captureClassUnit(capturedUnit, capturingCiv)
+        if (captureClassUnit != null)
+            return captureClassUnit.hasUnique(UniqueType.FoundCity, GameContext.IgnoreConditionals) ||
+                captureClassUnit.hasUnique(UniqueType.FoundPuppetCity, GameContext.IgnoreConditionals)
+        return capturedUnit.hasUnique(UniqueType.FoundCity, GameContext.IgnoreConditionals) ||
+            capturedUnit.hasUnique(UniqueType.FoundPuppetCity, GameContext.IgnoreConditionals)
     }
 
 }

@@ -50,6 +50,11 @@ class ModConstants {
      *  the health lost stays the same when a promotion changes the maximum (CvUnit::changeMaxHitPointsChange). false: 100 and the unique is not read. */
     var unitMaxHitPointsLikeVp = false
 
+    /** VP 5.4.8 CvUnit::getCaptureUnitType, getCaptureDefinition, createCaptureUnit: a captured civilian becomes the capturer's own unit of the unit's `Capture` class
+     *  (the unique `Becomes [baseUnitFilter] when captured`, resolved with the capturer's unique replacements) instead of the hard-coded Settler to Worker rule.
+     *  With barbarians involved (owner or capturer) the unit stays as it is; a city-state destroys a resulting settler. Units without the unique follow the old rules. false: Settlers become Workers. */
+    var captureClassLikeVp = false
+
     /** VP CvUnitCombat::DoDamageMath uses separate melee and ranged defines in hundredths. */
     data class CombatDamageConstants(
         val meleeBase: Int = 2400,

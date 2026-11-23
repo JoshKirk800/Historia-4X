@@ -36,11 +36,16 @@ internal class AStarPathfinder(
     internal val cache: PathingMapCache,
     private val timeLimitTurns: Int,
     private val tileMap: TileMap,
+    /** Whether a turn starting on the tile is one of an embarked unit (see [PathingMap]); never, unless `embarkAwarePathingLikeVp` */
+    private val turnEmbarkedAt: TilePredicate = TilePredicate { false },
 ) {
     internal val routeNodes = cache.routeNodes // Actually Array<RouteNode>
     private val initialBufferSize = tileMap.tileMatrix.size + tileMap.tileMatrix[0].size
     internal val tilesInTodo: IntIntMap = IntIntMap(initialBufferSize)
+    /** The movement of a turn started in the key's state. Used where no node of the turn is at hand (the priority estimate) */
     private val fpmFullMovement = cache.key.fullMove
+    /** The movement of the turn the [node] is in: it depends on the state of the tile that turn started on (CvAStar: StartMovesForTurn) */
+    private fun fullMoveOf(node: RouteNode) = cache.key.fullMoveOfTurn(node.turnEmbarked)
     @Cache private var damageFreeAnchorCost = FPM_ZERO
     /**
      * Frontier priority queue for managing the tiles to be checked.
@@ -66,7 +71,7 @@ internal class AStarPathfinder(
     }
     
     private fun moveFromLessThanTimeLimit(node: RouteNode) = 
-        node.turns < timeLimitTurns-1 || (node.turns == timeLimitTurns-1 && node.moveUsedThisTurn < fpmFullMovement)
+        node.turns < timeLimitTurns-1 || (node.turns == timeLimitTurns-1 && node.moveUsedThisTurn < fullMoveOf(node))
 
     // Heuristics for not-yet-calculated tiles here based on distance to target        
     @Readonly
@@ -134,7 +139,8 @@ internal class AStarPathfinder(
         var ancestor = startNode
         var totalCost = firstHopCost
         while (true) {
-            if (totalCost >= fpmFullMovement) {
+            // a turn started at this ancestor has the movement of the state the unit is in there
+            if (totalCost >= cache.key.fullMoveOfTurn(turnEmbarkedAt(ancestor.tile(tileMap)))) {
                 if (VERBOSE_PATHFINDING_LOGS == startingPoint || VERBOSE_PATHFINDING_LOGS == ALWAYS_LOG)
                     Log.debug("#findDamageFreeAnchor gave up short of ${neighborTile.position}: ${ancestor.tile(tileMap).position} is already $totalCost away, for $debugMapType $debugId")
                 return RouteNode() // this ancestor is already too far; anything earlier is even farther
@@ -161,17 +167,22 @@ internal class AStarPathfinder(
         val currentTile = currentNode.tile(tileMap)
         val startingPoint = cache.key.startingPoint
         val damagingTiles = currentNode.damagingTiles
-        val cost = cost(currentTile, neighborTile).coerceAtMost(fpmFullMovement)
+        // The move is made in the turn in progress, or in a turn that starts on this tile; the movement of that turn is the one of the state
+        // the unit is in where the turn starts (CvAStar PathCost: parent->m_iStartMovesForTurn)
+        val midTurn = currentNode.moveUsedThisTurn < fullMoveOf(currentNode)
+        val turnEmbarked = if (midTurn) currentNode.turnEmbarked else turnEmbarkedAt(currentTile)
+        val turnFullMovement = cache.key.fullMoveOfTurn(turnEmbarked)
+        val stepCost = cost(currentTile, neighborTile)
+        val cost = stepCost.coerceAtMost(turnFullMovement)
         val canMoveTo = currentNode.turns > 0 || moveToPredicate(neighborTile)
         val endTurnThereDamage = endTurnDamage(neighborTile).coerceAtMost(1)
         val neighborDamaging = endTurnThereDamage != 0
         val trueSafe = canMoveTo && !neighborDamaging
         val moveSinceStoppable = (currentNode.moveSinceStoppable + cost).coerceAtMost(RouteNode.MAX_MOVE_THIS_TURN)
         val newMoveSinceStoppable = if (canMoveTo) FPM_ZERO else moveSinceStoppable
-        val midTurn = currentNode.moveUsedThisTurn < fpmFullMovement
         val usedSoFar = if (midTurn) currentNode.moveUsedThisTurn else FPM_ZERO
-        val newUsedMovement = (usedSoFar + cost).coerceAtMost(fpmFullMovement)
-        val thisTurnPassThroughOrSafeEndTurn = newUsedMovement < fpmFullMovement || trueSafe
+        val newUsedMovement = (usedSoFar + cost).coerceAtMost(turnFullMovement)
+        val thisTurnPassThroughOrSafeEndTurn = newUsedMovement < turnFullMovement || trueSafe
         val relationship = relationshipLevel(neighborTile)
 
         fun log(verb: String, context: String) {
@@ -185,17 +196,17 @@ internal class AStarPathfinder(
         }
         fun newNode(
             newMoveSinceStoppable: FixedPointMovement, newUsedMovement: FixedPointMovement,
-            turnDelta: Int, newDamagingTiles: Int = damagingTiles
+            turnDelta: Int, newDamagingTiles: Int = damagingTiles, newTurnEmbarked: Boolean = turnEmbarked
         ) = RouteNode(
             neighborTile, relationship, newMoveSinceStoppable, newUsedMovement,
-            currentNode.turns + turnDelta,  currentTile, newDamagingTiles, neighborDamaging,
+            currentNode.turns + turnDelta,  currentTile, newDamagingTiles, neighborDamaging, newTurnEmbarked,
         )
         if ((midTurn || currentNode.canStopOn) && thisTurnPassThroughOrSafeEndTurn) {
             // if we can move to the next tile, and then either end our turn safely or move away, then we do so.
             val turnsDelta = if (midTurn) 0 else 1
             log("queuing", "for normal movement")
             return newNode(newMoveSinceStoppable,newUsedMovement, turnsDelta)
-        } else if (!canMoveTo && moveSinceStoppable < fpmFullMovement) {
+        } else if (!canMoveTo && moveSinceStoppable < turnFullMovement) {
             // If we could have moved here if we'd paused before entering unstoppable tiles
             // (usually allied units), pretend we paused before entering the mountains.
             // TODO: Eliminate endTurnDamage call.
@@ -206,7 +217,9 @@ internal class AStarPathfinder(
                 else damagingTiles
             val turnsDelta = if (currentNode.canStopOn) 1 else 0
             log("queing", "with retroactive pause")
-            return newNode(moveSinceStoppable, moveSinceStoppable, turnsDelta, retreatDamagingTiles)
+            // pausing here starts a new turn on this tile; pausing earlier stays in the turn in progress
+            val pauseTurnEmbarked = if (currentNode.canStopOn) turnEmbarkedAt(currentTile) else currentNode.turnEmbarked
+            return newNode(moveSinceStoppable, moveSinceStoppable, turnsDelta, retreatDamagingTiles, pauseTurnEmbarked)
         } else if (!canMoveTo) {
             // Even pausing as early as possible wasn't enough: it's simply not reachable this way,
             // and hopefully another tile finds a route to it later.
@@ -224,6 +237,7 @@ internal class AStarPathfinder(
                 neighborTile, relationship,
                 FPM_ZERO, damageFreeAnchorCost,
                 damageFreeAnchor.turns + 1, currentTile, damageFreeAnchor.damagingTiles, neighborDamaging,
+                turnEmbarkedAt(damageFreeAnchor.tile(tileMap)), // the new turn starts on the anchor
             )
         } else {
             // Ending our turn here takes damage. We'll add the neighbor tile, but the damage
@@ -232,7 +246,9 @@ internal class AStarPathfinder(
             // scenario where a tile can get recalculated.
             val newDamageTiles = (damagingTiles + endTurnThereDamage).coerceAtMost(RouteNode.MAX_DAMAGING_TILES)
             log("queing", "with taking damage")
-            return newNode(FPM_ZERO, cost, 1, newDamageTiles)
+            // the turn that ends here with damage is followed by one that starts on this tile
+            val nextTurnEmbarked = turnEmbarkedAt(currentTile)
+            return newNode(FPM_ZERO, stepCost.coerceAtMost(cache.key.fullMoveOfTurn(nextTurnEmbarked)), 1, newDamageTiles, nextTurnEmbarked)
         }
     }
 

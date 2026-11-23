@@ -438,9 +438,14 @@ class MapUnit : IsPartOfGameInfoSerialization {
     @Readonly fun hasMovement() = currentMovement > 0
 
     @Readonly
-    fun getMaxMovement(ignoreOtherUnit: Boolean = false): Int {
+    fun getMaxMovement(ignoreOtherUnit: Boolean = false): Int = getMaxMovementWhenEmbarked(isEmbarked(), ignoreOtherUnit)
+
+    /** [getMaxMovement] as it would be if the unit were embarked ([embarked] true) or not: a path search with `embarkAwarePathingLikeVp`
+     *  asks for the budget of the state the unit is in where a turn starts (CvAStar `UnitPathCacheData::baseMoves(bEmbarked)`, CvUnit::baseMoves). */
+    @Readonly
+    fun getMaxMovementWhenEmbarked(embarked: Boolean, ignoreOtherUnit: Boolean = false): Int {
         var movement =
-                if (isEmbarked()) civ.gameInfo.ruleset.modOptions.constants.embarkedUnitMovement
+                if (embarked) civ.gameInfo.ruleset.modOptions.constants.embarkedUnitMovement
                 else baseUnit.movement
 
         movement += getMatchingUniques(UniqueType.Movement, checkCivInfoUniques = true)
@@ -614,12 +619,19 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
         healing += getMatchingUniques(UniqueType.Heal, checkCivInfoUniques = true).sumOf { it.params[0].toInt() }
 
-        val healingCity = tile.getTilesInDistance(1).firstOrNull {
+        // CvUnit::healRate: a city in resistance (occupied, not being razed) gives the unit on its tile only the enemy base rate
+        // and the territory extras, not the city's own heal rate
+        val occupiedCityTile = constants.unitHealingLikeVp && tile.isCityCenter() &&
+            tile.getCity()?.let { it.isInResistance() && !it.isBeingRazed } == true
+        // With stateReligionHealingLikeVp, belief healing comes from the state religion below, not from the religion of a nearby city
+        val beliefsFromState = constants.unitHealingLikeVp && constants.stateReligionHealingLikeVp
+        val healingCity = if (occupiedCityTile) null else tile.getTilesInDistance(1).firstOrNull {
             it.isCityCenter() && it.getCity()!!.getMatchingUniques(UniqueType.CityHealingUnits).any()
         }?.getCity()
         if (healingCity != null) {
             healingCity.forEachMatchingUnique(UniqueType.CityHealingUnits) { unique ->
-                if (matchesFilter(unique.params[0]) && isAlly(healingCity.civ)) // only heal our units or allied units
+                val fromBelief = unique.sourceObjectType == UniqueTarget.FollowerBelief || unique.sourceObjectType == UniqueTarget.FounderBelief
+                if (!(beliefsFromState && fromBelief) && matchesFilter(unique.params[0]) && isAlly(healingCity.civ)) // only heal our units or allied units
                     healing += unique.params[1].toInt()
             }
         }
@@ -635,23 +647,28 @@ class MapUnit : IsPartOfGameInfoSerialization {
                 best = maxOf(best, other.adjacentHealingBonus())
             }
             healing += best
+            // CvUnit::healRate adds the extra heal of the territory kind (friendly, neutral or enemy) of the tile; a city tile counts as
+            // friendly if it is ours, otherwise as neutral. Each kind has its own aura (Get*TerritoryHealFromNearbyUnit)
+            val auraType = when {
+                tile.isCityCenter() -> if (tile.getOwner() == civ) UniqueType.HealTerritoryAura else UniqueType.HealNeutralTerritoryAura
+                isFriendlyTerritory -> UniqueType.HealTerritoryAura
+                tile.getOwner()?.isAtWarWith(civ) == true -> UniqueType.HealEnemyTerritoryAura
+                else -> UniqueType.HealNeutralTerritoryAura
+            }
             var territoryAura = 0
             for (other in civ.units.getCivUnits()) {
                 if (other == this || !other.hasTile() || other.type.getMovementType() != type.getMovementType()) continue
                 val distance = tile.aerialDistanceTo(other.getTile())
                 if (distance > 4) continue
-                for (unique in other.getMatchingUniques(UniqueType.HealTerritoryAura)) {
+                for (unique in other.getMatchingUniques(auraType)) {
                     if (distance <= unique.params[3].toInt() && matchesFilter(unique.params[1]) && tile.matchesFilter(unique.params[2]))
                         territoryAura = unique.params[0].toInt()
                 }
             }
             healing += territoryAura
-            if (constants.stateReligionHealingLikeVp && civ.getCapital() != null && tile.getOwner() == civ) {
-                val stateReligion = civ.religionManager.getFounderBenefitsReligion() ?: civ.religionManager.getMajorityReligion()
-                stateReligion?.followerBeliefUniqueMap?.getMatchingUniques(UniqueType.CityHealingUnits, cache.state)?.forEach { unique ->
-                    if (matchesFilter(unique.params[0])) healing += unique.params[1].toInt()
-                }
-            }
+            // MOD_BALANCE_VP: beliefs heal on our own tiles as long as we have a capital; they work through the friendly extra heal
+            if (constants.stateReligionHealingLikeVp && civ.getCapital(firstCityIfNoCapital = false) != null && tile.getOwner() == civ)
+                healing += civ.religionManager.getBeliefHealingFor(this)
         } else {
             val maxAdjacentHealingBonus = currentTile.neighbors
                 .flatMap { it.getUnits() }.filter { it.civ == civ }

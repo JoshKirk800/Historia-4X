@@ -53,9 +53,20 @@ class ModConstants {
     /** VP 5.4.8 CvUnit::baseMoves uses EMBARKED_UNIT_MOVEMENT before movement bonuses. */
     var embarkedUnitMovement = 2
 
-    /** VP 5.4.8 CvUnit::healRate: territory and occupation determine base healing. */
+    /** VP 5.4.8 CvUnit::baseMoves / CvUnitMovement::GetMovementCostChecked and CvAStar (UnitPathValid, PathCost): a path search spends the movement of
+     *  the state the unit is in at each node, not that of the starting tile. An embarked unit (or a land unit on a water node) has [embarkedUnitMovement]
+     *  as its budget (plus embarked-movement bonuses), landing on a tile ends the embarked state with its own full land budget on the next turn, and the
+     *  path cache keys include the embarked state. Off: the search assumes one fixed full-move budget and the unit's current embarked state. */
+    var embarkAwarePathingLikeVp = false
+
+    /** VP 5.4.8 CvUnit::healRate: territory and occupation determine base healing. The territory auras of nearby units
+     *  (GetHealFriendlyTerritoryFromNearbyUnit, ...Neutral..., ...Enemy...) apply only on tiles of their own kind, and a city in resistance
+     *  that is not being razed gives its unit the enemy base rate without the heal rate of the city's own buildings. */
     var unitHealingLikeVp = false
-    /** VP 5.4.8 CvUnit::healRate with MOD_BALANCE_VP: state religion beliefs heal in own territory. */
+    /** VP 5.4.8 CvUnit::healRate with MOD_BALANCE_VP: beliefs heal on own tiles for a civilization with a capital: those of the state religion
+     *  (CvPlayerReligions::UpdateStateReligion, [com.unciv.logic.civilization.managers.ReligionManager.getStateReligion]) that CvReligionBeliefs::IsBeliefValid
+     *  accepts, the pantheon belief of the second religion of the capital, and the civilization's own pantheon belief that it keeps for good
+     *  (MOD_BALANCE_PERMANENT_PANTHEONS). The healing of a city's own religion next to the city is then not added again. Needs [unitHealingLikeVp]. */
     var stateReligionHealingLikeVp = false
     var cityUnitHeal = 25
     var friendlyUnitHeal = 20

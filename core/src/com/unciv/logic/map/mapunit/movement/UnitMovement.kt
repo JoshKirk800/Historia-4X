@@ -193,6 +193,8 @@ class UnitMovement(val unit: MapUnit) {
 
         var distance = 1
         val unitMaxMovement = unit.getMaxMovement().toFloat()
+        // embarkAwarePathingLikeVp: a turn that starts on a tile has the movement of the state the unit is in there (CvAStar baseMoves(needsEmbarkation(plot)))
+        val embarkAware = unit.civ.gameInfo.ruleset.modOptions.constants.embarkAwarePathingLikeVp
         val newTilesToCheck = ArrayList<Tile>()
         val visitedTilesBitset = BitSet(currentTile.tileMap.tileList.size)
         visitedTilesBitset.set(currentTile.zeroBasedIndex)
@@ -224,7 +226,7 @@ class UnitMovement(val unit: MapUnit) {
                 else {
                     getMovementToTilesAtPosition(
                         tileToCheck.position,
-                        unitMaxMovement,
+                        if (embarkAware) unit.getMaxMovementWhenEmbarked(unit.isEmbarkedAt(tileToCheck)).toFloat() else unitMaxMovement,
                         false,
                         visitedTilesBitset,
                         passThroughCacheNew,
@@ -1161,6 +1163,8 @@ class PathfindingCache(private val unit: MapUnit) {
     private var destination: Tile? = null
     private var movement = -1f
     private var currentTile: Tile? = null
+    /** Whether the unit was embarked when the cache was cleared; only matters with `embarkAwarePathingLikeVp` */
+    private var embarked = false
     private var distanceToTilesCache: PathsToTilesWithinTurn? = null
     /** The tiles an exhausted shortest path search could reach (by zeroBasedIndex), valid like the other caches; null when no search was exhausted */
     private var searchedRegion: BitSet? = null
@@ -1168,7 +1172,9 @@ class PathfindingCache(private val unit: MapUnit) {
     /** Check if the caches are valid (only checking if the unit has moved or consumed movement points;
      * the isPlayerCivilization check is performed in the functions because we want isValid() == false
      * to have a specific behavior) */
-    @Readonly private fun isValid(): Boolean = (movement == unit.currentMovement) && (unit.getTile() == currentTile)
+    @Readonly private fun isValid(): Boolean = (movement == unit.currentMovement) && (unit.getTile() == currentTile) &&
+        // embarkAwarePathingLikeVp: the search spends the movement of the state the unit is in, so what was found for the other state does not hold
+        (embarked == unit.isEmbarked() || !unit.civ.gameInfo.ruleset.modOptions.constants.embarkAwarePathingLikeVp)
 
     fun getShortestPathCache(destination: Tile): List<Tile> {
         if (unit.civ.isHuman()) return listOf()
@@ -1212,6 +1218,7 @@ class PathfindingCache(private val unit: MapUnit) {
         distanceToTilesCache = null
         movement = unit.currentMovement
         currentTile = unit.getTile()
+        embarked = unit.isEmbarked()
         destination = null
         shortestPathCache = listOf()
     }

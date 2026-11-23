@@ -17,12 +17,28 @@ import java.util.Locale
 @Pure operator fun Int.minus(other: FixedPointMovement) = FixedPointMovement.fpmFromMovement(this) - other
 
 
+/**
+ *  @property fullMove The movement a turn started in the state the unit is in at [startingPoint] has
+ *  @property landFullMove With `embarkAwarePathingLikeVp`, the movement of a turn that starts on a tile where the unit is not embarked (CvAStar baseMoves(false));
+ *            otherwise the same as [fullMove]
+ *  @property embarkedFullMove With `embarkAwarePathingLikeVp`, the movement of a turn that starts on a tile where the unit is embarked (CvAStar baseMoves(true));
+ *            otherwise the same as [fullMove]
+ *  @property startsEmbarked Whether the unit is embarked at [startingPoint]: the cached routes depend on it through the root node's budget
+ */
 data class PathingMapCacheKey(
     val startingPoint: HexCoord,
     val moveRemaining: FixedPointMovement,
     val fullMove: FixedPointMovement,
+    val landFullMove: FixedPointMovement = fullMove,
+    val embarkedFullMove: FixedPointMovement = fullMove,
+    val startsEmbarked: Boolean = false,
 ) {
-    override fun toString() = "$startingPoint/$moveRemaining/$fullMove"
+    /** The movement of a turn that starts on a tile where the unit [embarked] or not */
+    @Readonly
+    fun fullMoveOfTurn(embarked: Boolean) = if (embarked) embarkedFullMove else landFullMove
+
+    override fun toString() = "$startingPoint/$moveRemaining/$fullMove" +
+        if (landFullMove == fullMove && embarkedFullMove == fullMove && !startsEmbarked) "" else "/land=$landFullMove/embarked=$embarkedFullMove/startsEmbarked=$startsEmbarked"
 }
 
 /**

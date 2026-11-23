@@ -765,8 +765,12 @@ enum class UniqueType(
     HealAdjacentUnits("All adjacent units heal [amount] HP when healing", UniqueTarget.Unit),
     /** VP 5.4.8 CvUnit::healRate takes the best same-tile or same-domain adjacent unit heal. */
     HealSameTileUnits("Units on this tile heal [amount] HP when healing", UniqueTarget.Unit),
-    /** VP 5.4.8 CvUnit::GetHealFriendlyTerritoryFromNearbyUnit and neutral/enemy variants. */
+    /** VP 5.4.8 CvUnit::GetHealFriendlyTerritoryFromNearbyUnit: with `unitHealingLikeVp`, only counts where CvUnit::healRate takes the friendly extra heal. */
     HealTerritoryAura("[amount] HP healing for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::GetHealNeutralTerritoryFromNearbyUnit: counts where CvUnit::healRate takes the neutral extra heal (unowned or non-hostile foreign tiles, and cities of another team). */
+    HealNeutralTerritoryAura("[amount] HP healing in neutral territory for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::GetHealEnemyTerritoryFromNearbyUnit: counts on tiles owned by a civilization at war with the unit's owner. */
+    HealEnemyTerritoryAura("[amount] HP healing in enemy territory for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles", UniqueTarget.Unit),
 
     // Vision
     NoSight("No Sight", UniqueTarget.Unit),

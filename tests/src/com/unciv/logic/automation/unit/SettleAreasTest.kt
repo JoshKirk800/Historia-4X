@@ -473,9 +473,16 @@ class SettleAreasTest {
         val plain = value(inca, site)
         assertTrue("setup: a site worth settling", plain > 0)
         assertEquals("nobody owns Pata-Pata yet", plain, value(other, site))
-        game.ruleset.tileImprovements["Pata-Pata"]!!.uniqueTo = inca.civName
-        assertTrue("the hills next to mountains and the mountains count for its owner", value(inca, site) > plain)
-        assertEquals(plain, value(other, site))
+        // The ruleset's objects are shared with every other test (the clone of a ruleset is shallow): put the owner back
+        val pataPata = game.ruleset.tileImprovements["Pata-Pata"]!!
+        val owner = pataPata.uniqueTo
+        try {
+            pataPata.uniqueTo = inca.civName
+            assertTrue("the hills next to mountains and the mountains count for its owner", value(inca, site) > plain)
+            assertEquals(plain, value(other, site))
+        } finally {
+            pataPata.uniqueTo = owner
+        }
     }
 
     @Test

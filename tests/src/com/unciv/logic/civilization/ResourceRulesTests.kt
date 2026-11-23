@@ -17,6 +17,7 @@ import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +42,12 @@ class ResourceRulesTests {
         a.diplomacyFunctions.makeCivilizationsMeet(b)
         city = game.addCity(a, game.getTile(HexCoord(0, 0)))
         game.addCity(b, game.getTile(HexCoord(4, 0)))
+    }
+
+    /** The objects of a TestGame's ruleset are those of the cached ruleset (its clone is shallow): what a test sets on Horses must not stay for the other tests */
+    @After
+    fun restoreHorses() {
+        game.ruleset.tileResources["Horses"]!!.obsoleteBy = null
     }
 
     //region obsolete resources

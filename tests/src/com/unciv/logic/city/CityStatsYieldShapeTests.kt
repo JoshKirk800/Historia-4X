@@ -84,6 +84,15 @@ class CityStatsYieldShapeTests {
         assertEquals(other, second.total(Stat.Science), 1e-3f)
     }
 
+    @Test
+    fun `a city receives proportional yield per empire citizen`() {
+        val before = second.total(Stat.Science)
+        val capitalBefore = capital.total(Stat.Science)
+        second.build("[+34 Science] per [100] citizens in the empire proportionally [in this city]")
+        assertEquals(before + 2.38f, second.total(Stat.Science), 1e-3f)
+        assertEquals(capitalBefore, capital.total(Stat.Science), 1e-3f)
+    }
+
     //region Processes
 
     @Test

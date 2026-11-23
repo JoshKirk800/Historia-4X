@@ -10,6 +10,7 @@ import com.unciv.logic.civilization.PopupAlert
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
+import com.unciv.models.ModConstants
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
@@ -77,6 +78,17 @@ object BattleUnitCapture {
         return unitCaptured
     }
 
+    /**
+     *  The health a captured military unit has with `conquestLikeVp` (CvUnit::createCaptureUnit): `maxHitPoints * COMBAT_CAPTURE_HEALTH / 100`, rounded down,
+     *  is passed to CvUnit::setDamage (which limits it to 0 until the maximum): VP's source makes it the unit's damage, so it keeps what is left of its hit points
+     *  ([ModConstants.ConquestConstants.combatCaptureHealthIsDamage]; with 75: a quarter of them). With the constant false it is the health.
+     */
+    @Readonly
+    fun capturedUnitHealthLikeVp(maxHealth: Int, constants: ModConstants.ConquestConstants): Int {
+        val share = (maxHealth * constants.combatCaptureHealthPercent / 100).coerceIn(0, maxHealth)
+        return (if (constants.combatCaptureHealthIsDamage) maxHealth - share else share).coerceAtLeast(1) // a unit with no hit points left would be dead
+    }
+
     /** Places a [unitName] unit near [tile] after being attacked by [attacker].
      * Adds a notification to [attacker]'s civInfo and returns whether the captured unit could be placed */
     private fun spawnCapturedUnit(defender: MapUnitCombatant, attacker: MapUnitCombatant): Boolean {
@@ -85,6 +97,14 @@ object BattleUnitCapture {
         addedUnit.currentMovement = 0f
         // CvUnit::createCaptureUnit: the captured unit's health is a share of its own GetMaxHitPoints (COMBAT_CAPTURE_HEALTH, 50 here)
         addedUnit.health = addedUnit.getMaxHealth() * 50 / 100
+        val constants = attacker.getCivInfo().gameInfo.ruleset.modOptions.constants
+        if (constants.conquestLikeVp) {
+            addedUnit.health = capturedUnitHealthLikeVp(addedUnit.getMaxHealth(), constants.conquestConstants)
+            if (constants.conquestConstants.capturedUnitMovesButCannotAttack) {
+                addedUnit.currentMovement = addedUnit.getMaxMovement().toFloat()
+                addedUnit.attacksThisTurn = addedUnit.maxAttacksPerTurn()
+            }
+        }
         attacker.getCivInfo().addNotification("An enemy [${defender.getName()}] has joined us!", MapUnitAction(addedUnit), NotificationCategory.War, defender.getName())
 
         defender.getCivInfo().addNotification(

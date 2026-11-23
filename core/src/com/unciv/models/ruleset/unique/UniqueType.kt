@@ -609,6 +609,12 @@ enum class UniqueType(
 
     DestroyedWhenCityCaptured("Destroyed when the city is captured", UniqueTarget.Building),
     NotDestroyedWhenCityCaptured("Never destroyed when the city is captured", UniqueTarget.Building),
+    // ---- (StageConquest / M5) building capture chance like Vox Populi ----
+    /** VP 5.4.8 CvPlayer::IsValidBuildingForPlayer, CvBuildingEntry::GetConquestProbability (Buildings.ConquestProb): the chance a building is kept in a conquered city. */
+    SurvivesCityCaptureChance("Has a [nonNegativeAmount]% chance of surviving when the city is captured", UniqueTarget.Building,
+        docDescription = "The chance, rolled once per building when a city is conquered, that this building is not destroyed (Buildings.ConquestProb). 0 destroys it, 100 keeps it. " +
+            "Buildings with `Destroyed when the city is captured` or `Never destroyed when the city is captured`, wonders and the capital's buildings are not rolled. " +
+            "Conditionals are not evaluated. Only read with the ModConstants switch `conquestLikeVp`; without a unique the chance is `conquestConstants.buildingSurvivalPercent`."),
     GoldFromCapturingCity("[relativeAmount]% Gold given to enemy if city is captured", UniqueTarget.Building),
 
     RemovesAnnexUnhappiness("Removes extra unhappiness from annexed cities", UniqueTarget.Building),

@@ -181,6 +181,40 @@ class ModConstants {
     )
     var unitSupplyConstants = UnitSupplyConstants()
 
+    // ---- (StageConquest / M5) conquest and capture like Vox Populi, staged ----
+    /** VP 5.4.8 CvPlayer::acquireCity, CvPlayerCulture::GetInfluenceCityConquestReduction, CvUnit::createCaptureUnit. true: a conquered city keeps [ConquestConstants.capturePopulationPercent]
+     *  of its citizens (plus the share of the rest that the influence reduction gives back; at least 1, never when the conqueror is the founder, the city was a barbarian one or was in resistance),
+     *  the reduction by influence is [ConquestConstants]'s table plus the boost (resistance only between two major civilizations), the city keeps its damage up to [ConquestConstants.cityCaptureDamagePercent]
+     *  of its maximum hit points, a building that is not destroyed by its own unique survives with the chance of `Has a [n]% chance of surviving when the city is captured`
+     *  (default [ConquestConstants.buildingSurvivalPercent]), a captured military unit gets [ConquestConstants.combatCaptureHealthPercent] as VP's COMBAT_CAPTURE_HEALTH, and keeps its moves.
+     *  false: a city loses 1 + population / 4 citizens less the influence share, has half of its maximum hit points, buildings are destroyed with 34% chance, captured units have 50% health and no moves. */
+    var conquestLikeVp = false
+
+    /** The numbers of VP's conquest, read only with [conquestLikeVp] (all-or-nothing, a data class so the Json serializer can omit it when default). `DEF-VP` is `(2) Vox Populi/Database Changes/DefineChanges.sql:105-115`. */
+    data class ConquestConstants(
+        /** Percent of the citizens a conquered city keeps (`CITY_CAPTURE_POPULATION_PERCENT`, 50 in CP, 75 in VP; used up to 100) */
+        val capturePopulationPercent: Int = 75,
+        /** Percent added to the influence reduction of population loss and resistance, also with no influence (`BALANCE_CONQUEST_REDUCTION_BOOST`, 0 in CP, 5 in VP) */
+        val conquestReductionBoost: Int = 5,
+        /** CvPlayerCulture::GetInfluenceCityConquestReduction by influence level of the conqueror over the old owner (Exotic 10, Familiar 25, Popular 50, Influential 75, Dominant 100 in VP; Unknown 0) */
+        val influenceReductionExotic: Int = 10,
+        val influenceReductionFamiliar: Int = 25,
+        val influenceReductionPopular: Int = 50,
+        val influenceReductionInfluential: Int = 75,
+        val influenceReductionDominant: Int = 100,
+        /** Percent of its maximum hit points the damage of a conquered city is capped at (`CITY_CAPTURE_DAMAGE_PERCENT`, 50 in CP and VP) */
+        val cityCaptureDamagePercent: Int = 50,
+        /** Percent of the buildings that survive a conquest when the building has no unique for it (`Buildings.ConquestProb`, 66 in CP, 80 in VP's base setting) */
+        val buildingSurvivalPercent: Int = 80,
+        /** `COMBAT_CAPTURE_HEALTH`: 50 in CP, 75 in VP */
+        val combatCaptureHealthPercent: Int = 75,
+        /** VP's CvUnit::createCaptureUnit passes this share of the unit's maximum hit points to CvUnit::setDamage, so the captured unit has what is left (25% with 75): true like the source, false: it is the health */
+        val combatCaptureHealthIsDamage: Boolean = true,
+        /** CvUnit::createCaptureUnit with MOD_BALANCE_VP: the captured unit has its full moves back, but has made all its attacks of the turn */
+        val capturedUnitMovesButCannotAttack: Boolean = true,
+    )
+    var conquestConstants = ConquestConstants()
+
     // Gold maintenance of units (CvTreasury::CalculateUnitCost), with 0.5 gold per unit that is not free:
     // cost = (paidUnits * 0.5 * (1 + unitMaintenanceGameMultiplier * progress)) ^ (1 + progress / unitMaintenanceExponentDivisor)
     // where progress is the turn divided by the number of turns of the game speed. The defaults are the original Unciv values; Gods & Kings uses 0, 8 and 7, Brave New World 0, 8 and 5 (Vox Populi's value).

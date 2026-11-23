@@ -16,10 +16,12 @@ import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.civilization.TileAcquisition
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
+import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.map.mapunit.UnitPromotions
 import com.unciv.logic.trade.TradeLogic
 import com.unciv.logic.trade.TradeOffer
 import com.unciv.logic.trade.TradeOfferType
+import com.unciv.models.ModConstants
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
@@ -36,6 +38,59 @@ class CityConquestFunctions(val city: City) {
     companion object {
         const val MINOR_FRIENDSHIP_AT_WAR = -60f
         const val MINOR_LIBERATION_FRIENDSHIP = 105f
+
+        /**
+         *  The citizens a conquered city has left with `conquestLikeVp` (CvPlayer::acquireCity, "Slaughtering time!"): the share of [population] kept is
+         *  [ModConstants.ConquestConstants.capturePopulationPercent] (at most 100) plus the part of what is lost that [influenceReduction] gives back
+         *  (`reduction * (100 - kept) / 100`, integer division), the result is `population * kept / 100` rounded down and at least 1.
+         */
+        @Readonly
+        fun retainedPopulationLikeVp(population: Int, influenceReduction: Int, constants: ModConstants.ConquestConstants): Int {
+            var percentRetained = min(constants.capturePopulationPercent, 100)
+            percentRetained += influenceReduction * (100 - percentRetained) / 100
+            return max(1, population * percentRetained / 100)
+        }
+
+        /**
+         *  CvPlayerCulture::GetInfluenceCityConquestReduction: the value of the influence [level] of the conqueror over a major old owner (`null`: the old owner is no major
+         *  civilization or not met, Unknown: 0) plus `BALANCE_CONQUEST_REDUCTION_BOOST`, limited to 0 until 100.
+         */
+        @Readonly
+        fun influenceReductionLikeVp(level: InfluenceLevel?, constants: ModConstants.ConquestConstants): Int {
+            val byLevel = when (level) {
+                InfluenceLevel.Exotic -> constants.influenceReductionExotic
+                InfluenceLevel.Familiar -> constants.influenceReductionFamiliar
+                InfluenceLevel.Popular -> constants.influenceReductionPopular
+                InfluenceLevel.Influential -> constants.influenceReductionInfluential
+                InfluenceLevel.Dominant -> constants.influenceReductionDominant
+                InfluenceLevel.Unknown, null -> 0
+            }
+            return (byLevel + constants.conquestReductionBoost).coerceIn(0, 100)
+        }
+
+        /**
+         *  The health a conquered city has with `conquestLikeVp` (CvPlayer::acquireCity, `setDamage(iBattleDamage)` after the buildings are in): the damage it had
+         *  ([damageBeforeCapture]) is kept up to [ModConstants.ConquestConstants.cityCaptureDamagePercent] of [maxHealth] (the new maximum, rounded down) and always
+         *  leaves 1 hit point.
+         */
+        @Readonly
+        fun capturedCityHealthLikeVp(maxHealth: Int, damageBeforeCapture: Int, constants: ModConstants.ConquestConstants): Int {
+            var maximumDamage = maxHealth * constants.cityCaptureDamagePercent / 100
+            if (maximumDamage >= maxHealth) maximumDamage = max(0, maxHealth - 1)
+            return maxHealth - min(damageBeforeCapture, maximumDamage)
+        }
+    }
+
+    /**
+     *  CvPlayerCulture::GetInfluenceCityConquestReduction with `conquestLikeVp`: the percent by which tourism over [conqueredCiv] gives back citizens and takes off resistance.
+     *  The level's value of [ModConstants.ConquestConstants] if [conqueredCiv] is a major civilization and [conqueringCiv] has met it (Unknown and not met: 0), plus
+     *  `conquestReductionBoost`, within 0 to 100. Reads the authoritative [com.unciv.logic.civilization.managers.CultureManager.getInfluenceLevel].
+     */
+    @Readonly
+    private fun getInfluenceReductionLikeVp(conqueringCiv: Civilization, conqueredCiv: Civilization): Int {
+        val constants = city.civ.gameInfo.ruleset.modOptions.constants.conquestConstants
+        val level = if (conqueredCiv.isMajorCiv) conqueringCiv.culture.getInfluenceLevel(conqueredCiv) else null
+        return influenceReductionLikeVp(level, constants)
     }
 
     private val tileBasedRandom = Random(city.getCenterTile().position.hashCode())
@@ -60,6 +115,7 @@ class CityConquestFunctions(val city: City) {
     }
 
     private fun destroyBuildingsOnCapture() {
+        val conquest = city.civ.gameInfo.ruleset.modOptions.constants.takeIf { it.conquestLikeVp }?.conquestConstants
         // Possibly remove other buildings
         for (building in city.cityConstructions.getBuiltBuildings()) {
             when {
@@ -68,6 +124,12 @@ class CityConquestFunctions(val city: City) {
                 building.hasUnique(UniqueType.MovesToNewCapital, city.state) -> continue // Will move to the civ's new capital
                 building.hasUnique(UniqueType.DestroyedWhenCityCaptured) ->
                     city.cityConstructions.removeBuilding(building)
+                // CvPlayer::IsValidBuildingForPlayer: a roll of 1-100 up to the building's ConquestProb keeps it
+                conquest != null -> {
+                    val survival = building.getMatchingUniques(UniqueType.SurvivesCityCaptureChance, GameContext.IgnoreConditionals)
+                        .firstOrNull()?.let { it.params[0].toInt() } ?: conquest.buildingSurvivalPercent
+                    if (tileBasedRandom.nextInt(100) >= survival) city.cityConstructions.removeBuilding(building)
+                }
                 // Regular buildings have a 34% chance of removal
                 tileBasedRandom.nextInt(100) < 34 -> city.cityConstructions.removeBuilding(building)
             }
@@ -122,7 +184,16 @@ class CityConquestFunctions(val city: City) {
 
         val reconqueredCityWhileStillInResistance = city.previousOwner == receivingCiv.civID && city.isInResistance()
         // Tourism makes a conquest gentler, as it makes the people of the city see the conqueror as one of their own (CvPlayer::acquireCity)
-        val influenceReduction = conqueringCiv.culture.getConquestReductionPercent(conqueredCiv)
+        val constants = city.civ.gameInfo.ruleset.modOptions.constants
+        val conquestVp = constants.conquestLikeVp
+        val influenceReduction =
+            if (conquestVp) getInfluenceReductionLikeVp(conqueringCiv, conqueredCiv)
+            else conqueringCiv.culture.getConquestReductionPercent(conqueredCiv)
+        // CvPlayer::acquireCity: the slaughter has exceptions, judged on the city as it is taken: the conqueror founded it, it was a barbarian city, it was in resistance
+        val slaughter = !city.isInResistance() && !conqueredCiv.isBarbarian && city.foundingCivObject != conqueringCiv
+        val populationBeforeCapture = city.population.population
+        // CvPlayer::acquireCity keeps the damage the city had (CvCity::getDamage), CvCity::setDamage is called after the buildings are in
+        val damageBeforeCapture = (city.getMaxHealth() - city.health).coerceAtLeast(0)
         // CvPlayer::acquireCity checks whether the conqueror has ever owned this city before
         // transferring it; trades and earlier conquests count as ownership too.
         if (conqueringCiv.hasUnique(UniqueType.TechnologyFromConqueringCity) &&
@@ -159,14 +230,20 @@ class CityConquestFunctions(val city: City) {
 
         Battle.destroyIfDefeated(conqueredCiv, conqueringCiv, city.location.toHexCoord())
 
-        city.health = city.getMaxHealth() / 2 // I think that cities recover to half health when conquered?
+        if (!conquestVp) city.health = city.getMaxHealth() / 2 // I think that cities recover to half health when conquered?
         city.avoidGrowth = false // reset settings
         city.setCityFocus(CityFocus.NoFocus) // reset settings
-        if (city.population.population > 1)
+        if (conquestVp) {
+            val retained = if (slaughter) retainedPopulationLikeVp(populationBeforeCapture, influenceReduction, constants.conquestConstants) else populationBeforeCapture
+            if (retained < city.population.population) city.population.addPopulation(retained - city.population.population)
+            city.health = capturedCityHealthLikeVp(city.getMaxHealth(), damageBeforeCapture, constants.conquestConstants)
+        } else if (city.population.population > 1)
             city.population.addPopulation(-(1 + city.population.population / 4) * (100 - influenceReduction) / 100) // so from 2-4 population, remove 1, from 5-8, remove 2, etc.
         city.reassignAllPopulation()
 
-        val resistanceTurns = getResistanceTurns(influenceReduction)
+        // CvPlayer::acquireCity: the reduction by tourism counts for resistance only between two major civilizations
+        val resistanceReduction = if (conquestVp && !(conqueringCiv.isMajorCiv && conqueredCiv.isMajorCiv)) 0 else influenceReduction
+        val resistanceTurns = if (conquestVp) max(getResistanceTurns(resistanceReduction), 1) else getResistanceTurns(influenceReduction)
         if (!reconqueredCityWhileStillInResistance && city.foundingCivObject != receivingCiv && resistanceTurns > 0) {
             // add resistance
             // I checked, and even if you puppet there's resistance for conquering

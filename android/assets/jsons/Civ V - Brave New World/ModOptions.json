@@ -24,8 +24,12 @@
         // CvCity::setPopulation: GlobalDefines SCIENCE_PER_POPULATION, 1 in Community Patch, 0 in Vox Populi (DefineChanges.sql:350);
         // the science of a city comes from its buildings, specialists and tiles
         "sciencePerPopulation": 0,
-        // CvPlayer::getGrowthThreshold: BASE_CITY_GROWTH_THRESHOLD 15, CITY_GROWTH_MULTIPLIER 12 and CITY_GROWTH_EXPONENT 2.22 (DefineChanges.sql; Brave New World 15, 8, 1.5)
+        // CvPlayer::getGrowthThreshold: BASE_CITY_GROWTH_THRESHOLD 15, CITY_GROWTH_MULTIPLIER 12 and CITY_GROWTH_EXPONENT 2.22 (DefineChanges.sql:140-141; Brave New World 15, 8, 1.5)
         "cityGrowth": { "base": 15, "multiplier": 12, "exponent": 2.22 },
+        // CvCityCitizens::GetSpecialistUpgradeThreshold: GREAT_PERSON_THRESHOLD_BASE 150 and GREAT_PERSON_THRESHOLD_INCREASE 250 (DefineChanges.sql:452-453; 100 and 100 in
+        // Brave New World). Vox Populi counts the Great People of each kind apart (GLOBAL_SEPARATE_GP_COUNTERS 1), Units.json has a group for each of them
+        "greatPersonThresholdBase": 150,
+        "greatPersonThresholdIncrease": 250,
         // CvCity::GetJONSCultureThreshold
         "cultureCostLikeCivV": true,
         // CvTreasury::DoGold

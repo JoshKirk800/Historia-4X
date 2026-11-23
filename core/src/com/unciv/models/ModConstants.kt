@@ -661,7 +661,9 @@ class ModConstants {
     var landmarkInfluenceWithCityStates = 50
 
     // Great People from points (CvCityCitizens::GetSpecialistUpgradeThreshold, GREAT_PERSON_THRESHOLD_BASE and _INCREASE in GlobalDefines.xml):
-    // a city needs base + increase × (Great People of the group gained so far) points, scaled by game speed and starting era
+    // a city needs base + increase × (Great People of the group gained so far) points, scaled by game speed and starting era.
+    // 100 and 100 in Brave New World, 150 and 250 in Vox Populi (DefineChanges.sql; with GLOBAL_SEPARATE_GP_COUNTERS, which Vox Populi sets, each of the Great
+    // Writers, Artists, Musicians, Merchants, Scientists and Engineers has a counter of its own: the groups of [UniqueType.GPPointPool])
     var greatPersonThresholdBase = 100
     var greatPersonThresholdIncrease = 100
 

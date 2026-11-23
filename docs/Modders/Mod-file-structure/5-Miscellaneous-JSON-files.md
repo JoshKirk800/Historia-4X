@@ -359,6 +359,8 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | unitMaintenanceExponentDivisor           | Float  | 3.0                           | [^U]  |
 | sciencePerPopulation                     | Float  | 1.0                           | Science each citizen of a city gives (`SCIENCE_PER_POPULATION`: 1 in Brave New World, 0 in Vox Populi) |
 | cityGrowth                               | Object | [See below](#citygrowthconstants) | Food a city needs to grow (`CITY_GROWTH_MULTIPLIER` and the others) |
+| greatPersonThresholdBase                 | Int    | 100                           | Points a city needs for the first Great Person of a group (`GREAT_PERSON_THRESHOLD_BASE`: Brave New World 100, Vox Populi 150) |
+| greatPersonThresholdIncrease             | Int    | 100                           | Points added for each Great Person of the group gained so far (`GREAT_PERSON_THRESHOLD_INCREASE`: Brave New World 100, Vox Populi 250). The groups are those of the unique `Is part of Great Person group [comment]` |
 | minimalCityDistance                      | Int    | 3                             | [^D]  |
 | minimalCityDistanceOnDifferentContinents | Int    | 2                             | [^D]  |
 | unitUpgradeCost                          | Object | [See below](#unitupgradecost) | [^J]  |

@@ -34,6 +34,20 @@ class GoldenAgeManager : IsPartOfGameInfoSerialization {
     }
 
     @Readonly fun isGoldenAge(): Boolean = turnsLeftForCurrentGoldenAge > 0
+
+    /**
+     *  CvPlayer::GetGoldenAgePointsFromCitiesTimes100: the golden age points a turn of every city (CvCity::getYieldRateTimes100(YIELD_GOLDEN_AGE_POINTS),
+     *  V:CvPlayer.cpp:24846-24860), here the sum of [UniqueType.GoldenAgePointsPerTurn] over the cities that the unique's filter names. 0 without such uniques.
+     */
+    @Readonly
+    fun pointsPerTurnFromUniques(): Int {
+        var points = 0
+        for (city in civInfo.cities)
+            city.forEachMatchingUnique(UniqueType.GoldenAgePointsPerTurn) { unique ->
+                if (city.matchesFilter(unique.params[1])) points += unique.params[0].toInt()
+            }
+        return points
+    }
     
     fun addHappiness(amount: Int) {
         storedHappiness += amount

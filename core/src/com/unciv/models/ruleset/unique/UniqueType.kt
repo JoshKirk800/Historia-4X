@@ -271,6 +271,10 @@ enum class UniqueType(
     RemoveBuilding("Remove [buildingFilter] [cityFilter]", UniqueTarget.Global, UniqueTarget.Triggerable),
     OneTimeSellBuilding("Sell [buildingFilter] buildings [cityFilter]", UniqueTarget.Global, UniqueTarget.Triggerable),
 
+    GoldenAgePointsPerTurn("[relativeAmount] Golden Age points per turn [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
+        docDescription = "Added to the golden age meter at the end of each turn for every matching city (the original's YIELD_GOLDEN_AGE_POINTS as a city yield, " +
+            "CvPlayer::GetGoldenAgePointsFromCitiesTimes100). With `<for every [countable]>` it covers the per-specialist, per-building and per-improvement rows"),
+
     /// Border growth
     BorderCulture("[relativeAmount] border culture [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
     BorderCultureFromTiles("[relativeAmount] border culture from [tileFilter] tiles [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),

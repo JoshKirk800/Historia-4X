@@ -479,6 +479,19 @@ enum class Countables(
         override fun eval(parameterText: String, gameContext: GameContext) =
             gameContext.civInfo?.goldenAges?.numberOfGoldenAges
     },
+    GoldenAgesUpTo("Golden Ages up to [positiveAmount]", shortDocumentation = "The number of Golden Ages the civilization has had, at most the amount") {
+        override val documentationStrings = listOf(
+            "The original's `YieldCap` of `Building_YieldChangesPerGoldenAge` and `Trait_ResourceYieldChangesFromGoldenAge`: the yield per golden age is capped as a total, " +
+                "which is this count when the yield per golden age is 1 (the cap is then the number of golden ages that count)."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val cap = parameterText.getPlaceholderParameters()[0].toIntOrNull() ?: return null
+            return gameContext.civInfo?.goldenAges?.numberOfGoldenAges?.coerceAtMost(cap)
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.PositiveNumber.getTranslatedErrorSeverity(parameterText, ruleset)
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
+    },
     TriggeringAmount("Triggering amount", shortDocumentation = "The amount the event that triggers this unique carries") {
         override val documentationStrings = listOf(
             "The citizens a city gains for `upon population growth`, the price for `upon buying something with [stat]`, " +

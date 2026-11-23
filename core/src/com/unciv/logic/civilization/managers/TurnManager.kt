@@ -590,8 +590,10 @@ class TurnManager(val civInfo: Civilization) {
 
         civInfo.goldenAges.endTurn(
             // CvPlayer::GetHappinessForGAP: the positive deltas of the cities with the key, else the excess happiness
-            if (civInfo.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) civInfo.stats.needs.goldenAgePointsFromHappiness()
+            (if (civInfo.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) civInfo.stats.needs.goldenAgePointsFromHappiness()
             else civInfo.getHappiness())
+                // CvPlayer::GetGoldenAgePointsFromEmpireTimes100 comes on top of GetHappinessForGAP (V:CvPlayer.cpp:24794-24795)
+                + civInfo.goldenAges.pointsPerTurnFromUniques())
         civInfo.units.getCivUnits().forEach { UnitTurnManager(it).endTurn() }  // This is the most expensive part of endTurn
         civInfo.diplomacy.values.toList().forEach { it.nextTurn() } // we copy the diplomacy values so if it changes in-loop we won't crash
         civInfo.cache.updateHasActiveEnemyMovementPenalty()

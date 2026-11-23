@@ -229,7 +229,9 @@ class NeedsRulesetTests {
         assertEquals(emptyList<String>(), ruleset.terrains.values.filter { terrain -> terrain.uniques.any { it.endsWith("Happiness] while this tile is in your borders") } }.map { it.name })
         // Traits.CityUnhappinessModifier, PopulationUnhappinessModifier, NaturalWonderHappinessModifier and LuxuryHappinessRetention are 0
         assertEquals(emptyList<String>(), ruleset.nations["India"]!!.uniques)
-        assertEquals(emptyList<String>(), ruleset.nations["The Netherlands"]!!.uniques)
+        // only the luxury export and import rows of content flip F1 (Trait_YieldFromExport and Trait_YieldFromImport), no happiness
+        assertEquals(listOf("[+3 Gold, +2 Culture] for each luxury resource exported <for every [Era scaler]>", "[+3 Gold, +2 Culture] for each luxury resource imported <for every [Era scaler]>"),
+            ruleset.nations["The Netherlands"]!!.uniques)
         assertFalse(ruleset.nations["Spain"]!!.uniques.any { it.contains("Happiness") })
     }
 }

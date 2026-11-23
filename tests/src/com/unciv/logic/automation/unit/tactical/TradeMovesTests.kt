@@ -151,6 +151,7 @@ class TradeMovesTests {
 
     @Test
     fun `only a ship goes for a trader at sea and a route by sea pays double`() {
+        game.ruleset.modOptions.constants.tradeRouteModelLikeVp = false   // double is Brave New World's sea bonus; the ruleset plays Vox Populi's model (sea +25 percent) since content flip F1
         for (tile in game.tileMap.values) game.setTileTerrain(tile.position, Constants.coast)
         game.setTileTerrain(tile(0).position, Constants.desert)
         game.setTileTerrain(tile(8).position, Constants.desert)

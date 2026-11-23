@@ -9,12 +9,14 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.stats.Stat
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,10 +33,21 @@ class PlotBuildScorerTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // The ruleset has Vox Populi's monopolies since content flip F1; these tests are of the scores without the monopoly term (MonopolyAiTests has it). The resources are shared
+        // with the ruleset cache (the clone is shallow), so they are put back
+        monopolyResources = game.ruleset.tileResources.values.filter { it.isMonopoly }
+        monopolyResources.forEach { it.isMonopoly = false }
         game.makeHexagonalMap(10)
         for (tile in game.tileMap.values) game.setTileTerrain(tile.position, "Grassland")
         civ = game.addCiv()
         for (tile in game.tileMap.values) tile.setExplored(civ, true)
+    }
+
+    private var monopolyResources = emptyList<TileResource>()
+
+    @After
+    fun restoreMonopolies() {
+        monopolyResources.forEach { it.isMonopoly = true }
     }
 
     private fun tile(x: Int, y: Int) = game.tileMap[HexCoord(x, y)]

@@ -38,7 +38,9 @@ class CivNeedsTests {
 
     /** A luxury on the centre tile of a new city of the civilization, where it is connected without an improvement */
     private fun addLuxury(): TileResource {
-        val resource = game.ruleset.tileResources.values.filter { it.resourceType == ResourceType.Luxury }[luxuriesAdded++]
+        // not the four whose monopoly gives 6 happiness (Vox Populi's, in the ruleset since content flip F1): the lone copy on these maps would be a monopoly
+        val resource = game.ruleset.tileResources.values
+            .filter { it.resourceType == ResourceType.Luxury && it.globalMonopolyUniques.none { unique -> "Happiness from a global monopoly" in unique } }[luxuriesAdded++]
         val city = world.addCity(1)
         luxuryCities++
         city.getCenterTile().tileResource = resource

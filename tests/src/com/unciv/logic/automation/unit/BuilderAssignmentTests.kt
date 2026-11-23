@@ -13,6 +13,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,9 +31,20 @@ class BuilderAssignmentTests {
     private lateinit var game: TestGame
     private lateinit var civ: Civilization
 
+    private var monopolyResources = emptyList<com.unciv.models.ruleset.tile.TileResource>()
+
+    @After
+    fun restoreMonopolies() {
+        monopolyResources.forEach { it.isMonopoly = true }
+    }
+
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // The ruleset has Vox Populi's monopolies since content flip F1; these tests are of the assignment without the monopoly term. The resources are shared with the ruleset
+        // cache (the clone is shallow), so they are put back
+        monopolyResources = game.ruleset.tileResources.values.filter { it.isMonopoly }
+        monopolyResources.forEach { it.isMonopoly = false }
         game.makeHexagonalMap(10)
         for (tile in game.tileMap.values) game.setTileTerrain(tile.position, "Grassland")
         civ = game.addCiv()

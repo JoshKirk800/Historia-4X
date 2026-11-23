@@ -17,7 +17,11 @@ import org.junit.runner.RunWith
 
 @RunWith(BaseTestRunner::class)
 class MysticBladeTests {
-    private val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+    private val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW).also {
+        // healing is what these tests measure: the Kris Swordsman needs Iron, which the test civilization lacks, and a unit short of a resource does not heal under Vox Populi's shortage
+        // rule, which the ruleset plays since content flip F1 (ResourceShortageTests has that rule)
+        it.ruleset.modOptions.constants.resourceShortageLikeVp = false
+    }
     private lateinit var indonesia: Civilization
     private lateinit var opponent: Civilization
 

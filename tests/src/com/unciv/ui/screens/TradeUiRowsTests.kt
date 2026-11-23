@@ -52,6 +52,8 @@ class TradeUiRowsTests {
             .filter { it.aerialDistanceTo(cityA.getCenterTile()) > 3 && it.aerialDistanceTo(cityB.getCenterTile()) > 3 }
             .sortedBy { it.position.x * 100 + it.position.y }
         for (tile in game.tileMap.values) { tile.setExplored(a, true); tile.setExplored(b, true) }
+        // The rows list the monopoly resources of the rules: these tests make their own, and the ruleset has Vox Populi's since content flip F1 (the clone's own map)
+        game.ruleset.tileResources.values.removeIf { it.isMonopoly }
     }
 
     private fun resource(global: List<String> = emptyList(), strategic: List<String> = emptyList(), type: ResourceType = ResourceType.Luxury): TileResource =
@@ -190,6 +192,7 @@ class TradeUiRowsTests {
 
     @Test
     fun `the rows of a route are empty with the route model of Brave New World`() {
+        game.ruleset.modOptions.constants.tradeRouteModelLikeVp = false   // the ruleset plays Vox Populi's model since content flip F1
         val route = route(cityA, cityB)
         assertTrue(TradeRouteRows.rows(route, a, true).isEmpty())
     }
@@ -244,6 +247,7 @@ class TradeUiRowsTests {
     fun `items are marked permanent or temporary only where the rule is on`() {
         val gold = offer(TradeOfferType.Gold, "Gold", 100)
         val resource = offer(TradeOfferType.Luxury_Resource, "Silk")
+        game.ruleset.modOptions.constants.dealsBlockTemporaryForPermanent = false   // the ruleset plays Vox Populi's rule since content flip F1
         assertNull(TradeOfferRows.permanenceNote(gold, a))
         game.ruleset.modOptions.constants.dealsBlockTemporaryForPermanent = true
         assertEquals("Permanent item", TradeOfferRows.permanenceNote(gold, a))
@@ -261,6 +265,7 @@ class TradeUiRowsTests {
             ourOffers.add(offer(TradeOfferType.Gold, "Gold", 100))
             theirOffers.add(offer(TradeOfferType.Luxury_Resource, "Silk"))
         }
+        game.ruleset.modOptions.constants.dealsBlockTemporaryForPermanent = false   // the ruleset plays Vox Populi's rule since content flip F1
         assertTrue("the rule is off", TradeOfferRows.blockReasons(trade, ai, a).isEmpty())
         game.ruleset.modOptions.constants.dealsBlockTemporaryForPermanent = true
         // the AI gives the permanent gold for the human's temporary luxury: V:CvDealClasses.cpp:1368-1470 forbids it, the human's own permanent-for-temporary is the exception
@@ -276,6 +281,7 @@ class TradeUiRowsTests {
         val ai = game.addCiv()
         ai.diplomacyFunctions.makeCivilizationsMeet(a)
         val trade = Trade().apply { ourOffers.add(TradeOffer(founded.id, TradeOfferType.City, speed = game.gameInfo.speed)) }
+        game.ruleset.modOptions.constants.dealNoPeacetimeSellingFoundedCities = false   // the ruleset plays Vox Populi's rule since content flip F1
         assertTrue(TradeOfferRows.blockReasons(trade, a, ai).isEmpty())
         game.ruleset.modOptions.constants.dealNoPeacetimeSellingFoundedCities = true
         assertEquals(listOf("The founder of [${founded.name}] cannot sell it in peacetime"), TradeOfferRows.blockReasons(trade, a, ai))

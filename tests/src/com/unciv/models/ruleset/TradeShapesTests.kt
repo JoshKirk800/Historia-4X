@@ -184,7 +184,7 @@ class TradeShapesTests {
 
         val unknownMonopoly = game.createBuilding().apply { cost = 100; requiredMonopolyAnyOf = listOf("Unobtainium") }
         assertTrue(errorsOf(game, unknownMonopoly.name).any { it.contains("Unobtainium") })
-        val notMonopoly = game.createBuilding().apply { cost = 100; requiredMonopolies = listOf("Iron") }
+        val notMonopoly = game.createBuilding().apply { cost = 100; requiredMonopolies = listOf("Stone") }   // Iron is a monopoly resource since content flip F1; Stone is not
         assertTrue(errorsOf(game, notMonopoly.name).any { it.contains("no monopoly resource") })
         val monopoly = game.createResource().apply { isMonopoly = true; globalMonopolyUniques = arrayListOf("[2] Happiness from a global monopoly") }
         val fine = game.createBuilding().apply { cost = 100; requiredMonopolyAnyOf = listOf(monopoly.name) }
@@ -203,7 +203,8 @@ class TradeShapesTests {
         val building = json().fromJson(Building::class.java, """{"name": "Old building", "cost": 10}""")
         assertTrue(building.requiredMonopolyAnyOf.isEmpty() && building.requiredMonopolies.isEmpty())
 
-        val bnw = newBnwGame().ruleset
+        // a ruleset without Vox Populi's data: the Brave New World one has it since content flip F1 (TradeContentTests), Gods & Kings does not
+        val bnw = TestGame().ruleset
         assertTrue(bnw.tileResources.values.none { it.isMonopoly || it.obsoleteBy != null || it.globalMonopolyUniques.isNotEmpty() || it.strategicMonopolyUniques.isNotEmpty() })
         assertTrue(bnw.buildings.values.none { it.requiredMonopolyAnyOf.isNotEmpty() || it.requiredMonopolies.isNotEmpty() })
         assertTrue(bnw.eras.values.all { it.tradeRouteFoodBonus == 0 && it.tradeRouteProductionBonus == 0 })
@@ -253,8 +254,8 @@ class TradeShapesTests {
         assertEquals(60, read.monopoly.globalThreshold)
         assertEquals(25, read.monopoly.strategicThreshold)
 
-        // the ruleset's constants stay what they were
-        val constants = newBnwGame().ruleset.modOptions.constants
+        // the constants of a ruleset without Vox Populi's (Gods & Kings; the Brave New World ruleset turns them on since content flip F1, TradeContentTests) stay what they were
+        val constants = TestGame().ruleset.modOptions.constants
         assertFalse(constants.tradeRouteModelLikeVp)
         assertTrue(constants.worldTradeRouteDistance.isEmpty())
         assertEquals(ModConstants.TradeRouteVpConstants(), constants.tradeRouteVp)

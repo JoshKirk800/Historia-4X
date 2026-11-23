@@ -51,6 +51,8 @@ class DealAiTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // These are the formulas of CvDealAI::GetLuxuryResourceValue without MOD_BALANCE_VP (VpDealAiTests has the Vox Populi branch); the ruleset plays the Vox Populi one since content flip F1
+        game.ruleset.modOptions.constants.dealLuxuryValueLikeVp = false
         game.makeHexagonalMap(12)
         a = neutralCiv(HexCoord(0, 0))
         b = neutralCiv(HexCoord(8, 0))
@@ -660,7 +662,10 @@ class DealAiTests {
 
     /** A luxury on the centre tile of a new city of [owner], connected without an improvement */
     private fun giveLuxury(world: NeedsTestWorld, owner: Civilization): TileResource {
-        val resource = world.game.ruleset.tileResources.values.first { it.resourceType == ResourceType.Luxury }
+        // the Community Patch's luxury value, as in setUp (the world has its own ruleset), and a luxury whose monopoly gives no happiness: Furs, the first, give 6 with the lone copy
+        // of these maps (both are Vox Populi's, in the ruleset since content flip F1)
+        world.constants.dealLuxuryValueLikeVp = false
+        val resource = world.game.ruleset.tileResources.values.first { it.resourceType == ResourceType.Luxury && it.globalMonopolyUniques.none { u -> "Happiness from a global monopoly" in u } }
         val city = world.addCity(1, of = owner)
         city.getCenterTile().tileResource = resource
         city.getCenterTile().resourceAmount = 1

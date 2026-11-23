@@ -144,6 +144,7 @@ class MonopolyAiTests {
 
     @Test
     fun `without monopoly resources in the rules the site and the attack keep their numbers`() {
+        game.ruleset.tileResources.values.removeIf { it.isMonopoly }   // the clone's own map: the ruleset has Vox Populi's monopoly resources since content flip F1
         val luxury = resource(ResourceType.Luxury)
         place(luxury, 10)
         give(a, luxury, 5)

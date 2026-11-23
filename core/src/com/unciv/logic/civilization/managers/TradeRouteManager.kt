@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.map.HexCoord
@@ -19,8 +20,11 @@ import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import yairm210.purity.annotations.Cache
+import yairm210.purity.annotations.LocalState
 import yairm210.purity.annotations.Readonly
 import kotlin.math.ceil
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /** A city a trade unit could send a route to, and what the route would be */
 class TradeDestination(val city: City, val kind: TradeRouteKind, private val pathSource: Lazy<List<Tile>>) {
@@ -55,6 +59,18 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     private val potentialConnections = HashMap<String, Boolean>()
     @Transient @Cache
     private var potentialConnectionsTurn = -1
+
+    /** The tiles the paths of our routes go over, kept until a route comes or goes ([getRouteTiles]) */
+    @Transient @Cache
+    private var routeTiles: Set<HexCoord>? = null
+    /** The longest route each of our cities could start in a domain, by city and domain, valid for [longestRoutesTurn] (CvCity::GetLongestPotentialTradeRoute) */
+    @Transient @Cache
+    private val longestRoutes = HashMap<String, Int>()
+    @Transient @Cache
+    private var longestRoutesTurn = -1
+    /** The connections our routes had when the turn started: the original works the longest routes out then, from the connections that were free (V:CvTradeClasses.cpp:540-550) */
+    @Transient
+    private var connectionsAtTurnStart: Set<String> = emptySet()
 
     /** The trade AI's ordered connections for [aiRoutesTurn] (CvHomelandAI::ExecuteTradeUnitMoves keeps one list per turn) */
     @Transient
@@ -128,7 +144,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     @Readonly
     fun getRange(origin: City, isSea: Boolean, baseRange: Int): Int {
         var extra = 0
-        var percent = 100
+        var percent = getWorldRangePercent()
         civ.forEachMatchingUnique(UniqueType.TradeRouteRange) {
             if (matchesDomain(it.params[1], isSea)) extra += it.params[0].toInt()
         }
@@ -136,6 +152,19 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
             if (matchesDomain(it.params[1], isSea)) percent += it.params[0].toInt()
         }
         return (baseRange + extra) * percent / 100
+    }
+
+    /**
+     * What CvPlayerTrade::GetTradeRouteRange starts the percentage it multiplies the range with from (V:CvTradeClasses.cpp:5381-5388): the world's `TradeRouteDistanceMod`, which the
+     * other percentages add to, by the number of tiles of the map (owner decision O8, until the world sizes have rule tables): the entry of
+     * [com.unciv.models.ModConstants.worldTradeRouteDistance] with the most tiles that the map has at least. 100 without [com.unciv.models.ModConstants.tradeRouteModelLikeVp] or an entry.
+     */
+    @Readonly
+    fun getWorldRangePercent(): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (!constants.tradeRouteModelLikeVp || constants.worldTradeRouteDistance.isEmpty()) return 100
+        val tiles = civ.gameInfo.tileMap.tileList.size
+        return constants.worldTradeRouteDistance.filter { it.tiles <= tiles }.maxByOrNull { it.tiles }?.percent ?: 100
     }
 
     @Readonly
@@ -271,13 +300,13 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
         val chosen = getDestination(unit, destination, kind) ?: return null
         val unique = unit.getMatchingUniques(UniqueType.EstablishTradeRoutes, GameContext.IgnoreConditionals).first()
         val origin = unit.getTile().getCity()!!
-        val constants = civ.gameInfo.ruleset.modOptions.constants
 
         val route = TradeRoute(origin.location, destination.location, kind, unit.baseUnit.isWaterUnit, unit.name,
-            chosen.path.map { it.position }, unique.params[1].toInt(), constants.tradeRouteTargetTurns, civ.gameInfo.turns)
+            chosen.path.map { it.position }, unique.params[1].toInt(), getTargetTurns(), civ.gameInfo.turns)
         route.setTransients(civ)
         unit.destroy()
         routes.add(route)
+        routeTiles = null
         for (tile in chosen.path) tile.setExplored(civ, true)
 
         // The trader moves right away in the original
@@ -288,6 +317,10 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
 
     //region Moving
     fun startTurn() {
+        // The longest routes are worked out from the connections that are free as the turn starts (V:CvTradeClasses.cpp:540-550)
+        connectionsAtTurnStart = routes.mapTo(HashSet()) { plunderKey(it.origin, it.destination) }
+        longestRoutes.clear()
+        longestRoutesTurn = civ.gameInfo.turns
         // CvPlayerTrade::UpdateTradeConnectionWasPlundered
         plunderedConnections.values.removeAll { it + PLUNDER_MEMORY_TURNS <= civ.gameInfo.turns }
         for (route in routes.toList()) {
@@ -298,9 +331,17 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
         updateYields()
     }
 
-    /** CvGameTrade::MoveUnit: the trader goes [TradeRoute.tilesPerTurn] tiles on.
+    /** CvGameTrade::MoveUnit: the trader goes [TradeRoute.tilesPerTurn] tiles on, and the move is an event (V:CvTradeClasses.cpp:2085-2150, once however many steps it made).
      *  @return `false` if the route was plundered on the way */
     private fun stepRoute(route: TradeRoute): Boolean {
+        if (!stepAlong(route)) return false
+        route.getOriginCity()?.let { InstantYields.tradeUnitMoved(civ, it) }
+        return true
+    }
+
+    /** The steps of [stepRoute]: the trader goes [TradeRoute.tilesPerTurn] tiles on.
+     *  @return `false` if the route was plundered on the way */
+    private fun stepAlong(route: TradeRoute): Boolean {
         repeat(route.tilesPerTurn) {
             if (route.circuitsCompleted >= route.circuitsToComplete) return true
             if (route.movingForward) {
@@ -334,6 +375,8 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
         val destination = route.getDestinationCity()
         civ.addNotification("Our trade route from [${origin.name}] to [${destination?.name}] has ended, and a new [${route.unitName}] awaits in [${origin.name}]",
             origin.location, NotificationCategory.Trade, route.unitName)
+        // CvPlayerTrade::MoveUnits: the route ran its course, which is an event of the cities it connected (V:CvTradeClasses.cpp:2606-2650)
+        InstantYields.tradeRouteCompleted(civ, route, origin, destination)
     }
 
     private fun giveUnitBack(route: TradeRoute, origin: City) {
@@ -394,11 +437,12 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     fun getEnemyTradersAt(tile: Tile): List<TradeRoute> = enemyRoutes().filter { it.getCurrentTile() == tile }.toList()
 
     /** CvPlayerTrade::PlunderTradeRoute: [plunderer] gets gold, the route is over, nobody gets a trade unit back */
-    fun plunder(route: TradeRoute, plunderer: MapUnit) = route.civ.tradeRoutes.plunderRoute(route, plunderer.civ, plunderer.getTile())
+    fun plunder(route: TradeRoute, plunderer: MapUnit) = route.civ.tradeRoutes.plunderRoute(route, plunderer.civ, plunderer.getTile(), plunderer)
 
-    private fun plunderRoute(route: TradeRoute, plunderingCiv: Civilization, tile: Tile) {
+    private fun plunderRoute(route: TradeRoute, plunderingCiv: Civilization, tile: Tile, plunderer: MapUnit? = null) {
         val constants = civ.gameInfo.ruleset.modOptions.constants
-        val gold = constants.tradeRoutePlunderGold * (100 + (if (route.isSea) constants.tradeRouteSeaBonusPercent else 0)) / 100
+        val gold = if (constants.tradeRouteModelLikeVp) TradeRouteValue.plunderGold(route, plunderingCiv)
+            else constants.tradeRoutePlunderGold * (100 + (if (route.isSea) constants.tradeRouteSeaBonusPercent else 0)) / 100
         plunderingCiv.addGold(gold)
         // CvPlayerTrade::PlunderTradeRoute: a barbarian on the route receives an extra unit with no moves left.
         if (plunderingCiv.isBarbarian && tile.getUnits().any { it.civ == plunderingCiv })
@@ -418,6 +462,8 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
         if (destinationCiv != null && destinationCiv != civ && !destinationCiv.isCityState && destinationCiv != plunderingCiv)
             destinationCiv.addNotification("A trade route of [${civ.civName}] to [$destination] was plundered by [${plunderingCiv.civName}]!",
                 tile.position, NotificationCategory.Trade, NotificationIcon.War)
+        // INSTANT_YIELD_TYPE_PLUNDER_TRADE_ROUTE (V:CvTradeClasses.cpp:5034)
+        InstantYields.tradeRoutePlundered(plunderingCiv, plunderer)
     }
     //endregion
 
@@ -446,7 +492,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
                 val tile = route.getCurrentTile()
                 val plunderer = tile.getUnits().firstOrNull { it.isMilitary() && !it.isEmbarked() && it.civ == other }
                 if (plunderer != null) {
-                    owner.tradeRoutes.plunderRoute(route, other, tile)
+                    owner.tradeRoutes.plunderRoute(route, other, tile, plunderer)
                     continue
                 }
                 owner.tradeRoutes.removeRoute(route)
@@ -472,6 +518,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     /** The civilization is gone */
     fun clear() {
         routes.clear()
+        routeTiles = null
     }
     //endregion
 
@@ -505,6 +552,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
 
     /** CvPlayerTrade::UpdateTradeConnectionValues */
     fun updateYields() {
+        routeTiles = null
         for (route in routes) computeYields(route)
     }
 
@@ -512,14 +560,70 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     fun preview(unit: BaseUnit, origin: City, destination: TradeDestination): TradeRoute? {
         val unique = unit.getMatchingUniques(UniqueType.EstablishTradeRoutes, GameContext.IgnoreConditionals).firstOrNull() ?: return null
         val route = TradeRoute(origin.location, destination.city.location, destination.kind, unit.isWaterUnit, unit.name,
-            destination.path.map { it.position }, unique.params[1].toInt(), civ.gameInfo.ruleset.modOptions.constants.tradeRouteTargetTurns, civ.gameInfo.turns)
+            destination.path.map { it.position }, unique.params[1].toInt(), getTargetTurns(), civ.gameInfo.turns)
         route.setTransients(civ)
         computeYields(route)
         return route
     }
 
+    /**
+     * CvGameTrade::GetTradeRouteTurns' target (V:CvTradeClasses.cpp:1429-1434): the number of turns a route is meant to last. With
+     * [com.unciv.models.ModConstants.tradeRouteModelLikeVp] TRADE_ROUTE_BASE_TARGET_TURNS times the game speed's [com.unciv.models.ruleset.Speed.tradeRouteSpeedModifier] in percent
+     * (the building's TRTurnMod, Slater Mill's -25, is not ported), at least 1; else the constant of Brave New World.
+     */
+    @Readonly
+    fun getTargetTurns(): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (!constants.tradeRouteModelLikeVp) return constants.tradeRouteTargetTurns
+        val speedPercent = (civ.gameInfo.speed.tradeRouteSpeedModifier * 100).roundToInt()
+        return max(constants.tradeRouteVp.targetTurns * speedPercent / 100, 1)
+    }
+
+    /** The tiles the paths of our routes go over, cities at the ends included (CvPlot::GetNumTradeUnitRoute, set by CvGameTrade::UpdateTradePlots, V:CvTradeClasses.cpp:1376-1402) */
+    @Readonly
+    fun getRouteTiles(): Set<HexCoord> {
+        var tiles = routeTiles
+        if (tiles == null) {
+            @LocalState val set = HashSet<HexCoord>()
+            for (route in routes) for (position in route.path) set.add(position)
+            tiles = set
+            routeTiles = tiles
+        }
+        return tiles
+    }
+
+    /**
+     * CvCity::GetLongestPotentialTradeRoute (V:CvTradeClasses.cpp:5221-5285): the cost of the longest path [origin] could send an international route along in the domain, over the
+     * cities it can start a route to that were free when the turn started, 0 if there is none. Worked out when asked and kept for the turn.
+     * A departure: the original works it out for every city when the turn starts, and does not ask it again until the next.
+     */
+    @Readonly
+    fun getLongestPotentialRoute(origin: City, isSea: Boolean): Int {
+        if (longestRoutesTurn != civ.gameInfo.turns) {
+            longestRoutes.clear()
+            longestRoutesTurn = civ.gameInfo.turns
+        }
+        val key = origin.id + if (isSea) ":sea" else ":land"
+        longestRoutes[key]?.let { return it }
+        val baseRange = getTradeUnitType(isSea)?.let { getBaseRange(it) }
+        var longest = 0
+        if (baseRange != null) for (destination in getDestinations(origin, isSea, baseRange, ignoreExisting = true)) {
+            if (destination.kind != TradeRouteKind.International) continue
+            if (plunderKey(origin.location, destination.city.location) in connectionsAtTurnStart) continue
+            longest = max(longest, TradeRoutePathfinder.pathCost(civ, destination.path, isSea))
+        }
+        longestRoutes[key] = longest
+        return longest
+    }
+
     private fun computeYields(route: TradeRoute) {
         val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (constants.tradeRouteModelLikeVp) {
+            val yields = TradeRouteValue.compute(route, this)
+            route.originYields = yields.origin
+            route.destinationYields = yields.destination
+            return
+        }
         route.originYields = Stats()
         route.destinationYields = Stats()
         run {
@@ -575,7 +679,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
 
     /** The gold of a city without what trade brings and without upkeep, in hundredths */
     @Readonly
-    private fun getGoldTimes100(city: City): Int {
+    fun getGoldTimes100(city: City): Int {
         var gold = 0f
         for ((source, stats) in city.cityStats.finalStatList)
             if (source != STAT_SOURCE && source != "Maintenance") gold += stats.gold

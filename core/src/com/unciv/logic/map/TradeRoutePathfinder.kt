@@ -155,6 +155,23 @@ object TradeRoutePathfinder {
         return reached
     }
 
+    /**
+     * The cost of walking [path] (SPath::iNormalizedDistanceRaw of the original, which CvGameTrade::GetValidTradeRoutePathLength returns): the sum of the costs of its steps as
+     * [findPath] counts them, 100 for a step without terrain costs and 50 along a road. A step that is not allowed (the path was found when it was) counts as a plain step.
+     */
+    @Readonly
+    fun pathCost(civ: Civilization, path: List<Tile>, isSea: Boolean): Int {
+        val allWaterPassage = civ.tech.embarkedUnitsCanEnterOcean
+        val woodsAreRoads = civ.hasUnique(UniqueType.ForestsAndJunglesAreRoads)
+        var total = 0
+        for (index in 1 until path.size) {
+            val stepCost = if (isSea) getWaterStepCost(civ, path[index - 1], path[index], allWaterPassage)
+                else getLandStepCost(path[index - 1], path[index], woodsAreRoads)
+            total += if (stepCost < 0) STEP else stepCost
+        }
+        return total
+    }
+
     @Readonly
     private fun hasRoad(tile: Tile) = tile.isCityCenter() || tile.roadStatus != RoadStatus.None
 

@@ -7,6 +7,7 @@ import com.unciv.logic.battle.CombatAction
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.ReligionState
+import com.unciv.logic.civilization.managers.TradeRouteValue
 import com.unciv.models.ruleset.validation.ModCompatibility
 import com.unciv.models.stats.Stat
 import com.unciv.utils.hashOf
@@ -287,6 +288,7 @@ object Conditionals {
                 state.relevantTile?.matchesFilter(conditional.params[0], state.relevantCiv) == true
             UniqueType.ConditionalInTilesNot ->
                 state.relevantTile?.matchesFilter(conditional.params[0], state.relevantCiv) == false
+            UniqueType.ConditionalOnTradeRoute -> state.gameInfo != null && state.relevantTile?.let { TradeRouteValue.isOnRoute(state.gameInfo, it) } == true
             UniqueType.ConditionalAdjacentTo -> state.relevantTile?.isAdjacentTo(conditional.params[0], state.relevantCiv) == true
             UniqueType.ConditionalNotAdjacentTo -> state.relevantTile?.isAdjacentTo(conditional.params[0], state.relevantCiv) == false
             UniqueType.ConditionalFightingInTiles ->

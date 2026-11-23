@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.managers.TradeRouteValue
 import com.unciv.models.ruleset.tile.Terrain
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.GameContext
@@ -343,6 +344,8 @@ class TileStatFunctions(val tile: Tile) {
             )
                 stats.add(unique.stats)
         }
+
+        TradeRouteValue.getImprovementRouteStats(tile, improvement, observingCiv, conditionalState)?.let { stats.add(it) } // Improvement_RouteYieldChanges
 
         return stats
     }

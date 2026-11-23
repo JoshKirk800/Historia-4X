@@ -402,6 +402,33 @@ class InstantYieldTests {
         assertEquals(0, capital.food())
     }
 
+    /** V:CvPlayer.cpp:44463-44469: a policy with Policy_YieldFromTechRetroactive pays the yield for each technology known but one, once, when it is adopted; the generator writes it as
+     *  `Gain [n] [stat] <(modified by game speed)> <for every [[Researched [All] Technologies] - 1]>` (phaseE/vp-policies-plan.md) */
+    @Test
+    fun `a policy pays its retroactive technology yield on adoption for each technology known but one`() {
+        civ.tech.addTechnology("Pottery")
+        civ.tech.addTechnology("Masonry")
+        civ.tech.addTechnology("Agriculture")
+        val known = com.unciv.models.ruleset.unique.Countables.getCountableAmount("Researched [All] Technologies", GameContext(civ))!!
+        assertTrue(known >= 3)
+        val culture = civ.policies.storedCulture
+
+        adopt("Gain [15] [Culture] <for every [[Researched [All] Technologies] - 1]>")
+
+        assertEquals(culture + 15 * (known - 1), civ.policies.storedCulture)
+        // it is paid once: a technology researched later pays nothing
+        val after = civ.policies.storedCulture
+        civ.tech.addTechnology("Animal Husbandry")
+        assertEquals(after, civ.policies.storedCulture)
+    }
+
+    @Test
+    fun `a retroactive technology yield of a civilization that knows one technology or none pays nothing`() {
+        val culture = civ.policies.storedCulture
+        adopt("Gain [15] [Culture] <for every [[Researched [All] Technologies] - 1]>")
+        assertEquals(culture, civ.policies.storedCulture)
+    }
+
     @Test
     fun `Culture also fills the city's border culture`() {
         val stored = capital.expansion.cultureStored

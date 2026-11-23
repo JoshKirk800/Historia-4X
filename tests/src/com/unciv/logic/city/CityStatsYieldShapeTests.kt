@@ -324,6 +324,20 @@ class CityStatsYieldShapeTests {
         assertEquals(0, Countables.getCountableAmount("[Merchant] Specialists in this city", GameContext(civ, city = second)))
     }
 
+    /** CvCity::ChangeBaseYieldRateFromBuildings: a policy's or a building's yield for each building of a class counts the buildings of the class in the city (V:CvCity.cpp:14616) */
+    @Test
+    fun `the countable of the buildings of a kind in the city counts that city only, and carries a golden age points yield`() {
+        val kind = capital.build()
+        assertTrue(Countables.isKnownValue("[${kind.name}] Buildings in this city", game.ruleset))
+        assertEquals(1, Countables.getCountableAmount("[${kind.name}] Buildings in this city", GameContext(civ, city = capital)))
+        assertEquals(0, Countables.getCountableAmount("[${kind.name}] Buildings in this city", GameContext(civ, city = second)))
+        assertEquals("the empire's count is the old countable's", 1, Countables.getCountableAmount("[${kind.name}] Buildings", GameContext(civ)))
+
+        second.build() // another building, of another kind
+        civ.policies.adopt(game.createPolicy("[+3] Golden Age points per turn [in all cities] <for every [[${kind.name}] Buildings in this city]>"), true)
+        assertEquals("only the capital has one", 3, civ.goldenAges.pointsPerTurnFromUniques())
+    }
+
     /** CvCity::getBaseYieldRateTimes100: getYieldFromNonSpecialistCitizensTimes100 x (population - specialists) (V:CvCity.cpp:23500-23504) */
     @Test
     fun `the countable of the citizens that are no specialists`() {

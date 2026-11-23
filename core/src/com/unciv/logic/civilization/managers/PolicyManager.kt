@@ -214,6 +214,10 @@ class PolicyManager : IsPartOfGameInfoSerialization {
 
     @Readonly fun isAdopted(policyName: String): Boolean = adoptedPolicies.contains(policyName)
 
+    /** The policies adopted that count for the wonders that need some (CvPlayerPolicies::GetNumPoliciesOwned(true), V:CvPolicyClasses.cpp:4393-4446): not the branches, not their finishers */
+    @Readonly fun getNumberOfPoliciesForRequirements(): Int =
+        getAdoptedPoliciesMatching("All").count { it.policyBranchType == PolicyBranchType.Member }
+
     /**
      * Test whether a policy is adoptable according to the RuleSet (ignoring cost).
      * Note: branch completion policies are automatic and therefore not adoptable in this test.

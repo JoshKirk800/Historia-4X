@@ -504,6 +504,18 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
         if ((requiredMonopolyAnyOf.isNotEmpty() || requiredMonopolies.isNotEmpty()) && !civ.monopolies.meetsRequirements(this@Building))
             yield(RejectionReasonType.RequiresMonopoly.toInstance("Needs a global monopoly of ${(requiredMonopolies + requiredMonopolyAnyOf).joinToString(", ")}"))
 
+        // CvPlayer::canConstruct (V:CvPlayer.cpp:14578-14650): the policies owned, but the finishers and the branches themselves
+        if (!civ.isCityState && !civ.isBarbarian) {
+            val required = getMatchingUniques(UniqueType.RequiresAdoptedPolicies, stateForConditionals).maxOfOrNull { it.params[0].toInt() } ?: 0
+            if (required > 0) {
+                var needed = required
+                val alliesPerReduction = civ.getMatchingUniques(UniqueType.PoliciesNeededForWondersFewer, stateForConditionals).sumOf { it.params[0].toInt() }
+                if (alliesPerReduction > 0) needed -= civ.gameInfo.getAliveCityStates().count { it.allyCiv == civ } / alliesPerReduction
+                if (civ.policies.getNumberOfPoliciesForRequirements() < needed)
+                    yield(RejectionReasonType.RequiresPolicyCount.toInstance("Requires [$needed] adopted Policies"))
+            }
+        }
+
         for (unique in civ.getMatchingUniques(UniqueType.CannotBuildBuildings, stateForConditionals))
             if (this@Building.matchesFilter(unique.params[0], stateForConditionals)) {
                 yield(RejectionReasonType.CannotBeBuilt.toInstance())

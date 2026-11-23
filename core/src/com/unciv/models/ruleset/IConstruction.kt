@@ -276,6 +276,7 @@ enum class RejectionReasonType(val shouldShow: Boolean, val errorMessage: String
     RequiresNearbyResource(false, "Requires a certain resource being exploited nearby"),
     CannotBeBuiltWith(false, "Cannot be built at the same time as another building already built"),
     RequiresMonopoly(true, "Requires a global monopoly of a resource"),
+    RequiresPolicyCount(true, "Requires more adopted policies"),
 
     RequiresBuildingInThisCity(true, "Requires a specific building in this city!"),
     RequiresBuildingInAllCities(true, "Requires a specific building in all cities!"),

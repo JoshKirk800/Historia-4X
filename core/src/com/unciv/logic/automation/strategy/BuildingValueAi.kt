@@ -400,15 +400,18 @@ object BuildingValueAi {
 
         /* Spy Buildings */
         val extraSpies = building.count(UniqueType.OneTimeGainSpy)
+        // spy points are a fraction of a spy (CvPlayer::CreateSpies: points over the threshold), in hundredths of a spy
+        val spyPointsPercent = if (!civ.gameInfo.ruleset.modOptions.constants.spyPointsLikeVp) 0
+            else building.amount(UniqueType.OneTimeGainSpyPoints) * 100 / maxOf(1, civ.espionageManager.spyThreshold())
         val espionage = building.amount(UniqueType.EnemySpyEffectiveness) { !it.isLocalEffect }
         val spyRank = building.amount(UniqueType.SpyStartingLevel) + building.amount(UniqueType.OneTimeSpiesLevelUp)
-        if (extraSpies > 0 || espionage != 0 || spyRank > 0) {
+        if (extraSpies > 0 || spyPointsPercent > 0 || espionage != 0 || spyRank > 0) {
             // build the modifier that synergises with spies
             val modifier = 100 + espionage * -20 + spyRank * 20
             // if the effect hits all existing spies, they count too, else just any new spies being gained
-            val spies = extraSpies + if (espionage != 0 || spyRank > 0) civ.espionageManager.spyList.size else 0
+            val spiesPercent = extraSpies * 100 + spyPointsPercent + if (espionage != 0 || spyRank > 0) civ.espionageManager.spyList.size * 100 else 0
             // score = 100 per relevant spy * % modifier
-            value += 100 * spies * modifier / 100
+            value += spiesPercent * modifier / 100
         }
         return value * (civ.getEraNumber() + 1)
     }

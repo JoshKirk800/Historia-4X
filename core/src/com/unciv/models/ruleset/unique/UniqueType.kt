@@ -1280,7 +1280,11 @@ enum class UniqueType(
             "Conditionals evaluate in the context of the civilization having the Unique, not the recipients of the alerts."),
     OneTimeGlobalSpiesWhenEnteringEra("Every major Civilization gains a spy once a civilization enters this era", UniqueTarget.Era),
     OneTimeSpiesLevelUp("Promotes all spies [positiveAmount] time(s)", UniqueTarget.Triggerable),  // used in Policies, Buildings
-    OneTimeGainSpy("Gain an extra spy", UniqueTarget.Triggerable),  // used in Wonders
+    OneTimeGainSpy("Gain an extra spy", UniqueTarget.Triggerable,
+        docDescription = "One spy; with the ModConstants `spyPointsLikeVp` it is one threshold of spy points (a spy, and the points kept below the threshold stay)"),  // used in Wonders
+    OneTimeGainSpyPoints("Gain [amount] Spy Points", UniqueTarget.Triggerable,
+        docDescription = "Only with the ModConstants `spyPointsLikeVp`. A spy is made for each time the points reach the threshold (100 in Vox Populi); a negative amount is a debt that the next points pay " +
+            "first. The original's `Buildings.ExtraSpies`, `Policies.FreeSpy` and `Units.ExtraSpies` (CvPlayer::CreateSpies)"),
 
     SkipPromotion("Doing so will consume this opportunity to choose a Promotion", UniqueTarget.Promotion),
     FreePromotion("This Promotion is free", UniqueTarget.Promotion),

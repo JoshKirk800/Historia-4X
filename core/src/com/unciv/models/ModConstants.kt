@@ -485,6 +485,31 @@ class ModConstants {
     var tributeLocalModifier = 100 // 125 in BNW
 
     // Espionage
+    /**
+     *  Vox Populi's spy points (CvPlayer::CreateSpies with MOD_BALANCE_SPY_POINTS, V:CvPlayer.cpp:23292-23338) instead of whole spies. false: `Gain an extra spy` makes one spy and
+     *  `Gain [n] Spy Points` does nothing. true: the points are counted ([com.unciv.logic.civilization.managers.EspionageManager.spyPoints]), a spy is made each time they reach the
+     *  threshold of [EspionageConstants], `Gain an extra spy` is one threshold of points (CreateSpies(1, false)), and a negative amount is a spy debt.
+     */
+    var spyPointsLikeVp = false
+
+    /**
+     *  The defines of spy points and of the time a dead spy needs, `spyToPlayerRatio`, `majorPlayerMultiplier`, `thresholdMin`, `thresholdMax` and `pointUnit` read only with [spyPointsLikeVp].
+     *  The threshold is `100 x spyToPlayerRatio / (city-states + majorPlayerMultiplier x majors)` of the players at the start, at least 1 of each, kept between the minimum and the
+     *  maximum (CvGame::initSpyThreshold, V:CvGame.cpp:10722-10767: BALANCE_SPY_TO_PLAYER_RATIO 20, BALANCE_SPY_POINT_MAJOR_PLAYER_MULTIPLIER 2,
+     *  BALANCE_SPY_POINT_THRESHOLD_MIN and _MAX, which Vox Populi sets to 100 both, so a spy costs 100 points on every map). [pointUnit] is the points of 1 in the original's tables
+     *  (ESPIONAGE_SPY_POINT_UNIT, 1 in Vox Populi), applied by the generator when it writes `Gain [n] Spy Points`. [respawnTurns] is how long a killed spy stays dead
+     *  (BALANCE_SPY_RESPAWN_TIMER, Vox Populi 10; the default is Brave New World's 5), read with or without [spyPointsLikeVp]. Can only be modded all-or-nothing.
+     */
+    data class EspionageConstants(
+        val spyToPlayerRatio: Int = 20,
+        val majorPlayerMultiplier: Int = 2,
+        val thresholdMin: Int = 100,
+        val thresholdMax: Int = 100,
+        val pointUnit: Int = 1,
+        val respawnTurns: Int = 5,
+    )
+    var espionage = EspionageConstants()
+
     var maxSpyRank = 3
     // How much of a skill bonus each rank gives.
     // Rank 0 is 100, rank 1 is 130, and so on.

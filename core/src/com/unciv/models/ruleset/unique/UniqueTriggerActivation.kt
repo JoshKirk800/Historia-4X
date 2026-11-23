@@ -1204,9 +1204,24 @@ object UniqueTriggerActivation {
                 if (!civInfo.isMajorCiv) return null
                 if (!civInfo.gameInfo.isEspionageEnabled()) return null
 
+                if (civInfo.gameInfo.ruleset.modOptions.constants.spyPointsLikeVp) return {
+                    civInfo.espionageManager.gainExtraSpyAsPoints()
+                    true
+                }
                 return {
                     val spy = civInfo.espionageManager.addSpy()
                     spy.addNotification("We have recruited [${spy.name}] as a spy!")
+                    true
+                }
+            }
+
+            UniqueType.OneTimeGainSpyPoints -> {
+                if (!civInfo.isMajorCiv) return null
+                if (!civInfo.gameInfo.isEspionageEnabled()) return null
+                if (!civInfo.gameInfo.ruleset.modOptions.constants.spyPointsLikeVp) return null
+
+                return {
+                    civInfo.espionageManager.gainSpyPoints(unique.params[0].toInt())
                     true
                 }
             }

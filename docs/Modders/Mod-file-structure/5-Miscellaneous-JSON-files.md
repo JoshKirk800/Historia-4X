@@ -377,6 +377,8 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | pantheonBase                             | Int    | 10                            | [^L]  |
 | pantheonGrowth                           | Int    | 5                             | [^L]  |
 | workboatAutomationSearchMaxTiles         | Int    | 37                            | [^M]  |
+| spyPointsLikeVp                          | Boolean | false                        | Vox Populi's spy points instead of whole spies: `Gain [n] Spy Points` counts points and makes a spy each time they reach the threshold (100 in Vox Populi), `Gain an extra spy` is one threshold of points, a negative amount is a debt. Without it `Gain [n] Spy Points` does nothing |
+| espionage                                | Object  | [See below](#espionageconstants) | The threshold of spy points and the time a killed spy stays dead |
 | maxSpyRank                               | Int    | 3                             | [^N]  |
 | spyRankSkillPercentBonus                 | Float  | 30                            | [^O]  |
 | minimumWarDuration                       | Int    | 10                            | [^P]  |
@@ -653,6 +655,19 @@ The defines of Vox Populi's trade route model (`tradeRouteModelLikeVp`). These v
 | riverModifier | Int | 25 | Percent more on land routes when a city is on a river |
 | proximityMax | Int | 50 | The most percent a route between close cities loses |
 | targetTurns | Int | 30 | Turns a route lasts before the game speed's `tradeRouteSpeedModifier` |
+
+#### EspionageConstants
+
+The defines of spy points (`spyPointsLikeVp`) and of how long a killed spy stays dead. These values are not merged individually, only the entire sub-structure is. The threshold is `100 x spyToPlayerRatio / (city-states + majorPlayerMultiplier x majors)` of the players the game started with (at least one of each), kept between `thresholdMin` and `thresholdMax`.
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| spyToPlayerRatio | Int | 20 | `BALANCE_SPY_TO_PLAYER_RATIO` |
+| majorPlayerMultiplier | Int | 2 | `BALANCE_SPY_POINT_MAJOR_PLAYER_MULTIPLIER` |
+| thresholdMin | Int | 100 | `BALANCE_SPY_POINT_THRESHOLD_MIN`: Vox Populi 100 (Community Patch 33) |
+| thresholdMax | Int | 100 | `BALANCE_SPY_POINT_THRESHOLD_MAX`: 100. With both at 100 a spy costs 100 points on every map |
+| pointUnit | Int | 1 | `ESPIONAGE_SPY_POINT_UNIT`: the points of 1 in the tables of Vox Populi, applied by the ruleset generator |
+| respawnTurns | Int | 5 | `BALANCE_SPY_RESPAWN_TIMER`: turns a killed spy stays dead. Brave New World 5, Vox Populi 10. Read without `spyPointsLikeVp` too |
 
 #### MonopolyConstants
 

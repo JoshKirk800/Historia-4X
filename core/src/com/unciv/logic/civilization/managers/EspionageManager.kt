@@ -4,6 +4,8 @@ import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
 import com.unciv.logic.city.managers.CityEspionageManager
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.NotificationCategory
+import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.Spy
 import com.unciv.models.ruleset.unique.UniqueType
@@ -28,6 +30,13 @@ class EspionageManager : IsPartOfGameInfoSerialization {
     var unCountdownStarted = false
     /** The intrigue we know, uncovered by our spies or told to us (CvPlayerEspionage::m_aIntrigueNotificationMessages) */
     var intrigueMessages = ArrayList<IntrigueMessage>()
+    /**
+     *  The spy points below the threshold (CvPlayer::m_iSpyPoints); below 0 the civilization is in debt, which the next points pay first (V:CvPlayer.cpp:23314-23326).
+     *  Only with [com.unciv.models.ModConstants.spyPointsLikeVp]; 0 in a save from before.
+     */
+    var spyPoints = 0
+    /** Every spy point ever gained, never reduced by making a spy (CvPlayer::m_iSpyPointsTotal, V:CvPlayer.cpp:23286-23290) */
+    var spyPointsTotal = 0
 
     @Transient
     lateinit var civInfo: Civilization
@@ -48,6 +57,8 @@ class EspionageManager : IsPartOfGameInfoSerialization {
         toReturn.lastBasePotential.putAll(lastBasePotential)
         toReturn.civOutOfTechTurn.putAll(civOutOfTechTurn)
         toReturn.unCountdownStarted = unCountdownStarted
+        toReturn.spyPoints = spyPoints
+        toReturn.spyPointsTotal = spyPointsTotal
         intrigueMessages.mapTo(toReturn.intrigueMessages) { it.clone() }
         return toReturn
     }
@@ -158,6 +169,44 @@ class EspionageManager : IsPartOfGameInfoSerialization {
         if (turnEspionageStarted == -1) turnEspionageStarted = civInfo.gameInfo.turns
         return newSpy
     }
+
+    /**
+     *  The spy points that make a spy (CvGame::initSpyThreshold, V:CvGame.cpp:10722-10767): `100 x ratio / (city-states + multiplier x majors)` of all the players the game
+     *  started with, at least one of each, between the minimum and the maximum of [com.unciv.models.ModConstants.espionage]. Civilizations that were defeated stay in the list.
+     */
+    @Readonly
+    fun spyThreshold(): Int {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants.espionage
+        val players = civInfo.gameInfo.civilizations
+        val minors = maxOf(1, players.count { it.isCityState })
+        val majors = maxOf(1, players.count { it.isMajorCiv })
+        val threshold = 100 * constants.spyToPlayerRatio / (minors + constants.majorPlayerMultiplier * majors)
+        return threshold.coerceIn(constants.thresholdMin, maxOf(constants.thresholdMin, constants.thresholdMax))
+    }
+
+    /**
+     *  CvPlayer::CreateSpies for spy points (V:CvPlayer.cpp:23292-23338, only with [com.unciv.models.ModConstants.spyPointsLikeVp]): adds [points] (below 0: a debt) to the points
+     *  and the total and makes a spy every time they reach [spyThreshold]. Nothing without espionage in the game. Returns the number of spies made.
+     */
+    fun gainSpyPoints(points: Int): Int {
+        if (!civInfo.gameInfo.isEspionageEnabled()) return 0
+        val threshold = maxOf(1, spyThreshold())
+        spyPointsTotal += points
+        spyPoints += points
+        var created = 0
+        while (spyPoints >= threshold) {
+            val spy = addSpy()
+            spy.addNotification("We have recruited [${spy.name}] as a spy!")
+            spyPoints -= threshold
+            created++
+        }
+        if (created == 0 && points > 0 && civInfo.isHuman())
+            civInfo.addNotification("We received [$points] spy points ([$spyPoints] of [$threshold])", NotificationCategory.Espionage, NotificationIcon.Spy)
+        return created
+    }
+
+    /** `Gain an extra spy` with spy points: CreateSpies(1, false), one threshold of points, which is one spy and leaves what was already collected (V:CvPlayer.cpp:23312-23314) */
+    fun gainExtraSpyAsPoints() { gainSpyPoints(maxOf(1, spyThreshold())) }
 
     @Readonly
     fun getTilesVisibleViaSpies(): Sequence<Tile> {

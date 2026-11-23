@@ -512,10 +512,11 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         return totalEfficiency.coerceAtLeast(0.0)
     }
 
-    private fun killSpy() {
+    /** The spy dies and comes back as a new recruit after [com.unciv.models.ModConstants.EspionageConstants.respawnTurns] turns (BALANCE_SPY_RESPAWN_TIMER) */
+    fun killSpy() {
         // We don't actually remove this spy object, we set them as dead and let them revive
         moveTo(null)
-        setAction(SpyAction.Dead, 5)
+        setAction(SpyAction.Dead, civInfo.gameInfo.ruleset.modOptions.constants.espionage.respawnTurns)
         rank = 1
     }
 

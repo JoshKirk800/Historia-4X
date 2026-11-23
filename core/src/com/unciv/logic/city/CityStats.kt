@@ -299,6 +299,14 @@ class CityStats(val city: City) {
             }
         }
 
+        // CvCity::getBaseYieldRateTimes100 adds GetYieldPerPopTimes100 times population (V:CvCity.cpp:23489-23491).
+        city.forEachMatchingUnique(UniqueType.StatsPerPopulationProportional) { unique ->
+            if (city.matchesFilter(unique.params[2])) {
+                val amount = city.population.population.toFloat() / unique.params[1].toInt()
+                sourceToStats.addStats(unique.stats.times(amount), unique.getSourceNameForUser(), unique.sourceObjectName ?: "")
+            }
+        }
+
         // "[stats] for each major religion with followers in the city [cityFilter]" (Candi)
         city.forEachMatchingUnique(UniqueType.StatsPerReligionWithFollowers) { unique ->
             if (city.matchesFilter(unique.params[1]))

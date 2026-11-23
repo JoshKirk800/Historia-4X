@@ -45,6 +45,7 @@ enum class UniqueType(
     StatsFromNamedSpecialist("[stats] from every [specialist] [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
         docDescription = "Adds the stats only for the named specialist in matching cities"),
     StatsPerPopulation("[stats] per [positiveAmount] population [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
+    StatsPerPopulationProportional("[stats] per [positiveAmount] population proportionally [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
     StatsPerReligionWithFollowers("[stats] for each major religion with followers in the city [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
         docDescription = "Counts the religions of which at least one citizen of the city is a follower, pantheons not included. Whole numbers of the stats only, as in the original (CvCity::GetYieldPerReligionTimes100)"),
     StatsPerPolicies("[stats] per [positiveAmount] social policies adopted", UniqueTarget.Global, docDescription = "Only works for civ-wide stats"),

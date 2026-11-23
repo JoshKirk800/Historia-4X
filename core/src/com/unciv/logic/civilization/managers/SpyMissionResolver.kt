@@ -19,8 +19,8 @@ enum class SpyMissionResult { Undetected, Identified, Killed, KilledUnidentified
  *  CvCity::CanDoEventChoice, V:CvCity.cpp:4590-4770). V: is `ref/vp-5.4.8/CvGameCoreDLL_Expansion2/`. Only with [com.unciv.models.ModConstants.espionageLikeVp].
  *
  *  The Network Points are paid first and always; then the spy is identified and killed by two rolls of its own, and the effects of the mission happen whether or not the spy
- *  lives. The spy that lives waits for [EspionageManager.getMissionCooldownLeft] turns before its next mission. Not read yet: the counterspy foci that lower the chance to be
- *  identified, and the yields of the instant-yield events of spies.
+ *  lives. The spy that lives waits for [EspionageManager.getMissionCooldownLeft] turns before its next mission. The foci of the owner's counterspies lower the chance to be identified, and
+ *  the focus of the city's counterspy can stop a mission. Not read yet: the yields of the instant-yield events of spies.
  */
 object SpyMissionResolver {
     /**
@@ -32,6 +32,7 @@ object SpyMissionResolver {
         val civ = spy.civInfo
         val constants = civ.gameInfo.ruleset.modOptions.constants
         if (!constants.espionageLikeVp) return "Missions need the espionage of Vox Populi"
+        if (mission.isFocus) return "This is a focus, not a mission"
         val city = spy.getCityOrNull() ?: return "The spy is in the hideout"
         if (spy.action != SpyAction.GatheringIntel) return "The spy is not gathering intel"
         if (city.civ == civ || !city.civ.isMajorCiv) return "Only in the cities of other major civilizations"
@@ -43,15 +44,40 @@ object SpyMissionResolver {
         val tech = mission.requiredTech
         if (tech != null && !civ.tech.isResearched(tech)) return "Needs the technology [$tech]"
         if (!city.matchesFilter(mission.cityFilter, civ)) return "Only in [${mission.cityFilter}] cities"
+        // the focus of the city's counterspy stops some missions (CvCity::CanDoEventChoice, V:CvCity.cpp:4125-4180)
+        val blocking = city.espionage.getFocus()?.name
+        if (blocking != null && blocking in mission.blockedBy) return "Blocked by the focus [$blocking]"
         for (unique in mission.getMatchingUniques(UniqueType.StealTechnologies))
             if (civ.espionageManager.getTechsToSteal(city.civ).size < unique.params[0].toInt()) return "There is no technology to steal"
         return null
     }
 
-    /** The missions [spy] can do now */
+    /**
+     *  Why [spy], which counters spies in an own city, cannot choose [focus] now (CvCity::CanDoEventChoice for a counterspy mission), or null if it can: it is a focus, the spy is in the state
+     *  `CounterIntelligence` in an own city, its owner has the technology and the city is what the focus wants
+     */
+    @Readonly
+    fun unavailableFocusReason(spy: Spy, focus: SpyMission): String? {
+        val civ = spy.civInfo
+        if (!civ.gameInfo.ruleset.modOptions.constants.espionageLikeVp) return "Foci need the espionage of Vox Populi"
+        if (!focus.isFocus) return "This is no focus"
+        val city = spy.getCityOrNull() ?: return "The spy is in the hideout"
+        if (spy.action != SpyAction.CounterIntelligence || city.civ != civ) return "The spy is not countering spies in one of our cities"
+        val tech = focus.requiredTech
+        if (tech != null && !civ.tech.isResearched(tech)) return "Needs the technology [$tech]"
+        if (!city.matchesFilter(focus.cityFilter, civ)) return "Only in [${focus.cityFilter}] cities"
+        return null
+    }
+
+    /** The missions [spy] can do now; the foci a spy countering spies can choose are [availableFoci] */
     @Readonly
     fun availableMissions(spy: Spy): List<SpyMission> =
         spy.civInfo.gameInfo.ruleset.spyMissions.values.filter { unavailableReason(spy, it) == null }
+
+    /** The foci [spy] can choose now */
+    @Readonly
+    fun availableFoci(spy: Spy): List<SpyMission> =
+        spy.civInfo.gameInfo.ruleset.spyMissions.values.filter { unavailableFocusReason(spy, it) == null }
 
     /**
      *  [spy] does [mission] (null if it cannot: [unavailableReason]). The rolls are seeded by the city, the civilization, the mission and the number of missions that civilization
@@ -69,7 +95,9 @@ object SpyMissionResolver {
 
         val done = manager.spyActionsDone[owner.civID] ?: 0
         val seed = city.location.x * 31 + city.location.y + civ.civID.hashCode() * 17 + mission.name.hashCode() * 7 + done
-        val identified = Random(seed xor 0x5a5a5a).nextInt(1, 101) <= mission.identifyChance.coerceIn(0, 100)
+        // the foci of our counterspies make us harder to find, in every city (CvPlayer::GetSpyIdentificationChance)
+        val identifyChance = (mission.identifyChance - manager.getIdentifyChanceReduction()).coerceIn(0, 100)
+        val identified = Random(seed xor 0x5a5a5a).nextInt(1, 101) <= identifyChance
         val killed = Random(seed xor 0x3c3c3c).nextInt(1, 101) <= mission.killChance.coerceIn(0, 100)
         val result = when {
             killed -> if (identified) SpyMissionResult.Killed else SpyMissionResult.KilledUnidentified

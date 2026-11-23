@@ -764,6 +764,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
         else (
             cityConstructions.builtBuildingUniqueMap.getUniques(uniqueType)
                 + religion.getUniques(uniqueType)
+                + espionage.getFocusUniques(uniqueType)
             ).filter {
                 !it.isTimedTriggerable && it.conditionalsApply(gameContext)
             }.flatMap { it.getMultiplied(gameContext) }
@@ -788,6 +789,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
         } else {
             cityConstructions.builtBuildingUniqueMap.forEachMatchingUnique(uniqueType, state, isTimedUniqueFilter, op)
             religion.forEachMatchingUnique(uniqueType, state, isTimedUniqueFilter, op)
+            espionage.forEachFocusUnique(uniqueType, state, op)
         }
     }
 
@@ -798,6 +800,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
     fun getLocalMatchingUniques(uniqueType: UniqueType, gameContext: GameContext = state): Sequence<Unique> {
         val uniques = cityConstructions.builtBuildingUniqueMap.getUniques(uniqueType).filter { it.isLocalEffect } +
             religion.getUniques(uniqueType) +
+            espionage.getFocusUniques(uniqueType) +
             getLocalResources().flatMap { it.uniqueMap.getUniques(uniqueType) }.filter { it.isLocalEffect }
         return uniques.filter { !it.isTimedTriggerable && it.conditionalsApply(gameContext) }
                 .flatMap { it.getMultiplied(gameContext) }
@@ -808,6 +811,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
     fun forEachLocalMatchingUnique(uniqueType: UniqueType, gameContext: GameContext = state, op: (unique: Unique)->Unit) {
         cityConstructions.builtBuildingUniqueMap.forEachMatchingUnique(uniqueType, gameContext, isLocalUniqueFilter, op)
         religion.forEachMatchingUnique(uniqueType, gameContext, op)
+        espionage.forEachFocusUnique(uniqueType, gameContext, op)
         for (resource in getLocalResources())
             resource.forEachMatchingUnique(uniqueType, gameContext, isLocalUniqueFilter, op)
     }

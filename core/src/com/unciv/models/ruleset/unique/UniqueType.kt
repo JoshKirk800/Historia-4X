@@ -537,6 +537,9 @@ enum class UniqueType(
         docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.TradeRouteGoldBonus), read by the trade route model"),
     DiplomatUncoversIntrigue("The spy uncovers intrigue", UniqueTarget.SpyBonus,
         docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.ReceiveIntrigues): the diplomat finds out what the civilization plans"),
+    CitySecurity("[relativeAmount] City Security [cityFilter]", UniqueTarget.Global, UniqueTarget.SpyMission,
+        docDescription = "Only with the ModConstants `espionageLikeVp`. Added to the security of matching cities, which lowers the Network Points that enemy spies gather in them " +
+            "(CvCity::CalculateCitySecurity, V:CvCity.cpp:25992-26085). Buildings, policies and wonders give it, and a counterspy focus while its spy counters spies in the city"),
     StealTechnologies("Steal [positiveAmount] random technology/technologies the target knows and we can research", UniqueTarget.SpyMission,
         docDescription = "A spy mission's effect (CvCity::DoEventChoice, StealNumTechs): the spy's owner learns this many technologies the city's owner has and the owner could research now, " +
             "chosen at random. The mission cannot be done when there are fewer"),

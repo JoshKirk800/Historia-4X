@@ -1011,6 +1011,8 @@ class ModConstants {
         /** The turns a spy that did a mission must wait for its next one, at standard speed times the speed's modifier (`ESPIONAGE_TURNS_BETWEEN_CITY_STATE_ELECTIONS`,
          *  CvGame::GetTurnsBetweenMinorCivElections and CvPlayerEspionage::GetNumTurnsSpyActiveMissionsBlocked, V:CvEspionageClasses.cpp:2844-2856) */
         val missionCooldownTurns: Int = 15,
+        /** The turns a spy cannot move after it chose a counterspy focus (`ESPIONAGE_COUNTERSPY_CHANGE_FOCUS_COOLDOWN`, CvPlayerEspionage::GetNumTurnsSpyMovementBlocked, V:CvEspionageClasses.cpp:2829-2842) */
+        val counterspyChangeCooldownTurns: Int = 5,
     )
     var espionage = EspionageConstants()
 

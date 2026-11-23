@@ -46,6 +46,14 @@ class EspionageManager : IsPartOfGameInfoSerialization {
     lateinit var civInfo: Civilization
 
     /**
+     *  Counts the changes of what our spies counter in our cities: a spy that starts or stops countering spies, moves, or chooses a focus (see [Spy.setAction], [Spy.chooseFocus]). A city
+     *  derives its counterspy focus from the spies and keeps it until this number differs from the one it saw ([com.unciv.logic.city.managers.CityEspionageManager.getFocus]), so a
+     *  lookup of the city's uniques is a comparison of two numbers and nothing is stored that could go out of step. Not saved: a loaded game derives everything again.
+     */
+    @Transient
+    var focusVersion = 0
+
+    /**
      * Part of the nextTurnAction of MoveSpies.
      * We need to store if the player has clicked the button already
      */
@@ -280,7 +288,9 @@ class EspionageManager : IsPartOfGameInfoSerialization {
      *  [com.unciv.models.ModConstants.espionageLikeVp]; 0 unless the spy gathers intel or schmoozes. The base; the rank (ours is the original's plus 1); 15 for each level of cultural influence over the
      *  city's owner above Exotic; the technologies the owner is ahead by; the points of policies and of the state religion's beliefs ([UniqueType.EspionageNetworkPoints]); the spy effectiveness
      *  uniques of Brave New World's buildings and policies, which count as percent of what the spy gathers (`SpyEffectiveness`, `EnemySpyEffectiveness`; Vox Populi has no such column); at least 0;
-     *  and for a spy gathering intel, less the security of the city ([CityEspionageManager.getSecurity]) as percent. The counterspy focus of the city is not read yet.
+     *  and for a spy gathering intel, less the security of the city ([CityEspionageManager.getSecurity]) as percent. A spy gathering intel also loses the points the focus of the city's counterspy
+     *  takes for each of its ranks ([com.unciv.models.ruleset.SpyMission.counterspyNetworkPointsReduction]); that comes before the points are kept at 0 and before the security, so the focus
+     *  takes the points the spy would have gathered, and the security then takes its percent of what is left.
      */
     @Readonly
     fun networkPointsPerTurn(spy: Spy, city: City): Int {
@@ -295,6 +305,12 @@ class EspionageManager : IsPartOfGameInfoSerialization {
         val techsAhead = city.civ.tech.researchedTechnologies.size - civInfo.tech.researchedTechnologies.size
         points += maxOf(0, minOf(techsAhead, constants.networkPointsMaxTechDifference)) * constants.networkPointsPerTechBehind
         points += civInfo.getMatchingUniques(UniqueType.EspionageNetworkPoints).sumOf { it.params[0].toInt() }
+        // the counterspy of the city loses a spy that gathers intel its focus's points for each of its ranks, before the points are kept at 0 (V:CvEspionageClasses.cpp:3315-3333)
+        if (gathering) {
+            val counter = city.espionage.counterspy()
+            val reduction = city.espionage.getFocus()?.counterspyNetworkPointsReduction ?: 0
+            if (counter != null && reduction != 0) points -= reduction * counter.getEffectiveRank()
+        }
         val effectiveness = getSpyEffectivenessPercent(city)
         if (effectiveness != 100) points = points * effectiveness / 100
         points = maxOf(points, 0)
@@ -303,6 +319,22 @@ class EspionageManager : IsPartOfGameInfoSerialization {
             if (points > 0 && security > 0) points = points * (100 - security * constants.networkPointsReductionPerSecurity / 100) / 100
         }
         return points
+    }
+
+    /**
+     *  The percent points the chance of our spies to be identified falls by: the sum of the identify reduction of the focus of the counterspy in each of our own cities
+     *  (CvPlayer::GetSpyIdentificationChance, V:CvPlayer.cpp:23342-23358; a focus like Double-Cross Foreign Agents is felt by every spy of ours in every foreign city)
+     */
+    @Readonly
+    fun getIdentifyChanceReduction(): Int {
+        if (!civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp || spyList.isEmpty()) return 0
+        var total = 0
+        for (spy in spyList) {
+            if (spy.action != SpyAction.CounterIntelligence) continue
+            val focusName = spy.focus ?: continue
+            total += civInfo.gameInfo.ruleset.spyMissions[focusName]?.identifyChanceReductionGlobal ?: 0
+        }
+        return total
     }
 
     /** The percent that the city owner's [UniqueType.EnemySpyEffectiveness] and our [UniqueType.SpyEffectiveness] make of what a spy of ours does in [city] */

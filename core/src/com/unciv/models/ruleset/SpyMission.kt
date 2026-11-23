@@ -10,6 +10,12 @@ import kotlin.math.roundToInt
  *  (target `SpyMission`); the cost, the chances to be found and to die and what the city must be are the fields. Only with [com.unciv.models.ModConstants.espionageLikeVp].
  */
 class SpyMission : RulesetObject() {
+    /**
+     *  `true` for a counterspy focus (`IsCounterSpyMission`, CvPlayerEspionage::TriggerSpyFocusSetup, V:CvEspionageClasses.cpp:1478-1553): what a spy that counters spies in an own city
+     *  chooses to do there. Its [uniques] are effects on that city while the spy counters spies there; it has no cost, chances or effect of a mission. [requiredTech] and [cityFilter]
+     *  say when it can be chosen. Every list of missions goes through [SpyMissionResolver.availableMissions], which leaves foci out.
+     */
+    var isFocus = false
     /** The technology the spy's owner must have researched (`PrereqTech`) */
     var requiredTech: String? = null
     /** The Network Points the spy must have stored in the city, and which the mission spends whether or not it succeeds (CvCityEspionage::DoMission), at standard speed */
@@ -24,6 +30,12 @@ class SpyMission : RulesetObject() {
     var requiredSpyRank = 1
     /** What the city must be, as a city filter: "Capital" for `CapitalOnly` */
     var cityFilter = "All"
+    /** The names of the foci that stop this mission in a city whose counterspy has one of them (`CityEventChoice_EventLinks`, V:CvCity.cpp:4125-4180) */
+    var blockedBy = ArrayList<String>()
+    /** Focus: the Network Points a spy of another civilization gathering intel in the city loses each turn for each effective rank of the counterspy (`CounterspyNPRateReduction`) */
+    var counterspyNetworkPointsReduction = 0
+    /** Focus: the percent points the chance to be identified falls for every mission of every spy of the civilization whose city has this focus (`SpyIdentificationChanceReductionGlobal`) */
+    var identifyChanceReductionGlobal = 0
 
     override fun getUniqueTarget() = UniqueTarget.SpyMission
 

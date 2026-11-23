@@ -78,6 +78,11 @@ enum class Countables(
             gameContext.civInfo?.tradeRoutes?.getNumDifferentPartners()
     },
 
+    CounterspyRank("Counterspy rank", shortDocumentation = "The effective rank, 1 to 3, of the spy that counters spies in the city the unique is checked for; 0 if there is none. Only with the ModConstants `espionageLikeVp`") {
+        override fun eval(parameterText: String, gameContext: GameContext) =
+            gameContext.city?.espionage?.counterspy()?.getEffectiveRank() ?: 0
+    },
+
     Stats {
         override val documentationHeader = "Stat name (${niceJoinList(Stat.names())})"
         override val documentationStrings = listOf("Gets the stat *reserve*, not the amount per turn (can be city stats or civilization stats, depending on where the unique is used)")

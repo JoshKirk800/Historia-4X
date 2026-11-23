@@ -9,9 +9,11 @@ import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.EspionageManager
 import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.IntrigueFunctions
+import com.unciv.logic.civilization.managers.SpyMissionResolver
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.ruleset.SpyBonus
 import com.unciv.models.ruleset.SpyBonusKind
+import com.unciv.models.ruleset.SpyMission
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
@@ -73,6 +75,18 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
     /** The turn the spy last did a mission and lived (CvEspionageSpy::m_iTurnActiveMissionConducted), 0 if never; the next one must wait for [EspionageManager.getMissionCooldownLeft] */
     var lastMissionTurn = 0
         private set
+    /**
+     *  The focus of a spy that counters spies in an own city (CvEspionageSpy::m_eSpyFocus): the name of a [SpyMission] with `isFocus`, null while it has none. The city reads it through
+     *  [com.unciv.logic.city.managers.CityEspionageManager.getFocus]; it is gone when the spy leaves
+     */
+    var focus: String? = null
+        private set
+    /** The turn the focus was last chosen (CvEspionageSpy::m_iTurnCounterspyMissionChanged), 0 if never: the spy cannot move for the next [ModConstants.EspionageConstants.counterspyChangeCooldownTurns] */
+    var focusChangedTurn = 0
+        private set
+    /** A human spy that arrived in an own city waits for its owner to choose a focus (CvCityEspionage::m_aiPendingEventsForPlayer): it cannot move meanwhile */
+    var focusPending = false
+        private set
 
     @Transient
     lateinit var civInfo: Civilization
@@ -100,6 +114,9 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         toReturn.networkPoints = networkPoints
         toReturn.maxNetworkPoints = maxNetworkPoints
         toReturn.lastMissionTurn = lastMissionTurn
+        toReturn.focus = focus
+        toReturn.focusChangedTurn = focusChangedTurn
+        toReturn.focusPending = focusPending
         return toReturn
     }
 
@@ -110,6 +127,9 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
 
     fun setAction(newAction: SpyAction, turns: Int = 0) {
         assert(!newAction.hasCountdownTurns || turns > 0) // hasTurns==false but turns > 0 is allowed (CounterIntelligence), hasTurns==true and turns==0 is not.
+        // a spy that stops countering spies has no focus: the city derives its focus from the spy's state, so the change must be noticed (CvPlayerEspionage::ExtractSpyFromCity)
+        if (newAction != SpyAction.CounterIntelligence && focus != null) clearFocus()
+        if (newAction != action) espionageManager.focusVersion++
         action = newAction
         turnsRemainingForAction = turns
     }
@@ -199,11 +219,55 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         val city = getCity()
         when {
             isDiplomat -> { setAction(SpyAction.Schmoozing); schmoozeLikeVp() }
-            city.civ == civInfo -> setAction(SpyAction.CounterIntelligence, 10)
+            city.civ == civInfo -> { setAction(SpyAction.CounterIntelligence, 10); askForFocus() }
             city.civ.isCityState ->
                 setAction(SpyAction.RiggingElections, (city.civ.flagsCountdown[CivFlags.TurnsTillCityStateElection.name] ?: 1) - 1)
             else -> setAction(SpyAction.GatheringIntel)
         }
+    }
+
+    /**
+     *  CvPlayerEspionage::TriggerSpyFocusSetup (V:CvEspionageClasses.cpp:1478-1553): the spy that arrives in an own city has no focus; its owner, if human, is asked to choose one and the
+     *  spy cannot move until it is chosen. An AI chooses by its own rules (P4.3d)
+     */
+    private fun askForFocus() {
+        focus = null
+        focusPending = civInfo.isHuman()
+        if (focusPending) addNotification("Your spy [$name] has arrived in [${getCity().name}]: choose what it should do against enemy spies")
+    }
+
+    /**
+     *  The spy chooses [mission], a counterspy focus, for the city it counters spies in (CvCity::DoEventChoice, V:CvCity.cpp:6519-6557): the focus before is replaced, the turn is noted for
+     *  the wait before the spy moves, the pending choice is over and the spies of other civilizations gathering intel in the city are told. Returns false if it cannot be chosen
+     *  ([SpyMissionResolver.unavailableFocusReason]); choosing the focus the spy has changes nothing
+     */
+    fun chooseFocus(mission: SpyMission): Boolean {
+        if (SpyMissionResolver.unavailableFocusReason(this, mission) != null) return false
+        if (focus == mission.name) return true
+        val city = getCity()
+        focus = mission.name
+        focusChangedTurn = civInfo.gameInfo.turns
+        focusPending = false
+        espionageManager.focusVersion++
+        for (other in city.espionage.getAllStationedSpies())
+            if (other.civInfo != civInfo && other.action == SpyAction.GatheringIntel)
+                other.addNotification("The spy in [${city.name}] has a new focus: [${mission.name}]")
+        return true
+    }
+
+    /** CvPlayerEspionage::ExtractSpyFromCity: a spy that leaves, or stops countering spies, has no focus and no wait for moving (V:CvEspionageClasses.cpp:2859-2925) */
+    private fun clearFocus() {
+        focus = null
+        focusChangedTurn = 0
+        focusPending = false
+    }
+
+    /** The turns the spy cannot move for after it chose a focus (CvPlayerEspionage::GetNumTurnsSpyMovementBlocked, V:CvEspionageClasses.cpp:2829-2842) */
+    @Readonly
+    fun getMovementBlockedTurns(): Int {
+        if (focusChangedTurn == 0) return 0
+        val cooldown = civInfo.gameInfo.ruleset.modOptions.constants.espionage.counterspyChangeCooldownTurns
+        return maxOf(0, cooldown + focusChangedTurn - civInfo.gameInfo.turns)
     }
 
     /** SPY_STATE_GATHERING_INTEL (V:CvEspionageClasses.cpp:972-984): the Network Points of the turn, and a world wonder or project in production is found out */
@@ -507,6 +571,8 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         if (asDiplomat && (!city.civ.isMajorCiv || city.civ == civInfo || !city.isCapital()
                 || civInfo.isAtWarWith(city.civ))) return false
         if (!asDiplomat && getCityOrNull() == city) return true
+        // CvPlayerEspionage::CanMoveSpyTo: not while the focus of the spy waits to be chosen, nor for the turns after it was chosen (V:CvEspionageClasses.cpp:2703-2711)
+        if (likeVp() && (focusPending || getMovementBlockedTurns() > 0)) return false
         if (!city.getCenterTile().isExplored(civInfo)) return false
         return espionageManager.getSpyAssignedToCity(city).let { it == null || it == this }
     }

@@ -309,6 +309,13 @@ class CityStats(val city: City) {
                 addUniqueStats(unique)
         }
 
+        // "[stats] [cityFilter] for every global monopoly" (CvPlayer::SetHasGlobalMonopoly: Building_YieldChangesPerMonopoly, V:CvPlayer.cpp:39010-39030)
+        val globalMonopolies = city.civ.monopolies.globalMonopolyCount()
+        if (globalMonopolies > 0) city.forEachMatchingUnique(UniqueType.StatsPerGlobalMonopoly) { unique ->
+            if (city.matchesFilter(unique.params[1]))
+                sourceToStats.addStats(unique.stats.times(globalMonopolies.toFloat()), unique.getSourceNameForUser(), unique.sourceObjectName ?: "")
+        }
+
         // "[stats] from each [greatWorkType] Great Work [cityFilter]" (CvCityBuildings::GetYieldFromGreatWorksTimes100)
         city.forEachMatchingUnique(UniqueType.StatsFromGreatWorkType) { unique ->
             if (!city.matchesFilter(unique.params[2])) return@forEachMatchingUnique
@@ -673,6 +680,7 @@ class CityStats(val city: City) {
         newStatsBonusTree.addStats(getStatPercentBonusesFromUnitSupply(), "Unit Supply")
         newStatsBonusTree.addStats(getStatPercentBonusesFromUnhappiness(currentConstruction), "Unhappiness")
         newStatsBonusTree.add(getStatsPercentBonusesFromUniquesBySource(currentConstruction))
+        newStatsBonusTree.addStats(city.civ.monopolies.cityPercentBonuses(city), "Monopolies")
         
         for (building in city.cityConstructions.getBuiltBuildings())
             newStatsBonusTree.addStats(building.getStatPercentageBonuses(city),

@@ -49,7 +49,7 @@ class TileResource : RulesetStatsObject(), GameResource {
 
     /** Whether owning most of the copies on the map gives a monopoly bonus (the original's `Resources.IsMonopoly`, V:CvPlayer.cpp:38944-39266). The bonuses are the
      *  uniques of [globalMonopolyUniques] and [strategicMonopolyUniques]; a resource that [isMonopoly] without any of them gives nothing (the validator warns).
-     *  Not read yet: slice T2 of `phaseE/vp-trade-plan.md` */
+     *  Read by [com.unciv.logic.civilization.managers.MonopolyManager] */
     var isMonopoly = false
     /** Uniques that apply to the civilization while it has a global monopoly of this resource (more than half of the copies on the map for a luxury, V:CvPlayer.cpp:39139-39232) */
     var globalMonopolyUniques = ArrayList<String>()

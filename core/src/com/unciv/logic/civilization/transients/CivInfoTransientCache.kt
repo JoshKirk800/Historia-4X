@@ -400,7 +400,10 @@ class CivInfoTransientCache(val civInfo: Civilization) {
         newDetailedCivResources.removeAll { it.resource.isCityWide }
 
         // Check if anything has actually changed so we don't update stats for no reason - this uses List equality which means it checks the elements
-        if (civInfo.detailedCivResources == newDetailedCivResources) return
+        if (civInfo.detailedCivResources == newDetailedCivResources) {
+            civInfo.monopolies.checkAll(refreshGreatest = false) // the policies that decide what counts as owned can change without a change of the supply
+            return
+        }
 
         val summarizedResourceSupply = newDetailedCivResources.sumByResource("All")
 
@@ -412,6 +415,7 @@ class CivInfoTransientCache(val civInfo: Civilization) {
         civInfo.detailedCivResources = newDetailedCivResources
         civInfo.summarizedCivResourceSupply = summarizedResourceSupply
         civInfo.civResourcesUniqueMap = newResourceUniqueMap
+        civInfo.monopolies.checkAll(refreshGreatest = false) // CvPlayer::changeNumResourceTotal: a change of the copies owned can gain or lose a monopoly
 
         civInfo.updateStatsForNextTurn() // More or less resources = more or less happiness, with potential domino effects
         if (civInfo.isCityState) {

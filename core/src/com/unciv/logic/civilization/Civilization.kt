@@ -195,6 +195,8 @@ class Civilization : IsPartOfGameInfoSerialization {
     var greatPeople = GreatPersonManager()
     var espionageManager = EspionageManager()
     var tradeRoutes = TradeRouteManager()
+    /** The resource monopolies, see [MonopolyManager]. A save from before it existed loads with none; they are found again at the next turn start */
+    var monopolies = MonopolyManager()
     var culture = CultureManager()
     var victoryManager = VictoryManager()
     var ruinsManager = RuinsManager()
@@ -370,6 +372,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.ruinsManager = ruinsManager.clone()
         toReturn.espionageManager = espionageManager.clone()
         toReturn.tradeRoutes = tradeRoutes.clone()
+        toReturn.monopolies = monopolies.clone()
         toReturn.culture = culture.clone()
         toReturn.victoryManager = victoryManager.clone()
         toReturn.ai = ai.clone()
@@ -731,6 +734,7 @@ class Civilization : IsPartOfGameInfoSerialization {
             yieldAll(religionManager.religion!!.founderBeliefUniqueMap.getMatchingUniques(uniqueType, gameContext))
 
         yieldAll(civResourcesUniqueMap.getMatchingUniques(uniqueType, gameContext))
+        yieldAll(monopolies.uniqueMap.getMatchingUniques(uniqueType, gameContext))
         yieldAll(gameInfo.getGlobalUniques().getMatchingUniques(uniqueType, gameContext))
         gameInfo.league?.let { yieldAll(it.getActiveUniqueMap().getMatchingUniques(uniqueType, gameContext)) }
     }
@@ -747,6 +751,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         cityStateFunctions.forEachUniqueProvidedByCityStates(uniqueType, gameContext, op)
         religionManager.religion?.founderBeliefUniqueMap?.forEachMatchingUnique(uniqueType, gameContext, op)
         civResourcesUniqueMap.forEachMatchingUnique(uniqueType, gameContext, op)
+        monopolies.uniqueMap.forEachMatchingUnique(uniqueType, gameContext, op)
         gameInfo.getGlobalUniques().forEachMatchingUnique(uniqueType, gameContext, op)
         gameInfo.league?.getActiveUniqueMap()?.forEachMatchingUnique(uniqueType, gameContext, op)
     }
@@ -1132,6 +1137,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         ruinsManager.setTransients(this)
         espionageManager.setTransients(this)
         tradeRoutes.setTransients(this)
+        monopolies.setTransients(this)
         culture.setTransients(this)
         victoryManager.civInfo = this
         ai.setTransients(this)

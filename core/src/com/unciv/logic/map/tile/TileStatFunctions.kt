@@ -104,7 +104,11 @@ class TileStatFunctions(val tile: Tile) {
         if (observingCiv != null) {
             // resource base
             val resource = tile.tileResource
-            if (observingCiv.canSeeResource(resource)) listOfStats.add(resource.name to resource)
+            if (observingCiv.canSeeResource(resource)) {
+                listOfStats.add(resource.name to resource)
+                // Resource_YieldChangeFromMonopoly (V:CvPlot.cpp:11135-11141)
+                observingCiv.monopolies.tileYield(resource)?.let { listOfStats.add("${resource.name} (monopoly)" to it) }
+            }
 
             if (improvement != null)
                 improvementStats.add(getExtraImprovementStats(improvement, observingCiv, city))

@@ -217,7 +217,13 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
                 resource = value.name
                 tileResourceCache = value
             }
+            invalidateResourceCopies()
         }
+
+    /** The count of the copies on the map ([GameInfo.resourceCopiesOnMap][com.unciv.logic.GameInfo.resourceCopiesOnMap]) is out of date */
+    private fun invalidateResourceCopies() {
+        if (isTilemapInitialized() && tileMap.hasGameInfo()) tileMap.gameInfo.invalidateResourceCopies()
+    }
 
     @Transient
     @get:Readonly
@@ -946,7 +952,10 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
             val resource = ruleset.tileResources[newResource]
             tileResource = resource
             return
-        } else resource = newResource
+        } else {
+            resource = newResource
+            invalidateResourceCopies()
+        }
     }
 
     /**

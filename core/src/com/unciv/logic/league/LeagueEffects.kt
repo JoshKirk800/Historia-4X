@@ -47,6 +47,7 @@ object LeagueEffects {
     }
 
     private fun refresh(civ: Civilization, luxuries: Boolean, ideology: Boolean) {
+        // updateCivResources also rechecks the monopolies, which a ban and its lifting change (V:CvVotingClasses.cpp:1592, 1818)
         if (luxuries) civ.cache.updateCivResources()
         if (ideology && civ.isMajorCiv) civ.culture.publicOpinion.update()
         for (city in civ.cities) city.cityStats.update()

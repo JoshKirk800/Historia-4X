@@ -1181,26 +1181,26 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, FollowerBelief
 
 ??? example  "[relativeAmount] to the flat bonus of each monopoly"
-	Added to every flat yield, happiness or tile bonus that a global monopoly of the civilization gives (the original's `MonopolyModFlat`). Not read yet: slice T2 of the trade plan
+	Added to every flat yield, happiness or tile bonus that a global monopoly of the civilization gives (the original's `MonopolyModFlat`)
 
 	Example: "[+20] to the flat bonus of each monopoly"
 
 	Applicable to: Global
 
 ??? example  "[relativeAmount]% to the percentage bonus of each monopoly"
-	Added to every percentage that a global monopoly of the civilization gives (the original's `MonopolyModPercent`). Not read yet: slice T2 of the trade plan
+	Added to every percentage that a global monopoly of the civilization gives (the original's `MonopolyModPercent`): to the percentage bonuses to a stat of a city and to the golden age length
 
 	Example: "[+20]% to the percentage bonus of each monopoly"
 
 	Applicable to: Global
 
 ??? example  "City-State resources count towards monopolies"
-	The copies of a resource that allied City-States give the civilization are owned copies when its monopolies are counted (the original's `CSResourcesCountForMonopolies`). Not read yet: slice T2 of the trade plan
+	The copies of a resource that allied City-States give the civilization are owned copies when its monopolies are counted (the original's `CSResourcesCountForMonopolies`)
 
 	Applicable to: Global
 
 ??? example  "[stats] [cityFilter] for every global monopoly"
-	Added to the matching cities once for each global monopoly the civilization has (the original's `Building_YieldChangesPerMonopoly`, `Policy_CityYieldPerMonopoly`). Not read yet: slice T2 of the trade plan
+	Added to the matching cities once for each global monopoly the civilization has (the original's `Building_YieldChangesPerMonopoly`, `Policy_CityYieldPerMonopoly`)
 
 	Example: "[+1 Gold, +2 Production] [in all cities] for every global monopoly"
 
@@ -4672,14 +4672,14 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Conditional
 
 ??? example  "&lt;with a global monopoly of [resource]&gt;"
-	True while the civilization has a global monopoly of the resource (more than half of the copies on the map for a luxury, V:CvPlayer.cpp:39139-39232). Not evaluated yet: slice T2 of the trade plan, until then false
+	True while the civilization has a global monopoly of the resource (more than half of the copies on the map for a luxury, V:CvPlayer.cpp:39139-39232)
 
 	Example: "&lt;with a global monopoly of [Iron]&gt;"
 
 	Applicable to: Conditional
 
 ??? example  "&lt;with a strategic monopoly of [resource]&gt;"
-	True while the civilization has a strategic monopoly of the resource (more than a quarter of the copies on the map). Not evaluated yet: slice T2 of the trade plan, until then false
+	True while the civilization has a strategic monopoly of the resource (more than a quarter of the copies on the map)
 
 	Example: "&lt;with a strategic monopoly of [Iron]&gt;"
 

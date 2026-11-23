@@ -32,6 +32,7 @@ import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.Speed
 import com.unciv.models.ruleset.tech.Era
 import com.unciv.models.ruleset.nation.Difficulty
+import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.IHasUniques
 import com.unciv.models.ruleset.unique.UniqueType
@@ -161,8 +162,16 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
     /** The medians the cities' needs are measured against, updated once per game turn, only with [com.unciv.models.ModConstants.cityNeedsLikeVp]. 0 in a game saved before they existed */
     var needsMedians = NeedsMedians()
 
+    /** For each resource that is `isMonopoly`, the id of the major civilization with the greatest share of its copies (CvGame::m_aiGreatestMonopolyPlayer, V:CvGame.cpp:14251-14301).
+     *  A cache of the shares that is saved so that a loaded game decides monopolies as the saved one did; empty in a game saved before monopolies existed */
+    var greatestMonopolyPlayer = HashMap<String, String>()
+
     //endregion
     //region Fields - Transient
+
+    /** The copies of each resource on the map, counted when first asked after [invalidateResourceCopies] */
+    @Transient @Cache @Volatile
+    private var resourceCopiesCache: Map<String, Int>? = null
 
     @Transient
     private lateinit var difficultyObject: Difficulty // Since this is static game-wide, and was taking a large part of nextTurn
@@ -177,6 +186,47 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
     @Readonly
     fun isUnavailableBySettingsCached(obj: IHasUniques): Boolean =
         settingsUnavailability.computeIfAbsent(obj) { it.isUnavailableBySettings(this) }
+
+    /**
+     *  CvMap::getNumResources: the copies of [resourceName] on the whole map, every tile whether anybody has seen it or not: a strategic resource counts its quantity,
+     *  any other resource one a tile. Counted once until a tile gets or loses a resource ([invalidateResourceCopies])
+     */
+    @Readonly
+    fun resourceCopiesOnMap(resourceName: String): Int {
+        val counted = resourceCopiesCache ?: run {
+            val counts = HashMap<String, Int>()
+            for (tile in tileMap.values) {
+                val resource = tile.tileResource ?: continue
+                val copies = if (resource.resourceType == ResourceType.Strategic) tile.resourceAmount else 1
+                counts.merge(resource.name, copies, Int::plus)
+            }
+            resourceCopiesCache = counts
+            counts
+        }
+        return counted[resourceName] ?: 0
+    }
+
+    fun invalidateResourceCopies() {
+        resourceCopiesCache = null
+    }
+
+    /** CvGame::UpdateGreatestPlayerResourceMonopoly: the living major civilization with the highest share of the copies of [resourceName], the lower id on a tie, nobody at 0 percent */
+    fun updateGreatestMonopolyPlayer(resourceName: String) {
+        val resource = ruleset.tileResources[resourceName] ?: return
+        if (!resource.isMonopoly) return
+        var best: Civilization? = null
+        var highest = 0
+        for (civ in civilizations) {
+            if (!civ.isMajorCiv || !civ.isAlive()) continue
+            val share = civ.monopolies.percent(resource)
+            if (share > highest) {
+                highest = share
+                best = civ
+            }
+        }
+        if (best == null) greatestMonopolyPlayer.remove(resourceName)
+        else greatestMonopolyPlayer[resourceName] = best.civID
+    }
 
     @Transient
     lateinit var speed: Speed
@@ -238,6 +288,7 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
         toReturn.archaeologyTriggered = archaeologyTriggered
         toReturn.league = league?.clone()
         toReturn.needsMedians = needsMedians.clone()
+        toReturn.greatestMonopolyPlayer.putAll(greatestMonopolyPlayer)
 
         return toReturn
     }

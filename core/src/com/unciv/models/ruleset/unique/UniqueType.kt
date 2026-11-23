@@ -321,16 +321,15 @@ enum class UniqueType(
         docDescription = "Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), " +
             "as the original's `Belief_ResourceQuantityModifiers` do. Not read yet: slice T1 of the trade plan"),
     MonopolyFlatBonus("[relativeAmount] to the flat bonus of each monopoly", UniqueTarget.Global,
-        docDescription = "Added to every flat yield, happiness or tile bonus that a global monopoly of the civilization gives (the original's `MonopolyModFlat`). " +
-            "Not read yet: slice T2 of the trade plan"),
+        docDescription = "Added to every flat yield, happiness or tile bonus that a global monopoly of the civilization gives (the original's `MonopolyModFlat`)"),
     MonopolyPercentBonus("[relativeAmount]% to the percentage bonus of each monopoly", UniqueTarget.Global,
-        docDescription = "Added to every percentage that a global monopoly of the civilization gives (the original's `MonopolyModPercent`). Not read yet: slice T2 of the trade plan"),
+        docDescription = "Added to every percentage that a global monopoly of the civilization gives (the original's `MonopolyModPercent`): to the percentage bonuses to a stat of a city and to the golden age length"),
     CityStateResourcesCountForMonopolies("City-State resources count towards monopolies", UniqueTarget.Global,
         docDescription = "The copies of a resource that allied City-States give the civilization are owned copies when its monopolies are counted " +
-            "(the original's `CSResourcesCountForMonopolies`). Not read yet: slice T2 of the trade plan"),
+            "(the original's `CSResourcesCountForMonopolies`)"),
     StatsPerGlobalMonopoly("[stats] [cityFilter] for every global monopoly", UniqueTarget.Global,
         docDescription = "Added to the matching cities once for each global monopoly the civilization has (the original's `Building_YieldChangesPerMonopoly`, " +
-            "`Policy_CityYieldPerMonopoly`). Not read yet: slice T2 of the trade plan"),
+            "`Policy_CityYieldPerMonopoly`)"),
 
     /// Great Persons
     GreatPersonPointPercentage("[relativeAmount]% Great Person generation [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
@@ -840,7 +839,7 @@ enum class UniqueType(
     ///////////////////////////////////////// region 06 TILE UNIQUES /////////////////////////////////////////
 
     // Resources: the monopoly effects go into the resource's `globalMonopolyUniques` and `strategicMonopolyUniques` (they apply while the civilization has that monopoly),
-    // together with the existing `[relativeAmount]% [stat] [cityFilter]`, `[relativeAmount]% Golden Age length` and the combat uniques. Not read yet: slices T1 and T2 of the trade plan
+    // together with the existing `[relativeAmount]% [stat] [cityFilter]`, `[relativeAmount]% Golden Age length` and the combat uniques
     MonopolyTileYield("[stats] from each tile with this resource", UniqueTarget.Resource,
         docDescription = "Only in `globalMonopolyUniques` and `strategicMonopolyUniques`: added to every tile of the civilization that has the resource, while it has the monopoly " +
             "(Vox Populi's `Resource_YieldChangeFromMonopoly`; `MonopolyFlatBonus` is added to every positive stat)"),
@@ -1080,10 +1079,9 @@ enum class UniqueType(
     ConditionalWithResource("with [resource]", UniqueTarget.Conditional),
     ConditionalWithoutResource("without [resource]", UniqueTarget.Conditional),
     ConditionalGlobalMonopoly("with a global monopoly of [resource]", UniqueTarget.Conditional,
-        docDescription = "True while the civilization has a global monopoly of the resource (more than half of the copies on the map for a luxury, V:CvPlayer.cpp:39139-39232). " +
-            "Not evaluated yet: slice T2 of the trade plan, until then false"),
+        docDescription = "True while the civilization has a global monopoly of the resource (more than half of the copies on the map for a luxury, V:CvPlayer.cpp:39139-39232)"),
     ConditionalStrategicMonopoly("with a strategic monopoly of [resource]", UniqueTarget.Conditional,
-        docDescription = "True while the civilization has a strategic monopoly of the resource (more than a quarter of the copies on the map). Not evaluated yet: slice T2 of the trade plan, until then false"),
+        docDescription = "True while the civilization has a strategic monopoly of the resource (more than a quarter of the copies on the map)"),
     ConditionalOnTradeRoute("on tiles of trade routes and their cities", UniqueTarget.Conditional,
         docDescription = "True for a tile or city that a trade route of any civilization passes over (Vox Populi's Inca, `TRAIT_GREAT_ANDEAN_ROAD`). " +
             "Not evaluated yet: slice T3 of the trade plan, until then false"),

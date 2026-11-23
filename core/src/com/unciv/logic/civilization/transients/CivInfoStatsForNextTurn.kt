@@ -333,6 +333,9 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         val relevantLuxuries = ownedLuxuries.count { resource ->
             resource.getMatchingUniques(UniqueType.ObsoleteWith).none { unique -> civInfo.tech.isResearched(unique.params[0]) } }
         statMap["Luxury resources"] = relevantLuxuries * happinessPerUniqueLuxury
+        // A global monopoly of an owned luxury adds its MonopolyHappiness and the flat modifier to that luxury's happiness (V:CvPlayer.cpp:22030-22039)
+        val monopolyHappiness = civInfo.monopolies.luxuryHappiness(ownedLuxuries)
+        if (monopolyHappiness != 0f) statMap["Resource monopolies"] = monopolyHappiness
 
         val happinessBonusForCityStateProvidedLuxuries =
             civInfo.getMatchingUniques(UniqueType.CityStateLuxuryHappiness).sumOf { it.params[0].toInt() } / 100f

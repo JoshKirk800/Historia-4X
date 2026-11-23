@@ -72,8 +72,11 @@ class GoldenAgeManager : IsPartOfGameInfoSerialization {
     fun calculateGoldenAgeLength(unmodifiedNumberOfTurns: Int): Int {
         var turnsToGoldenAge = unmodifiedNumberOfTurns.toFloat()
         civInfo.forEachMatchingUnique(UniqueType.GoldenAgeLength) { unique ->
-            turnsToGoldenAge *= unique.params[0].toPercent()
+            if (!civInfo.monopolies.isMonopolyUnique(unique)) turnsToGoldenAge *= unique.params[0].toPercent()
         }
+        // The monopolies add up with the modifier of the percentage bonus (CvPlayer::getGoldenAgeModifier, V:CvPlayer.cpp:25270-25290)
+        val monopolyPercent = civInfo.monopolies.goldenAgeLengthPercent()
+        if (monopolyPercent != 0) turnsToGoldenAge *= (100 + monopolyPercent) / 100f
         turnsToGoldenAge *= civInfo.gameInfo.speed.goldenAgeLengthModifier
         return turnsToGoldenAge.toInt()
     }

@@ -68,9 +68,9 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
     var requiredNearbyImprovedResources: List<String>? = null
 
     /** This Building can only be built if the civilization has a global monopoly of at least one of these resources (the original's `Building_ResourceMonopolyOrs`,
-     *  CvCity::IsBuildingResourceMonopolyValid). Empty: no requirement. Not read yet: slice T2 of `phaseE/vp-trade-plan.md` */
+     *  CvCity::IsBuildingResourceMonopolyValid, read by [com.unciv.logic.civilization.managers.MonopolyManager.meetsRequirements]). Empty: no requirement */
     var requiredMonopolyAnyOf: List<String> = emptyList()
-    /** ... and of all of these (`Building_ResourceMonopolyAnds`; no data in Vox Populi 5.4.8). Empty: no requirement. Not read yet either */
+    /** ... and of all of these (`Building_ResourceMonopolyAnds`; no data in Vox Populi 5.4.8). Empty: no requirement */
     var requiredMonopolies: List<String> = emptyList()
     var cityStrength = 0.0
     var cityHealth = 0
@@ -500,6 +500,9 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
             if (!containsResourceWithImprovement)
                 yield(RejectionReasonType.RequiresNearbyResource.toInstance("Nearby $requiredNearbyImprovedResources required"))
         }
+
+        if ((requiredMonopolyAnyOf.isNotEmpty() || requiredMonopolies.isNotEmpty()) && !civ.monopolies.meetsRequirements(this@Building))
+            yield(RejectionReasonType.RequiresMonopoly.toInstance("Needs a global monopoly of ${(requiredMonopolies + requiredMonopolyAnyOf).joinToString(", ")}"))
 
         for (unique in civ.getMatchingUniques(UniqueType.CannotBuildBuildings, stateForConditionals))
             if (this@Building.matchesFilter(unique.params[0], stateForConditionals)) {

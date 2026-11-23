@@ -1,5 +1,6 @@
 package com.unciv.logic.battle
 
+import com.unciv.logic.MultiFilter
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
@@ -10,6 +11,9 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.UnitType
 import yairm210.purity.annotations.Readonly
 
+/** The unit type of VP's `UNITCOMBAT_MOUNTED` combat class (see [MapUnitCombatant.matchesOpponentFilter]). */
+private const val MOUNTED_UNIT_TYPE = "Mounted"
+
 open class MapUnitCombatant(val unit: MapUnit) : ICombatant {
     override fun getHealth(): Int = unit.health
     override fun getMaxHealth() = unit.getMaxHealth()
@@ -19,6 +23,19 @@ open class MapUnitCombatant(val unit: MapUnit) : ICombatant {
     override fun isDefeated(): Boolean = unit.health <= 0
     override fun canAttack(): Boolean = unit.canAttack()
     override fun matchesFilter(filter: String, multiFilter: Boolean) = unit.matchesFilter(filter, multiFilter)
+
+    /**
+     *  [matchesFilter] as the opponent of a `<vs [filter]>` strength conditional. VP 5.4.8 CvUnit::unitCombatModifier, GetMaxAttackStrength,
+     *  GetMaxDefenseStrength, GetRangeCombatDamage...: "hack: mounted units can have secondary combat class" - a unit entry with `IsMounted`
+     *  also takes the modifiers against the Mounted combat class (the unit type named [MOUNTED_UNIT_TYPE]) when its own class is another.
+     *  With [com.unciv.models.ModConstants.mountedUnitFlagLikeVp] only.
+     */
+    @Readonly
+    fun matchesOpponentFilter(filter: String): Boolean {
+        if (!unit.civ.gameInfo.ruleset.modOptions.constants.mountedUnitFlagLikeVp
+            || !unit.baseUnit.hasUnique(UniqueType.IsMountedUnit)) return unit.matchesFilter(filter)
+        return MultiFilter.multiFilter(filter, { it == MOUNTED_UNIT_TYPE || unit.matchesFilter(it, false) })
+    }
     override fun getAttackSound() = unit.baseUnit.attackSound.let {
         if (it == null) UncivSound.Click else UncivSound(it)
     }

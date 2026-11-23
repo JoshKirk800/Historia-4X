@@ -276,7 +276,8 @@ object Conditionals {
                 checkOnCity { getCenterTile().militaryUnit?.canGarrison() == true }
 
             UniqueType.ConditionalVsCity -> state.theirCombatant?.matchesFilter("City", false) == true
-            UniqueType.ConditionalVsUnits,  UniqueType.ConditionalVsCombatant -> state.theirCombatant?.matchesFilter(conditional.params[0]) == true
+            UniqueType.ConditionalVsUnits,  UniqueType.ConditionalVsCombatant ->
+                state.theirCombatant.let { if (it is MapUnitCombatant) it.matchesOpponentFilter(conditional.params[0]) else it?.matchesFilter(conditional.params[0]) } == true
             UniqueType.ConditionalOurUnit, UniqueType.ConditionalOurUnitOnUnit ->
                 state.relevantUnit?.matchesFilter(conditional.params[0]) == true
             UniqueType.ConditionalUnitWithPromotion -> state.relevantUnit != null &&

@@ -735,6 +735,11 @@ enum class UniqueType(
     PromotionRequiresPromotion("Requires [promotion] promotion", UniqueTarget.Promotion),
     PromotionMinimumRange("Requires at least [amount] attack range", UniqueTarget.Promotion),
     PromotionMaximumRange("Requires at most [amount] attack range", UniqueTarget.Promotion),
+    // --- Mounted flag (StageMounted), read only with ModConstants.mountedUnitFlagLikeVp ---
+    /** VP 5.4.8 Units.IsMounted (CvUnitEntry::IsMounted): the unit also counts as a Mounted target for `<vs [Mounted] units>` modifiers (CvUnit::unitCombatModifier). */
+    IsMountedUnit("Is a mounted unit", UniqueTarget.Unit),
+    /** VP 5.4.8 UnitPromotions.MountedOnly (CvUnit::canAcquirePromotion): only units with `Is a mounted unit` can take this promotion. */
+    PromotionMountedOnly("Only for mounted units", UniqueTarget.Promotion),
     /** VP 5.4.8 CvUnit::GetReverseGreatGeneralModifier uses the strongest same-domain enemy aura. */
     EnemyStrengthAura("[relativeAmount]% Strength for enemy [mapUnitFilter] units within [amount] tiles", UniqueTarget.Unit, UniqueTarget.Global),
     StrongerWhenDamaged("Stronger when damaged", UniqueTarget.Unit, UniqueTarget.Global),

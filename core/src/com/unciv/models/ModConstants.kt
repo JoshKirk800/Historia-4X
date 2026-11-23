@@ -32,6 +32,12 @@ class ModConstants {
 
     /** VP 5.4.8 CvUnit::maxXPValue and changeExperienceTimes100 cap awards against barbarians and minors. */
     var combatXpCapsLikeVp = false
+
+    // --- Mounted flag (StageMounted) ---
+    /** VP 5.4.8 CvUnitEntry::IsMounted, CvUnit::unitCombatModifier / GetMaxAttackStrength / GetMaxDefenseStrength ("hack: mounted units can have secondary
+     *  combat class") and CvUnit::canAcquirePromotion (`MountedOnly`): a unit with the unique `Is a mounted unit` is also matched by `<vs [Mounted] units>`
+     *  strength conditionals when its own unit type is not Mounted, and a promotion with `Only for mounted units` is refused to other units. false: neither unique is read. */
+    var mountedUnitFlagLikeVp = false
     var maxXPfromCityStates = -1
 
     /** VP 5.4.8 CvUnit::GetDamageCombatModifier applies wound penalties to strength, except ranged defence. */

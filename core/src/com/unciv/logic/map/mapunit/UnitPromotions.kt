@@ -232,6 +232,10 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
     @Readonly
     private fun meetsExtraRequirements(promotion: Promotion): Boolean {
         val state = unit.cache.state
+        // VP 5.4.8 CvUnit::canAcquirePromotion: a MountedOnly promotion is refused to a unit whose unit entry is not IsMounted
+        if (unit.civ.gameInfo.ruleset.modOptions.constants.mountedUnitFlagLikeVp
+            && promotion.hasUnique(UniqueType.PromotionMountedOnly, state)
+            && !unit.baseUnit.hasUnique(UniqueType.IsMountedUnit)) return false
         if (promotion.getMatchingUniques(UniqueType.PromotionRequiresPromotion, state).any { it.params[0] !in promotions }) return false
         if (promotion.getMatchingUniques(UniqueType.PromotionMinimumRange, state).any { unit.getRange() < it.params[0].toInt() }) return false
         if (unit.getRange() > 0 && promotion.getMatchingUniques(UniqueType.PromotionMaximumRange, state)

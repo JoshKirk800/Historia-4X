@@ -270,6 +270,8 @@ enum class UniqueType(
     OneTimeSellBuilding("Sell [buildingFilter] buildings [cityFilter]", UniqueTarget.Global, UniqueTarget.Triggerable),
 
     /// Border growth
+    BorderCulture("[relativeAmount] border culture [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
+    BorderCulturePercent("[relativeAmount]% border culture [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief),
     BorderGrowthPercentage("[relativeAmount]% Culture cost of natural border growth [cityFilter]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
         docDescription = MULTIPLICATIVE_BONUS_EXPLANATION),
     TileCostPercentage("[relativeAmount]% Gold cost of acquiring tiles [cityFilter]", UniqueTarget.FollowerBelief, UniqueTarget.Global,

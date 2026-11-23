@@ -489,6 +489,22 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
         tile.history.recordTakeOwnership(tile)
     }
 
+    /** Additional local yield and its modifiers do not enter the civilization's policy culture.
+     *  CvCity::getBaseYieldRateTimes100 includes city culture in local culture (V:CvCity.cpp:23306). */
+    @Readonly
+    fun borderCulturePerTurn(culture: Float): Float {
+        var flat = 0
+        var percent = 0
+        city.forEachMatchingUnique(UniqueType.BorderCulture) { unique ->
+            if (city.matchesFilter(unique.params[1])) flat += unique.params[0].toInt()
+        }
+        city.forEachMatchingUnique(UniqueType.BorderCulturePercent) { unique ->
+            if (city.matchesFilter(unique.params[1])) percent += unique.params[0].toInt()
+        }
+        if (flat == 0 && percent == 0) return culture
+        return max(0f, (culture + flat) * (100 + percent) / 100f)
+    }
+
     /**
      *  A city whose culture is enough for a tile takes one, and fires `upon acquiring a [tileFilter] tile through [border growth]` for it
      *  (CvCity::DoJONSCultureLevelIncrease, V:CvCity.cpp:17176-17304). With no tile left to take the original still spends the culture and raises the level,
@@ -496,7 +512,7 @@ class CityExpansionManager : IsPartOfGameInfoSerialization {
      *  because a city that keeps its culture when it can not expand is how this port always played (an unchanged game stays unchanged).
      */
     fun nextTurn(culture: Float) {
-        cultureStored += culture.toInt()
+        cultureStored += borderCulturePerTurn(culture).toInt()
         if (cultureStored >= getCultureToNextTile()) {
             val location = addNewTileWithCulture()
             if (location != null) {

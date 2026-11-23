@@ -36,7 +36,7 @@
 		"gold": 1,
 		"turnsToBuild": 7,
 		"techRequired": "Guilds",
-		"uniques": ["[+1 Gold] <after discovering [Economics]>", "Pillaging this improvement yields approximately [+20 Gold]"],
+		"uniques": ["[+1 Gold] <after discovering [Economics]>", "Pillaging this improvement yields approximately [+20 Gold]", "[+1 Gold, +1 Production] if a trade route crosses this tile on a [Road]", "[+2 Gold, +2 Production] if a trade route crosses this tile on a [Railroad]"],
 		"shortcutKey": "T"
 	},
 
@@ -228,7 +228,9 @@
 		"terrainsCanBeBuiltOn": ["Land"],
 		"gold": 4,
 		"uniques": ["Great Improvement", "Can be built on tiles with any resource", "[+1 Gold] <after discovering [Economics]>", "Removes removable features when built",
-            "Will not be replaced by automated units", "Pillaging this improvement yields approximately [+20 Gold]"]
+            "Will not be replaced by automated units", "Pillaging this improvement yields approximately [+20 Gold]",
+            "[+2 Gold, +2 Production] if a trade route crosses this tile on a [Road]",
+            "[+4 Gold, +4 Production] if a trade route crosses this tile on a [Railroad]"]
 	},
 	{
 		"name": "Holy site",

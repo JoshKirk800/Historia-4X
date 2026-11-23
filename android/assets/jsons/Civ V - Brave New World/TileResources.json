@@ -111,7 +111,8 @@
 		"improvementStats": {"production": 1},
 		"uniques": ["Generated on every [30] tiles <in [{Featureless} {Grassland}] tiles> <in tiles without [Fresh Water]>",
 					"Generated on every [15] tiles <in [{Featureless} {Tundra}] tiles>",
-					"Generated on every [19] tiles <in [{Featureless} {Desert}] tiles>"]
+					"Generated on every [19] tiles <in [{Featureless} {Desert}] tiles>",
+					"[+10]% Production of Wonders in cities with this resource <before the [Medieval era]>"]
 	},
 	{
 		"name": "Fish",
@@ -136,6 +137,10 @@
 	// Strategic resources
 	{
 		"name": "Horses",
+		"globalMonopolyUniques": ["[+2 Science] from each tile with this resource"],
+		"isMonopoly": true,
+		"obsoleteBy": "Rocketry",
+		"strategicMonopolyUniques": ["[+10]% Strength <when attacking>"],
 		"resourceType": "Strategic",
 		"revealedBy": "Animal Husbandry",
 		// Hill only if plains or grassland. Desert and Tundra: AssignStartingPlots.lua of Vox Populi places horses on flat tundra and on flood plains and fresh water desert
@@ -158,6 +163,9 @@
 	},
 	{
 		"name": "Iron",
+		"globalMonopolyUniques": ["[+2 Production] from each tile with this resource"],
+		"isMonopoly": true,
+		"strategicMonopolyUniques": ["[+10]% Strength <when defending>"],
 		"resourceType": "Strategic",
 		"revealedBy": "Bronze Working",
 		// Forest, Jungle: AssignStartingPlots:PlaceStrategicAndBonusResources draws iron, coal and aluminum for every hill of hills_list, forested and jungle hills included;
@@ -184,6 +192,9 @@
 	},
 	{
 		"name": "Coal",
+		"globalMonopolyUniques": ["[+3 Gold] from each tile with this resource"],
+		"isMonopoly": true,
+		"strategicMonopolyUniques": ["[+10]% Strength <when attacking> <for [Water] units>", "[+10]% Strength <when defending> <for [Water] units>"],
 		"resourceType": "Strategic",
 		"revealedBy": "Industrialization",
 		"terrainsCanBeFoundOn": ["Grassland","Plains","Hill","Jungle","Forest","Marsh"],
@@ -206,6 +217,9 @@
 	},
 	{
 		"name": "Oil",
+		"globalMonopolyUniques": ["[+2 Science] from each tile with this resource"],
+		"isMonopoly": true,
+		"strategicMonopolyUniques": ["New [Military] units start with [2] XP [in all cities]"],
 		"resourceType": "Strategic",
 		"revealedBy": "Biology",
 		"terrainsCanBeFoundOn": ["Desert","Coast","Tundra","Snow","Marsh","Jungle"],
@@ -228,6 +242,9 @@
 	},
 	{
 		"name": "Aluminum",
+		"globalMonopolyUniques": ["[+2 Production] from each tile with this resource"],
+		"isMonopoly": true,
+		"strategicMonopolyUniques": ["[5] HP when healing"],
 		"resourceType": "Strategic",
 		"revealedBy": "Electricity",
 		// Forest: aluminum on forested hills, see Iron. Plains: aluminum on hills and flat plains (AssignStartingPlots.lua of Vox Populi)
@@ -245,6 +262,9 @@
 	},
 	{
 		"name": "Uranium",
+		"globalMonopolyUniques": ["[+10]% [Science] [in all cities]"],
+		"isMonopoly": true,
+		"strategicMonopolyUniques": ["[+10]% Strength <when attacking>"],
 		"resourceType": "Strategic",
 		"revealedBy": "Atomic Theory",
 		// Hill, Plains, Grassland, Desert: AssignStartingPlots.lua of Vox Populi places uranium on every land terrain (the database of Brave New World has them all too)
@@ -265,6 +285,8 @@
 	// Luxury resources
 	{
 		"name": "Furs",
+		"globalMonopolyUniques": ["[6] Happiness from a global monopoly"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Forest","Tundra"],
 		"gold": 2,
@@ -276,6 +298,8 @@
 	},
 	{
 		"name": "Cotton",
+		"globalMonopolyUniques": ["[+3 Gold] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Flood plains"],
 		"gold": 2,
@@ -288,6 +312,8 @@
 	},
 	{
 		"name": "Dyes",
+		"globalMonopolyUniques": ["[+3 Gold] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Jungle","Forest","Marsh"],
 		"gold": 2,
@@ -300,6 +326,8 @@
 	},
 	{
 		"name": "Gems",
+		"globalMonopolyUniques": ["[+10]% [Gold] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Jungle","Forest","Hill"],
 		"gold": 3,
@@ -314,6 +342,8 @@
 	},
 	{
 		"name": "Gold",
+		"globalMonopolyUniques": ["[+25]% Golden Age length"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Desert","Hill","Forest","Jungle"],
 		"gold": 2,
@@ -328,6 +358,8 @@
 	},
 	{
 		"name": "Silver",
+		"globalMonopolyUniques": ["[+2 Culture] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Hill","Forest","Jungle","Tundra","Grassland"],
 		"gold": 2,
@@ -346,6 +378,8 @@
 	},
 	{
 		"name": "Incense",
+		"globalMonopolyUniques": ["[+2 Faith] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Plains","Desert","Flood plains"],
 		"gold": 2,
@@ -357,6 +391,8 @@
 	},
 	{
 		"name": "Ivory",
+		"globalMonopolyUniques": ["[+25]% Golden Age length"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Plains","Grassland"],
 		"gold": 2,
@@ -365,10 +401,13 @@
 		"uniques": ["Generated with weight [35] <in [Plains] Regions>",
 					"Generated with weight [15] <in [Hybrid] Regions>",
 					"Generated near City States with weight [10]",
-					"Doesn't generate naturally <in [{Grassland} {Fresh Water}] tiles>"]
+					"Doesn't generate naturally <in [{Grassland} {Fresh Water}] tiles>",
+					"[-15]% Production of [Siege] units in cities with this resource <before the [Industrial era]>"]
 	},
 	{
 		"name": "Silk",
+		"globalMonopolyUniques": ["[+10]% [Gold] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Forest","Jungle"],
 		"gold": 2,
@@ -381,6 +420,8 @@
 	},
 	{
 		"name": "Cinnamon",
+		"globalMonopolyUniques": ["[+2 Culture] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Jungle","Forest","Marsh"],
 		"gold": 2,
@@ -396,6 +437,8 @@
 	},
 	{
 		"name": "Wine",
+		"globalMonopolyUniques": ["[+2 Faith] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Plains"],
 		"gold": 2,
@@ -406,6 +449,8 @@
 	},
 	{
 		"name": "Sugar",
+		"globalMonopolyUniques": ["[+10]% [Food] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Flood plains","Grassland","Marsh"],
 		// Technically sugar can also be placed on lowland jungles which then *turn* into marsh.
@@ -420,18 +465,21 @@
 	},
 	{
 		"name": "Marble",
+		"globalMonopolyUniques": ["[+10]% [Culture] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Desert","Plains","Hill","Grassland"],
 		"gold": 2,
 		"improvement": "Quarry",
 		"improvementStats": {"production": 1},
-		"uniques": ["[+15]% Production when constructing [Ancient era] wonders [in this city]",
-					"[+15]% Production when constructing [Classical era] wonders [in this city]",
-					"Special placement during map generation",
-					"Doesn't generate naturally <in [{Grassland} {Fresh Water}] tiles>"]
+		"uniques": ["Special placement during map generation",
+					"Doesn't generate naturally <in [{Grassland} {Fresh Water}] tiles>",
+					"[+15]% Production of Wonders in cities with this resource <before the [Industrial era]>"]
 	},
 	{
 		"name": "Whales",
+		"globalMonopolyUniques": ["[+10]% [Science] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Coast"],
 		"food": 1,
@@ -447,6 +495,8 @@
 	},
 	{
 		"name": "Pearls",
+		"globalMonopolyUniques": ["[+2 Faith] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Coast"],
 		"gold": 2,
@@ -462,36 +512,48 @@
 	},
 	{
 		"name": "Jewelry",
+		"globalMonopolyUniques": ["[6] Happiness from a global monopoly"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"gold": 2,
 		"uniques": ["Can only be created by Mercantile City-States"]
 	},
 	{
 		"name": "Porcelain",
+		"globalMonopolyUniques": ["[+30]% Golden Age length"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"gold": 2,
 		"uniques": ["Can only be created by Mercantile City-States"]
 	},
 	{
 		"name": "Nutmeg",
+		"globalMonopolyUniques": ["[+10]% [Production] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"gold": 2,
 		"uniques": ["Unique Luxury for [Indonesia]"]
 	},
 	{
 		"name": "Cloves",
+		"globalMonopolyUniques": ["[6] Happiness from a global monopoly"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"gold": 2,
 		"uniques": ["Unique Luxury for [Indonesia]"]
 	},
 	{
 		"name": "Pepper",
+		"globalMonopolyUniques": ["[+3 Food] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"gold": 2,
 		"uniques": ["Unique Luxury for [Indonesia]"]
 	},
 	{
 		"name": "Citrus",
+		"globalMonopolyUniques": ["[+2 Science] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Jungle","Forest","Flood plains"],
 		"food": 1,
@@ -506,6 +568,8 @@
 	},
 	{
 		"name": "Copper",
+		"globalMonopolyUniques": ["[+10]% [Production] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Hill","Forest","Jungle","Grassland","Tundra"],
 		"gold": 2,
@@ -524,6 +588,8 @@
 	},
 	{
 		"name": "Cocoa",
+		"globalMonopolyUniques": ["[+2 Culture] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Jungle"], // only on grassland or plains jungle
 		"food": 1,
@@ -538,6 +604,8 @@
 	},
 	{
 		"name": "Crab",
+		"globalMonopolyUniques": ["[+3 Food] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Coast"],
 		"food": 1,
@@ -556,6 +624,8 @@
 	// (the improvement stats are what its table gives less what the improvement of this ruleset gives to every resource it improves). Its monopolies are not here yet
 	{
 		"name": "Amber",
+		"globalMonopolyUniques": ["[6] Happiness from a global monopoly"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Plains","Desert","Tundra","Hill"],
 		"production": 1,
@@ -570,6 +640,8 @@
 	},
 	{
 		"name": "Jade",
+		"globalMonopolyUniques": ["[+25]% Golden Age length"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Plains","Desert","Tundra","Hill"],
 		"gold": 2,
@@ -583,6 +655,8 @@
 	},
 	{
 		"name": "Lapis Lazuli",
+		"globalMonopolyUniques": ["[+25]% Golden Age length"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Plains","Desert","Tundra","Hill"],
 		"production": 1,
@@ -596,6 +670,8 @@
 	},
 	{
 		"name": "Coral",
+		"globalMonopolyUniques": ["[+2 Science] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Coast"],
 		"production": 1,
@@ -614,6 +690,8 @@
 	},
 	{
 		"name": "Coffee",
+		"globalMonopolyUniques": ["[+10]% [Production] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Plains"],
 		"food": 1,
@@ -627,6 +705,8 @@
 	},
 	{
 		"name": "Olives",
+		"globalMonopolyUniques": ["[+10]% [Food] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Plains"],
 		"food": 1,
@@ -640,6 +720,8 @@
 	},
 	{
 		"name": "Tobacco",
+		"globalMonopolyUniques": ["[+2 Faith] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Plains"],
 		"gold": 2,
@@ -652,6 +734,8 @@
 	},
 	{
 		"name": "Tea",
+		"globalMonopolyUniques": ["[+10]% [Culture] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Plains"],
 		"food": 1,
@@ -665,6 +749,8 @@
 	},
 	{
 		"name": "Perfume",
+		"globalMonopolyUniques": ["[+3 Gold] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Grassland","Plains"],
 		"gold": 2,
@@ -677,6 +763,8 @@
 	},
 	{
 		"name": "Salt",
+		"globalMonopolyUniques": ["[+10]% [Food] [in all cities]"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Desert","Tundra","Plains","Forest"],
 		"gold": 1,
@@ -694,6 +782,8 @@
 	},
 	{
 		"name": "Truffles",
+		"globalMonopolyUniques": ["[+3 Food] from each tile with this resource"],
+		"isMonopoly": true,
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Forest","Marsh","Jungle"],
 		"gold": 2,

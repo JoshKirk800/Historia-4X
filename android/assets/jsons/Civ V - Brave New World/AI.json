@@ -8343,6 +8343,36 @@
         "Growth": 10,
         "Religion": 20
       }
+    },
+    {
+      "kind": "Building",
+      "name": "Coaling Station",
+      "flavors": {
+        "Infrastructure": 20,
+        "Production": 50,
+        "Gold": 20
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Homestead",
+      "flavors": {
+        "Expansion": 15,
+        "Production": 30
+      }
+    },
+    {
+      "kind": "Building",
+      "name": "Runestone",
+      "flavors": {
+        "MilitaryTraining": 20,
+        "NavalGrowth": 20,
+        "NavalTileImprovement": 20,
+        "Growth": 15,
+        "Gold": 10,
+        "Culture": 10,
+        "WaterConnection": 40
+      }
     }
   ],
   "unitAiTypes": [

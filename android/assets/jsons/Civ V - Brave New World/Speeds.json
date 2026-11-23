@@ -1,6 +1,7 @@
 [
     {
         "name": "Quick",
+        "tradeRouteSpeedModifier": 0.67,
         "modifier": 0.67,
         // Vox Populi's GameSpeeds.InstantYieldPercent (CvPlayer::doInstantYield, CvCity::doInstantYield: the amount of a building's or tech's instant yield times it)
         "instantYieldModifier": 0.75,
@@ -78,6 +79,7 @@
     },
     {
         "name": "Epic",
+        "tradeRouteSpeedModifier": 1.5,
         "modifier": 1.5,
         "instantYieldModifier": 1.5,
         "productionCostModifier": 1.5,
@@ -107,6 +109,7 @@
     },
     {
         "name": "Marathon",
+        "tradeRouteSpeedModifier": 3.0,
         "modifier": 3.0,
         "instantYieldModifier": 2.0,
         "productionCostModifier": 3.0,

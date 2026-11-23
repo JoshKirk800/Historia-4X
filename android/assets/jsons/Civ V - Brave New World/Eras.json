@@ -29,6 +29,8 @@
     },
     {
         "name": "Classical era",
+        "tradeRouteFoodBonus": 100,
+        "tradeRouteProductionBonus": 100,
         "researchAgreementCost": 150,
         "startingSettlerCount": 1,
         "startingWorkerCount": 1,
@@ -54,6 +56,8 @@
     },
     {
         "name": "Medieval era",
+        "tradeRouteFoodBonus": 200,
+        "tradeRouteProductionBonus": 200,
         "researchAgreementCost": 200,
         "startingSettlerCount": 2,
         "startingWorkerCount": 1,
@@ -84,6 +88,8 @@
     },
     {
         "name": "Renaissance era",
+        "tradeRouteFoodBonus": 400,
+        "tradeRouteProductionBonus": 400,
         "researchAgreementCost": 250,
         "startingSettlerCount": 2,
         "startingWorkerCount": 1,
@@ -114,6 +120,8 @@
     },
     {
         "name": "Industrial era",
+        "tradeRouteFoodBonus": 600,
+        "tradeRouteProductionBonus": 600,
         "researchAgreementCost": 300,
         "startingSettlerCount": 3,
         "startingWorkerCount": 2,
@@ -149,6 +157,8 @@
     },
     {
         "name": "Modern era",
+        "tradeRouteFoodBonus": 800,
+        "tradeRouteProductionBonus": 800,
         "researchAgreementCost": 350,
         "startingSettlerCount": 3,
         "startingWorkerCount": 2,
@@ -185,6 +195,8 @@
     },
     {
         "name": "Atomic era",
+        "tradeRouteFoodBonus": 1000,
+        "tradeRouteProductionBonus": 1000,
         "researchAgreementCost": 400,
         "startingSettlerCount": 3,
         "startingWorkerCount": 2,
@@ -223,6 +235,8 @@
     },
     {
         "name": "Information era",
+        "tradeRouteFoodBonus": 1200,
+        "tradeRouteProductionBonus": 1200,
         "researchAgreementCost": 450,
         "startingSettlerCount": 3,
         "startingWorkerCount": 3,
@@ -262,6 +276,8 @@
       // But as it is _really_ usefull to have for testing, I'd like to keep it.
       // The stats are just copy-pasted from the information era.
         "name": "Future era",
+        "tradeRouteFoodBonus": 1200,
+        "tradeRouteProductionBonus": 1200,
         "researchAgreementCost": 400,
         "startingSettlerCount": 3,
         "startingWorkerCount": 3,

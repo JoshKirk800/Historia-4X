@@ -44,6 +44,8 @@
 			"[15]% Food is carried over after population increases [in this city]",
 			"Allows [Food] trade routes between your cities <in this city>",
 			"[+1 Food] from [Bananas] tiles [in this city]",
+			"[+1 Food] from [Maize] tiles [in this city]",
+			"[+1 Food] from [Rice] tiles [in this city]",
 			"[+1 Food] from [Wheat] tiles [in this city]",
 			"Gain [25] [Food] <(modified by game speed)>"
 		]
@@ -91,6 +93,7 @@
 		],
 		"uniques": [
 			"Allows [Production] trade routes between your cities <in this city>",
+			"[+1 Gold, +1 Production] from [Jade] tiles [in this city]",
 			"[+1 Gold, +1 Production] from [Marble] tiles [in this city]",
 			"[+2 Gold] from [Salt] tiles [in this city]",
 			"[+2 Production] from [Stone] tiles [in this city]",
@@ -303,18 +306,18 @@
 	},
 	{
 		"name": "Lighthouse",
-		"cost": 75,
-		"hurryCostModifier": 25,
+		"cost": 150,
 		"maintenance": 1,
+		"requiredTech": "Sailing",
 		"uniques": [
 			"Must be next to [Coast]",
+			"Connects trade routes over water",
 			"[+1 Food] from [Ocean] tiles [in this city]",
 			"[+1 Food] from [Coast] tiles [in this city]",
-			"[+1 Food] from [Fish] tiles [in this city]",
-			"[+1 Production] from [Water resource] tiles [in this city]",
-			"Connects trade routes over water"
-		],
-		"requiredTech": "Sailing"
+			"[+1 Gold] from [Ocean] tiles [in this city]",
+			"[+1 Gold] from [Coast] tiles [in this city]",
+			"[+4 Food] on domestic trade routes that start in this city"
+		]
 	},
 	{
 		"name": "The Great Lighthouse",
@@ -336,22 +339,21 @@
 	},
 	{
 		"name": "Stable",
-		"maintenance": 1,
+		"cost": 300,
+		"maintenance": 2,
+		"requiredTech": "Chivalry",
 		"requiredNearbyImprovedResources": [
 			"Horses",
 			"Sheep",
 			"Cattle"
 		],
-		"hurryCostModifier": 25,
+		"production": 3,
 		"uniques": [
-			"[+15]% Production when constructing [Mounted] units [in this city]",
-			"[+1 Production] from [Cattle] tiles [in this city]",
-			"[+1 Production] from [Horses] tiles [in this city]",
-			"[+1 Production] from [Sheep] tiles [in this city]",
-			"Destroyed when the city is captured"
-		],
-		"requiredTech": "Trade",
-		"cost": 100
+			"[+2 Production] from [Cattle] tiles [in this city]",
+			"[+2 Production] from [Horses] tiles [in this city]",
+			"[+2 Production] from [Sheep] tiles [in this city]",
+			"[+2 Production] on domestic trade routes that start in this city"
+		]
 	},
 	{
 		"name": "Caravansary",
@@ -367,23 +369,19 @@
 		"name": "Ducal Stable",
 		"replaces": "Stable",
 		"uniqueTo": "Poland",
-		"cost": 75,
-		"maintenance": 0,
-		"hurryCostModifier": 25,
-		"requiredNearbyImprovedResources": [
-			"Horses",
-			"Sheep",
-			"Cattle"
-		],
+		"cost": 300,
+		"maintenance": 2,
+		"requiredTech": "Chivalry",
+		"production": 3,
 		"uniques": [
+			"Provides [1] [Horses]",
+			"[+3 Production, +3 Gold] from [Cattle] tiles [in this city]",
+			"[+3 Production, +3 Gold] from [Horses] tiles [in this city]",
+			"[+3 Production, +3 Gold] from [Sheep] tiles [in this city]",
 			"[+15]% Production when constructing [Mounted] units [in this city]",
 			"New [Mounted] units start with [15] XP [in this city]",
-			"[+1 Production, +1 Gold] from [Cattle] tiles [in this city]",
-			"[+1 Production, +1 Gold] from [Horses] tiles [in this city]",
-			"[+1 Production, +1 Gold] from [Sheep] tiles [in this city]",
-			"Destroyed when the city is captured"
-		],
-		"requiredTech": "Trade"
+			"[+2 Production] on domestic trade routes that start in this city"
+		]
 	},
 	{
 		"name": "Circus Maximus",
@@ -444,6 +442,7 @@
 			"Only available <when religion is enabled>",
 			"[+25]% Natural religion spread [in this city]",
 			"Reduces [Religious Unrest] by [1] [in this city]",
+			"[+1 Culture, +1 Gold] from [Amber] tiles [in this city]",
 			"[+1 Culture, +1 Gold] from [Incense] tiles [in this city]",
 			"[+1 Culture, +1 Gold] from [Wine] tiles [in this city]"
 		]
@@ -507,6 +506,7 @@
 		"uniques": [
 			"[+1] Gold on incoming [International] trade routes for their origin <in this city>",
 			"[+1] Gold from incoming [International] trade routes <in this city>",
+			"[+1 Food, +1 Production] from [Cinnamon] tiles [in this city]",
 			"[+1 Food, +1 Gold] from [Sugar] tiles [in this city]"
 		]
 	},
@@ -526,6 +526,7 @@
 			"[+1] Gold on incoming [International] trade routes for their origin <in this city>",
 			"[+1] Gold from incoming [International] trade routes <in this city>",
 			"[+50]% range for [Land] trade routes <in this city>",
+			"[+1 Food, +1 Production] from [Cinnamon] tiles [in this city]",
 			"[+1 Food, +1 Gold] from [Sugar] tiles [in this city]"
 		]
 	},
@@ -741,20 +742,20 @@
 	},
 	{
 		"name": "Workshop",
+		"cost": 350,
 		"maintenance": 2,
+		"requiredTech": "Civil Service",
+		"requiredBuilding": "Forge",
 		"production": 2,
 		"specialistSlots": {
 			"Engineer": 1
 		},
-		"hurryCostModifier": 25,
-		"percentStatBonus": {
-			"production": 10
-		},
 		"uniques": [
-			"Allows [Production] trade routes between your cities <in this city>"
-		],
-		"requiredTech": "Metal Casting",
-		"cost": 120
+			"Allows [Production] trade routes between your cities <in this city>",
+			"[+1 Production] per [4] population [in this city]",
+			"[+1 Production] from [Forest] tiles [in this city]",
+			"[+4 Production] on domestic trade routes that start in this city"
+		]
 	},
 	{
 		"name": "Longhouse",
@@ -1066,6 +1067,9 @@
 			"[+3] Gold from incoming [International] trade routes <in this city>",
 			"[+4]% [Production] [in this city] <for every [[City-State] Trade Routes]>",
 			"[+2 Gold] from [Bananas] tiles [in this city]",
+			"[+1 Gold, +2 Production] from [Coffee] tiles [in this city]",
+			"[+2 Gold, +1 Production] from [Tea] tiles [in this city]",
+			"[+3 Gold] from [Tobacco] tiles [in this city]",
 			"[10]% of [Gold] [in this city] added to [Science]"
 		]
 	},
@@ -1943,6 +1947,7 @@
 			"[+10]% Production when constructing [All] buildings [in this city]",
 			"Allows [Production] trade routes between your cities <in this city>",
 			"[+1 Production] from [River] tiles [in this city]",
+			"[+1 Gold, +1 Production] from [Jade] tiles [in this city]",
 			"[+1 Gold, +1 Production] from [Marble] tiles [in this city]",
 			"[+2 Gold] from [Salt] tiles [in this city]",
 			"[+2 Production] from [Stone] tiles [in this city]",
@@ -1962,7 +1967,10 @@
 			"Reduces [Poverty] by [1] [in this city]",
 			"[+2] Gold on incoming [International] trade routes for their origin <in this city>",
 			"[+2] Gold from incoming [International] trade routes <in this city>",
-			"[+2 Gold] from [Bananas] tiles [in this city]"
+			"[+2 Gold] from [Bananas] tiles [in this city]",
+			"[+1 Gold, +2 Production] from [Coffee] tiles [in this city]",
+			"[+2 Gold, +1 Production] from [Tea] tiles [in this city]",
+			"[+3 Gold] from [Tobacco] tiles [in this city]"
 		]
 	},
 	{
@@ -1973,6 +1981,8 @@
 		"culture": 1,
 		"uniques": [
 			"Reduces [Boredom] by [1] [in this city]",
+			"[+1 Food, +1 Gold] from [Olives] tiles [in this city]",
+			"[+1 Culture, +1 Gold] from [Perfume] tiles [in this city]",
 			"[+2 Production] from every [Barracks]",
 			"[+2 Production] from every [Forge]",
 			"[+2 Production] from every [Armory]"
@@ -2008,6 +2018,7 @@
 			"Cost increases by [25] per owned city",
 			"Reduces [Poverty] by [1] [in all cities]",
 			"Provides 1 extra copy of each improved luxury resource near this City",
+			"[+25]% Gold from resource diversity on trade routes",
 			"[+2] Gold on incoming [International] trade routes for their origin <in this city>",
 			"[+4] Gold from incoming [International] trade routes <in this city>"
 		]
@@ -2088,7 +2099,8 @@
 		"uniques": [
 			"[15]% Food is carried over after population increases [in this city]",
 			"Reduces [Poverty] by [1] [in this city]",
-			"[+1 Food] per [5] population [in this city]"
+			"[+1 Food] per [5] population [in this city]",
+			"[+1 Food, +1 Gold, +1 Production] from [Figs] tiles [in this city]"
 		]
 	},
 	{
@@ -2117,6 +2129,24 @@
 		]
 	},
 	{
+		"name": "Coaling Station",
+		"cost": 1000,
+		"maintenance": 5,
+		"requiredTech": "Railroads",
+		"requiredResource": "Coal",
+		"percentStatBonus": {
+			"production": 20,
+			"gold": 10
+		},
+		"specialistSlots": {
+			"Engineer": 1
+		},
+		"uniques": [
+			"[+2 Production] from every [Factory]",
+			"[+6 Food] on domestic trade routes that start in this city"
+		]
+	},
+	{
 		"name": "Mine Field",
 		"cost": 1600,
 		"maintenance": 7,
@@ -2139,6 +2169,22 @@
 			"Provides [1] [Coal]",
 			"Provides [1] [Oil]",
 			"Destroyed when the city is captured"
+		]
+	},
+	{
+		"name": "Homestead",
+		"replaces": "Stable",
+		"uniqueTo": "America",
+		"cost": 300,
+		"maintenance": 2,
+		"requiredTech": "Chivalry",
+		"production": 3,
+		"uniques": [
+			"[+2 Production, +2 Food, +2 Gold] from [Cattle] tiles [in this city]",
+			"[+2 Production, +2 Food, +2 Gold] from [Horses] tiles [in this city]",
+			"[+2 Production, +2 Food, +2 Gold] from [Sheep] tiles [in this city]",
+			"[+2 Food, +2 Production, +2 Gold] from [Bison] tiles [in this city]",
+			"[+2 Production] on domestic trade routes that start in this city"
 		]
 	},
 	{
@@ -2173,6 +2219,24 @@
 			"Reduces [Distress] by [1] [in this city]",
 			"[+15]% Production when constructing [Land] units [in this city]",
 			"New [Military] units start with [25] XP [in this city]"
+		]
+	},
+	{
+		"name": "Runestone",
+		"replaces": "Lighthouse",
+		"uniqueTo": "Denmark",
+		"cost": 150,
+		"maintenance": 1,
+		"requiredTech": "Sailing",
+		"culture": 2,
+		"uniques": [
+			"Connects trade routes over water",
+			"[+2 Food] from [Ocean] tiles [in this city]",
+			"[+2 Food] from [Coast] tiles [in this city]",
+			"[+1 Gold] from [Ocean] tiles [in this city]",
+			"[+1 Gold] from [Coast] tiles [in this city]",
+			"Gain [30] [Culture] <upon pillaging a tile> <in this city> <(modified by game speed)> <for every [Era scaler]>",
+			"[+4 Food] on domestic trade routes that start in this city"
 		]
 	},
 	{
@@ -2312,7 +2376,12 @@
 			"[+1 Science] [in this city] <after discovering [Industrialization]>",
 			"[+1 Culture] [in this city] <after discovering [Industrialization]>",
 			"[+1 Faith] [in this city] <after discovering [Industrialization]>",
-			"[+2 Gold] from [Bananas] tiles [in this city]"
+			"[+2 Gold] from [Bananas] tiles [in this city]",
+			"[+1 Gold, +2 Production] from [Coffee] tiles [in this city]",
+			"[+2 Gold, +1 Production] from [Tea] tiles [in this city]",
+			"[+3 Gold] from [Tobacco] tiles [in this city]",
+			"[+1 Production, +1 Gold] from [Village] tiles [in this city]",
+			"[+1 Production, +1 Gold] from [Town] tiles [in this city]"
 		]
 	},
 	{
@@ -2369,6 +2438,7 @@
 			"Reduces [Poverty] by [1] [in this city]",
 			"Reduces [Poverty] by [1] [in all cities]",
 			"Provides 1 extra copy of each improved luxury resource near this City",
+			"[+25]% Gold from resource diversity on trade routes",
 			"Gain a free [Harbor] [in all cities]",
 			"[+3] Gold on incoming [International] trade routes for their origin <in this city>",
 			"[+5] Gold from incoming [International] trade routes <in this city>",

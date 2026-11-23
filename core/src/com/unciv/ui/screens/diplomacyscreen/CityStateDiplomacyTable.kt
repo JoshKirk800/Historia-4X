@@ -434,7 +434,8 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
         diplomacyTable.add(demandGoldButton).row()
         if (!otherCiv.cityStateFunctions.canBullyGold(viewingCiv))   demandGoldButton.disable()
 
-        val demandWorkerButton = (if (vpTribute) "Take worker (-[${otherCiv.cityStateFunctions.tributeInfluenceCost(viewingCiv, heavy = true)}] Influence)"
+        val demandWorkerButton = (if (otherCiv.cityStateFunctions.heavyTributeLikeVp()) "Demand heavy tribute (-[${otherCiv.cityStateFunctions.tributeInfluenceCost(viewingCiv, heavy = true)}] Influence)"
+            else if (vpTribute) "Take worker (-[${otherCiv.cityStateFunctions.tributeInfluenceCost(viewingCiv, heavy = true)}] Influence)"
             else "Take worker (-50 Influence)").toTextButton()
         demandWorkerButton.onClick {
             otherCiv.cityStateFunctions.tributeWorker(viewingCiv)

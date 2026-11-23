@@ -2,6 +2,7 @@ package com.unciv.models.ruleset
 
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.quests.QuestImplementation
+import com.unciv.logic.civilization.managers.quests.QuestRewardKind
 import com.unciv.logic.civilization.managers.quests.IQuestImplementation
 import com.unciv.models.stats.INamed
 import yairm210.purity.annotations.Readonly
@@ -60,6 +61,42 @@ class Quest : INamed {
 
     /** Influence reward gained on quest completion */
     var influence: Float = 40f
+
+    /** The rewards of the other kinds (`SmallAwards` of Vox Populi), base amounts before the era and the multipliers: only with
+     *  [com.unciv.models.ModConstants.cityStateQuestsLikeVp], which also reads [influence] as the base of the influence (see [baseRewards]). 0 is none */
+    var gold = 0
+    var science = 0
+    var culture = 0
+    var faith = 0
+    var goldenAgePoints = 0
+    var food = 0
+    var production = 0
+    var tourism = 0
+    var happiness = 0
+    var greatPersonPoints = 0
+    var greatPersonPointsEverywhere = 0
+    var generalPoints = 0
+    var admiralPoints = 0
+    var experience = 0
+    var juggernauts = 0
+
+    /** `SmallAwards.Random`: the random share of the rewards is 0 to this, twice */
+    var randomMod = 0
+
+    /** Whether Vox Populi enables the quest (the types with weight 0 in all eras are off); only with [com.unciv.models.ModConstants.cityStateQuestsLikeVp] */
+    var enabled = true
+
+    /** The base amounts of all kinds for the rewards of [com.unciv.models.ModConstants.cityStateQuestsLikeVp] */
+    @Readonly
+    fun baseRewards(): Map<QuestRewardKind, Int> = mapOf(
+        QuestRewardKind.Influence to influence.toInt(),
+        QuestRewardKind.Gold to gold, QuestRewardKind.Science to science, QuestRewardKind.Culture to culture, QuestRewardKind.Faith to faith,
+        QuestRewardKind.GoldenAgePoints to goldenAgePoints, QuestRewardKind.Food to food, QuestRewardKind.Production to production,
+        QuestRewardKind.Tourism to tourism, QuestRewardKind.Happiness to happiness,
+        QuestRewardKind.GreatPersonPoints to greatPersonPoints, QuestRewardKind.GreatPersonPointsEverywhere to greatPersonPointsEverywhere,
+        QuestRewardKind.GeneralPoints to generalPoints, QuestRewardKind.AdmiralPoints to admiralPoints,
+        QuestRewardKind.Experience to experience, QuestRewardKind.Juggernauts to juggernauts,
+    )
 
     /** Maximum number of turns to complete the quest, 0 if there's no turn limit */
     var duration: Int = 0

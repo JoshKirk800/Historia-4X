@@ -169,6 +169,9 @@ enum class UniqueType(
     PoliciesNeededForWondersFewer("Wonders need 1 fewer adopted Policy for every [positiveAmount] allied City-States", UniqueTarget.Global,
         docDescription = "Lowers the number of adopted policies that `Requires [positiveAmount] adopted Policies` asks for by the allied City-States over this number (the original's " +
             "`Policies.XCSAlliesLowersPolicyNeedWonders`, CvPlayer::canConstruct, V:CvPlayer.cpp:14585-14595). The amounts of several uniques are added, as the original adds the policies' columns"),
+    IncreasedCityStateQuestRewards("City-State quest rewards are increased by [relativeAmount]%", UniqueTarget.Global,
+        docDescription = "Adds this percentage to the modifier of the rewards of City-State quests (the original's `Policies.IncreasedQuestRewards`, CvMinorCivAI::GetQuestRewardModifier, " +
+            "V:CvMinorCivAI.cpp:4949-4975). Only with `cityStateQuestsLikeVp`"),
     CityStateInfluencePerGiftedUnit("[amount] Influence per turn with City-States for each of their military units we gifted", UniqueTarget.Global,
         docDescription = "Only with the ModConstants `cityStateInfluenceLikeVp`: the original's `Traits.MinorInfluencePerGiftedUnit` (Germany, CvMinorCivAI::GetFriendshipChangePerTurnTimes100, " +
             "V:CvMinorCivAI.cpp:10401, 10426-10437), added to the change of each turn for each living military unit of the City-State that we gave it"),

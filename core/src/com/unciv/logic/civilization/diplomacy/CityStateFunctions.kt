@@ -354,9 +354,8 @@ class CityStateFunctions(val civInfo: Civilization) {
         if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateProtectionLikeVp) {
             diplomacy.turnLastPledged = civInfo.gameInfo.turns
             diplomacy.turnsSincePledgeWarning = 0
-            return
-        }
-        diplomacy.setFlag(DiplomacyFlags.RecentlyPledgedProtection, 10) // Can't break for 10 turns
+        } else diplomacy.setFlag(DiplomacyFlags.RecentlyPledgedProtection, 10) // Can't break for 10 turns
+        civInfo.questManager.recalculateRewards(otherCiv)
     }
 
     fun removeProtectorCiv(otherCiv: Civilization, forced: Boolean = false) {
@@ -371,6 +370,7 @@ class CityStateFunctions(val civInfo: Civilization) {
         diplomacy.diplomaticStatus = DiplomaticStatus.Peace
         diplomacy.setFlag(DiplomacyFlags.RecentlyWithdrewProtection, 20) // Can't re-pledge for 20 turns
         diplomacy.addInfluence(-20f)
+        civInfo.questManager.recalculateRewards(otherCiv)
     }
 
     @Readonly
@@ -454,6 +454,7 @@ class CityStateFunctions(val civInfo: Civilization) {
         val diplomacy = civInfo.getDiplomacyManager(major)!!
         diplomacy.diplomaticStatus = DiplomaticStatus.Peace
         diplomacy.turnsSincePledgeWarning = 0
+        civInfo.questManager.recalculateRewards(major)
         if (!broken) return
         diplomacy.turnLastPledgeBroken = civInfo.gameInfo.turns
         diplomacy.addInfluence(-(civInfo.gameInfo.ruleset.modOptions.constants.cityStateProtection.dishonourPerEra * max(1, major.getEraNumber())).toFloat())
@@ -991,6 +992,10 @@ class CityStateFunctions(val civInfo: Civilization) {
 
     fun tributeWorker(demandingCiv: Civilization) {
         if (!civInfo.isCityState) throw Exception("You can only demand workers from City-States!")
+        if (heavyTributeLikeVp()) {
+            tributeHeavyLikeVp(demandingCiv)
+            return
+        }
         val rng = civInfo.getDiplomacyManager(demandingCiv)!!.state.stateBasedRandom("CityStateFunctions.tributeWorker")
 
         val buildableWorkerLikeUnits = civInfo.gameInfo.ruleset.units.filter {
@@ -1008,6 +1013,27 @@ class CityStateFunctions(val civInfo: Civilization) {
             civInfo.getDiplomacyManager(demandingCiv)!!.addInfluence(-50f)
             cityStateBullied(demandingCiv)
         }
+        civInfo.addFlag(CivFlags.RecentlyBullied.name, 20)
+    }
+
+    /** Whether the heavy tribute is the one of Vox Populi (gold and the early rewards of the quests) and not the worker: the owner's rule, with both of the switches */
+    @Readonly
+    fun heavyTributeLikeVp(): Boolean {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        return constants.cityStateBullyLikeVp && constants.cityStateQuestsLikeVp
+    }
+
+    /**
+     *  The heavy tribute of CvMinorCivAI::DoMajorBullyUnit (V:CvMinorCivAI.cpp:14925-14975): gold equal to the normal tribute, the rewards of the personal quests of the demanding
+     *  civilization but their influence at once (the quests end), and the influence the heavy tribute costs
+     */
+    private fun tributeHeavyLikeVp(demandingCiv: Civilization) {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        val gold = goldGainedByTribute(demandingCiv)
+        demandingCiv.addGold(gold)
+        InstantYields.fire(UniqueType.TriggerUponDemandingTribute, demandingCiv, demandingCiv.getCapital(), gold)
+        civInfo.questManager.payRewardsEarly(demandingCiv)
+        bulliedReaction(demandingCiv, CityStateBully.influenceChangeTimes100(constants.cityStateBully, 0, 0, heavy = true))
         civInfo.addFlag(CivFlags.RecentlyBullied.name, 20)
     }
 

@@ -567,6 +567,53 @@ class ModConstants {
     var cityStateGoldGifts = true
 
     /**
+     *  The rewards of city-state quests as in Vox Populi (CvMinorCivQuest::CalculateRewards, V:CvMinorCivAI.cpp:329-895, DoRewards, 896-1067, CvMinorCivAI::GetQuestRewardModifier,
+     *  4949-4975) instead of Brave New World's influence alone: the [Quest] holds the rewards of many kinds, which grow with the era of the civilization, get a random share, the
+     *  percentage of the speed, the multipliers of the type and personality of the city-state, and the modifier of the civilization (protection, personality, policies); they are
+     *  frozen into the assigned quest and given out when it is complete. A heavy tribute (the owner's rule with [cityStateBullyLikeVp]) gives gold and the rewards of the personal
+     *  quests but their influence. Off: the old rules. The numbers are in [CityStateQuestConstants].
+     */
+    var cityStateQuestsLikeVp = false
+
+    /**
+     *  The defines of [cityStateQuestsLikeVp]. Can only be modded all-or-nothing; the defaults are Vox Populi 5.4.8's. [eraScalerPercent] the growth of a reward for each era after the
+     *  first (`iEraScaler`, V:CvMinorCivAI.cpp:347); [protectionBoost] `BALANCE_INFLUENCE_BOOST_PROTECTION_MINOR`, [friendlyModifier] `MINOR_CIV_QUEST_REWARD_FRIENDLY` and
+     *  [hostileModifier] `MINOR_CIV_QUEST_REWARD_HOSTILE` the percent added to the modifier of the civilization; [typeMultipliers] and [personalityMultipliers] the percent of a reward
+     *  of a [com.unciv.logic.civilization.managers.quests.QuestRewardKind] name by city-state type and by personality name (the `MINOR_CIV_QUEST_REWARD_*` defines; no entry is 100).
+     */
+    data class CityStateQuestConstants(
+        val eraScalerPercent: Int = 50,
+        val protectionBoost: Int = 15,
+        val friendlyModifier: Int = 25,
+        val hostileModifier: Int = -25,
+        val typeMultipliers: Map<String, Map<String, Int>> = mapOf(
+            "Gold" to mapOf("Mercantile" to 150, "Maritime" to 125),
+            "Science" to mapOf("Religious" to 60),
+            "Culture" to mapOf("Cultured" to 150),
+            "Faith" to mapOf("Religious" to 150),
+            "GoldenAgePoints" to mapOf("Cultured" to 150, "Religious" to 125),
+            "Food" to mapOf("Maritime" to 150, "Mercantile" to 50),
+            "Production" to mapOf("Militaristic" to 125),
+            "Tourism" to mapOf("Militaristic" to 50, "Cultured" to 125),
+            "GreatPersonPoints" to mapOf("Cultured" to 75),
+            "GreatPersonPointsEverywhere" to mapOf("Religious" to 125, "Cultured" to 75),
+            "GeneralPoints" to mapOf("Militaristic" to 150, "Cultured" to 75),
+            "AdmiralPoints" to mapOf("Maritime" to 150, "Cultured" to 75),
+            "Experience" to mapOf("Militaristic" to 125, "Religious" to 50),
+        ),
+        val personalityMultipliers: Map<String, Map<String, Int>> = mapOf(
+            "Culture" to mapOf("Neutral" to 80, "Irrational" to 125),
+            "Faith" to mapOf("Neutral" to 60),
+            "GoldenAgePoints" to mapOf("Irrational" to 60),
+            "Food" to mapOf("Neutral" to 80),
+            "Tourism" to mapOf("Neutral" to 125, "Irrational" to 75),
+            "GreatPersonPoints" to mapOf("Neutral" to 150, "Irrational" to 75),
+            "GreatPersonPointsEverywhere" to mapOf("Neutral" to 125),
+        ),
+    )
+    var cityStateQuests = CityStateQuestConstants()
+
+    /**
      *  Demanding tribute from a city-state as in Vox Populi (CvMinorCivAI::CalculateBullyScore, V:CvMinorCivAI.cpp:14015-14400, GetBullyGoldAmount, 13969-14012, CanMajorBullyGold,
      *  14403-14470, DoMajorBullyGold, 14603-14750, DoBulliedByMajorReaction, 15025-15080; MOD_BALANCE_VP with MOD_BALANCE_HEAVY_TRIBUTE) instead of Brave New World's: the score is the
      *  share of the military might of all the civilizations and the local power, with no base reluctance and no penalty for low influence, gold needs a score of 20 and heavy tribute

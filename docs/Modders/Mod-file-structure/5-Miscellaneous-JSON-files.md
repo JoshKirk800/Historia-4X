@@ -381,6 +381,8 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | cityStateInfluence                       | Object  | [See below](#citystateinfluenceconstants) | The defines of that model, only read with `cityStateInfluenceLikeVp` |
 | cityStateProtectionLikeVp                | Boolean | false                        | The pledge to protect a City-State as in Vox Populi instead of Brave New World's: only a civilization whose military might over its distance is at least the median of all, and that is the ally, has a trade route with the City-State or could make one, can pledge; it cannot be withdrawn for 50 turns; one that no longer qualifies ends after a warning of 12 turns, or at once below 0 influence, and costs influence for the era |
 | cityStateProtection                    | Object  | [See below](#citystateprotectionconstants) | The defines of that model, only read with `cityStateProtectionLikeVp` |
+| cityStateQuestsLikeVp                    | Boolean | false                        | The rewards of City-State quests as in Vox Populi instead of influence alone: the quests hold rewards of 15 kinds which grow with the era, get a random share, the speed's percentage and the multipliers of the type and personality of the City-State and the modifier of the civilization, are frozen when the quest is assigned and paid when it is complete; a heavy tribute (with `cityStateBullyLikeVp`) gives gold and the rewards of the personal quests |
+| cityStateQuests                          | Object  | [See below](#citystatequestconstants) | The defines of that model, only read with `cityStateQuestsLikeVp` |
 | cityStateGoldGifts                       | Boolean | true                         | Whether gold can be given to a City-State for influence, by the player and by the AI. Vox Populi has none (`CSD_GOLD_GIFT_DISABLED`) |
 | cityStateBullyLikeVp                     | Boolean | false                        | Demanding tribute as in Vox Populi instead of Brave New World's: the score is the share of the military might and the local power with no base reluctance and no penalty for low influence, gold needs a score of 20 and the heavy tribute (the worker) 100, a demand costs 30 influence and what the civilization has over its resting point, and the `upon demanding tribute from a City-State` yields are paid |
 | cityStateBully                           | Object  | [See below](#citystatebullyconstants) | The defines of that model, only read with `cityStateBullyLikeVp` |
@@ -714,6 +716,19 @@ The defines of `cityStateBullyLikeVp`, with the penalties as positive numbers. T
 | militaristicPenalty | Int | 10 | For a Militaristic City-State |
 | liberatedPenalty | Int | 100 | Taken off the score for a City-State liberated within `recentlyLiberatedTurns` |
 | scoreCap | Int | 100 | The highest score |
+
+#### CityStateQuestConstants
+
+The defines of `cityStateQuestsLikeVp`. These values are not merged individually, only the entire sub-structure is. The defaults are Vox Populi 5.4.8's.
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| eraScalerPercent | Int | 50 | The growth of a reward in percent for each era after the first (the 0-based era number counts, Ancient is 0) |
+| protectionBoost | Int | 15 | `BALANCE_INFLUENCE_BOOST_PROTECTION_MINOR`: added to the modifier if the civilization protects the City-State |
+| friendlyModifier | Int | 25 | `MINOR_CIV_QUEST_REWARD_FRIENDLY`: added to the modifier for a Friendly City-State |
+| hostileModifier | Int | -25 | `MINOR_CIV_QUEST_REWARD_HOSTILE`: added for a Hostile one |
+| typeMultipliers | Map | Vox Populi's | The percent of the reward of a kind (Gold, Science, Culture, Faith, GoldenAgePoints, Food, Production, Tourism, GreatPersonPoints, GreatPersonPointsEverywhere, GeneralPoints, AdmiralPoints, Experience) by City-State type; no entry is 100 |
+| personalityMultipliers | Map | Vox Populi's | The same by personality (Neutral, Irrational) |
 
 #### CityStateProtectionConstants
 

@@ -55,7 +55,13 @@ class AssignedQuest(
     val questNameInstance get() = quest.questNameInstance
 
 
-    fun clone() = AssignedQuest(questName, assigner, assignee, assignedOnTurn, data1, data2)
+    /**
+     *  The rewards that were calculated when the quest was assigned and recalculated since, by [QuestRewardKind] name; empty for the rewards of the [quest] itself (the influence alone).
+     *  Only with [com.unciv.models.ModConstants.cityStateQuestsLikeVp]
+     */
+    var rewards = HashMap<String, Int>()
+
+    fun clone() = AssignedQuest(questName, assigner, assignee, assignedOnTurn, data1, data2).also { it.rewards.putAll(rewards) }
 
     internal fun setTransients(gameInfo: GameInfo, quest: Quest? = null) {
         this.gameInfo = gameInfo
@@ -79,7 +85,10 @@ class AssignedQuest(
     @Suppress("MemberVisibilityCanBePrivate")
     @Readonly fun getDuration(): Int = (gameInfo.speed.modifier * quest.duration).toInt()
     @Readonly fun getRemainingTurns(): Int = (assignedOnTurn + getDuration() - gameInfo.turns).coerceAtLeast(0)
-    @Readonly fun getInfluence() = quest.influence
+    @Readonly fun getInfluence() = rewards[QuestRewardKind.Influence.name]?.toFloat() ?: quest.influence
+
+    /** The calculated rewards of the kinds that are paid, see [rewards] */
+    @Readonly fun getRewards(): Map<QuestRewardKind, Int> = rewards.mapNotNull { (name, amount) -> QuestRewardKind.entries.firstOrNull { it.name == name }?.let { it to amount } }.toMap()
 
     @Readonly fun getDescription(): String = quest.description.fillPlaceholders(data1)
 

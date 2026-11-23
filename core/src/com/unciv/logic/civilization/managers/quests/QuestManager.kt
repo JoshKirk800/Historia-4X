@@ -11,16 +11,23 @@ import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
+import com.unciv.logic.city.City
 import com.unciv.logic.civilization.managers.quests.QuestTargetHelpers.getRandom
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.ruleset.Quest
 import com.unciv.models.ruleset.QuestName
+import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.stats.Stat
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.toPercent
 import com.unciv.utils.randomWeighted
 import yairm210.purity.annotations.Pure
 import yairm210.purity.annotations.Readonly
+import java.util.Objects
 import kotlin.collections.iterator
+import kotlin.math.roundToInt
+import kotlin.random.Random
 
 @Suppress("ConvertArgumentToSet")  // Flags all assignedQuests.removeAll(List) - not worth it
 class QuestManager : IsPartOfGameInfoSerialization {
@@ -355,6 +362,8 @@ class QuestManager : IsPartOfGameInfoSerialization {
             )
             val notificationActions = quest.questNameInstance.getNotificationActions(civ, newQuest)
 
+            if (civ.gameInfo.ruleset.modOptions.constants.cityStateQuestsLikeVp)
+                newQuest.rewards = HashMap(calculateRewards(newQuest, assignee).mapKeys { it.key.name })
             assignedQuests.add(newQuest)
             if (quest.isIndividual())
                 individualQuestCountdown[assignee.civID] = UNSET
@@ -400,10 +409,87 @@ class QuestManager : IsPartOfGameInfoSerialization {
         civ.getDiplomacyManager(assignee)!!.addInfluence(rewardInfluence)
         if (rewardInfluence > 0)
             assignee.addQuestNotification("[${civ.civName}] rewarded you with [${rewardInfluence.toInt()}] influence for completing the [${assignedQuest.questName}] quest.")
+        if (civ.gameInfo.ruleset.modOptions.constants.cityStateQuestsLikeVp)
+            payRewards(assignee, assignedQuest.getRewards(), assignedQuest.questName)
 
         // We may have received bonuses from city-state friend-ness or ally-ness
         for (city in civ.cities)
             city.cityStats.update()
+    }
+
+    /**
+     *  CvMinorCivQuest::CalculateRewards (V:CvMinorCivAI.cpp:329-895) for [assignee]: the base rewards of the quest through [CityStateQuestRewards.calculate]. The random share is
+     *  fixed by the turn, the quest and the civilizations; the religion's influence modifier is P5 (0 here)
+     */
+    private fun calculateRewards(assignedQuest: AssignedQuest, assignee: Civilization): Map<QuestRewardKind, Int> {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        val quest = assignedQuest.quest
+        var increased = 0
+        assignee.forEachMatchingUnique(UniqueType.IncreasedCityStateQuestRewards) { increased += it.params[0].toInt() }
+        val protectedByThem = civ.getDiplomacyManager(assignee)?.diplomaticStatus == DiplomaticStatus.Protector
+        val modifier = CityStateQuestRewards.modifierPercent(constants.cityStateQuests, increased, protectedByThem, civ.cityStatePersonality)
+        val random = if (quest.randomMod > 0)
+            Random(Objects.hash(civ.gameInfo.turns, civ.civID, assignee.civID, quest.name)).nextInt(quest.randomMod + 1) * 2
+        else 0
+        val rewards = CityStateQuestRewards.calculate(constants.cityStateQuests, quest.baseRewards(), assignee.getEraNumber(), random, modifier,
+            (civ.gameInfo.speed.instantYieldModifier * 100).roundToInt(), civ.cityStateType.name, civ.cityStatePersonality.name)
+        // the influence is always there, so that a quest without any is not read as one of the old rules
+        return if (QuestRewardKind.Influence in rewards) rewards else rewards + (QuestRewardKind.Influence to 0)
+    }
+
+    /**
+     *  CvMinorCivAI::RecalculateRewards (V:CvMinorCivAI.cpp:1069-1080), when the protection of [major] changes: the rewards of its quests are calculated again and each kind only rises
+     */
+    fun recalculateRewards(major: Civilization) {
+        if (!civ.gameInfo.ruleset.modOptions.constants.cityStateQuestsLikeVp) return
+        for (assigned in getAssignedQuestsFor(major))
+            assigned.rewards = HashMap(CityStateQuestRewards.recalculated(assigned.getRewards(), calculateRewards(assigned, major)).mapKeys { it.key.name })
+    }
+
+    /**
+     *  CvMinorCivQuest::DoRewards (V:CvMinorCivAI.cpp:896-1067) but the influence, which the caller gave: gold, science, culture and faith to [assignee], food and production to
+     *  its capital, golden age points, great person points of every great person in the capital or in all cities, experience to all its military units. Tourism, general and admiral
+     *  points, happiness and the juggernauts are not paid yet (P5, P6, the quest types of P4.2d)
+     */
+    private fun payRewards(assignee: Civilization, rewards: Map<QuestRewardKind, Int>, questName: String) {
+        val capital = assignee.getCapital() ?: return
+        val given = ArrayList<String>()
+        for ((kind, amount) in rewards) {
+            if (amount <= 0) continue
+            when (kind) {
+                QuestRewardKind.Gold -> assignee.addStat(Stat.Gold, amount)
+                QuestRewardKind.Science -> assignee.addStat(Stat.Science, amount)
+                QuestRewardKind.Culture -> assignee.addStat(Stat.Culture, amount)
+                QuestRewardKind.Faith -> assignee.addStat(Stat.Faith, amount)
+                QuestRewardKind.Food -> capital.addStat(Stat.Food, amount)
+                QuestRewardKind.Production -> capital.addStat(Stat.Production, amount)
+                QuestRewardKind.GoldenAgePoints -> assignee.goldenAges.addHappiness(amount)
+                QuestRewardKind.GreatPersonPoints -> addGreatPersonPoints(capital, amount)
+                QuestRewardKind.GreatPersonPointsEverywhere -> assignee.cities.forEach { addGreatPersonPoints(it, amount) }
+                QuestRewardKind.Experience -> assignee.units.getCivUnits().filter { !it.isCivilian() }.forEach { it.promotions.XP += amount }
+                else -> continue
+            }
+            given += "[$amount] ${kind.name}"
+        }
+        if (given.isNotEmpty())
+            assignee.addQuestNotification("[${civ.civName}] rewarded you with ${given.joinToString()} for the [$questName] quest.")
+    }
+
+    /** The great person points of the specialists of [city] (V:CvMinorCivAI.cpp:1000-1030: every specialist that spawns a great person gets [amount]) */
+    private fun addGreatPersonPoints(city: City, amount: Int) {
+        for (name in civ.gameInfo.ruleset.specialists.values.flatMap { it.greatPersonPoints.keys }.distinct())
+            city.greatPersonProgress.add(name, amount)
+    }
+
+    /**
+     *  A heavy tribute of [demanding] (V:CvMinorCivAI.cpp:14966-14972, IsRevoked(bHeavyTribute), 1669-1692): the rewards of its personal quests but their influence are given at once
+     *  and the quests end
+     */
+    fun payRewardsEarly(demanding: Civilization) {
+        if (!civ.gameInfo.ruleset.modOptions.constants.cityStateQuestsLikeVp) return
+        for (assigned in getAssignedQuestsFor(demanding).filter { it.isIndividual() })
+            payRewards(demanding, assigned.getRewards(), assigned.questName)
+        assignedQuests.removeAll { it.isIndividual() && it.assigneeCiv == demanding }
     }
 
     /** Notifies the assignee of [assignedQuest] that the quest is now obsolete or expired.

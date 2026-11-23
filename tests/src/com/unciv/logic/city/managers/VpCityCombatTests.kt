@@ -113,7 +113,7 @@ class VpCityCombatTests {
 
     @Test fun defenseProcessAccumulatesButDoesNotBoostStrike() {
         val constants = game.ruleset.modOptions.constants.cityCombat
-        constants.defenseProcesses = mapOf("Defense" to com.unciv.models.ruleset.CityDefenseProcess(10, 1, 15))
+        constants.defenseProcesses = hashMapOf("Defense" to com.unciv.models.ruleset.CityDefenseProcess(10, 1, 15))
         city.cityConstructions.addToQueue("Defense")
         city.cityStats.currentCityStats.production = 20f
         val combatant = CityCombatant(city)

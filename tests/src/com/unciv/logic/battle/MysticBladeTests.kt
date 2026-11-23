@@ -206,6 +206,7 @@ class MysticBladeTests {
         unit.getTile().setOwningCity(hostileCity)
         unit.health = 80
         UnitTurnManager(unit).endTurn()
-        assertEquals(70, unit.health) // heals 10, then takes 20 attrition
+        // heals at the enemy territory rate of the ruleset (5 in Vox Populi: ENEMY_HEAL_RATE, ModOptions.json), then takes 20 attrition: 80 + 5 - 20
+        assertEquals(80 + game.ruleset.modOptions.constants.enemyUnitHeal - 20, unit.health)
     }
 }

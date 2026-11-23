@@ -2,6 +2,7 @@ package com.unciv.logic.civilization
 
 import com.unciv.Constants
 import com.unciv.logic.map.HexCoord
+import com.unciv.models.ModConstants
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
@@ -22,6 +23,9 @@ class AiUnitSupplyTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // the formula tested here is the original's / Community Patch's, not VP's breakdown that the BNW ruleset has switched on
+        game.ruleset.modOptions.constants.unitSupplyLikeVp = false
+        game.ruleset.modOptions.constants.unitSupplyConstants = ModConstants.UnitSupplyConstants()
         game.makeHexagonalMap(8, Constants.grassland)
         game.setDifficulty("Prince")
     }

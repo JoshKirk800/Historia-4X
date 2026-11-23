@@ -38,6 +38,9 @@ class VpPromotionStrengthFormsTests {
     /** Our civilization has [ourUniques]; (0, 0), (1, 0), (-1, 0) and (0, 1) are flat Grassland, whose defence modifier is 0 */
     private fun fight(vararg ourUniques: String): Fight {
         val game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // The Brave New World ruleset switches every one of these on: each test starts from the default (off) of ModConstants and switches on what it tests
+        for (switch in listOf("combatHealthStrengthLikeVp", "unitMaxHitPointsLikeVp", "unitHealingLikeVp", "stateReligionHealingLikeVp", "cityCombatLikeVp", "enemyCombatAurasLikeVp"))
+            setFlag(game, switch, false)
         game.makeHexagonalMap(3)
         for ((x, y) in listOf(0 to 0, 1 to 0, -1 to 0, 0 to 1)) game.setTileTerrain(game.getTile(x, y).position, "Grassland")
         val ours = game.addCiv(*ourUniques, isPlayer = true)

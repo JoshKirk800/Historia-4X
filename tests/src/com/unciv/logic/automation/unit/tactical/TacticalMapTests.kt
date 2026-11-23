@@ -52,7 +52,8 @@ class TacticalMapTests {
         return civ.ai.tactical.map
     }
 
-    private fun cityStrength() = CityCombatant(city).getCityStrength() * 100 * city.health / game.ruleset.ai.define(AiDefine.MAX_CITY_HIT_POINTS)
+    /** CvTacticalAnalysisMap::CalculateMilitaryStrengths: getStrengthValue x (GetMaxHitPoints - damage) / GetMaxHitPoints, in hundredths; the maximum is the city's own (250 + 8 per citizen with Vox Populi's city combat) */
+    private fun cityStrength() = CityCombatant(city).getCityStrength() * 100 * city.health / CityCombatant(city).getMaxHealth()
     private fun zone() = map().zoneOf(city.getCenterTile())!!
 
     @Test
@@ -106,7 +107,7 @@ class TacticalMapTests {
         assertEquals(cityStrength(), full)
         assertEquals(0, zone().friendlyMeleeStrength)
         assertEquals(0, zone().totalFriendlyUnitCount)
-        city.health = game.ruleset.ai.define(AiDefine.MAX_CITY_HIT_POINTS) / 2
+        city.health = CityCombatant(city).getMaxHealth() / 2
         assertEquals(full / 2, zone().friendlyRangedStrength)
     }
 

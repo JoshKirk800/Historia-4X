@@ -4,6 +4,7 @@ import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.battle.BattleDamage
 import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.city.City
+import com.unciv.logic.city.managers.CityTurnManager
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
@@ -155,8 +156,8 @@ class TacticalSimulationTests {
     // endregion
     // region Cities
     /** An enemy city with [count] units of ours next to it. */
-    private fun besiegedCity(unitName: String, count: Int): Pair<City, List<MapUnit>> {
-        val city = game.addCity(enemy, tile(0), replacePalace = true, initialPopulation = 4)
+    private fun besiegedCity(unitName: String, count: Int, population: Int = 4): Pair<City, List<MapUnit>> {
+        val city = game.addCity(enemy, tile(0), replacePalace = true, initialPopulation = population)
         val units = city.getCenterTile().neighbors.filter { it.militaryUnit == null && !it.isCityCenter() }.take(count).map { game.addUnit(unitName, civ, it) }.toList()
         return city to units
     }
@@ -169,10 +170,12 @@ class TacticalSimulationTests {
 
     @Test
     fun `a city is not attacked while it is too early, and is when the units do more than it has hit points`() {
-        val (city, units) = besiegedCity("Warrior", 1)
+        // With Vox Populi's city (strength 5.0 and 250 + 8 hit points per citizen) a Warrior does about 41 of damage and the city heals 8 + its citizens (x3 when nobody
+        // blockades it), not the 20 a turn of the original: a city of 12 citizens (346 hit points, 20 healed) is the one a single Warrior is still too early for
+        val (city, units) = besiegedCity("Warrior", 1, population = 12)
         var ctx = siegeContext(city)
         var expected = TacticalSimulation.computeTotalExpectedDamage(ctx, city.getCenterTile(), TacticalSimulation.findUnitsWithinStrikingDistance(ctx, city.getCenterTile()))
-        val healed = 20
+        val healed = CityTurnManager(city).getHealPerTurn()
         val full = city.health
         assertTrue("expected=$expected healed=$healed full=$full", expected > 0 && (expected - healed) * 13 < full && expected < full)
 

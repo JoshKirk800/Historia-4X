@@ -154,7 +154,8 @@ class VpMilitaryShapesTests {
         city.religion.addPressure(religion.name, 100) // IsBeliefValid: a follower belief needs the holy city to follow the religion
         setFlag(game, "unitHealingLikeVp", true)
         setFlag(game, "stateReligionHealingLikeVp", true)
-        assertEquals(29, unit.healingAmountForTile(tile, noTerrainDamage = true))
+        // Own territory heals at the friendly rate of the ruleset (15 in Vox Populi, as set in ModOptions.json), plus the +9 of the belief
+        assertEquals(game.ruleset.modOptions.constants.friendlyUnitHeal + 9, unit.healingAmountForTile(tile, noTerrainDamage = true))
     }
 
     @Test
@@ -185,6 +186,8 @@ class VpMilitaryShapesTests {
         tile.baseTerrain = "Coast"
         tile.setTerrainTransients()
         val unit = game.addUnit("Warrior", civ, tile)
+        // The Brave New World ruleset sets Vox Populi's 3: the default of ModConstants is the original's 2
+        setInt(game, "embarkedUnitMovement", com.unciv.models.ModConstants().embarkedUnitMovement)
         assertEquals(2, unit.getMaxMovement())
         setInt(game, "embarkedUnitMovement", 3)
         assertEquals(3, unit.getMaxMovement())
@@ -362,6 +365,7 @@ class VpMilitaryShapesTests {
             unitTypes = listOf("Worker")
         }
         game.ruleset.unitPromotions[promotion.name] = promotion
+        setFlag(game, "civilianPromotionApplicabilityLikeVp", false) // the Brave New World ruleset switches it on; the default of ModConstants is off
         org.junit.Assert.assertFalse(worker.promotions.getAvailablePromotions().any { it.name == promotion.name })
         setFlag(game, "civilianPromotionApplicabilityLikeVp", true)
         org.junit.Assert.assertTrue(worker.promotions.getAvailablePromotions().any { it.name == promotion.name })
@@ -388,6 +392,7 @@ class VpMilitaryShapesTests {
         attackerCiv.getDiplomacyManager(defenderCiv)!!.declareWar()
         val attacker = game.addUnit("Warrior", attackerCiv, game.getTile(0, 0))
         val defender = game.addUnit("Warrior", defenderCiv, game.getTile(1, 0))
+        setFlag(game, "combatXpFirstAttackOnly", false) // the Brave New World ruleset switches it on; the default of ModConstants is off
         attacker.attacksThisTurn = 1
         Battle.attack(MapUnitCombatant(attacker), MapUnitCombatant(defender))
         assertEquals(5, attacker.promotions.XP)

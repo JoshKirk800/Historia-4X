@@ -539,12 +539,14 @@ class ArchaeologyTests {
     }
 
     @Test
-    fun `an archaeologist needs a University in the city, and the technology`() {
+    fun `an archaeologist needs a Museum in the city, and the technology`() {
+        // Vox Populi: Unit_BuildingClassRequireds UNIT_ARCHAEOLOGIST -> BUILDINGCLASS_MUSEUM (Brave New World: University)
         val archaeologist = game.ruleset.units["Archaeologist"]!!
         city.cityConstructions.addBuilding("Library")
+        city.cityConstructions.addBuilding("University")
         civ.tech.addTechnology("Archaeology")
         assertFalse(archaeologist.isBuildable(city.cityConstructions))
-        city.cityConstructions.addBuilding("University")
+        city.cityConstructions.addBuilding("Museum")
         assertTrue(archaeologist.isBuildable(city.cityConstructions))
     }
     //endregion

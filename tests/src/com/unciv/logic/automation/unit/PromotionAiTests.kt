@@ -70,10 +70,32 @@ class PromotionAiTests {
     @Test
     fun `ranged promotions need a ranged unit and use the ranged flavor`() {
         val archer = unit("Archer")
-        assertValue(15 + 4 * 2, value(archer, "Accuracy I"), "Accuracy I")
-        assertValue(15 * 2 + 4 * 2, value(archer, "Barrage I"), "Barrage I")
+        // The row of AI.json (open 15 / rough 15, + ranged flavor x 2) plus the term of Vox Populi's promotions, which the ruleset now has: Accuracy I has
+        // `<vs units at or below half health>` +10: 10 x (defense 3 + 2 x offense 5) x 0.25 (a shooter) = 32; Barrage I `<vs units above half health>` +10:
+        // 10 x (defense 3 + 2 x city defense 0) x 0.45 = 13 (the test of Vox Populi's terms below has them alone)
+        assertValue(15 + 4 * 2 + 32, value(archer, "Accuracy I"), "Accuracy I")
+        assertValue(15 * 2 + 4 * 2 + 13, value(archer, "Barrage I"), "Barrage I")
         val swordsman = unit("Swordsman", HexCoord(0, 1))
-        assertEquals(0, value(swordsman, "Accuracy I"))
+        // The row of AI.json rates nothing for a unit that cannot shoot; what stays is the health term, 10 x (3 + 2 x 5) x 0.4 for a melee unit
+        assertValue(52, value(swordsman, "Accuracy I"), "Accuracy I of a melee unit")
+    }
+
+    @Test
+    fun `Vox Populi's terms rate what the uniques of a promotion do, those with a switch only while it is on`() {
+        // CvUnit::AI_promotionValue (VP 5.4.8) for promotions with no row in AI.json: only the terms of PromotionAi.vpUniqueValue
+        val belowHalf = game.createUnitPromotion("[+10]% Strength <vs units at or below half health>")
+        val archer = unit("Archer")
+        val swordsman = unit("Swordsman", HexCoord(0, 1))
+        // AttackBelowEqual50HealthMod x (defense 3 + 2 x offense 5) x 0.25 for a shooter, 0.4 for the others
+        assertValue(32, value(archer, belowHalf.name), "below half health, a shooter")
+        assertValue(52, value(swordsman, belowHalf.name), "below half health")
+
+        val hitPoints = game.createUnitPromotion("[+25] maximum hit points")
+        // MaxHitPointsChange: a shooter half of 25 x (offense 5 + defense 3 + city defense 0), the others 25 x (2 x offense 5 + defense 3)
+        assertValue(100, value(archer, hitPoints.name), "hit points, a shooter")
+        assertValue(325, value(swordsman, hitPoints.name), "hit points")
+        game.ruleset.modOptions.constants.unitMaxHitPointsLikeVp = false
+        assertEquals("the switch off: not read", 0, value(swordsman, hitPoints.name))
     }
 
     @Test
@@ -100,14 +122,18 @@ class PromotionAiTests {
 
     @Test
     fun `a promotion the original rates nothing of is not taken`() {
-        // A submarine may take Wolfpack I (a plain attack bonus the rating does not read) or Targeting I (rated by its domain modifier)
+        // A submarine that has Wolfpack I may take Wolfpack II or Torpedo I (plain attack bonuses the rating does not read) or Mobility (rated by its extra move; in
+        // Vox Populi's promotions Targeting I is no longer a submarine's)
         game.setTileTerrain(HexCoord(2, 0), "Ocean")
         val submarine = unit("Submarine", HexCoord(2, 0))
+        submarine.promotions.addPromotion("Wolfpack I", isFree = true)
         assertEquals(0, value(submarine, "Wolfpack I"))
+        assertEquals(0, value(submarine, "Wolfpack II"))
+        assertEquals(0, value(submarine, "Torpedo I"))
         submarine.promotions.XP = 1000
         NextTurnAutomation.applyPromotions(GameView(game.gameInfo, civ).getMapUnitView(submarine))
-        assertTrue("Targeting I" in submarine.promotions.promotions)
-        assertTrue(submarine.promotions.promotions.none { it.startsWith("Wolfpack") })
+        assertTrue("Mobility" in submarine.promotions.promotions)
+        assertTrue(submarine.promotions.promotions.none { it.startsWith("Wolfpack") && it != "Wolfpack I" || it.startsWith("Torpedo") })
     }
 
     @Test

@@ -145,6 +145,8 @@ class DiplomacyContactAndDemandTests {
 
     @Test
     fun `aircraft are no combat units for the military posture`() {
+        // The BNW ruleset holds 2 aircraft in a city (Vox Populi); the six fighters of this test need the original six slots
+        game.ruleset.modOptions.constants.airBasingLikeVp = false
         // An air base of b 4 tiles from a's city, in b's own land: 5 a unit if they counted, 6 fighters are 30
         val airbase = game.addCity(b, game.getTile(HexCoord(4, 1))).getCenterTile()
         val tiles = listOf(HexCoord(0, 3), HexCoord(1, 3), HexCoord(-1, 3), HexCoord(0, 4)).map { game.getTile(it) }

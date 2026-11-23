@@ -21,6 +21,9 @@ class TenetEffectTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // The wounded-unit tests read the original's rule (the lost health lowers the damage dealt, the penalty unique lowers that loss); the Brave New World ruleset
+        // plays Vox Populi's (a strength penalty, the unique a flat strength bonus: VpMilitaryShapesTests, VpPromotionStrengthFormsTests)
+        game.ruleset.modOptions.constants.combatHealthStrengthLikeVp = false
         game.makeHexagonalMap(10)
     }
 

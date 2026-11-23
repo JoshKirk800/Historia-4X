@@ -185,7 +185,8 @@ class PlotDefenseTests {
         border()
         stance(MajorCivApproach.Guarded, StrengthLevel.Immense)
         game.setTileTerrain(p.position, "Hill")
-        assertEquals("hills 25%: 400 × (2 × (25 + 50)) / 100 = 600", 600 * 420 / 100, value("Fort"))
+        // Terrains.json (Vox Populi's hills): Hill defenceBonus 0.1, so 10%: 400 × (2 × (10 + 50)) / 100 = 480 (the Fort's own 50%); the forest below still has its 25%
+        assertEquals("hills 10%: 400 × (2 × (10 + 50)) / 100 = 480", 480 * 420 / 100, value("Fort"))
 
         game.setTileTerrainAndFeatures(p.position, "Grassland", "Forest")
         assertEquals("a forest 25%", 600 * 420 / 100, value("Fort"))

@@ -5,6 +5,7 @@ import com.unciv.logic.city.City
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
+import com.unciv.models.ModConstants
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
@@ -30,6 +31,10 @@ class VpUnitSupplyTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // the BNW ruleset has the switch on and VP's constants since the M4 activation; each test starts from the original's formula and
+        // switches on (setSwitch) and sets the constants it tests
+        game.ruleset.modOptions.constants.unitSupplyLikeVp = false
+        game.ruleset.modOptions.constants.unitSupplyConstants = ModConstants.UnitSupplyConstants()
         game.makeHexagonalMap(8, Constants.grassland)
         civ = game.addCiv(isPlayer = true)
         val origin = game.getTile(HexCoord(0, 0))

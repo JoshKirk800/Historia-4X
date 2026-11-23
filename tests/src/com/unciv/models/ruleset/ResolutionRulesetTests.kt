@@ -104,7 +104,10 @@ class ResolutionRulesetTests {
     fun `nuclear weapons cannot be built under Nuclear Non-Proliferation`() {
         for (unit in listOf("Atomic Bomb", "Nuclear Missile")) {
             val uniques = bnw.units[unit]!!.uniqueObjects
-            val unbuildable = uniques.single { it.type == UniqueType.Unbuildable }
+            // Vox Populi's objects also have an `Unbuildable <for [City-State] Civilizations>`: pick the one of the resolution
+            val unbuildable = uniques.single { unique ->
+                unique.type == UniqueType.Unbuildable && unique.modifiers.any { it.text.contains("Nuclear Non-Proliferation") }
+            }
             assertEquals(listOf("when the [Nuclear Non-Proliferation] resolution is in effect"), unbuildable.modifiers.map { it.text })
             assertTrue(uniques.any { it.type == UniqueType.OnlyAvailable })
         }

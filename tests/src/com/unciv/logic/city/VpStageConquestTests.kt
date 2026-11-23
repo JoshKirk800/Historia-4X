@@ -212,6 +212,9 @@ class VpStageConquestTests {
     @Test
     fun `without the key a conquered city has half of its maximum whatever damage it had`() {
         val game = newGame(switchOn = false)
+        // The legacy rule is the original's, with its fixed maximum of 200: the Brave New World ruleset switches Vox Populi's population-based maximum on, and the
+        // citizens the capture takes then lower the half that the city was given before
+        setFlag(game, "cityCombatLikeVp", false)
         val defender = game.addCiv()
         val attacker = game.addCiv()
         val city = cityWithSpare(game, defender, 6)

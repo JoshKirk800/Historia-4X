@@ -608,10 +608,11 @@ class NavalOperationTests {
 
     @Test
     fun `the nuke goes for the enemy city with the best blast value in range`() {
-        // Atomic Bomb range 10; the nuke in our city reaches both of these cities, not the far one
+        // Atomic Bomb range 6 (Vox Populi's; it was 10 in the original BNW data): the nuke in our city reaches both of these cities (5 and 4 away), not the far one (14)
         val nuke = game.addUnit("Atomic Bomb", civ, tile(0))
-        val big = game.addCity(enemy, tile(-1, 8))
-        val small = game.addCity(enemy, tile(0, 7))
+        assertEquals(6, nuke.getRange())
+        val big = game.addCity(enemy, tile(-1, 5))
+        val small = game.addCity(enemy, tile(0, 4))
         big.population.setPopulation(8)
         small.population.setPopulation(3)
         val probe = AiOperation().also { it.type = AiOperationType.NUKE_ATTACK; it.enemyCivId = enemy.civID }
@@ -639,7 +640,7 @@ class NavalOperationTests {
     @Test
     fun `a nuke operation uses the nuke at once and ends in success`() {
         val nuke = game.addUnit("Atomic Bomb", civ, tile(0))
-        game.addCity(enemy, tile(0, 7)).population.setPopulation(6)
+        game.addCity(enemy, tile(0, 5)).population.setPopulation(6) // within the Atomic Bomb's range of 6
         val operation = AiOperationLogic.addOperation(civ, AiOperationType.NUKE_ATTACK, enemy)
         assertEquals(OperationState.SUCCESSFUL_FINISH, operation.state)
         assertTrue("the bomb self-destructs", nuke.isDestroyed)

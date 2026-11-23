@@ -46,6 +46,13 @@ class VpStageAirTests {
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        // The BNW ruleset has the three switches on with Vox Populi's numbers; each test turns on what it is about (setSwitch, vpBasing)
+        // and the "without the switch" ones pin the original behaviour
+        val constants = game.ruleset.modOptions.constants
+        constants.airBasingLikeVp = false
+        constants.airBasing = ModConstants.AirBasingConstants()
+        constants.airDefenseLikeVp = false
+        constants.airInterceptionLikeVp = false
         game.makeHexagonalMap(12)
         us = game.addCiv()
         them = game.addCiv()

@@ -28,7 +28,9 @@ class UnitPurchaseContentTests {
         for (name in listOf("Worker", "Work Boats", "Caravan", "Cargo Ship")) assertEquals(name, 5, ruleset.units[name]!!.purchaseCooldown)
         val military = ruleset.units.values.filter { it.strength > 0 || it.rangedStrength > 0 }
         assertTrue(military.all { it.purchaseCooldown <= 1 })
-        assertEquals(131, ruleset.units.values.count { it.purchaseCooldown > 0 })
+        // 131 units of the 145 before the M4 activation, plus the 13 VP units it added (Barbarian Horseman, Field Gun, Fleet Destroyer, Sensor Combat Ship, Liburna, Cruiser,
+        // Dreadnought, Attack Submarine, Rocket Missile, Iron Chariot, Fusta, Licorne, Inquisition), each with Units.PurchaseCooldown 1 in ref/db/vp.sqlite
+        assertEquals(131 + 13, ruleset.units.values.count { it.purchaseCooldown > 0 })
     }
 
     @Test
@@ -48,7 +50,9 @@ class UnitPurchaseContentTests {
         assertEquals(listOf("Can only be purchased in cities with [Caravansary]"), needs("Caravan"))
         assertEquals(2, needs("Fighter").size)
         assertEquals(emptyList<String>(), needs("Warrior") + needs("Archer"))
-        assertEquals(94, ruleset.units.values.count { unit -> unit.uniques.any { it.startsWith("Can only be purchased in cities with [") } })
+        // 94 units before the M4 activation, plus the 10 added VP units that have a row in Unit_BuildingClassPurchaseRequireds of ref/db/vp.sqlite (Field Gun, Fleet Destroyer,
+        // Sensor Combat Ship, Liburna, Cruiser, Dreadnought, Attack Submarine, Rocket Missile, Fusta, Licorne; not Barbarian Horseman, Iron Chariot, Inquisition)
+        assertEquals(94 + 10, ruleset.units.values.count { unit -> unit.uniques.any { it.startsWith("Can only be purchased in cities with [") } })
         // every named building is one of the ruleset
         val named = ruleset.units.values.flatMap { it.uniques }.filter { it.startsWith("Can only be purchased in cities with [") }.map { it.substringAfter("[").dropLast(1) }
         assertEquals(emptyList<String>(), named.filter { it !in ruleset.buildings })

@@ -9,6 +9,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.PerpetualConstruction
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.stats.Stat
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
@@ -202,6 +203,54 @@ class BuildingYieldValueTests {
         assertTrue(PurchaseRules.isOnCooldown(city, warrior, Stat.Gold))
         city.purchaseCooldowns.gold = 0
         assertTrue(UnitProductionAi.checkUnitBuildSanity(city, warrior, 100, forOperation = false, forPurchase = true) > 0)
+    }
+
+    //endregion
+    //region Monopolies and trade routes (slice T6 of phaseE/vp-trade-plan.md)
+
+    /** A luxury of which the only copy on the map is on a tile far away, and which the civilization owns through a building: a global monopoly */
+    private fun hold(luxuryTile: HexCoord) {
+        val luxury = game.createResource().apply { resourceType = ResourceType.Luxury; isMonopoly = true }
+        game.tileMap[luxuryTile].setTileResource(luxury.name)
+        city.cityConstructions.addBuilding(game.createBuilding("Provides [1] [${luxury.name}]"))
+        civ.cache.updateCivResources()
+    }
+
+    @Test
+    fun `a building with a yield for every monopoly is worth it for each global monopoly we hold`() {
+        val unique = "[+1 Gold] [in this city] for every global monopoly"
+        assertEquals("no monopoly held", 0, value(Stat.Gold, unique))
+        hold(HexCoord(6, 0))
+        hold(HexCoord(6, 1))
+        setRates()
+        assertEquals(2, civ.monopolies.globalMonopolyCount())
+        // V:CvCityStrategyAI.cpp:3525-3527: 1 x 2 monopolies is a flat yield of 2 over the city's 10: 2 x 100 / 10
+        assertEquals(20, value(Stat.Gold, unique))
+        assertEquals("the same as 2 flat gold", value(Stat.Gold, "[+2 Gold]"), value(Stat.Gold, unique))
+        assertEquals("another yield is not asked", 0, value(Stat.Science, unique))
+    }
+
+    @Test
+    fun `the yield of a passing trade route counts only while a route passes the city`() {
+        val unique = "[+4 Gold] while any trade route passes through this city"
+        assertEquals("no route passes", 0, value(Stat.Gold, unique))
+        val far = game.addCity(game.addCiv(), game.tileMap[HexCoord(0, 6)])
+        val route = com.unciv.models.TradeRoute(far.location, city.location, com.unciv.models.TradeRouteKind.International, false, "Caravan",
+            (6 downTo 0).map { game.tileMap[HexCoord(0, it)].position }, 2, 30, 0)
+        route.setTransients(far.civ)
+        far.civ.tradeRoutes.routes.add(route)
+        far.civ.tradeRoutes.updateYields()
+        setRates()
+        // V:CvCityStrategyAI.cpp:3505-3508: the 4 over the city's 10
+        assertEquals(40, value(Stat.Gold, unique))
+    }
+
+    @Test
+    fun `a yield when a route ends is an instant yield of the city's table only`() {
+        // V:CvCityStrategyAI.cpp:3826-3832: the building's own table, an instant yield of 20 is worth max(20 / 2, 20 / 10)
+        assertEquals(10, value(Stat.Gold, "Gain [20] [Gold] <upon completing a [international] trade route> <in this city>"))
+        assertEquals(10, value(Stat.Gold, "Gain [20] [Gold] <upon completing a [domestic] trade route> <in this city>"))
+        assertEquals("the table of the whole civilization is not read", 0, value(Stat.Gold, "Gain [20] [Gold] <upon completing a [international] trade route>"))
     }
 
     //endregion

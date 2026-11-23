@@ -99,6 +99,17 @@ class CivVLuxuryPlacementTests {
     }
 
     @Test
+    fun `the number of luxury kinds placed anywhere is Vox Populi's by world size, not what the kinds leave`() {
+        // GetRandomLuxuriesTargetNumber: 4 on Duel ... 5 on Standard ... 9 on Huge. The kinds of a map are those of its regions (at most one each), 3 of the city states,
+        // marble and ivory (special cases) and the random ones; so on a Standard map of 8 civs there are at most 8 + 3 + 2 + 5 = 18 kinds, however many the ruleset has
+        for (seed in 71L..76L) {
+            val (map, ruleset) = standardMap(seed)
+            val kinds = map.values.mapNotNull { it.resource }.filter { ruleset.tileResources[it]!!.resourceType == ResourceType.Luxury }.toSet()
+            assertTrue("seed $seed: ${kinds.size} kinds $kinds", kinds.size <= 18)
+        }
+    }
+
+    @Test
     fun `the bonus resources of Vox Populi are in the ruleset`() {
         RulesetCache.loadRulesets(noMods = true)
         val ruleset = RulesetCache[BaseRuleset.Civ_V_BNW.fullName]!!
@@ -129,11 +140,10 @@ class CivVLuxuryPlacementTests {
     }
 
     @Test
-    fun `luxuries are not placed on starts and the luxuries total about six of each of the 29 kinds`() {
+    fun `luxuries are not placed on starts and the luxuries total about a hundred and thirty`() {
         val (map, ruleset) = hugeMap(64L)
         val total = map.values.count { it.resource != null && ruleset.tileResources[it.resource!!]!!.resourceType == ResourceType.Luxury }
-        // 20 kinds made about 130 (6.5 each) before the 9 of Vox Populi were added; each kind that is placed gets at least 3 and about 6 on average
-        assertTrue("luxuries $total", total in 120..230)
+        assertTrue("luxuries $total", total in 100..170)
         val starts = map.startingLocationsByNation.values.flatten()
         assertTrue(starts.none { it.resource != null && ruleset.tileResources[it.resource!!]!!.resourceType == ResourceType.Luxury })
     }

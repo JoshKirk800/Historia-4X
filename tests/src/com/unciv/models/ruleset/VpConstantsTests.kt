@@ -38,11 +38,17 @@ class VpConstantsTests {
     fun `the Brave New World ruleset has the values of Vox Populi`() {
         val constants = ruleset
         assertEquals(5f, constants.unitMaintenanceExponentDivisor, 0f)
-        assertEquals(0f, constants.sciencePerPopulation, 0f)
         assertEquals(ModConstants.CityGrowthConstants(base = 15, multiplier = 12f, exponent = 2.22f), constants.cityGrowth)
         assertEquals(150, constants.greatPersonThresholdBase)
         assertEquals(250, constants.greatPersonThresholdIncrease)
         assertEquals(ModConstants.BorderCultureConstants(first = 20, laterPlotMultiplier = 12, exponent = 1.35), constants.borderCulture)
+    }
+
+    @Test
+    fun `the Brave New World ruleset keeps one science per citizen until the science sources of Vox Populi are flipped`() {
+        // Vox Populi's SCIENCE_PER_POPULATION is 0 (DefineChanges.sql:350); a ruleset can set it, see the tests of the constant below
+        assertEquals(1f, ruleset.sciencePerPopulation, 0f)
+        assertEquals(4f, populationScience(null, 4)!!, 0.001f)
     }
 
     @Test
@@ -123,10 +129,11 @@ class VpConstantsTests {
     }
 
     @Test
-    fun `the ruleset gives no science for citizens and a city whose citizens all work does not break`() {
-        assertEquals(0f, populationScience(null, 4) ?: 0f, 0f)
+    fun `with 0 the citizens give no science and a city whose citizens all work does not break`() {
+        assertEquals(0f, populationScience(0f, 4) ?: 0f, 0f)
         // a city of 1 with its citizen on a tile has no stats from its population at all: the food it eats is still booked there
         val game = bnwGame()
+        game.ruleset.modOptions.constants.sciencePerPopulation = 0f
         val civ = game.addCiv(isPlayer = true)
         val city = game.addCity(civ, game.getTile(HexCoord.Zero), initialPopulation = 1)
         city.cityStats.update()

@@ -279,6 +279,42 @@ class CityStatsYieldShapeTests {
     //endregion
     //region Golden ages
 
+    /** CvPlayer::GetGoldenAgePointsFromCitiesTimes100 sums CvCity::getYieldRateTimes100(YIELD_GOLDEN_AGE_POINTS) of the cities (V:CvPlayer.cpp:24846-24860) */
+    @Test
+    fun `golden age points a turn are summed over the cities that the filter names`() {
+        assertEquals(0, civ.goldenAges.pointsPerTurnFromUniques())
+        capital.build("[+4] Golden Age points per turn [in this city]")
+        assertEquals(4, civ.goldenAges.pointsPerTurnFromUniques())
+        civ.policies.adopt(game.createPolicy("[+2] Golden Age points per turn [in all cities]"), true)
+        assertEquals("the policy gives each of the two cities 2", 8, civ.goldenAges.pointsPerTurnFromUniques())
+    }
+
+    @Test
+    fun `golden age points a turn multiply with a countable and the meter takes them at the end of the turn`() {
+        // a meter well above 0 (the meter never goes below it) and well below the threshold
+        civ.goldenAges.storedHappiness = 200
+        val stored = civ.goldenAges.storedHappiness
+        com.unciv.logic.civilization.managers.TurnManager(civ).endTurn()
+        val without = civ.goldenAges.storedHappiness - stored
+
+        capital.build("[+1] Golden Age points per turn [in this city] <for every [Cities]>")
+        assertEquals(2, civ.goldenAges.pointsPerTurnFromUniques())
+        civ.goldenAges.storedHappiness = 200
+        val stored2 = civ.goldenAges.storedHappiness
+        com.unciv.logic.civilization.managers.TurnManager(civ).endTurn()
+        assertEquals("two points more than a turn without the unique", 2, civ.goldenAges.storedHappiness - stored2 - without)
+    }
+
+    /** Building_YieldChangesPerGoldenAge: yield x golden ages, up to YieldCap (V:CvPlot.cpp:11129-11132 for the trait's rows, the building's cap CvCity.cpp:14373-14380) */
+    @Test
+    fun `the countable Golden Ages up to a cap stops at the cap`() {
+        repeat(3) { civ.goldenAges.endTurn(100000); civ.goldenAges.turnsLeftForCurrentGoldenAge = 0 }
+        assertEquals(3, Countables.getCountableAmount("Golden Ages", GameContext(civ)))
+        assertEquals(2, Countables.getCountableAmount("Golden Ages up to [2]", GameContext(civ)))
+        assertEquals(3, Countables.getCountableAmount("Golden Ages up to [5]", GameContext(civ)))
+        assertTrue(Countables.isKnownValue("Golden Ages up to [10]", game.ruleset))
+    }
+
     @Test
     fun `the countable Golden Ages is the number of golden ages had`() {
         assertEquals(0, Countables.getCountableAmount("Golden Ages", GameContext(civ)))

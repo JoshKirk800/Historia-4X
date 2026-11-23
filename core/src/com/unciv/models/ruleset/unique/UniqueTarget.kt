@@ -36,6 +36,7 @@ enum class UniqueTarget(
     Era(inheritsFrom = Global),
     Resolution("Uniques of a resolution of the World Congress, which apply to every civilization while it is in effect", inheritsFrom = Global),
     SpyBonus("Uniques of a passive bonus of a spy, which the spy's owner gets when the spy has stored enough Network Points in a city", inheritsFrom = Global),
+    SpyMission("Uniques of a spy mission, which happen when the mission is done", inheritsFrom = Global),
     Tech(inheritsFrom = Global),
     Policy(inheritsFrom = Global),
     FounderBelief("Uniques for Founder and Enhancer type Beliefs, that will apply to the founder of this religion", inheritsFrom = Global),

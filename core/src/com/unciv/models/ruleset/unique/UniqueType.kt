@@ -532,6 +532,9 @@ enum class UniqueType(
         docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.TradeRouteGoldBonus), read by the trade route model"),
     DiplomatUncoversIntrigue("The spy uncovers intrigue", UniqueTarget.SpyBonus,
         docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.ReceiveIntrigues): the diplomat finds out what the civilization plans"),
+    StealTechnologies("Steal [positiveAmount] random technology/technologies the target knows and we can research", UniqueTarget.SpyMission,
+        docDescription = "A spy mission's effect (CvCity::DoEventChoice, StealNumTechs): the spy's owner learns this many technologies the city's owner has and the owner could research now, " +
+            "chosen at random. The mission cannot be done when there are fewer"),
     DiplomatRevealsTrueApproaches("The spy reveals the true approaches of this civilization", UniqueTarget.SpyBonus,
         docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.RevealTrueApproaches)"),
 

@@ -246,6 +246,11 @@ class EspionageScreen(val civInfo: Civilization, val worldScreen: WorldScreen) :
             actions.add(MoveToLocationButton(location))
             if (location != null && location.civ != civInfo && location.civ.isMajorCiv && location.isCapital())
                 actions.add(MoveToLocationButton(location, asDiplomat = true)).padLeft(6f)
+            if (location != null && spy != null && spy.action == SpyAction.GatheringIntel && worldScreen.canChangeState && !civInfo.isDefeated()) {
+                val missions = "Missions".toTextButton()
+                missions.onClick { SpyMissionsPopup(this@EspionageScreen, spy) { update() }.open(force = true) }
+                actions.add(missions).padLeft(6f)
+            }
             locationSelectionTable.add(actions)
         }
         locationSelectionTable.row()

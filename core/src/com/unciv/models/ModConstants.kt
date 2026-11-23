@@ -711,6 +711,9 @@ class ModConstants {
          *  [travelTurnsByProximity] (the neighbours, close, far and distant civilizations of the city's owner; not for an own city), halved (at least 1) when the city's owner gives the spy's owner open borders */
         val travelBaseTurns: Int = 1,
         val travelTurnsByProximity: List<Int> = listOf(1, 2, 3, 4),
+        /** The turns a spy that did a mission must wait for its next one, at standard speed times the speed's modifier (`ESPIONAGE_TURNS_BETWEEN_CITY_STATE_ELECTIONS`,
+         *  CvGame::GetTurnsBetweenMinorCivElections and CvPlayerEspionage::GetNumTurnsSpyActiveMissionsBlocked, V:CvEspionageClasses.cpp:2844-2856) */
+        val missionCooldownTurns: Int = 15,
     )
     var espionage = EspionageConstants()
 

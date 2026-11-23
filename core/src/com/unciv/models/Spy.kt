@@ -70,6 +70,9 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
     /** The most Network Points ever stored in this city, which the passive bonuses are earned on (CvCityEspionage::m_aiMaxAmount) */
     var maxNetworkPoints = 0
         private set
+    /** The turn the spy last did a mission and lived (CvEspionageSpy::m_iTurnActiveMissionConducted), 0 if never; the next one must wait for [EspionageManager.getMissionCooldownLeft] */
+    var lastMissionTurn = 0
+        private set
 
     @Transient
     lateinit var civInfo: Civilization
@@ -96,6 +99,7 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         toReturn.evaluateReassignment = evaluateReassignment
         toReturn.networkPoints = networkPoints
         toReturn.maxNetworkPoints = maxNetworkPoints
+        toReturn.lastMissionTurn = lastMissionTurn
         return toReturn
     }
 
@@ -230,6 +234,12 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         for (bonus in bonusesFor(isDiplomat))
             if (bonusPoints(bonus) in (before + 1)..maxNetworkPoints)
                 addNotification("Your spy [$name] in [${city.name}] has earned the passive bonus [${bonus.name}]")
+    }
+
+    /** The spy lived after a mission of [turn] (V:CvEspionageClasses.cpp:1715-1724): it must wait before the next, and an AI spy thinks about where it should be */
+    fun finishMission(turn: Int) {
+        lastMissionTurn = turn
+        if (civInfo.isAI()) evaluateReassignment = true
     }
 
     /** Takes the cost of a mission from the stored Network Points (CvCityEspionage::SetAmount, V:CvEspionageClasses.cpp:7239-7252); the maximum stays */

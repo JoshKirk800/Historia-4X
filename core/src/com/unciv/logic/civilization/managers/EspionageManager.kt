@@ -39,6 +39,8 @@ class EspionageManager : IsPartOfGameInfoSerialization {
     var spyPoints = 0
     /** Every spy point ever gained, never reduced by making a spy (CvPlayer::m_iSpyPointsTotal, V:CvPlayer.cpp:23286-23290) */
     var spyPointsTotal = 0
+    /** How many missions our spies did against each civilization (by civID), which seeds the rolls of the next (CvPlayerEspionage::m_aiNumSpyActionsDone). Only with [com.unciv.models.ModConstants.espionageLikeVp] */
+    var spyActionsDone = HashMap<String, Int>()
 
     @Transient
     lateinit var civInfo: Civilization
@@ -61,6 +63,7 @@ class EspionageManager : IsPartOfGameInfoSerialization {
         toReturn.unCountdownStarted = unCountdownStarted
         toReturn.spyPoints = spyPoints
         toReturn.spyPointsTotal = spyPointsTotal
+        toReturn.spyActionsDone.putAll(spyActionsDone)
         intrigueMessages.mapTo(toReturn.intrigueMessages) { it.clone() }
         return toReturn
     }
@@ -235,6 +238,18 @@ class EspionageManager : IsPartOfGameInfoSerialization {
                 val radius = if (likeVp && spy.action == SpyAction.GatheringIntel) spy.getBonuses().sumOf { b -> b.getMatchingUniques(UniqueType.SpyExtraVision).sumOf { it.params[0].toInt() } } else 1
                 if (radius <= 0) emptySequence() else city.getCenterTile().getTilesInDistance(radius)
             }
+    }
+
+    /**
+     *  The turns [spy] must wait for its next mission (CvPlayerEspionage::GetNumTurnsSpyActiveMissionsBlocked, V:CvEspionageClasses.cpp:2844-2856): the constant's turns times the game
+     *  speed (CvGame::GetTurnsBetweenMinorCivElections, V:CvGame.cpp:11667-11674) less the turns since the mission; 0 for a spy that never did one
+     */
+    @Readonly
+    fun getMissionCooldownLeft(spy: Spy): Int {
+        if (spy.lastMissionTurn == 0) return 0
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants.espionage
+        val turns = (constants.missionCooldownTurns * civInfo.gameInfo.speed.modifier).toInt()
+        return maxOf(0, turns + spy.lastMissionTurn - civInfo.gameInfo.turns)
     }
 
     /**

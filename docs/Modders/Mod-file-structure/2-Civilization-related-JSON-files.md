@@ -355,6 +355,24 @@ A ruleset without this file has no passive bonuses.
 | scaledBySpeed  | Boolean | false     | Whether `networkPoints` is multiplied by the game speed's production cost modifier |
 | uniques        | List    | empty     | What the bonus gives (unique target `SpyBonus`): `[positiveAmount]% of the city's Science goes to the spy's owner`, `[positiveAmount] more tile(s) of vision around the city`, `Reveals the city screen to the spy's owner`, and for a diplomat `[positiveAmount]% of Congress votes can be traded with this civilization`, `[positiveAmount]% Gold on trade routes between us`, `The spy uncovers intrigue`, `The spy reveals the true approaches of this civilization` |
 
+## SpyMissions.json
+
+The missions a spy can do with the Network Points it has stored in a foreign major civilization's city (Vox Populi's espionage missions), only with the ModConstants `espionageLikeVp`.
+A ruleset without this file has no missions. The cost is paid first whether or not the mission succeeds; two rolls decide whether the spy is identified and whether it is killed, and the effects
+happen whatever the spy's fate. A spy that lived waits `missionCooldownTurns` times the game speed's modifier turns before its next mission.
+
+| Attribute                   | Type    | Default  | Notes |
+|-----------------------------|---------|----------|-------|
+| name                        | String  | Required | Must be unique |
+| uniques                     | List    | empty    | What the mission does (unique target `SpyMission`): `Steal [positiveAmount] random technology/technologies the target knows and we can research` |
+| requiredTech                | String  | none     | A technology the spy's owner must have researched |
+| networkPoints               | Integer | 0        | The Network Points the spy must have stored and spends |
+| networkPointsScaledBySpeed  | Boolean | false    | Whether the cost is multiplied by the game speed's `productionCostModifier` |
+| identifyChance              | Integer | 0        | Percent chance that the spy is identified |
+| killChance                  | Integer | 0        | Percent chance that the spy is killed |
+| requiredSpyRank             | Integer | 1        | The rank the spy needs |
+| cityFilter                  | String  | `All`    | What the city must be, a city filter: `Capital` for a mission that works in capitals only |
+
 ## Resolutions.json
 
 This file contains the resolutions that the World Congress can enact (Brave New World). A ruleset without this file has no World Congress.

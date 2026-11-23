@@ -779,6 +779,7 @@ The defines of spy points (`spyPointsLikeVp`) and of how long a killed spy stays
 | securityPerExcessUnhappiness | Int | -4 | `ESPIONAGE_SECURITY_PER_EXCESS_UNHAPPINESS`: for each point the city's happiness is below 0 |
 | travelBaseTurns | Int | 1 | `iSpyTurnsToTravel`: the turns to travel before the distance |
 | travelTurnsByProximity | List of Int | 1, 2, 3, 4 | The turns more for a city of a civilization that is a neighbour, close, far and distant. Halved (at least 1) when the city's owner gives us open borders |
+| missionCooldownTurns | Int | 15 | `ESPIONAGE_TURNS_BETWEEN_CITY_STATE_ELECTIONS`: the turns a spy that did a mission waits for its next, times the game speed's modifier |
 
 #### MonopolyConstants
 

@@ -62,12 +62,14 @@ class TradeEvaluation {
         val goldFromThem = trade.theirOffers.filter { it.type == TradeOfferType.Gold }.sumOf { it.amount }
         val goldFromUs = trade.ourOffers.filter { it.type == TradeOfferType.Gold }.sumOf { it.amount }
         for (offer in trade.ourOffers)
-            if (!isOfferValid(offer, offerer, tradePartner, trade.isPeaceTreaty(), goldFromThem - goldFromUs)) {
+            if (!isOfferValid(offer, offerer, tradePartner, trade.isPeaceTreaty(), goldFromThem - goldFromUs)
+                || blocksTemporaryForPermanent(offer, offerer, tradePartner, trade.theirOffers)) {
                 return false
             }            
 
         for (offer in trade.theirOffers)
-            if (!isOfferValid(offer, tradePartner, offerer, trade.isPeaceTreaty(), goldFromUs - goldFromThem)) {
+            if (!isOfferValid(offer, tradePartner, offerer, trade.isPeaceTreaty(), goldFromUs - goldFromThem)
+                || blocksTemporaryForPermanent(offer, tradePartner, offerer, trade.ourOffers)) {
                 return false
             }
         return true
@@ -109,7 +111,7 @@ class TradeEvaluation {
             TradeOfferType.Introduction -> !tradePartner.knows(tradeOffer.name) // You can't introduce them to someone they already know!
             TradeOfferType.WarDeclaration -> offerer.getDiplomacyManager(tradeOffer.name)!!.canDeclareWar()
             TradeOfferType.PeaceProposal -> offerer.isAtWarWith(offerer.gameInfo.getCivilization(tradeOffer.name))
-            TradeOfferType.City -> offerer.cities.any { it.id == tradeOffer.name }
+            TradeOfferType.City -> offerer.cities.any { it.id == tradeOffer.name && !isFoundedCityBlocked(it, offerer, tradePartner, isPeaceDeal) }
             TradeOfferType.GreatWork -> tradeOffer.amount == 1 &&
                 GreatWorkFunctions.findTradeSlot(offerer, tradeOffer.name) != null
             TradeOfferType.VoteCommitment -> VoteCommitmentItem.parse(tradeOffer)?.let {
@@ -147,6 +149,54 @@ class TradeEvaluation {
     }
 
     companion object {
+        /** Whether an item is permanent (gold, a city, a technology), temporary (gold per turn, resources, open borders, pacts, a war or peace with a third civilization, an embassy)
+         *  or neither (CvDeal::BlockTemporaryForPermanentTrade's lists, V:CvDealClasses.cpp:1368-1470); a peace treaty is irrelevant to the rule */
+        @Readonly
+        fun permanence(offer: TradeOffer): Permanence? = when (offer.type) {
+            TradeOfferType.Gold, TradeOfferType.City, TradeOfferType.Technology -> Permanence.Permanent
+            TradeOfferType.Gold_Per_Turn, TradeOfferType.Luxury_Resource, TradeOfferType.Strategic_Resource, TradeOfferType.Agreement,
+            TradeOfferType.Embassy, TradeOfferType.WarDeclaration, TradeOfferType.PeaceProposal -> Permanence.Temporary
+            TradeOfferType.Treaty -> if (offer.name == Constants.peaceTreaty) null else Permanence.Temporary
+            else -> null
+        }
+
+        enum class Permanence { Permanent, Temporary }
+
+        /**
+         * CvDeal::BlockTemporaryForPermanentTrade (V:CvDealClasses.cpp:1368-1470), with [com.unciv.models.ModConstants.dealsBlockTemporaryForPermanent]:
+         * whether [offer], which [from] gives [to], cannot be in a deal in which [to] gives [receiverGives]: a temporary item is not given for a permanent one and
+         * a permanent item not for a temporary one. Humans deal with each other as they like, and with `dealHumanPermanentForAiTemporary` a human may give the
+         * permanent item for what the AI gives temporarily (MOD_DEALAI_HUMAN_PERMANENT_FOR_AI_TEMPORARY).
+         */
+        @Readonly
+        fun blocksTemporaryForPermanent(offer: TradeOffer, from: Civilization, to: Civilization, receiverGives: List<TradeOffer>): Boolean {
+            val constants = from.gameInfo.ruleset.modOptions.constants
+            if (!constants.dealsBlockTemporaryForPermanent) return false
+            if (offer.type == TradeOfferType.PeaceProposal && from.isAtWarWith(to)) return false
+            val fromHuman = from.isHuman()
+            val noHumans = !fromHuman && !to.isHuman()
+            if (fromHuman && to.isHuman()) return false
+            val humanRule = constants.dealHumanPermanentForAiTemporary
+            return when (permanence(offer)) {
+                Permanence.Temporary ->
+                    (!humanRule || fromHuman || noHumans) && receiverGives.any { permanence(it) == Permanence.Permanent }
+                Permanence.Permanent ->
+                    (!humanRule || !fromHuman || noHumans) && receiverGives.any {
+                        permanence(it) == Permanence.Temporary && !(it.type == TradeOfferType.PeaceProposal && from.isAtWarWith(to))
+                    }
+                null -> false
+            }
+        }
+
+        /**
+         * CvDeal::IsPossibleToTradeItem for a city (V:CvDealClasses.cpp:644-653): outside a peace deal the founder does not sell a city it founded
+         * ([com.unciv.models.ModConstants.dealNoPeacetimeSellingFoundedCities]), unless both are humans
+         */
+        @Readonly
+        fun isFoundedCityBlocked(city: com.unciv.logic.city.City, seller: Civilization, buyer: Civilization, isPeaceDeal: Boolean): Boolean =
+            seller.gameInfo.ruleset.modOptions.constants.dealNoPeacetimeSellingFoundedCities && !isPeaceDeal
+                && !(seller.isHuman() && buyer.isHuman()) && city.foundingCivObject == seller
+
         /** CvDiplomacyAI::IsDoFAccepted both ways */
         @Readonly
         fun hasMutualDeclarationOfFriendship(civ: Civilization, other: Civilization): Boolean =

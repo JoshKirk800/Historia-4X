@@ -904,6 +904,10 @@ object DealAi {
     fun isPossibleToTradeItem(trade: Trade, from: Civilization, to: Civilization, offer: TradeOffer, fromGivesOurOffers: Boolean,
                               available: TradeOffersList): Boolean {
         val receiverGives = if (fromGivesOurOffers) trade.theirOffers else trade.ourOffers
+        // CvDeal::IsPossibleToTradeItem: BlockTemporaryForPermanentTrade (V:CvDealClasses.cpp:414), the founder's city (649)
+        if (TradeEvaluation.blocksTemporaryForPermanent(offer, from, to, receiverGives)) return false
+        if (offer.type == TradeOfferType.City && from.cities.firstOrNull { it.id == offer.name }
+                ?.let { TradeEvaluation.isFoundedCityBlocked(it, from, to, trade.isPeaceTreaty()) } == true) return false
         when (offer.type) {
             TradeOfferType.Gold -> {
                 if (!trade.isPeaceTreaty() && !TradeEvaluation.hasMutualDeclarationOfFriendship(from, to)) return false

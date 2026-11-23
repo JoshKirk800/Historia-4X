@@ -10,6 +10,7 @@ import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.TradeRoutePathfinder
 import com.unciv.logic.map.mapunit.MapUnit
+import com.unciv.logic.trade.TradeOfferType
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.TradeRoute
 import com.unciv.models.TradeRouteKind
@@ -208,8 +209,22 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
                 if (kind !in getDomesticKinds(origin)) return false
             }
         }
+        if (ignoreExisting) return true
         // The original refuses a second route from and to the same cities, whatever it carries
-        return ignoreExisting || routes.none { it.origin == origin.location && it.destination == destination.location }
+        if (routes.any { it.origin == origin.location && it.destination == destination.location }) return false
+        return !isDestinationRestricted(destination, kind)
+    }
+
+    /**
+     * CvGameTrade::CanCreateTradeRoute's targeting restriction (V:CvTradeClasses.cpp:665-685, MOD_BALANCE_TRADE_ROUTE_DESTINATION_RESTRICTION, with
+     * [com.unciv.models.ModConstants.tradeRouteModelLikeVp]): no second international route of ours to the same city, unless we or the owner of the
+     * destination have [UniqueType.NoTradeRouteDestinationRestriction].
+     */
+    @Readonly
+    private fun isDestinationRestricted(destination: City, kind: TradeRouteKind): Boolean {
+        if (!civ.gameInfo.ruleset.modOptions.constants.tradeRouteModelLikeVp || kind != TradeRouteKind.International) return false
+        if (civ.hasUnique(UniqueType.NoTradeRouteDestinationRestriction) || destination.civ.hasUnique(UniqueType.NoTradeRouteDestinationRestriction)) return false
+        return routes.any { it.isInternational() && it.destination == destination.location }
     }
 
     /** The cities a unit that is in [origin] can start a route to, with the path. Empty if the unit is not the right one. */
@@ -550,6 +565,54 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
         return partners.size
     }
 
+    /**
+     * The seam to the monopolies of slice T2 (CvPlayer::HasGlobalMonopoly, which the resource diversity of a route asks, V:CvTradeClasses.cpp:3010): whether [Civilization] has a
+     * global monopoly of the resource. Until the monopolies are merged nobody has one; at the merge this line becomes
+     * `val hasGlobalMonopoly: (Civilization, String) -> Boolean = { owner, resource -> owner.monopolies.hasGlobalMonopoly(resource) }`.
+     */
+    @Transient
+    val hasGlobalMonopoly: (Civilization, String) -> Boolean = { _, _ -> false }
+
+    /**
+     * CvPlayer::GetYieldPerTurnFromResources (V:CvPlayer.cpp:18078-18130): what the civilization's uniques give every turn for each kind of luxury it exports in a deal
+     * ([UniqueType.StatsPerExportedLuxury]) and imports from a deal, an allied City-State or a siphon ([UniqueType.StatsPerImportedLuxury]).
+     */
+    @Readonly
+    fun getResourceTradeStats(civ: Civilization): Stats { // of the civilization given, whose manager may not be set up where the stats are read
+        val stats = Stats()
+        var exported = -1
+        civ.forEachMatchingUnique(UniqueType.StatsPerExportedLuxury) {
+            if (exported < 0) exported = countExportedLuxuries(civ)
+            stats.add(it.stats.times(exported))
+        }
+        var imported = -1
+        civ.forEachMatchingUnique(UniqueType.StatsPerImportedLuxury) {
+            if (imported < 0) imported = countImportedLuxuries(civ)
+            stats.add(it.stats.times(imported))
+        }
+        return stats
+    }
+
+    /** The kinds of luxury resource that one of [civ]'s deals gives away (getResourceExport > 0) */
+    @Readonly
+    private fun countExportedLuxuries(civ: Civilization): Int {
+        val resources = civ.gameInfo.ruleset.tileResources
+        val names = HashSet<String>()
+        for (diplomacy in civ.diplomacy.values) for (trade in diplomacy.trades) for (offer in trade.ourOffers)
+            if (offer.type == TradeOfferType.Luxury_Resource && offer.amount > 0 && resources[offer.name]?.resourceType == ResourceType.Luxury) names.add(offer.name)
+        return names.size
+    }
+
+    /** The kinds of luxury resource that come from deals or City-States (a siphon is one of those: its copies have the City-States' origin) */
+    @Readonly
+    private fun countImportedLuxuries(civ: Civilization): Int {
+        val names = HashSet<String>()
+        for (supply in civ.detailedCivResources)
+            if (supply.amount > 0 && supply.resource.resourceType == ResourceType.Luxury && (supply.origin == "Trade" || supply.origin == Constants.cityStates))
+                names.add(supply.resource.name)
+        return names.size
+    }
+
     /** CvPlayerTrade::UpdateTradeConnectionValues */
     fun updateYields() {
         routeTiles = null
@@ -619,7 +682,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     private fun computeYields(route: TradeRoute) {
         val constants = civ.gameInfo.ruleset.modOptions.constants
         if (constants.tradeRouteModelLikeVp) {
-            val yields = TradeRouteValue.compute(route, this)
+            val yields = TradeRouteValue.compute(route, this, hasGlobalMonopoly)
             route.originYields = yields.origin
             route.destinationYields = yields.destination
             return

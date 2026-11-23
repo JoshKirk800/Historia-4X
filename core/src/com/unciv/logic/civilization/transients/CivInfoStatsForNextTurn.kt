@@ -299,7 +299,7 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
             statMap.add(key,value)
 
         // the passive bonuses of the spies (CvPlayer::GetSciencePerTurnFromPassiveSpyBonusesTimes100)
-        val spyScience = civInfo.espionageManager.getPassiveScienceTimes100()
+        val spyScience = if (civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp) civInfo.espionageManager.getPassiveScienceTimes100() else 0
         if (spyScience != 0) statMap["Spies"] = Stats(science = spyScience / 100f)
 
         return statMap

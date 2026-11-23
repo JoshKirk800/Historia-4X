@@ -206,6 +206,21 @@ enum class Countables(
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
     },
 
+    FilteredBuildingsInCity("[buildingFilter] Buildings in this city", shortDocumentation = "The number of matching buildings in the city") {
+        override val documentationStrings = listOf(
+            "The original's per-class yields count the buildings of the class in each city (`CvCity::ChangeBaseYieldRateFromBuildings`, " +
+                "`Policy_BuildingClassYieldChanges`, `Building_BuildingClassYieldChanges`): `[+3] Golden Age points per turn [in all cities] <for every [[Museum] Buildings in this city]>`."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val city = gameContext.city ?: return null
+            val filter = parameterText.getPlaceholderParameters()[0]
+            return city.cityConstructions.getBuiltBuildings().count { it.matchesFilter(filter, gameContext) }
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.BuildingFilter.getTranslatedErrorSeverity(parameterText, ruleset)
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
+    },
+
     FilteredBuildingsByCivs("[buildingFilter] Buildings by [civFilter] Civilizations") {
         override fun eval(parameterText: String, gameContext: GameContext): Int? {
             val (buildingFilter, civFilter) = parameterText.getPlaceholderParameters()
@@ -511,8 +526,9 @@ enum class Countables(
     },
     GoldenAgesUpTo("Golden Ages up to [positiveAmount]", shortDocumentation = "The number of Golden Ages the civilization has had, at most the amount") {
         override val documentationStrings = listOf(
-            "The original's `YieldCap` of `Building_YieldChangesPerGoldenAge` and `Trait_ResourceYieldChangesFromGoldenAge`: the yield per golden age is capped as a total, " +
-                "which is this count when the yield per golden age is 1 (the cap is then the number of golden ages that count)."
+            "The original's `YieldCap` of `Trait_ResourceYieldChangesFromGoldenAge`: the yield of the tile is the yield times the golden ages had, at most the cap (`CvPlot::calculateYield`, " +
+                "V:CvPlot.cpp:11129-11132), which is this count when the cap is a multiple of the yield. Not for `Building_YieldChangesPerGoldenAge`: that is a yield added to the city " +
+                "permanently at the start of each golden age while the building stands (`CvCity::GetYieldChangePerGoldenAge`), not a count of the golden ages had."
         )
         override fun eval(parameterText: String, gameContext: GameContext): Int? {
             val cap = parameterText.getPlaceholderParameters()[0].toIntOrNull() ?: return null

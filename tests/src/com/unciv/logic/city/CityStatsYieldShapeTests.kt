@@ -324,6 +324,31 @@ class CityStatsYieldShapeTests {
         assertEquals(0, Countables.getCountableAmount("[Merchant] Specialists in this city", GameContext(civ, city = second)))
     }
 
+    /** CvCity::getBaseYieldRateTimes100: getYieldFromNonSpecialistCitizensTimes100 x (population - specialists) (V:CvCity.cpp:23500-23504) */
+    @Test
+    fun `the countable of the citizens that are no specialists`() {
+        assertTrue(Countables.isKnownValue("Non-specialist citizens in this city", game.ruleset))
+        capital.population.specialistAllocations["Merchant"] = 1
+        assertEquals(capital.population.population - 1, Countables.getCountableAmount("Non-specialist citizens in this city", GameContext(civ, city = capital)))
+        assertEquals(second.population.population, Countables.getCountableAmount("Non-specialist citizens in this city", GameContext(civ, city = second)))
+    }
+
+    @Test
+    fun `stats may carry a decimal amount and nothing else about them changes`() {
+        assertTrue(com.unciv.models.stats.Stats.isStats("+0.25 Culture, +2 Food"))
+        assertEquals(0.25f, com.unciv.models.stats.Stats.parse("+0.25 Culture").culture, 1e-6f)
+        assertEquals(-3f, com.unciv.models.stats.Stats.parse("-3 Gold").gold, 1e-6f)
+        assertTrue(!com.unciv.models.stats.Stats.isStats("+1.5.2 Food"))
+        assertTrue(!com.unciv.models.stats.Stats.isStats("+.5 Food"))
+    }
+
+    @Test
+    fun `a fraction of a yield for each citizen that is no specialist is a fractional stat that the count multiplies`() {
+        val before = second.total(Stat.Culture)
+        second.build("[+0.25 Culture] [in this city] <for every [Non-specialist citizens in this city]>")
+        assertEquals(before + second.population.population * 0.25f, second.total(Stat.Culture), 1e-3f)
+    }
+
     //endregion
     //region Golden ages
 

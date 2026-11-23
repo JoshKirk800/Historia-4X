@@ -299,6 +299,7 @@ enum class RejectionReasonType(val shouldShow: Boolean, val errorMessage: String
     NoSettlerForOneCityPlayers(false, "No settlers for city-states or one-city challengers"),
     NoPlaceToPutUnit(true, "No space to place this unit"),
     NoTradeRouteSlot(false, "No free trade route slot or no city to trade with"),
+    OutOfUnitSupply(true, "Too many units out of supply"),
     ;
 
     val defaultInstance by lazy { RejectionReason(this, errorMessage, shouldShow) }

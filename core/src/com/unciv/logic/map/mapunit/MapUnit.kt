@@ -311,7 +311,23 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
     @Readonly fun isMilitary() = baseUnit.isMilitary
     @Readonly fun isCivilian() = baseUnit.isCivilian()
-    @Readonly fun usesUnitSupply() = baseUnit.usesUnitSupply
+    /**
+     *  Whether this unit counts in [com.unciv.logic.civilization.managers.UnitManager.getNumUnitsToSupply]: the unit type uses supply and, with
+     *  [com.unciv.models.ModConstants.unitSupplyLikeVp], the unit is not [isNoSupply]. VP keeps such a unit in the supply-free count
+     *  (CvUnit::init, CvPlayer::GetNumUnitsToSupply), which comes to the same.
+     */
+    @Readonly
+    fun usesUnitSupply(): Boolean =
+        baseUnit.usesUnitSupply && !(civ.gameInfo.ruleset.modOptions.constants.unitSupplyLikeVp && isNoSupply())
+
+    /**
+     *  CvUnit::isNoSupply: the unit type or any promotion of the unit has [UniqueType.NoUnitSupply] (the original's counter `m_iNoSupply` of
+     *  UnitPromotions.NoSupply plus CvUnitEntry::IsNoSupply). Read off the promotions, so [UnitPromotions.addPromotion] and
+     *  [UnitPromotions.removePromotion] reset the count of [com.unciv.logic.civilization.managers.UnitManager.getNumUnitsToSupply].
+     */
+    @Readonly
+    fun isNoSupply(): Boolean = baseUnit.hasNoUnitSupply ||
+        promotions.getPromotions().any { it.hasUnique(UniqueType.NoUnitSupply, GameContext.IgnoreConditionals) }
 
     @Readonly fun isActionUntilHealed() = action?.endsWith("until healed") == true
 

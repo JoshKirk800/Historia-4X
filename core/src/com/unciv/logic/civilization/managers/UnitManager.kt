@@ -162,6 +162,11 @@ class UnitManager(val civInfo: Civilization) {
         return numUnitsToSupply
     }
 
+    /** Counts [getNumUnitsToSupply] again: a unit's promotions changed, and with `unitSupplyLikeVp` they decide [MapUnit.isNoSupply] (CvUnit::changeNoSupply) */
+    fun resetNumUnitsToSupply() {
+        numUnitsToSupply = -1
+    }
+
     @Readonly fun getCivUnits(): Sequence<MapUnit> = unitList.asSequence()
     @Readonly fun getCivGreatPeople(): Sequence<MapUnit> = getCivUnits().filter { mapUnit -> mapUnit.isGreatPerson() }
 

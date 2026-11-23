@@ -306,6 +306,9 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
         if (city != null && civ.tradeRoutes.isTradeUnit(this@BaseUnit) && !civ.tradeRoutes.canBuildTradeUnit(this@BaseUnit, city, ownQueue))
             yield(RejectionReasonType.NoTradeRouteSlot.toInstance())
 
+        if (isOutOfUnitSupplyCap(civ))
+            yield(RejectionReasonType.OutOfUnitSupply.toInstance())
+
         if (!civ.isBarbarian) { // Barbarians don't need resources
             val civResources = Counter(civ.getCivResourcesByName()) + additionalResources
             for ((resource, requiredAmount) in getResourceRequirementsPerTurn(stateForConditionals)) {
@@ -544,6 +547,23 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
      *  Workers, settlers, Great People, missionaries, prophets, inquisitors and archaeologists do not.
      */
     val usesUnitSupply by lazy { isMilitary || hasUnique(UniqueType.UsesUnitSupply, GameContext.IgnoreConditionals) }
+
+    /** CvUnitEntry::IsNoSupply: the unit type (or the uniques every unit has) has [UniqueType.NoUnitSupply]. Only read with `unitSupplyLikeVp`. */
+    val hasNoUnitSupply by lazy { rulesetUniqueObjects.any { it.type == UniqueType.NoUnitSupply } }
+
+    /**
+     *  CvCity::canTrain (Vox Populi, BALANCE_VP): a combat unit that uses supply can not be trained once the units out of supply are as many as the
+     *  production penalty takes [com.unciv.models.ModConstants.UnitSupplyConstants.maxProductionPenalty] percent for ([maxProductionPenalty] / [productionPenaltyPerUnit]
+     *  units; no limit when either is 0). Only with `unitSupplyLikeVp`; never for barbarians.
+     */
+    @Readonly
+    private fun isOutOfUnitSupplyCap(civ: Civilization): Boolean {
+        val constants = ruleset.modOptions.constants
+        if (!constants.unitSupplyLikeVp || civ.isBarbarian || hasNoUnitSupply || (strength <= 0 && rangedStrength <= 0)) return false
+        val penalties = constants.unitSupplyConstants
+        if (penalties.maxProductionPenalty <= 0 || penalties.productionPenaltyPerUnit <= 0) return false
+        return civ.stats.getUnitSupplyDeficit() >= penalties.maxProductionPenalty / penalties.productionPenaltyPerUnit
+    }
 
     val isLandUnit by lazy { type.isLandUnit() }
     val isWaterUnit by lazy { type.isWaterUnit() }

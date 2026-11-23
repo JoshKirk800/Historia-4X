@@ -119,6 +119,38 @@ class ModConstants {
     // aiUnitSupply... and cityStateUnitSupply... fields, and the sum is increased by their bonus percent.
     var unitSupplyPerPopulation = 0.5
 
+    // ---- (P6/M6) Vox Populi's unit supply, staged ----
+    /** VP 5.4.8 CvPlayer::GetUnitSupplyBreakdown, GetNumUnitsSuppliedByHandicap/Cities/Population, calculateUnitProductionMaintenanceMod, calculateUnitGrowthMaintenanceMod,
+     *  CvUnit::isNoSupply. true: the supply is the breakdown of [unitSupplyConstants] (era reduction of the base supply, the technology divisors of the cities' and the population's
+     *  supply, the empire size divisor, the puppet share of a city's supply), a unit with the unique `Does not use unit supply` (its own or from a promotion) uses no supply,
+     *  the production penalty and the growth penalty per unit over the supply are [unitSupplyConstants]'. false: the supply of [unitSupplyPerPopulation] and the difficulty, -10% production
+     *  per unit over the supply (at most -70%), no growth penalty, and the unique is not read. */
+    var unitSupplyLikeVp = false
+
+    /**
+     *  The GlobalDefines of VP's unit supply, read only with [unitSupplyLikeVp] (can only be modded all-or-nothing, a data class so the Json serializer can omit it when default). The
+     *  defaults are the numbers of the original / Community Patch (nothing reduces the supply, 10% production per unit over it); `DEF-VP` is `(2) Vox Populi/Database Changes/DefineChanges.sql:160-195`.
+     *  The puppet share of the supply of a city and of its citizens is [NeedsConstants.puppetYieldMultiplier] (one define, `PUPPET_YIELD_AND_SUPPLY_MODIFIER_MULTIPLICATIVE`, for yield and supply).
+     */
+    data class UnitSupplyConstants(
+        /** Hundredths of a unit taken off the base supply per era of the civilization (`UNIT_SUPPLY_BASE_TECH_REDUCTION_PER_ERA`, 100 in VP) */
+        val baseTechReductionPerEra: Int = 0,
+        /** Percent of the technologies known that divide the supply of the cities, and of the citizens: divisor = 100 + progress x this / 100, progress 0-100
+         *  (`UNIT_SUPPLY_CITIES_TECH_REDUCTION_MULTIPLIER`, `UNIT_SUPPLY_POPULATION_TECH_REDUCTION_MULTIPLIER`, both 100 in VP) */
+        val citiesTechReductionMultiplier: Int = 0,
+        val populationTechReductionMultiplier: Int = 0,
+        /** Percent the supply loses per effective city (the cities but the puppets): divisor = 100 + cities x this (the column `NumCitiesUnitSupplyMod` of VP's `Worlds`, 5 for every
+         *  world size in VP, 0 in Community Patch; we have no per-world table) */
+        val empireSizePenaltyPerCity: Int = 0,
+        /** Percent production lost per unit over the supply, and the most that can be lost (`PRODUCTION_PENALTY_PER_UNIT_OVER_SUPPLY` 10 in CP, 5 in VP; `MAX_UNIT_SUPPLY_PRODMOD` 70) */
+        val productionPenaltyPerUnit: Int = 10,
+        val maxProductionPenalty: Int = 70,
+        /** Percent growth lost per unit over the supply, and the most that can be lost (`GROWTH_PENALTY_PER_UNIT_OVER_SUPPLY` 0 in CP, 5 in VP; `MAX_UNIT_SUPPLY_GROWTH_MOD` 70) */
+        val growthPenaltyPerUnit: Int = 0,
+        val maxGrowthPenalty: Int = 70,
+    )
+    var unitSupplyConstants = UnitSupplyConstants()
+
     // Gold maintenance of units (CvTreasury::CalculateUnitCost), with 0.5 gold per unit that is not free:
     // cost = (paidUnits * 0.5 * (1 + unitMaintenanceGameMultiplier * progress)) ^ (1 + progress / unitMaintenanceExponentDivisor)
     // where progress is the turn divided by the number of turns of the game speed. The defaults are the original Unciv values; Gods & Kings uses 0, 8 and 7, Brave New World 0, 8 and 5 (Vox Populi's value).

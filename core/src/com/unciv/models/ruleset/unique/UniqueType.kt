@@ -367,6 +367,11 @@ enum class UniqueType(
     UsesUnitSupply("Uses unit supply", UniqueTarget.Unit,
         docDescription = "Marks a non-military unit as one that counts against the civilization's unit supply, as the original's MilitarySupport does for " +
             "the Caravan, the Cargo Ship and the Work Boat. Units with a combat strength use supply without it; the other civilians never do."),
+    // ---- (P6/M6) unit supply like Vox Populi ----
+    /** VP 5.4.8 CvUnit::isNoSupply (UnitPromotions.NoSupply, Units.NoSupply, CvUnit::changeNoSupply): the unit, or a promotion it has, takes no unit supply. */
+    NoUnitSupply("Does not use unit supply", UniqueTarget.Unit,
+        docDescription = "The unit does not count against the civilization's unit supply, whether the unit type or one of its promotions has it (CvUnit::isNoSupply). " +
+            "Conditionals are not evaluated. Only read with the ModConstants switch `unitSupplyLikeVp`."),
 
     // Units entering Tiles
     // ToDo: make per unit and use unit filters? "Enables embarkation <for [land] units>"

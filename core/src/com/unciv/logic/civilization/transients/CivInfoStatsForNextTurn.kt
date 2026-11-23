@@ -2,10 +2,12 @@ package com.unciv.logic.civilization.transients
 
 import com.unciv.Constants
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.city.City
 import com.unciv.logic.civilization.CivNeeds
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.map.tile.RoadStatus
+import com.unciv.models.ModConstants
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileImprovement
@@ -22,6 +24,7 @@ import java.util.PriorityQueue
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /** CivInfo class was getting too crowded */
 class CivInfoStatsForNextTurn(val civInfo: Civilization) {
@@ -171,6 +174,7 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
      */
     @Readonly
     fun getUnitSupply(): Int {
+        if (civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyLikeVp) return getUnitSupplyBreakdown(includeGross = false).total
         val supply = getBaseUnitSupply() + getUnitSupplyFromCities() + getUnitSupplyFromPop()
         val chosen = civInfo.gameInfo.getDifficulty()
         val bonusPercent = when {
@@ -195,15 +199,18 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
 
     /** CvPlayer::GetNumUnitsSuppliedByCities: the supply of each city, with the [UniqueType.UnitSupplyPerCity] uniques */
     @Readonly
-    fun getUnitSupplyFromCities(): Int {
+    fun getUnitSupplyFromCities(): Int = civInfo.cities.size * getUnitSupplyPerCity()
+
+    /** What each city gives: the difficulty's supply per city and the [UniqueType.UnitSupplyPerCity] uniques */
+    @Readonly
+    private fun getUnitSupplyPerCity(): Int {
         val chosen = civInfo.gameInfo.getDifficulty()
         val perCity = when {
             civInfo.isCityState -> chosen.cityStateUnitSupplyPerCity
             isAiMajor() -> chosen.aiUnitSupplyPerCity
             else -> civInfo.getDifficulty().unitSupplyPerCity
         }
-        return civInfo.cities.size *
-            (perCity + civInfo.getMatchingUniques(UniqueType.UnitSupplyPerCity).sumOf { it.params[0].toInt() })
+        return perCity + civInfo.getMatchingUniques(UniqueType.UnitSupplyPerCity).sumOf { it.params[0].toInt() }
     }
 
     /**
@@ -241,7 +248,149 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
      *  CvPlayer::calculateUnitProductionMaintenanceMod (Community Patch): per unit out of supply a player gets -10% production,
      *  at most -70%.
      */
-    @Readonly fun getUnitSupplyProductionPenalty(): Float = -min(getUnitSupplyDeficit() * 10f, 70f)
+    @Readonly
+    fun getUnitSupplyProductionPenalty(): Float {
+        // The numbers are the original's (10 and 70, the defaults of the data class) unless unitSupplyLikeVp reads the ruleset's
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        val penalties = if (constants.unitSupplyLikeVp) constants.unitSupplyConstants else ModConstants.UnitSupplyConstants()
+        return -min(getUnitSupplyDeficit() * max(penalties.productionPenaltyPerUnit, 0).toFloat(), max(penalties.maxProductionPenalty, 0).toFloat())
+    }
+
+    /**
+     *  CvPlayer::calculateUnitGrowthMaintenanceMod (Vox Populi, read by CvCity::getGrowthMods): per unit out of supply a city loses
+     *  [ModConstants.UnitSupplyConstants.growthPenaltyPerUnit] percent of its growth, at most [ModConstants.UnitSupplyConstants.maxGrowthPenalty].
+     *  Negative percent; 0 without `unitSupplyLikeVp` (the original has no such penalty) or without units out of supply.
+     */
+    @Readonly
+    fun getUnitSupplyGrowthPenalty(): Int {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        if (!constants.unitSupplyLikeVp) return 0
+        val deficit = getUnitSupplyDeficit()
+        if (deficit <= 0) return 0
+        val penalties = constants.unitSupplyConstants
+        return -min(max(penalties.maxGrowthPenalty, 0), deficit * max(penalties.growthPenaltyPerUnit, 0))
+    }
+
+    // region Vox Populi's breakdown (unitSupplyLikeVp)
+
+    /** The share of all technologies this civilization knows, 0-100 (CvPlayer::GetUnitSupplyTechProgress) */
+    @Readonly
+    private fun getUnitSupplyTechProgress(): Int {
+        val techs = civInfo.gameInfo.ruleset.technologies.size
+        if (techs == 0) return 0
+        return (civInfo.tech.techsResearched.size * 100 / techs).coerceIn(0, 100)
+    }
+
+    /** What the supply of the cities and of the citizens is divided by as technologies pile up, in percent (CvPlayer::GetUnitSupplyTechDivisorPct) */
+    @Readonly
+    private fun getUnitSupplyTechDivisorPercent(multiplierPercent: Int): Int =
+        max(100 + getUnitSupplyTechProgress() * multiplierPercent / 100, 1)
+
+    /** The percent of the supply of a city and of its citizens that a city gives: 100, a puppet's share (`PUPPET_YIELD_AND_SUPPLY_MODIFIER_MULTIPLICATIVE`) */
+    @Readonly
+    private fun getCitySupplyPercent(city: City): Int =
+        if (city.isPuppet) civInfo.gameInfo.ruleset.modOptions.constants.needs.puppetYieldMultiplier else 100
+
+    /** CvPlayer::GetNumUnitsSuppliedByHandicap: the base supply less [ModConstants.UnitSupplyConstants.baseTechReductionPerEra] hundredths per era, at least 0 */
+    @Readonly
+    private fun getVpUnitSupplyFromDifficulty(ignoreReduction: Boolean): Int {
+        var supply = getBaseUnitSupply()
+        if (!ignoreReduction)
+            supply -= civInfo.getEraNumber() * civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyConstants.baseTechReductionPerEra / 100
+        return max(supply, 0)
+    }
+
+    /**
+     *  CvPlayer::GetNumUnitsSuppliedByCities: each city gives its supply per city (puppets their share of it), the sum is divided by the
+     *  technology divisor of [ModConstants.UnitSupplyConstants.citiesTechReductionMultiplier]. At least 0.
+     */
+    @Readonly
+    private fun getVpUnitSupplyFromCities(ignoreReduction: Boolean): Int {
+        val perCity = getUnitSupplyPerCity()
+        var supply = civInfo.cities.sumOf { perCity * getCitySupplyPercent(it) } / 100
+        if (!ignoreReduction)
+            supply = supply * 100 / getUnitSupplyTechDivisorPercent(civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyConstants.citiesTechReductionMultiplier)
+        return max(supply, 0)
+    }
+
+    /**
+     *  CvPlayer::GetNumUnitsSuppliedByPopulation: the population percent (the difficulty's for an AI major and a city-state,
+     *  [ModConstants.unitSupplyPerPopulation] for a human) of each city's citizens, a puppet's share of them, the sum divided by the technology
+     *  divisor of [ModConstants.UnitSupplyConstants.populationTechReductionMultiplier]. The [UniqueType.UnitSupplyPerPop] uniques are
+     *  added per city before the share and the divisor (the original has them as a percent: CvPlayer::GetExtraSupplyPerPopulation).
+     */
+    @Readonly
+    private fun getVpUnitSupplyFromPopulation(ignoreReduction: Boolean): Int {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        val chosen = civInfo.gameInfo.getDifficulty()
+        val percent = when {
+            civInfo.isCityState -> chosen.cityStateUnitSupplyPopulationPercent
+            isAiMajor() -> chosen.aiUnitSupplyPopulationPercent
+            else -> (constants.unitSupplyPerPopulation * 100).roundToInt()
+        }
+        // hundredths of a unit
+        var supply = civInfo.cities.sumOf { it.population.population * getCitySupplyPercent(it) * percent / 100 }
+        civInfo.forEachMatchingUnique(UniqueType.UnitSupplyPerPop) { unique ->
+            val amount = unique.params[0].toInt()
+            val perPopulation = unique.params[1].toInt()
+            for (city in civInfo.cities)
+                if (city.matchesFilter(unique.params[2]))
+                    supply += amount * (city.population.population / perPopulation) * getCitySupplyPercent(city)
+        }
+        if (!ignoreReduction)
+            supply = supply * 100 / getUnitSupplyTechDivisorPercent(constants.unitSupplyConstants.populationTechReductionMultiplier)
+        return max(supply / 100, 0)
+    }
+
+    /**
+     *  CvPlayer::GetUnitSupplyBreakdown: the supply of the difficulty, the cities and the population, divided by the empire size divisor
+     *  (100 + [ModConstants.UnitSupplyConstants.empireSizePenaltyPerCity] per city but the puppets), times (100 + the bonus percent of the difficulty) / 100.
+     *  Barbarians have no limit. Gross values are those before the technology reductions ([includeGross] false leaves them 0).
+     *
+     *  Not in it, for lack of the state: the supply of expended Great People (CvPlayer::GetUnitSupplyFromExpendedGreatPeople), a city's own supply
+     *  flat and percent from buildings (CvCity::getCitySupplyFlat, getCitySupplyModifier), the player and trait supply and puppet-share changes,
+     *  the era columns of the difficulty and the start era's base supply, the city-state trait and personality modifiers (all 0 in Vox Populi), the cities not yet
+     *  decided on (CvCity::IsIgnoreCityForHappiness) and the war weariness reduction (CvPlayer::GetSupplyReductionFromWarWeariness: [CivNeeds.warWeariness] is 0).
+     */
+    @Readonly
+    fun getUnitSupplyBreakdown(includeGross: Boolean = true): UnitSupplyBreakdown {
+        if (civInfo.isBarbarian) return UnitSupplyBreakdown(total = Int.MAX_VALUE)
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        val difficultyNet = getVpUnitSupplyFromDifficulty(false)
+        val citiesNet = getVpUnitSupplyFromCities(false)
+        val populationNet = getVpUnitSupplyFromPopulation(false)
+        val subtotal = difficultyNet + citiesNet + populationNet
+
+        val effectiveCities = if (civInfo.cities.isEmpty()) 0 else max(1, civInfo.cities.count { !it.isPuppet })
+        val empireSizeDivisor = 100 + max(effectiveCities * constants.unitSupplyConstants.empireSizePenaltyPerCity, 0)
+        val afterEmpireSize = subtotal * 100 / empireSizeDivisor
+
+        val bonusPercent = when {
+            civInfo.isCityState -> civInfo.gameInfo.getDifficulty().cityStateUnitSupplyBonusPercent
+            isAiMajor() -> civInfo.gameInfo.getDifficulty().aiUnitSupplyBonusPercent
+            else -> 0
+        }
+        val modifier = 100 + bonusPercent
+        return UnitSupplyBreakdown(
+            techProgressPercent = getUnitSupplyTechProgress(),
+            citiesTechDivisorPercent = getUnitSupplyTechDivisorPercent(constants.unitSupplyConstants.citiesTechReductionMultiplier),
+            populationTechDivisorPercent = getUnitSupplyTechDivisorPercent(constants.unitSupplyConstants.populationTechReductionMultiplier),
+            difficultyGross = if (includeGross) getVpUnitSupplyFromDifficulty(true) else 0,
+            difficultyNet = difficultyNet,
+            citiesGross = if (includeGross) getVpUnitSupplyFromCities(true) else 0,
+            citiesNet = citiesNet,
+            populationGross = if (includeGross) getVpUnitSupplyFromPopulation(true) else 0,
+            populationNet = populationNet,
+            subtotal = subtotal,
+            effectiveCities = effectiveCities,
+            empireSizeDivisorPercent = empireSizeDivisor,
+            afterEmpireSize = afterEmpireSize,
+            difficultyModifierPercent = modifier,
+            total = max(0, afterEmpireSize * modifier / 100)
+        )
+    }
+
+    // endregion
 
     @Readonly
     fun getStatMapForNextTurn(): StatMap = timeThis("getStatMapForNextTurn") {

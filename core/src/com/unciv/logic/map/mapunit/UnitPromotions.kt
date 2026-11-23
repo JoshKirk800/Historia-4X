@@ -152,6 +152,7 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
 
         unit.updateUniques()
         unit.keepDamageAfterMaxHealthChange(maximumBefore)
+        unit.civ.units.resetNumUnitsToSupply() // CvUnit::changeNoSupply: the promotion may take the unit out of the supply count
 
         // Since some units get promotions upon construction, they will get the addPromotion from the unit.postBuildEvent
         // upon creation, BEFORE they are assigned to a tile, so the updateVisibleTiles() would crash.
@@ -168,6 +169,7 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
             promotions.remove(promotionName)
             unit.updateUniques()
             unit.keepDamageAfterMaxHealthChange(maximumBefore)
+            unit.civ.units.resetNumUnitsToSupply()
             unit.updateVisibleTiles()
             
             for (unique in unit.getTriggeredUniques(UniqueType.TriggerUponPromotionLoss){ it.params[0] == promotionName })

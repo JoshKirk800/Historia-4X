@@ -87,6 +87,11 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
     /** A human spy that arrived in an own city waits for its owner to choose a focus (CvCityEspionage::m_aiPendingEventsForPlayer): it cannot move meanwhile */
     var focusPending = false
         private set
+    /**
+     *  AI: the name of the [com.unciv.models.ruleset.SpyMission] a spy gathering intel works towards (CvEspionageSpy::m_eSpyFocus of an offense spy). Apart from [focus], which is the counterspy's
+     *  and which [setAction] clears when the spy stops countering spies; null for a human's spy, and gone when the spy leaves its city
+     */
+    var targetMission: String? = null
 
     @Transient
     lateinit var civInfo: Civilization
@@ -117,6 +122,7 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         toReturn.focus = focus
         toReturn.focusChangedTurn = focusChangedTurn
         toReturn.focusPending = focusPending
+        toReturn.targetMission = targetMission
         return toReturn
     }
 
@@ -129,6 +135,7 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
         assert(!newAction.hasCountdownTurns || turns > 0) // hasTurns==false but turns > 0 is allowed (CounterIntelligence), hasTurns==true and turns==0 is not.
         // a spy that stops countering spies has no focus: the city derives its focus from the spy's state, so the change must be noticed (CvPlayerEspionage::ExtractSpyFromCity)
         if (newAction != SpyAction.CounterIntelligence && focus != null) clearFocus()
+        if (newAction != SpyAction.GatheringIntel) targetMission = null   // the mission is worked towards only while gathering intel
         if (newAction != action) espionageManager.focusVersion++
         action = newAction
         turnsRemainingForAction = turns

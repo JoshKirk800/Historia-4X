@@ -28,7 +28,18 @@ object SpyMissionResolver {
      *  last mission, has the Network Points, its owner has the technology, the city is what the mission wants, and there is something for the effects to do.
      */
     @Readonly
-    fun unavailableReason(spy: Spy, mission: SpyMission): String? {
+    fun unavailableReason(spy: Spy, mission: SpyMission): String? = refusal(spy, mission, ignoreWaiting = false)
+
+    /**
+     *  Whether [spy] can work towards [mission] in the city it is in: every condition of [unavailableReason] except the two that time takes care of, the wait after its last mission and
+     *  the Network Points it has stored. What the AI asks (CvEspionageAI::GetMissionScore is -1 for a mission whose requirements are not met, not for one that waits for points), so it needs
+     *  no reading of the wording of a reason.
+     */
+    @Readonly
+    fun canWorkTowards(spy: Spy, mission: SpyMission): Boolean = refusal(spy, mission, ignoreWaiting = true) == null
+
+    @Readonly
+    private fun refusal(spy: Spy, mission: SpyMission, ignoreWaiting: Boolean): String? {
         val civ = spy.civInfo
         val constants = civ.gameInfo.ruleset.modOptions.constants
         if (!constants.espionageLikeVp) return "Missions need the espionage of Vox Populi"
@@ -37,10 +48,12 @@ object SpyMissionResolver {
         if (spy.action != SpyAction.GatheringIntel) return "The spy is not gathering intel"
         if (city.civ == civ || !city.civ.isMajorCiv) return "Only in the cities of other major civilizations"
         if (spy.getEffectiveRank() < mission.requiredSpyRank) return "Needs a spy of rank [${mission.requiredSpyRank}]"
-        val cooldown = civ.espionageManager.getMissionCooldownLeft(spy)
-        if (cooldown > 0) return "The spy must wait [$cooldown] more turns"
-        val cost = mission.getNetworkPointsNeeded(civ.gameInfo.speed)
-        if (cost > 0 && spy.networkPoints < cost) return "Needs [$cost] Network Points, [${spy.networkPoints}] stored"
+        if (!ignoreWaiting) {
+            val cooldown = civ.espionageManager.getMissionCooldownLeft(spy)
+            if (cooldown > 0) return "The spy must wait [$cooldown] more turns"
+            val cost = mission.getNetworkPointsNeeded(civ.gameInfo.speed)
+            if (cost > 0 && spy.networkPoints < cost) return "Needs [$cost] Network Points, [${spy.networkPoints}] stored"
+        }
         val tech = mission.requiredTech
         if (tech != null && !civ.tech.isResearched(tech)) return "Needs the technology [$tech]"
         if (!city.matchesFilter(mission.cityFilter, civ)) return "Only in [${mission.cityFilter}] cities"

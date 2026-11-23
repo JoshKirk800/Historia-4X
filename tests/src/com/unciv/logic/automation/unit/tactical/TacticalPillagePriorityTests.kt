@@ -29,7 +29,7 @@ class TacticalPillagePriorityTests {
         val luxury = candidates[0]
         val strategic = candidates[1]
         for (tile in candidates) tile.setOwningCity(enemyCity)
-        luxury.setTileResource("Gold Ore")
+        luxury.setTileResource("Gold")
         luxury.setImprovement("Mine")
         strategic.setTileResource("Iron")
         strategic.setImprovement("Mine")

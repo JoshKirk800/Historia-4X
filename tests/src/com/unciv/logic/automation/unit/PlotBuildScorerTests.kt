@@ -83,7 +83,7 @@ class PlotBuildScorerTests {
     fun `gold is smoothed for golden ages so that a golden age does not change the score`() {
         val city = game.addCity(civ, tile(0, 0))
         val plot = tile(1, 0)
-        val tradingPost = improvement("Trading post")
+        val tradingPost = improvement("Village")
         val build = Build(tradingPost)
         val scorer = scorer()
         val projected = scorer.projectedYields(plot, build, city)

@@ -462,6 +462,23 @@ class SettleAreasTest {
     }
 
     @Test
+    fun `the Inca check finds Pata-Pata`() {
+        map(6)
+        val other = civ()
+        val inca = civ()
+        val site = tile(0, 0)
+        addWheat(site)
+        game.setTileTerrainAndFeatures(HexCoord(1, 0), "Plains", "Hill")
+        game.setTileTerrain(HexCoord(2, 0), "Mountain")
+        val plain = value(inca, site)
+        assertTrue("setup: a site worth settling", plain > 0)
+        assertEquals("nobody owns Pata-Pata yet", plain, value(other, site))
+        game.ruleset.tileImprovements["Pata-Pata"]!!.uniqueTo = inca.civName
+        assertTrue("the hills next to mountains and the mountains count for its owner", value(inca, site) > plain)
+        assertEquals(plain, value(other, site))
+    }
+
+    @Test
     fun `a very unhappy empire cannot found a city with the needs model`() {
         for ((happy, unhappy, canFound) in listOf(Triple(20, 10, true), Triple(9, 10, true), Triple(2, 3, false))) {
             val world = NeedsTestWorld()

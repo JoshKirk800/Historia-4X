@@ -41,6 +41,73 @@ class CivVLuxuryPlacementTests {
         assertEquals("15", ruleset.tileResources["Whales"]!!.getMatchingUniques(com.unciv.models.ruleset.unique.UniqueType.LuxuryWeightingForCityStates).first().params[0])
     }
 
+    /** A Standard map (80 x 52) of 8 civs and 16 city states */
+    private fun standardMap(seed: Long): Pair<TileMap, com.unciv.models.ruleset.Ruleset> {
+        RulesetCache.loadRulesets(noMods = true)
+        val ruleset = RulesetCache[BaseRuleset.Civ_V_BNW.fullName]!!
+        val gameInfo = GameInfo()
+        gameInfo.ruleset = ruleset
+        for (n in ruleset.nations.values.filter { it.isMajorCiv }.take(8) + ruleset.nations.values.filter { it.isCityState }.take(16)) {
+            val civ = Civilization(n); civ.gameInfo = gameInfo; gameInfo.civilizations.add(civ)
+        }
+        val params = MapParameters().apply {
+            this.seed = seed; type = MapType.continentsLikeCivV; mapSize = MapSize(80, 52); worldWrap = true; shape = MapShape.rectangular
+        }
+        return MapGenerator(ruleset).generateMap(params, GameParameters(), gameInfo) to ruleset
+    }
+
+    private val newLuxuries = listOf("Amber", "Jade", "Lapis Lazuli", "Coral", "Coffee", "Tobacco", "Tea", "Perfume", "Olives")
+
+    @Test
+    fun `the new luxuries have the weights of the script of Vox Populi`() {
+        RulesetCache.loadRulesets(noMods = true)
+        val ruleset = RulesetCache[BaseRuleset.Civ_V_BNW.fullName]!!
+        fun weights(name: String): Map<String, String> = ruleset.tileResources[name]!!.getMatchingUniques(
+            com.unciv.models.ruleset.unique.UniqueType.ResourceWeighting, com.unciv.models.ruleset.unique.GameContext.IgnoreConditionals)
+            .associate { it.modifiers.first().params[0] to it.params[0] }
+        fun cityState(name: String) = ruleset.tileResources[name]!!.getMatchingUniques(
+            com.unciv.models.ruleset.unique.UniqueType.LuxuryWeightingForCityStates).first().params[0]
+        // AssignStartingPlots.lua luxury_region_weights (V:(2) Vox Populi/Core Files/Overrides/AssignStartingPlots.lua:481-790), 1 tundra ... 8 hybrid
+        assertEquals(mapOf("Tundra" to "35", "Desert" to "10", "Hill" to "10", "Hybrid" to "30"), weights("Amber"))
+        assertEquals(mapOf("Tundra" to "10", "Desert" to "15", "Hill" to "20", "Hybrid" to "30"), weights("Jade"))
+        assertEquals(mapOf("Tundra" to "10", "Desert" to "35", "Hill" to "10", "Hybrid" to "30"), weights("Lapis Lazuli"))
+        assertEquals(mapOf("Tundra" to "10", "Jungle" to "10", "Forest" to "8", "Desert" to "10", "Hill" to "6", "Plains" to "11", "Grassland" to "14", "Hybrid" to "20"),
+            weights("Coral"))
+        assertEquals(mapOf("Plains" to "40", "Grassland" to "20", "Hybrid" to "5"), weights("Coffee"))
+        assertEquals(mapOf("Plains" to "40", "Grassland" to "20", "Hybrid" to "5"), weights("Olives"))
+        for (name in listOf("Tobacco", "Tea", "Perfume")) assertEquals(name, mapOf("Plains" to "15", "Grassland" to "50", "Hybrid" to "5"), weights(name))
+        // luxury_city_state_weights
+        assertEquals(listOf("10", "10", "10", "10", "5", "5", "5", "5", "5"), newLuxuries.map { cityState(it) })
+    }
+
+    @Test
+    fun `every new luxury is placed on a Standard map within the census range`() {
+        val seen = HashSet<String>()
+        for (seed in 71L..78L) {
+            val (map, ruleset) = standardMap(seed)
+            val luxuries = map.values.filter { it.resource != null && ruleset.tileResources[it.resource!!]!!.resourceType == ResourceType.Luxury }
+            seen += luxuries.map { it.resource!! }
+            assertTrue("seed $seed: luxuries ${luxuries.size}", luxuries.size in 50..150)
+            for (tile in map.values.filter { it.resource in newLuxuries })
+                assertTrue("seed $seed: ${tile.resource} on ${tile.baseTerrain} ${tile.terrainFeatures}", ruleset.tileResources[tile.resource!!]!!.let { r ->
+                    r.terrainsCanBeFoundOn.any { it == tile.baseTerrain || it in tile.terrainFeatures || (it == "Hill" && "Hill" in tile.terrainFeatures) } })
+        }
+        assertEquals("every new luxury is somewhere in 8 maps", emptyList<String>(), newLuxuries.filter { it !in seen })
+        assertTrue("Gold is placed under its new name", "Gold" in seen)
+        assertTrue("Cinnamon is placed under its new name", "Cinnamon" in seen)
+        assertTrue(seen.none { it == "Gold Ore" || it == "Spices" })
+    }
+
+    @Test
+    fun `the bonus resources of Vox Populi are in the ruleset`() {
+        RulesetCache.loadRulesets(noMods = true)
+        val ruleset = RulesetCache[BaseRuleset.Civ_V_BNW.fullName]!!
+        for (name in listOf("Maize", "Rice", "Figs")) assertEquals(name, ResourceType.Bonus, ruleset.tileResources[name]!!.resourceType)
+        assertEquals("Agriculture", ruleset.tileResources["Maize"]!!.revealedBy)
+        assertEquals("Agriculture", ruleset.tileResources["Rice"]!!.revealedBy)
+        assertEquals(null, ruleset.tileResources["Figs"]!!.revealedBy)
+    }
+
     @Test
     fun `most luxury kinds are on the map, marble is topped up to 3 in 4 civs and every start and city state has one near`() {
         for (seed in 61L..63L) {
@@ -62,10 +129,11 @@ class CivVLuxuryPlacementTests {
     }
 
     @Test
-    fun `luxuries are not placed on starts and the luxuries total about a hundred and thirty`() {
+    fun `luxuries are not placed on starts and the luxuries total about six of each of the 29 kinds`() {
         val (map, ruleset) = hugeMap(64L)
         val total = map.values.count { it.resource != null && ruleset.tileResources[it.resource!!]!!.resourceType == ResourceType.Luxury }
-        assertTrue("luxuries $total", total in 100..170)
+        // 20 kinds made about 130 (6.5 each) before the 9 of Vox Populi were added; each kind that is placed gets at least 3 and about 6 on average
+        assertTrue("luxuries $total", total in 120..230)
         val starts = map.startingLocationsByNation.values.flatten()
         assertTrue(starts.none { it.resource != null && ruleset.tileResources[it.resource!!]!!.resourceType == ResourceType.Luxury })
     }

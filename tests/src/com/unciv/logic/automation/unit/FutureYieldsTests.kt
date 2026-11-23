@@ -42,11 +42,11 @@ class FutureYieldsTests {
         val economics = column("Economics")
         assertTrue("setup: Economics is within reach of the weights", economics in 1..9)
         // Nothing researched: the latest column is 0 and the earliest missing is 0, so the average is 0
-        assertEquals(1 * (100 - economics * 10), futureYields("Trading post")[improvement("Trading post"), Stat.Gold])
+        assertEquals(1 * (100 - economics * 10), futureYields("Village")[improvement("Village"), Stat.Gold])
 
         // Everything before Economics researched: latest = economics - 1, earliest missing = economics, average = economics - 1
         for (tech in game.ruleset.technologies.values) if (tech.column!!.columnNumber < economics) research(tech.name)
-        assertEquals(1 * 90, futureYields("Trading post")[improvement("Trading post"), Stat.Gold])
+        assertEquals(1 * 90, futureYields("Village")[improvement("Village"), Stat.Gold])
     }
 
     @Test
@@ -58,13 +58,13 @@ class FutureYieldsTests {
         assertEquals("setup: Atomic Theory is beyond the horizon of a civilization with nothing researched", 0, weight("Atomic Theory"))
 
         research("Economics")
-        assertEquals("Economics is researched: no future gold", 0, futureYields("Trading post")[improvement("Trading post"), Stat.Gold])
+        assertEquals("Economics is researched: no future gold", 0, futureYields("Village")[improvement("Village"), Stat.Gold])
     }
 
     @Test
     fun `an improvement or a yield without a future one has none`() {
-        val futureYields = futureYields("Trading post")
-        assertEquals(0, futureYields[improvement("Trading post"), Stat.Food])
+        val futureYields = futureYields("Village")
+        assertEquals(0, futureYields[improvement("Village"), Stat.Food])
         // Not part of the update: Academy is neither buildable nor on a plot of ours
         assertEquals(0, futureYields[improvement("Academy"), Stat.Science])
     }
@@ -79,14 +79,14 @@ class FutureYieldsTests {
 
     @Test
     fun `the policies of an adopted branch that are not adopted give their yield at 80`() {
-        val tradingPost = improvement("Trading post")
+        val tradingPost = improvement("Village")
         // Economics is researched: only the policy remains
         research("Economics")
-        assertEquals("no branch adopted", 0, futureYields("Trading post")[tradingPost, Stat.Gold])
+        assertEquals("no branch adopted", 0, futureYields("Village")[tradingPost, Stat.Gold])
 
         civ.policies.freePolicies = 1
         civ.policies.adopt(game.ruleset.policies["Commerce"]!!)
-        assertEquals("Commerce Complete: +1 gold from every Trading post", 1 * 80, futureYields("Trading post")[tradingPost, Stat.Gold])
+        assertEquals("Commerce Complete: +1 gold from every Village", 1 * 80, futureYields("Village")[tradingPost, Stat.Gold])
     }
 
     @Test
@@ -94,7 +94,7 @@ class FutureYieldsTests {
         game.addCity(civ, game.tileMap[HexCoord(0, 0)])
         civ.policies.freePolicies = 1
         civ.policies.adopt(game.ruleset.policies["Commerce"]!!)
-        val tradingPost = improvement("Trading post")
+        val tradingPost = improvement("Village")
         val scorer = PlotBuildScorer(civ)
         scorer.updateAllCityWorstPlots()
         scorer.futureYields.update(listOf(tradingPost))

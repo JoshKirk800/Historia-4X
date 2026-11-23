@@ -159,7 +159,7 @@ class BuilderAssignmentTests {
         val plot = tile(1, 0)
         val worker = game.addUnit("Worker", civ, plot)
         val ai = BuilderTaskingAi(civ)
-        val later = directive("Trading post", plot, PlotBuildScore(100000), canBuild = false)
+        val later = directive("Village", plot, PlotBuildScore(100000), canBuild = false)
         val farm = directive("Farm", plot, PlotBuildScore(5000))
         val farmScore = ai.scorer.scorePlotBuild(plot, improvement("Farm"), farm.build)
 
@@ -179,7 +179,7 @@ class BuilderAssignmentTests {
         val first = game.addUnit("Worker", civ, plot)
         val second = game.addUnit("Worker", civ, tile(0, 0))
         val ai = BuilderTaskingAi(civ)
-        val assignment = BuilderAssignment(civ, ai, listOf(directive("Farm", plot, PlotBuildScore(5000)), directive("Trading post", plot, PlotBuildScore(4000))))
+        val assignment = BuilderAssignment(civ, ai, listOf(directive("Farm", plot, PlotBuildScore(5000)), directive("Village", plot, PlotBuildScore(4000))))
         val picks = assignment.assign(listOf(first, second))
         assertEquals(1, picks.size)
         assertEquals("Farm", picks.single().build.improvement.name)

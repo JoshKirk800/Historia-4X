@@ -55,6 +55,7 @@ class MapUnitCache(private val mapUnit: MapUnit) {
     var canEnterIceTiles = false
     var cannotEmbark = false
     var cannotEnterOceanTiles = false
+    var hasTileEntryRestrictions = false
     var canEnterForeignTerrain: Boolean = false
     var canEnterCityStates: Boolean = false
     var costToDisembark: Float? = null
@@ -113,6 +114,7 @@ class MapUnitCache(private val mapUnit: MapUnit) {
         canEnterIceTiles = mapUnit.hasUnique(UniqueType.CanEnterIceTiles)
         cannotEmbark = mapUnit.hasUnique(UniqueType.CannotEmbark)
         cannotEnterOceanTiles = mapUnit.hasUnique(UniqueType.CannotEnterOcean, state)
+        hasTileEntryRestrictions = mapUnit.hasUnique(UniqueType.CannotEnterFilteredTile, GameContext.IgnoreConditionals, checkCivInfoUniques = true)
 
         hasUniqueToBuildImprovements = mapUnit.hasUnique(UniqueType.BuildImprovements)
         hasUniqueToCreateWaterImprovements = mapUnit.hasUnique(UniqueType.CreateWaterImprovements)
@@ -141,6 +143,7 @@ class MapUnitCache(private val mapUnit: MapUnit) {
             UniqueType.ReducedDisembarkCost,
             UniqueType.ReducedEmbarkCost,
             UniqueType.CanEnterIceTiles,
+            UniqueType.CannotEnterFilteredTile,
             UniqueType.CanEnterForeignTiles,
             UniqueType.CanEnterForeignTilesButLosesReligiousStrength,
             // Special - applied in Nation and not here, wshould be moved to mapunitcache as well

@@ -1,5 +1,6 @@
 package com.unciv.models
 
+import com.unciv.models.ruleset.CityCombatConstants
 import com.unciv.utils.withHash
 import java.lang.reflect.Modifier
 
@@ -19,6 +20,51 @@ class ModConstants {
     // Max amount of experience that can be gained from combat with barbarians
     @Suppress("SpellCheckingInspection") // Pfrom is not a word ;)
     var maxXPfromBarbarians = 30
+
+    /** VP 5.4.8 CvUnitCombat::ResolveMeleeCombat: only the first attack each turn grants attacker XP. */
+    var combatXpFirstAttackOnly = false
+
+    /** VP 5.4.8 CvCity::SetRetroactivePromotion grants trained promotions to existing units. */
+    var retroactiveCityPromotionsLikeVp = false
+
+    /** VP 5.4.8 IsPromotionValidForCivilianUnitType checks the specific civilian unit type. */
+    var civilianPromotionApplicabilityLikeVp = false
+
+    /** VP 5.4.8 CvUnit::maxXPValue and changeExperienceTimes100 cap awards against barbarians and minors. */
+    var combatXpCapsLikeVp = false
+    var maxXPfromCityStates = -1
+
+    /** VP 5.4.8 CvUnit::GetDamageCombatModifier applies wound penalties to strength, except ranged defence. */
+    var combatHealthStrengthLikeVp = false
+    var enemyCombatAurasLikeVp = false
+
+    /** VP CvUnitCombat::DoDamageMath uses separate melee and ranged defines in hundredths. */
+    data class CombatDamageConstants(
+        val meleeBase: Int = 2400,
+        val meleeRandom: Int = 1200,
+        val rangedBase: Int = 2400,
+        val rangedRandom: Int = 1200,
+        val meleeCityDamagePercent: Int = 100,
+        val cityMeleeRetaliationPercent: Int = 100,
+        val rangedCivilianDamage: Int = 40,
+    )
+    var combatDamage = CombatDamageConstants()
+
+    /** VP 5.4.8 CvUnit::baseMoves uses EMBARKED_UNIT_MOVEMENT before movement bonuses. */
+    var embarkedUnitMovement = 2
+
+    /** VP 5.4.8 CvUnit::healRate: territory and occupation determine base healing. */
+    var unitHealingLikeVp = false
+    /** VP 5.4.8 CvUnit::healRate with MOD_BALANCE_VP: state religion beliefs heal in own territory. */
+    var stateReligionHealingLikeVp = false
+    var cityUnitHeal = 25
+    var friendlyUnitHeal = 20
+    var neutralUnitHeal = 10
+    var enemyUnitHeal = 10
+
+    /** Staged city model; its values are only used when enabled. */
+    var cityCombatLikeVp = false
+    var cityCombat = CityCombatConstants()
 
     // Formula for city Strength:
     // Strength = baseStrength + strengthPerPop + strengthFromTiles +

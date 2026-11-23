@@ -445,7 +445,7 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
 
             val isRelevantPromotion = filter == "relevant"
                     && civInfo.gameInfo.ruleset.unitPromotions.values
-                .any { it.name == promotion && unit.type.name in it.unitTypes }
+                .any { it.name == promotion && unit.promotions.isApplicableToUnit(it) }
 
             if (isRelevantPromotion || unit.matchesFilter(filter)) {
                 unit.promotions.addPromotion(promotion, isFree = true)

@@ -16,6 +16,7 @@ import com.unciv.logic.map.pathingmap.PathingMap
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UnitActionType
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.ui.components.UnitMovementMemoryType
 import com.unciv.utils.Log
@@ -1015,6 +1016,9 @@ class UnitMovement(val unit: MapUnit) {
 
     @Readonly
     fun cannotPassThroughReason(tile: Tile, includeOtherEscortUnit: Boolean = true): CannotMoveToReason? {
+        if (unit.cache.hasTileEntryRestrictions && unit.getMatchingUniques(
+                UniqueType.CannotEnterFilteredTile, GameContext(unit.civ, unit = unit, tile = tile), checkCivInfoUniques = true
+            ).any { tile.matchesFilter(it.params[0]) }) return CannotMoveToReason.TerrainImpassable
         if (tile.isImpassible()) {
             // special exception - ice tiles are technically impassible, but some units can move through them anyway
             // helicopters can pass through impassable tiles like mountains

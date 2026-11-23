@@ -180,6 +180,24 @@ object BattleDamage {
         if (strengthMalus != null) {
             modifiers.add("Adjacent enemy units", strengthMalus.params[0].toInt())
         }
+        if (civInfo.gameInfo.ruleset.modOptions.constants.enemyCombatAurasLikeVp &&
+            (combatant.unit.type.isLandUnit() || combatant.unit.type.isWaterUnit())) {
+            val position = if (conditionalState.combatAction == CombatAction.Attack) tileToAttackFrom else combatant.getTile()
+            var worst = 0
+            for (tile in position.getTilesInDistance(8)) for (source in tile.getUnits()) {
+                if (!source.civ.isAtWarWith(civInfo) || source.isEmbarked() ||
+                    source.type.getMovementType() != combatant.unit.type.getMovementType()) continue
+                var amount = 0
+                var range = 0
+                for (unique in source.getMatchingUniques(UniqueType.EnemyStrengthAura, checkCivInfoUniques = true)) {
+                    if (!combatant.matchesFilter(unique.params[1])) continue
+                    amount += unique.params[0].toInt()
+                    range += unique.params[2].toInt()
+                }
+                if (position.aerialDistanceTo(tile) <= range) worst = minOf(worst, amount)
+            }
+            if (worst != 0) modifiers.add("Nearby enemy units", worst)
+        }
         return modifiers
     }
 
@@ -365,6 +383,7 @@ object BattleDamage {
      *  and a city is not weakened at all (GetCombatDamage) */
     @Readonly
     private fun getHealthDependantDamageRatio(combatant: ICombatant, fullHealthScale: Boolean = false): Float {
+        if (combatant.getCivInfo().gameInfo.ruleset.modOptions.constants.combatHealthStrengthLikeVp) return 1f
         if (fullHealthScale) return combatant.getHealth().toFloat() / combatant.getMaxHealth()
         return if (combatant !is MapUnitCombatant
             || combatant.unit.hasUnique(UniqueType.NoDamagePenaltyWoundedUnits, checkCivInfoUniques = true)
@@ -390,7 +409,11 @@ object BattleDamage {
         tileToAttackFrom: Tile,
         ignoreFlanking: Boolean = false
     ): Float {
-        val attackModifier = modifiersToFinalBonus(getAttackModifiers(attacker, defender, tileToAttackFrom, ignoreFlanking))
+        val modifiers = Counter<String>()
+        modifiers.add(getAttackModifiers(attacker, defender, tileToAttackFrom, ignoreFlanking))
+        val healthPenalty = vpHealthStrengthPenalty(attacker, false)
+        if (healthPenalty != 0) modifiers.add("Wounded", healthPenalty)
+        val attackModifier = modifiersToFinalBonus(modifiers)
         val strength = max(1f, attacker.getAttackingStrength(defender) * attackModifier)
         // CvUnitCombat::GenerateMeleeCombatInfo: Heavy Charge, 150% after all the modifiers, against a unit that cannot fall back
         return if (attacker is MapUnitCombatant && attacker.unit.cache.hasHeavyChargeUnique && MeleeFallBack.isHeavyChargeBoosted(attacker, defender)) strength * 1.5f else strength
@@ -402,8 +425,32 @@ object BattleDamage {
      */
     @Readonly
     fun getDefendingStrength(attacker: ICombatant, defender: ICombatant, tileToAttackFrom: Tile, ignoreFlanking: Boolean = false): Float {
-        val defenceModifier = modifiersToFinalBonus(getDefenceModifiers(attacker, defender, tileToAttackFrom, ignoreFlanking))
+        val modifiers = Counter<String>()
+        modifiers.add(getDefenceModifiers(attacker, defender, tileToAttackFrom, ignoreFlanking))
+        val healthPenalty = vpHealthStrengthPenalty(defender, attacker.isRanged())
+        if (healthPenalty != 0) modifiers.add("Wounded", healthPenalty)
+        val defenceModifier = modifiersToFinalBonus(modifiers)
         return max(1f, defender.getDefendingStrength(attacker) * defenceModifier)
+    }
+
+    /** VP 5.4.8 CvUnit::GetDamageCombatModifier; use the combatant's overlay HP, never the live unit HP. */
+    @Readonly
+    private fun vpHealthStrengthPenalty(combatant: ICombatant, rangedDefence: Boolean): Int {
+        if (combatant !is MapUnitCombatant ||
+            !combatant.getCivInfo().gameInfo.ruleset.modOptions.constants.combatHealthStrengthLikeVp) return 0
+        val lostHealth = (combatant.getMaxHealth() - combatant.getHealth()).coerceAtLeast(0)
+        if (lostHealth == 0) return 0
+        // CvUnit::GetDamageCombatModifier: the player modifier is a flat bonus while wounded,
+        // independent of the normal health-scaled penalty and of ranged-defence immunity.
+        var modifier = 0
+        combatant.unit.forEachMatchingUnique(UniqueType.WoundedUnitDamagePenalty, checkCivInfoUniques = true) {
+            modifier -= it.params[0].toInt()
+        }
+        val woundAmount = lostHealth * BattleConstants.WOUNDED_DAMAGE_MULTIPLIER / 100
+        if (combatant.unit.hasUnique(UniqueType.StrongerWhenDamaged, checkCivInfoUniques = true)) return modifier + woundAmount
+        if (!rangedDefence && !combatant.unit.hasUnique(UniqueType.NoDamagePenaltyWoundedUnits, checkCivInfoUniques = true))
+            modifier -= woundAmount
+        return modifier
     }
     
     @Readonly
@@ -428,10 +475,19 @@ object BattleDamage {
     ): Int {
         if (attacker.isRanged() && !attacker.isAirUnit()) return 0
         if (defender.isCivilian()) return 0
-        val ratio = getAttackingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking) / getDefendingStrength(
-                attacker, defender, tileToAttackFrom, ignoreFlanking)
+        val attackStrength = getAttackingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking)
+        val defenceStrength = getDefendingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking)
         val minimum = if (defender is CityCombatant && isAirStrike(attacker, defender)) BattleConstants.MIN_CITY_STRIKE_DAMAGE else 1
-        return damageToInt(damageModifier(ratio, true, randomnessFactor) * getHealthDependantDamageRatio(defender, fullHealthScale), minimum)
+        val constants = attacker.getCivInfo().gameInfo.ruleset.modOptions.constants
+        if (constants.combatHealthStrengthLikeVp) {
+            val damage = constants.combatDamage
+            var percent = if (defender is CityCombatant && attacker.isMelee()) damage.cityMeleeRetaliationPercent else 100
+            percent += damageTakenModifier(attacker)
+            if (defender is CityCombatant) percent -= cityAssaultReduction(attacker)
+            return vpDamageMath((defenceStrength * 100).toInt(), (attackStrength * 100).toInt(),
+                randomnessFactor, damage.meleeBase, damage.meleeRandom, percent)
+        }
+        return damageToInt(damageModifier(attackStrength / defenceStrength, true, randomnessFactor) * getHealthDependantDamageRatio(defender, fullHealthScale), minimum)
     }
 
     @Readonly
@@ -445,11 +501,74 @@ object BattleDamage {
         fullHealthScale: Boolean = isAirStrike(attacker, defender),
         ignoreFlanking: Boolean = false
     ): Int {
-        if (defender.isCivilian()) return BattleConstants.DAMAGE_TO_CIVILIAN_UNIT
-        val ratio = getAttackingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking) /
-                getDefendingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking)
+        var damage = rawDamageToDefender(attacker, defender, tileToAttackFrom, randomnessFactor, fullHealthScale, ignoreFlanking)
+        if (defender is CityCombatant) damage = (damage - defender.getFlatDamageReduction()).coerceAtLeast(0)
+        if (defender !is CityCombatant || !sharesGarrisonDamage(attacker, defender)) return damage
+        val garrisonMaxHealth = if (defender.city.getGarrison() == null) 0 else 100
+        return damage - garrisonShare(damage, defender.getMaxHealth(), garrisonMaxHealth)
+    }
+
+    /** VP 5.4.8 CvUnit::getMeleeCombatDamageCity / GetRangeCombatDamage: split before capping to current HP.
+     * [garrisonMaxHealth] is null for the live garrison, or its hypothetical maximum HP (zero when absent) in a simulation. */
+    @Readonly
+    fun calculateDamageToDefenderAndGarrison(
+        attacker: ICombatant,
+        defender: ICombatant,
+        tileToAttackFrom: Tile = defender.getTile(),
+        randomnessFactor: Float = getRandomness(defender),
+        fullHealthScale: Boolean = isAirStrike(attacker, defender),
+        ignoreFlanking: Boolean = false,
+        garrisonMaxHealth: Int? = null,
+    ): Pair<Int, Int> {
+        var damage = rawDamageToDefender(attacker, defender, tileToAttackFrom, randomnessFactor, fullHealthScale, ignoreFlanking)
+        if (defender is CityCombatant) damage = (damage - defender.getFlatDamageReduction()).coerceAtLeast(0)
+        if (defender !is CityCombatant || !sharesGarrisonDamage(attacker, defender)) return damage to 0
+        val maxHealth = garrisonMaxHealth ?: if (defender.city.getGarrison() == null) 0 else 100
+        val share = garrisonShare(damage, defender.getMaxHealth(), maxHealth)
+        return damage - share to share
+    }
+
+    @Readonly
+    private fun rawDamageToDefender(attacker: ICombatant, defender: ICombatant, tileToAttackFrom: Tile,
+        randomnessFactor: Float, fullHealthScale: Boolean, ignoreFlanking: Boolean): Int {
+        val constants = attacker.getCivInfo().gameInfo.ruleset.modOptions.constants
+        if (defender.isCivilian()) return if (constants.combatHealthStrengthLikeVp && attacker.isRanged())
+            constants.combatDamage.rangedCivilianDamage else BattleConstants.DAMAGE_TO_CIVILIAN_UNIT
+        val attackStrength = getAttackingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking)
+        val defenceStrength = getDefendingStrength(attacker, defender, tileToAttackFrom, ignoreFlanking)
         val minimum = if (attacker is CityCombatant) BattleConstants.MIN_CITY_STRIKE_DAMAGE else 1
-        return damageToInt(damageModifier(ratio, false, randomnessFactor) * getHealthDependantDamageRatio(attacker, fullHealthScale), minimum)
+        if (constants.combatHealthStrengthLikeVp) {
+            val damage = constants.combatDamage
+            val base = if (attacker.isRanged()) damage.rangedBase else damage.meleeBase
+            val random = if (attacker.isRanged()) damage.rangedRandom else damage.meleeRandom
+            var percent = if (defender is CityCombatant && attacker.isMelee()) damage.meleeCityDamagePercent else 100
+            if (attacker is CityCombatant) percent -= cityAssaultReduction(defender)
+            else if (attacker.isMelee()) percent += damageTakenModifier(defender)
+            val result = vpDamageMath((attackStrength * 100).toInt(), (defenceStrength * 100).toInt(),
+                randomnessFactor, base, random, percent)
+            return if (attacker.isRanged() && attacker !is CityCombatant && defender is MapUnitCombatant)
+                (result * (100 + damageTakenModifier(defender)) / 100).coerceAtLeast(0) else result
+        }
+        return damageToInt(damageModifier(attackStrength / defenceStrength, false, randomnessFactor) * getHealthDependantDamageRatio(attacker, fullHealthScale), minimum)
+    }
+
+    @Readonly
+    private fun damageTakenModifier(combatant: ICombatant): Int = if (combatant is MapUnitCombatant)
+        combatant.unit.getMatchingUniques(UniqueType.DamageTakenModifier, checkCivInfoUniques = true).sumOf { it.params[0].toInt() } else 0
+
+    @Readonly
+    private fun cityAssaultReduction(combatant: ICombatant): Int = if (combatant is MapUnitCombatant)
+        combatant.unit.getMatchingUniques(UniqueType.CityAssaultDamageReduction, checkCivInfoUniques = true).sumOf { it.params[0].toInt() } else 0
+
+    @Readonly
+    private fun sharesGarrisonDamage(attacker: ICombatant, city: CityCombatant): Boolean =
+        city.getCivInfo().gameInfo.ruleset.modOptions.constants.cityCombatLikeVp &&
+            !(attacker.isRanged() && attacker is MapUnitCombatant && attacker.hasUnique(UniqueType.IgnoresGarrisonAbsorption))
+
+    @Pure
+    private fun garrisonShare(damage: Int, cityMaxHealth: Int, garrisonMaxHealth: Int): Int {
+        if (garrisonMaxHealth <= 0) return 0
+        return (damage.toLong() * 2 * garrisonMaxHealth / (cityMaxHealth.toLong() + 2L * garrisonMaxHealth)).toInt()
     }
 
     /** A melee attack on a unit rolls both damages up front and applies both (CvUnitCombat::GenerateMeleeCombatInfo). If that would kill
@@ -460,7 +579,16 @@ object BattleDamage {
     fun resolveMeleeDeaths(attacker: ICombatant, defender: ICombatant, damageToDefender: Int, damageToAttacker: Int): Pair<Int, Int> {
         val attackerHealth = attacker.getHealth()
         val defenderHealth = defender.getHealth()
-        if (damageToDefender < defenderHealth || damageToAttacker < attackerHealth) return damageToDefender to damageToAttacker
+        if (damageToDefender < defenderHealth || damageToAttacker < attackerHealth) {
+            // VP 5.4.8 CvUnit::getMeleeCombatDamage: the side killed cannot inflict its full retaliation.
+            if (!attacker.isAirUnit() && attacker.getCivInfo().gameInfo.ruleset.modOptions.constants.combatHealthStrengthLikeVp) {
+                if (damageToDefender >= defenderHealth && damageToDefender > 0)
+                    return damageToDefender to damageToAttacker * defenderHealth / damageToDefender
+                if (damageToAttacker >= attackerHealth && damageToAttacker > 0)
+                    return damageToDefender * attackerHealth / damageToAttacker to damageToAttacker
+            }
+            return damageToDefender to damageToAttacker
+        }
         val totalOnDefender = damageToDefender + defender.getMaxHealth() - defenderHealth
         val totalOnAttacker = damageToAttacker + attacker.getMaxHealth() - attackerHealth
         return if (totalOnDefender > totalOnAttacker) damageToDefender to attackerHealth - 1
@@ -477,6 +605,18 @@ object BattleDamage {
             minExtra += calculateDamageToDefender(fakeAttacker, defender, tileToAttackFrom, 0f)
         }
         return maxExtra to minExtra
+    }
+
+    /** VP 5.4.8 CvUnitCombat::DoDamageMath, strengths and intermediate damage in hundredths. */
+    @Pure
+    internal fun vpDamageMath(attackerStrength: Int, defenderStrength: Int, randomnessFactor: Float,
+        base: Int = 2400, random: Int = 1200, percent: Int = 100): Int {
+        val stronger = max(attackerStrength, defenderStrength).toDouble()
+        val weaker = max(1, minOf(attackerStrength, defenderStrength))
+        val ratio = minOf(1000.0, (((stronger / weaker + 3.0) / 4.0).pow(4) + 1.0) / 2.0)
+        val adjustedRatio = if (defenderStrength > attackerStrength) 1.0 / ratio else ratio
+        val baseDamage = base + (random * randomnessFactor).toInt()
+        return ((baseDamage * adjustedRatio).toInt().toLong() * percent / 100 / 100).toInt().coerceAtLeast(0)
     }
 
     @Pure

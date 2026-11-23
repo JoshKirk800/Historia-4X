@@ -13,6 +13,8 @@ import kotlin.collections.HashMap
 import kotlin.math.abs
 
 class Speed : RulesetObject() {
+    /** VP 5.4.8 CvUnit::maxXPValue scales barbarian and minor XP limits by GameSpeeds.ExperiencePercent. */
+    var experiencePercent: Int = 100
     var modifier: Float = 1f
     var goldCostModifier: Float = modifier
     var productionCostModifier: Float = modifier

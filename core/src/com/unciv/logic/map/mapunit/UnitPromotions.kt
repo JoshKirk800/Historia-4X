@@ -188,14 +188,20 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
         return unit.civ.gameInfo.ruleset.unitPromotions.values.asSequence().filter { isAvailable(it) }
     }
 
+    /** VP 5.4.8 CvGameCoreUtils::IsPromotionValidForCivilianUnitType also matches the civilian's specific unit type. */
+    @Readonly
+    fun isApplicableToUnit(promotion: Promotion): Boolean = unit.type.name in promotion.unitTypes ||
+        (unit.civ.gameInfo.ruleset.modOptions.constants.civilianPromotionApplicabilityLikeVp && unit.isCivilian()
+            && unit.name in promotion.unitTypes)
+
     /** All promotions this unit could have in its promotion tree: those matching its unit type, plus those already adopted. */
     @Readonly
     fun getPromotionTreeCandidates(): List<AvailablePromotion> {
         val state = unit.cache.state
         return unit.civ.gameInfo.ruleset.unitPromotions.values
-            .filter { unit.baseUnit.unitType in it.unitTypes || it.name in promotions }
+            .filter { isApplicableToUnit(it) || it.name in promotions }
             .map { promotion ->
-                val blocked = promotion.hasUnique(UniqueType.Unavailable, state)
+                val blocked = !meetsExtraRequirements(promotion) || promotion.hasUnique(UniqueType.Unavailable, state)
                     || promotion.getMatchingUniques(UniqueType.OnlyAvailable, GameContext.IgnoreConditionals)
                         .any { !it.conditionalsApply(state) }
                 AvailablePromotion(promotion, promotion.name in promotions, blocked)
@@ -207,13 +213,25 @@ class UnitPromotions : IsPartOfGameInfoSerialization {
     @Readonly
     private fun isAvailable(promotion: Promotion): Boolean {
         if (promotion.name in promotions) return false
-        if (unit.type.name !in promotion.unitTypes) return false
+        if (!isApplicableToUnit(promotion)) return false
         if (promotion.prerequisites.isNotEmpty() && promotion.prerequisites.none { it in promotions }) return false
 
         val stateForConditionals = unit.cache.state
+        if (!meetsExtraRequirements(promotion)) return false
         if (promotion.hasUnique(UniqueType.Unavailable, stateForConditionals)) return false
         if (promotion.getMatchingUniques(UniqueType.OnlyAvailable, GameContext.IgnoreConditionals)
             .any { !it.conditionalsApply(stateForConditionals) }) return false
+        return true
+    }
+
+    /** VP 5.4.8 CvUnit::canAcquirePromotion checks the mandatory prerequisite and effective attack range. */
+    @Readonly
+    private fun meetsExtraRequirements(promotion: Promotion): Boolean {
+        val state = unit.cache.state
+        if (promotion.getMatchingUniques(UniqueType.PromotionRequiresPromotion, state).any { it.params[0] !in promotions }) return false
+        if (promotion.getMatchingUniques(UniqueType.PromotionMinimumRange, state).any { unit.getRange() < it.params[0].toInt() }) return false
+        if (unit.getRange() > 0 && promotion.getMatchingUniques(UniqueType.PromotionMaximumRange, state)
+                .any { unit.getRange() > it.params[0].toInt() }) return false
         return true
     }
 

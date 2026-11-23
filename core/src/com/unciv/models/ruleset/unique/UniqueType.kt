@@ -701,6 +701,19 @@ enum class UniqueType(
     CannotAttack("Cannot attack", UniqueTarget.Unit),
     MustSetUp("Must set up to ranged attack", UniqueTarget.Unit),
     SelfDestructs("Self-destructs when attacking", UniqueTarget.Unit),
+    // VP 5.4.8 CvUnit::GetRangeCombatDamage excludes UNITAI_MISSILE_AIR from garrison absorption.
+    // Missile target selection against cities also selects a unit, and is owned by air combat; do not map this alone.
+    IgnoresGarrisonAbsorption("Attacks bypass garrison damage absorption", UniqueTarget.Unit),
+    CityRangeStrikeModifier("[relativeAmount]% City ranged strike strength", UniqueTarget.Global),
+    GarrisonedCityRangeStrikeModifier("[relativeAmount]% City ranged strike strength with a garrison", UniqueTarget.Global),
+    AdjacentCityDefenseModifier("[relativeAmount]% defense for this and adjacent cities", UniqueTarget.Unit),
+    CityDefensePerWonder("[amount] city strength per [amount] world wonders", UniqueTarget.Building),
+    CityDefensePerAirUnit("[amount] city strength per stationed air unit", UniqueTarget.Global),
+    AlliedCityStateDefenseModifier("[relativeAmount]% allied city-state defense", UniqueTarget.Global),
+    MultipleAttackCityStrikeModifier("[relativeAmount]% city strike strength per previous attack on target", UniqueTarget.Global),
+    CityFlatDamageReduction("Cities take [amount] less damage from attacks", UniqueTarget.Global),
+    DamageTakenModifier("[relativeAmount]% damage taken", UniqueTarget.Unit, UniqueTarget.Global),
+    CityAssaultDamageReduction("[amount]% less damage from cities", UniqueTarget.Unit, UniqueTarget.Global),
 
     // Attack unrestrictions
     AttackAcrossCoast("Eliminates combat penalty for attacking across a coast", UniqueTarget.Unit),
@@ -714,6 +727,13 @@ enum class UniqueType(
 
     NoDefensiveTerrainBonus("No defensive terrain bonus", UniqueTarget.Unit, UniqueTarget.Global),
     NoDefensiveTerrainPenalty("No defensive terrain penalty", UniqueTarget.Unit, UniqueTarget.Global),
+    // VP 5.4.8 CvUnit::canAcquirePromotion: an AND prerequisite and range bounds supplement the OR list.
+    PromotionRequiresPromotion("Requires [promotion] promotion", UniqueTarget.Promotion),
+    PromotionMinimumRange("Requires at least [amount] attack range", UniqueTarget.Promotion),
+    PromotionMaximumRange("Requires at most [amount] attack range", UniqueTarget.Promotion),
+    /** VP 5.4.8 CvUnit::GetReverseGreatGeneralModifier uses the strongest same-domain enemy aura. */
+    EnemyStrengthAura("[relativeAmount]% Strength for enemy [mapUnitFilter] units within [amount] tiles", UniqueTarget.Unit, UniqueTarget.Global),
+    StrongerWhenDamaged("Stronger when damaged", UniqueTarget.Unit, UniqueTarget.Global),
     NoDamagePenaltyWoundedUnits("No damage penalty for wounded units", UniqueTarget.Unit, UniqueTarget.Global),
     WoundedUnitDamagePenalty("[amount]% wounded unit damage penalty", UniqueTarget.Global,
         docDescription = "Percentage points added to the share of its lost health that a wounded unit loses in strength and damage dealt (33 by default), " +
@@ -743,6 +763,10 @@ enum class UniqueType(
     HealOnlyByPillaging("Can only heal by pillaging", UniqueTarget.Unit, UniqueTarget.Global),
     HealsEvenAfterAction("Unit will heal every turn, even if it performs an action", UniqueTarget.Unit),
     HealAdjacentUnits("All adjacent units heal [amount] HP when healing", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::healRate takes the best same-tile or same-domain adjacent unit heal. */
+    HealSameTileUnits("Units on this tile heal [amount] HP when healing", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::GetHealFriendlyTerritoryFromNearbyUnit and neutral/enemy variants. */
+    HealTerritoryAura("[amount] HP healing for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles", UniqueTarget.Unit),
 
     // Vision
     NoSight("No Sight", UniqueTarget.Unit),
@@ -809,6 +833,8 @@ enum class UniqueType(
     CanEnterIceTiles("Can enter ice tiles", UniqueTarget.Unit),
     CannotEmbark("Cannot embark", UniqueTarget.Unit),
     CannotEnterOcean("Cannot enter ocean tiles", UniqueTarget.Unit),
+    /** VP 5.4.8 CvUnit::canEnterTerrain checks feature and terrain impassability from promotions. */
+    CannotEnterFilteredTile("Cannot enter [tileFilter] tiles", UniqueTarget.Unit, UniqueTarget.Global),
     CanEnterForeignTiles("May enter foreign tiles without open borders", UniqueTarget.Unit),
     CanEnterForeignTilesButLosesReligiousStrength("May enter foreign tiles without open borders, but loses [amount] religious strength each turn it ends there", UniqueTarget.Unit),
     ReducedDisembarkCost("[nonNegativeAmount] Movement point cost to disembark", UniqueTarget.Global, UniqueTarget.Unit),

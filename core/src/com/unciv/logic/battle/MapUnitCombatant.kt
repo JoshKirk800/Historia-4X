@@ -55,7 +55,9 @@ open class MapUnitCombatant(val unit: MapUnit) : ICombatant {
         return if (unit.isEmbarked() && !isCivilian())
             unit.civ.getEra().embarkDefense
         // CvUnit::GetRangeCombatDamage: a ranged unit uses its ranged strength against a ranged attack "UNLESS it's a boat"
-        else if (isRanged() && attackedByRanged && !unit.baseUnit.isWaterUnit)
+        // VP 5.4.8 CvUnit::GetRangeCombatDamage also uses ranged strength for naval ranged defenders.
+        else if (isRanged() && attackedByRanged && (!unit.baseUnit.isWaterUnit ||
+                unit.civ.gameInfo.ruleset.modOptions.constants.combatHealthStrengthLikeVp))
             unit.baseUnit.rangedStrength + extraStrength
         else unit.baseUnit.strength + extraStrength
     }

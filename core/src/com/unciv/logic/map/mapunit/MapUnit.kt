@@ -80,6 +80,11 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
     var attacksThisTurn = 0
 
+    /** VP 5.4.8 CvUnit::ChangeNumTimesAttackedThisTurn; keyed by the attacking civilization. */
+    var timesAttackedBy = HashMap<String, Int>()
+
+    @Readonly fun getTimesAttackedBy(civName: String): Int = timesAttackedBy[civName] ?: 0
+
     /** Damage taken since this unit's turn started and during the turn before (CvUnit::m_iDamageTakenThisTurn / m_iDamageTakenLastTurn), see [isProjectedToDieNextTurn] */
     var damageTakenThisTurn = 0
     var damageTakenLastTurn = 0
@@ -252,6 +257,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
         toReturn.escorting = escorting
         toReturn.automatedRoadConnectionDestination = automatedRoadConnectionDestination
         toReturn.attacksThisTurn = attacksThisTurn
+        toReturn.timesAttackedBy = HashMap(timesAttackedBy)
         toReturn.damageTakenThisTurn = damageTakenThisTurn
         toReturn.damageTakenLastTurn = damageTakenLastTurn
         toReturn.turnsFortified = turnsFortified
@@ -434,7 +440,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
     @Readonly
     fun getMaxMovement(ignoreOtherUnit: Boolean = false): Int {
         var movement =
-                if (isEmbarked()) 2
+                if (isEmbarked()) civ.gameInfo.ruleset.modOptions.constants.embarkedUnitMovement
                 else baseUnit.movement
 
         movement += getMatchingUniques(UniqueType.Movement, checkCivInfoUniques = true)
@@ -576,9 +582,22 @@ class MapUnit : IsPartOfGameInfoSerialization {
     /** Returns the health points [MapUnit] will receive if healing on [tile] */
     @Readonly
     fun healingAmountForTile(tile: Tile, noTerrainDamage: Boolean = false): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (constants.unitHealingLikeVp && ResourceShortage.cannotHeal(this)) return 0
         val isFriendlyTerritory = tile.isFriendlyTerritory(civ)
-
-        var healing = when {
+        var healing = if (constants.unitHealingLikeVp) {
+            val city = tile.getCity()
+            when {
+                tile.isCityCenter() -> if (city != null && city.isInResistance() && !city.isBeingRazed)
+                    constants.enemyUnitHeal else constants.cityUnitHeal
+                tile.isWater && !(isFriendlyTerritory && (baseUnit.isWaterUnit || isTransported || cache.canMoveOnWater)) -> 0
+                isFriendlyTerritory && city?.isBeingRazed == true -> constants.cityUnitHeal
+                isFriendlyTerritory && city?.isInResistance() == true -> constants.enemyUnitHeal
+                isFriendlyTerritory -> constants.friendlyUnitHeal
+                tile.getOwner()?.isAtWarWith(civ) == true -> constants.enemyUnitHeal
+                else -> constants.neutralUnitHeal
+            }
+        } else when {
             tile.isCityCenter() -> 25
             tile.isWater && isFriendlyTerritory && (baseUnit.isWaterUnit || isTransported) -> 20 // Water unit on friendly water
             tile.isWater && isFriendlyTerritory && cache.canMoveOnWater -> 20 // Treated as a water unit on friendly water
@@ -605,11 +624,40 @@ class MapUnit : IsPartOfGameInfoSerialization {
             }
         }
 
-        val maxAdjacentHealingBonus = currentTile.neighbors
-            .flatMap { it.getUnits() }.filter { it.civ == civ }
-            .maxOfOrNull { it.adjacentHealingBonus() }
-        if (maxAdjacentHealingBonus != null)
-            healing += maxAdjacentHealingBonus
+        if (constants.unitHealingLikeVp) {
+            var best = getMatchingUniques(UniqueType.HealSameTileUnits).sumOf { it.params[0].toInt() }
+            for (other in tile.getUnits()) {
+                if (other == this || other.civ != civ) continue
+                best = maxOf(best, other.getMatchingUniques(UniqueType.HealSameTileUnits).sumOf { it.params[0].toInt() })
+            }
+            for (neighbor in tile.neighbors) for (other in neighbor.getUnits()) {
+                if (other == this || other.civ != civ || other.type.getMovementType() != type.getMovementType()) continue
+                best = maxOf(best, other.adjacentHealingBonus())
+            }
+            healing += best
+            var territoryAura = 0
+            for (other in civ.units.getCivUnits()) {
+                if (other == this || !other.hasTile() || other.type.getMovementType() != type.getMovementType()) continue
+                val distance = tile.aerialDistanceTo(other.getTile())
+                if (distance > 4) continue
+                for (unique in other.getMatchingUniques(UniqueType.HealTerritoryAura)) {
+                    if (distance <= unique.params[3].toInt() && matchesFilter(unique.params[1]) && tile.matchesFilter(unique.params[2]))
+                        territoryAura = unique.params[0].toInt()
+                }
+            }
+            healing += territoryAura
+            if (constants.stateReligionHealingLikeVp && civ.getCapital() != null && tile.getOwner() == civ) {
+                val stateReligion = civ.religionManager.getFounderBenefitsReligion() ?: civ.religionManager.getMajorityReligion()
+                stateReligion?.followerBeliefUniqueMap?.getMatchingUniques(UniqueType.CityHealingUnits, cache.state)?.forEach { unique ->
+                    if (matchesFilter(unique.params[0])) healing += unique.params[1].toInt()
+                }
+            }
+        } else {
+            val maxAdjacentHealingBonus = currentTile.neighbors
+                .flatMap { it.getUnits() }.filter { it.civ == civ }
+                .maxOfOrNull { it.adjacentHealingBonus() }
+            if (maxAdjacentHealingBonus != null) healing += maxAdjacentHealingBonus
+        }
 
         if (noTerrainDamage) return healing
         healing -= getDamageFromTerrain(tile)
@@ -898,6 +946,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
         newUnit.instanceName = instanceName
         newUnit.currentMovement = currentMovement
         newUnit.attacksThisTurn = attacksThisTurn
+        newUnit.timesAttackedBy = HashMap(timesAttackedBy)
         newUnit.isTransported = isTransported
         for (promotion in newUnit.promotions.promotions)
             if (promotion !in promotions.promotions)

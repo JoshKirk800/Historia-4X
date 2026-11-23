@@ -167,6 +167,7 @@ class UnitTurnManager(val unit: MapUnit) {
         unit.movement.clearPathfindingCache()
         unit.currentMovement = unit.getMaxMovement().toFloat()
         unit.attacksThisTurn = 0
+        unit.timesAttackedBy.clear()
         unit.flipDamageReceivedPerTurn()
         unit.due = true
 

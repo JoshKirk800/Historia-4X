@@ -774,13 +774,13 @@ object CityStateAi {
         return value
     }
 
-    /** CvMinorCivAI::CanMajorBullyUnit: Unciv's tribute rule (willingness to give a worker not negative) and a capital to give it from */
+    /** CvMinorCivAI::CanMajorBullyUnit: Unciv's tribute rule (willingness to give a worker not negative, with `cityStateBullyLikeVp` the score for a heavy tribute) and a capital to give it from */
     fun canMajorBullyUnit(minor: Civilization, major: Civilization): Boolean =
-        !minor.isAtWarWith(major) && minor.getCapital() != null && minor.cityStateFunctions.getTributeWillingness(major, demandingWorker = true) >= 0
+        minor.getCapital() != null && minor.cityStateFunctions.canBullyHeavy(major)
 
-    /** CvMinorCivAI::CanMajorBullyGold: Unciv's tribute rule (willingness not negative) */
+    /** CvMinorCivAI::CanMajorBullyGold: Unciv's tribute rule (willingness not negative, with `cityStateBullyLikeVp` the score for gold) */
     fun canMajorBullyGold(minor: Civilization, major: Civilization): Boolean =
-        !minor.isAtWarWith(major) && minor.cityStateFunctions.getTributeWillingness(major) >= 0
+        minor.cityStateFunctions.canBullyGold(major)
 
     /**
      *  The worker tribute desirability of Vox Populi's DoContactMinorCivs; null unless hostile and possible. 100, by proximity +25,

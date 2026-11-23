@@ -518,6 +518,43 @@ class ModConstants {
     )
     var cityStateInfluence = CityStateInfluenceConstants()
 
+    /**
+     *  Demanding tribute from a city-state as in Vox Populi (CvMinorCivAI::CalculateBullyScore, V:CvMinorCivAI.cpp:14015-14400, GetBullyGoldAmount, 13969-14012, CanMajorBullyGold,
+     *  14403-14470, DoMajorBullyGold, 14603-14750, DoBulliedByMajorReaction, 15025-15080; MOD_BALANCE_VP with MOD_BALANCE_HEAVY_TRIBUTE) instead of Brave New World's: the score is the
+     *  share of the military might of all the civilizations and the local power, with no base reluctance and no penalty for low influence, gold needs a score of 20 and heavy tribute
+     *  of 100, a demand costs 30 influence and everything the civilization has over its resting point change, and the yields of policies and traits for a demand are paid.
+     *  Off: the old rules. The numbers are in [CityStateBullyConstants].
+     */
+    var cityStateBullyLikeVp = false
+
+    /**
+     *  The defines of [cityStateBullyLikeVp], with the amounts of the penalties as positive numbers. Can only be modded all-or-nothing; the defaults are Vox Populi 5.4.8's.
+     *  [blockedTurns] the turns after a tribute in which there is no new one (10 x the game speed's production cost percentage), [cooldownTurns] the turns in which a tribute counts
+     *  against the score, [recentlyBulliedPerTurn] for each turn left of them; [globalMilitaryShare] the percent of the might share that counts; [goldBase] `MINOR_BULLY_GOLD` and
+     *  [goldGrowth] `MINOR_BULLY_GOLD_GROWTH_FACTOR`, the gold of a tribute at the start and what it grows by over the game; [goldThreshold] `MINOR_CIV_GOLD_TRIBUTE_THRESHOLD`
+     *  and [heavyThreshold] `MINOR_CIV_HEAVY_TRIBUTE_THRESHOLD` the scores a demand needs; [dropGoldTimes100] `MINOR_FRIENDSHIP_DROP_BULLY_GOLD_SUCCESS` and [dropHeavyTimes100]
+     *  `MINOR_FRIENDSHIP_DROP_BULLY_WORKER_SUCCESS` the influence a demand costs, in hundredths; [allyPenalty], [protectorPenalty] for each, [hostilePenalty] and [militaristicPenalty]
+     *  what the city-state's situation takes off; [scoreCap] the highest score.
+     */
+    data class CityStateBullyConstants(
+        val blockedTurns: Int = 10,
+        val cooldownTurns: Int = 30,
+        val recentlyBulliedPerTurn: Int = 10,
+        val globalMilitaryShare: Int = 50,
+        val goldBase: Int = 50,
+        val goldGrowth: Int = 1000,
+        val goldThreshold: Int = 20,
+        val heavyThreshold: Int = 100,
+        val dropGoldTimes100: Int = 3000,
+        val dropHeavyTimes100: Int = 6000,
+        val allyPenalty: Int = 15,
+        val protectorPenalty: Int = 15,
+        val hostilePenalty: Int = 10,
+        val militaristicPenalty: Int = 10,
+        val scoreCap: Int = 100,
+    )
+    var cityStateBully = CityStateBullyConstants()
+
     // Espionage
     /**
      *  Vox Populi's spy points (CvPlayer::CreateSpies with MOD_BALANCE_SPY_POINTS, V:CvPlayer.cpp:23292-23338) instead of whole spies. false: `Gain an extra spy` makes one spy and

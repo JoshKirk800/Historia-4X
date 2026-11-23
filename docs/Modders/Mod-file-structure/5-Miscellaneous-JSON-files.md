@@ -379,6 +379,8 @@ and city distance in another. In case of conflicts, there is no guarantee which 
 | workboatAutomationSearchMaxTiles         | Int    | 37                            | [^M]  |
 | cityStateInfluenceLikeVp                 | Boolean | false                        | How the influence with a City-State changes each turn as in Vox Populi instead of Brave New World's: a protector's resting point is 5 (not 10), the decay grows with the points over the resting point, is three times as fast towards a protector whose capital is damaged, the trade route bonus is multiplied by the number of routes to City-States (at most 5), the change is divided by the game speed's production cost percentage, and an ally stays until another civilization has more influence |
 | cityStateInfluence                       | Object  | [See below](#citystateinfluenceconstants) | The defines of that model, only read with `cityStateInfluenceLikeVp` |
+| cityStateBullyLikeVp                     | Boolean | false                        | Demanding tribute as in Vox Populi instead of Brave New World's: the score is the share of the military might and the local power with no base reluctance and no penalty for low influence, gold needs a score of 20 and the heavy tribute (the worker) 100, a demand costs 30 influence and what the civilization has over its resting point, and the `upon demanding tribute from a City-State` yields are paid |
+| cityStateBully                           | Object  | [See below](#citystatebullyconstants) | The defines of that model, only read with `cityStateBullyLikeVp` |
 | spyPointsLikeVp                          | Boolean | false                        | Vox Populi's spy points instead of whole spies: `Gain [n] Spy Points` counts points and makes a spy each time they reach the threshold (100 in Vox Populi), `Gain an extra spy` is one threshold of points, a negative amount is a debt. Without it `Gain [n] Spy Points` does nothing |
 | espionage                                | Object  | [See below](#espionageconstants) | The threshold of spy points and the time a killed spy stays dead |
 | maxSpyRank                               | Int    | 3                             | [^N]  |
@@ -676,6 +678,28 @@ The defines of `cityStateInfluenceLikeVp`, in hundredths of influence where the 
 | anchorProtected | Int | 5 | `MINOR_FRIENDSHIP_ANCHOR_MOD_PROTECTED`: the resting point of a protector |
 | anchorWary | Int | -20 | `MINOR_FRIENDSHIP_ANCHOR_MOD_WARY_OF`: the resting point against a civilization the City-State is wary of |
 | tradeRouteBonusRoutes | Int | 5 | The most routes to City-States that multiply the trade route bonus of policies |
+
+#### CityStateBullyConstants
+
+The defines of `cityStateBullyLikeVp`, with the penalties as positive numbers. These values are not merged individually, only the entire sub-structure is. The defaults are Vox Populi 5.4.8's.
+
+| Attribute | Type | Default | Notes |
+|-----------|------|---------|-------|
+| blockedTurns | Int | 10 | The turns after a tribute in which there is no new one (times the game speed's production cost percentage) |
+| cooldownTurns | Int | 30 | The turns in which a tribute counts against the score, `recentlyBulliedPerTurn` for each turn left |
+| recentlyBulliedPerTurn | Int | 10 | |
+| globalMilitaryShare | Int | 50 | The percent of the share of the military might that counts |
+| goldBase | Int | 50 | `MINOR_BULLY_GOLD`: the gold of a tribute at the start |
+| goldGrowth | Int | 1000 | `MINOR_BULLY_GOLD_GROWTH_FACTOR`: what the gold grows by over the game |
+| goldThreshold | Int | 20 | `MINOR_CIV_GOLD_TRIBUTE_THRESHOLD`: the score gold needs |
+| heavyThreshold | Int | 100 | `MINOR_CIV_HEAVY_TRIBUTE_THRESHOLD`: the score a heavy tribute needs |
+| dropGoldTimes100 | Int | 3000 | `MINOR_FRIENDSHIP_DROP_BULLY_GOLD_SUCCESS`: the influence a demand for gold costs, in hundredths |
+| dropHeavyTimes100 | Int | 6000 | `MINOR_FRIENDSHIP_DROP_BULLY_WORKER_SUCCESS` |
+| allyPenalty | Int | 15 | Taken off the score if another civilization is the ally of the City-State |
+| protectorPenalty | Int | 15 | For each other civilization that protects it |
+| hostilePenalty | Int | 10 | For a hostile City-State |
+| militaristicPenalty | Int | 10 | For a Militaristic City-State |
+| scoreCap | Int | 100 | The highest score |
 
 #### EspionageConstants
 

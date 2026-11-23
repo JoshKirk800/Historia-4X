@@ -578,7 +578,69 @@ class CityStateFunctions(val civInfo: Civilization) {
 
     @Readonly
     fun getTributeWillingness(demandingCiv: Civilization, demandingWorker: Boolean = false): Int {
-        return getTributeModifiers(demandingCiv, demandingWorker).values.sum()
+        val sum = getTributeModifiers(demandingCiv, demandingWorker).values.sum()
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        return if (constants.cityStateBullyLikeVp) sum.coerceAtMost(constants.cityStateBully.scoreCap) else sum
+    }
+
+    /** Whether [demandingCiv] can demand gold: Brave New World's willingness of 0 or more, with [com.unciv.models.ModConstants.cityStateBullyLikeVp] the score for gold (CvMinorCivAI::CanMajorBullyGold) */
+    @Readonly
+    fun canBullyGold(demandingCiv: Civilization): Boolean {
+        if (civInfo.isAtWarWith(demandingCiv)) return false
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        return if (constants.cityStateBullyLikeVp) CityStateBully.canBullyGold(constants.cityStateBully, getTributeWillingness(demandingCiv))
+        else getTributeWillingness(demandingCiv) >= 0
+    }
+
+    /** Whether [demandingCiv] can demand a heavy tribute, the worker: with the switch the score of CvMinorCivAI::CanMajorBullyUnit (100), else the willingness for a worker of 0 or more */
+    @Readonly
+    fun canBullyHeavy(demandingCiv: Civilization): Boolean {
+        if (civInfo.isAtWarWith(demandingCiv)) return false
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        return if (constants.cityStateBullyLikeVp) CityStateBully.canBullyHeavy(constants.cityStateBully, getTributeWillingness(demandingCiv, demandingWorker = true))
+        else getTributeWillingness(demandingCiv, demandingWorker = true) >= 0
+    }
+
+    /** Whether this city-state is afraid of [demandingCiv] (the relationship level Afraid): Brave New World's willingness above 0, with the switch that it can demand gold */
+    @Readonly
+    fun isAfraidOf(demandingCiv: Civilization): Boolean {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        return if (constants.cityStateBullyLikeVp) CityStateBully.canBullyGold(constants.cityStateBully, getTributeWillingness(demandingCiv))
+        else getTributeWillingness(demandingCiv) > 0
+    }
+
+    /** The inputs of CvMinorCivAI::CalculateBullyScore for [demandingCiv], which has a capital (V:14090-14380) */
+    @Readonly
+    private fun getVpBullyInputs(demandingCiv: Civilization): CityStateBully.Inputs {
+        // the might of all the living majors with cities
+        val majors = civInfo.gameInfo.getAliveMajorCivs().filter { it.cities.isNotEmpty() }
+        val totalMight = majors.sumOf { it.ai.militaryMight().toLong() }
+        val mightPercent = (100L * demandingCiv.ai.militaryMight() / max(1L, totalMight)).toInt()
+
+        // The capital's tile and every tile within max(map width / 10, 5) of it; CvUnit::GetPower of the combat units on them
+        val bullyRange = max(civInfo.gameInfo.tileMap.tileMatrix.size / 10, 5)
+        @Suppress("DEPRECATION") val inRangeTiles = civInfo.getCapital()!!.getCenterTile().getTilesInDistanceRange(0..bullyRange)
+        val bullyPower = inRangeTiles.sumOf { tile -> tile.militaryUnit?.takeIf { it.civ == demandingCiv }?.getAiPower() ?: 0 }
+        val cityStatePower = CityCombatant(civInfo.getCapital()!!).getDefendingStrength().toDouble().pow(1.5).toInt() +
+            inRangeTiles.sumOf { tile -> tile.militaryUnit?.takeIf { it.civ == civInfo }?.getAiPower() ?: 0 }
+
+        var militaryModifier = 0
+        demandingCiv.forEachMatchingUnique(UniqueType.BullyMilitaryStrengthModifier) { militaryModifier += it.params[0].toInt() }
+        var policyModifier = 0
+        demandingCiv.forEachMatchingUnique(UniqueType.CityStateEasilyIntimidatedByForce) { policyModifier += it.params[0].toInt() }
+
+        val lastBullied = civInfo.getDiplomacyManager(demandingCiv)!!.turnLastBullied
+        return CityStateBully.Inputs(
+            globalMilitaryPercent = mightPercent, bullyPower = bullyPower, cityStatePower = cityStatePower,
+            militaryModifier = militaryModifier, policyModifier = policyModifier,
+            turnsSinceBullied = if (lastBullied >= 0) civInfo.gameInfo.turns - lastBullied else null,
+            trainPercent = max(1, (civInfo.gameInfo.speed.productionCostModifier * 100).roundToInt()),
+            hasOtherAlly = civInfo.allyCiv != null && civInfo.allyCiv != demandingCiv,
+            otherProtectors = getProtectorCivs().count { it != demandingCiv },
+            ignorePenalties = demandingCiv.hasUnique(UniqueType.IgnoresBullyPenalties),
+            hostile = civInfo.cityStatePersonality == CityStatePersonality.Hostile,
+            militaristic = civInfo.cityStateType.name == "Militaristic"
+        )
     }
 
     @Readonly
@@ -592,6 +654,14 @@ class CityStateFunctions(val civInfo: Civilization) {
         if (civInfo.cities.isEmpty() || civInfo.getCapital() == null) {
             modifiers["No Cities"] = -999
             return modifiers
+        }
+
+        if (civInfo.gameInfo.ruleset.modOptions.constants.cityStateBullyLikeVp) {
+            if (demandingCiv.getCapital() == null) {
+                modifiers["No Cities"] = -1000
+                return modifiers
+            }
+            return CityStateBully.terms(civInfo.gameInfo.ruleset.modOptions.constants.cityStateBully, getVpBullyInputs(demandingCiv))
         }
 
         modifiers["Base value"] = -110
@@ -660,8 +730,29 @@ class CityStateFunctions(val civInfo: Civilization) {
         return modifiers
     }
 
+    /** The influence a demand for gold (or for the worker, [heavy]) by [demandingCiv] costs it now, for the tribute screen: Brave New World's 15 and 50, with `cityStateBullyLikeVp` the drop of the demand */
     @Readonly
-    fun goldGainedByTribute(): Int {
+    fun tributeInfluenceCost(demandingCiv: Civilization, heavy: Boolean = false): Int {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        if (!constants.cityStateBullyLikeVp) return if (heavy) 50 else 15
+        if (demandingCiv.hasUnique(UniqueType.CanBullyFriendlyCityStates) || demandingCiv.hasUnique(UniqueType.BullyGlobalInfluenceShift)) return 0
+        val current = (civInfo.getDiplomacyManager(demandingCiv)!!.getInfluence() * 100).roundToInt()
+        return -CityStateBully.influenceChangeTimes100(constants.cityStateBully, 0, current, heavy) / 100
+    }
+
+    /** The gold a demand by [demandingCiv] takes; with [com.unciv.models.ModConstants.cityStateBullyLikeVp] it is scaled by its score (CvMinorCivAI::GetBullyGoldAmount), else it is Brave New World's */
+    @Readonly
+    fun goldGainedByTribute(demandingCiv: Civilization? = null): Int {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        if (constants.cityStateBullyLikeVp && demandingCiv != null) {
+            val speed = civInfo.gameInfo.speed
+            // the game's progress: the turns over the speed's estimated end turn
+            val progress = civInfo.gameInfo.turns.toFloat() / max(1, speed.numTotalTurns())
+            // (the trait modifier of the value, CSBullyValueModifier, has no row in Vox Populi)
+            return CityStateBully.goldAmount(
+                constants.cityStateBully, progress, demandingCiv.getEraNumber(), (speed.instantYieldModifier * 100).roundToInt(), 0, getTributeWillingness(demandingCiv)
+            )
+        }
         // These values are close enough, linear increase throughout the game
         var gold = (10 * civInfo.gameInfo.speed.goldGiftModifier).toInt() * 5 // rounding down to nearest 5
         val turnsToIncrement = civInfo.gameInfo.speed.cityStateTributeScalingInterval
@@ -672,11 +763,64 @@ class CityStateFunctions(val civInfo: Civilization) {
 
     fun tributeGold(demandingCiv: Civilization) {
         if (!civInfo.isCityState) throw Exception("You can only demand gold from City-States!")
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        if (constants.cityStateBullyLikeVp) {
+            tributeGoldLikeVp(demandingCiv)
+            return
+        }
         val goldAmount = goldGainedByTribute()
         demandingCiv.addGold(goldAmount)
         civInfo.getDiplomacyManager(demandingCiv)!!.addInfluence(-15f)
         cityStateBullied(demandingCiv)
         civInfo.addFlag(CivFlags.RecentlyBullied.name, 20)
+    }
+
+    /** CvMinorCivAI::DoMajorBullyGold (V:CvMinorCivAI.cpp:14603-14750): the gold, the yields of the demand, the influence and the others' reaction. A score under the threshold does nothing */
+    private fun tributeGoldLikeVp(demandingCiv: Civilization) {
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        if (!CityStateBully.canBullyGold(constants.cityStateBully, getTributeWillingness(demandingCiv))) return
+        val gold = goldGainedByTribute(demandingCiv)
+        demandingCiv.addGold(gold)
+        // what Policy_YieldFromMinorDemand and Trait_YieldFromMinorDemand give for the gold (V:CvPlayer.cpp:26760-26770)
+        InstantYields.fire(UniqueType.TriggerUponDemandingTribute, demandingCiv, demandingCiv.getCapital(), gold)
+
+        val diplomacy = civInfo.getDiplomacyManager(demandingCiv)!!
+        // the resting point change of the civilization (a Great Diplomat's mission, a liberation) is 0 until a rule gives it one
+        val change = CityStateBully.influenceChangeTimes100(constants.cityStateBully, 0, (diplomacy.getInfluence() * 100).roundToInt())
+        bulliedReaction(demandingCiv, change)
+        civInfo.addFlag(CivFlags.RecentlyBullied.name, 20)
+    }
+
+    /**
+     *  CvMinorCivAI::DoBulliedByMajorReaction and the global shift of DoMajorBullyGold (V:CvMinorCivAI.cpp:14674-14730, 15025-15080): a civilization that cannot bully friendly
+     *  city-states pays the influence of the demand and breaks its pledge to protect (the pledge cannot be renewed for a while, nothing is paid for that); with a global shift
+     *  the demand raises its influence by a percentage of it, and lowers that of the other civilizations by the same percentage; the others hear of it, the quests are tested
+     */
+    private fun bulliedReaction(demandingCiv: Civilization, changeTimes100: Int) {
+        val diplomacy = civInfo.getDiplomacyManager(demandingCiv)!!
+        var shiftPercent = 0
+        demandingCiv.forEachMatchingUnique(UniqueType.BullyGlobalInfluenceShift) { shiftPercent += it.params[0].toInt() }
+
+        if (shiftPercent > 0) {
+            // the effective influence times the percentage, from the bully for itself and from everybody else against them
+            val own = (diplomacy.getInfluence() * shiftPercent / 100f)
+            if (own > 0f) diplomacy.addInfluence(own)
+            for (major in civInfo.gameInfo.getAliveMajorCivs()) {
+                if (major == demandingCiv) continue
+                val shift = civInfo.getDiplomacyManager(major)!!.getInfluence() * shiftPercent / 100f
+                if (shift > 0f) civInfo.getDiplomacyManager(major)!!.addInfluence(-shift)
+            }
+        }
+        if (!demandingCiv.hasUnique(UniqueType.CanBullyFriendlyCityStates)) {
+            if (shiftPercent == 0) diplomacy.addInfluence(changeTimes100 / 100f)
+            if (diplomacy.diplomaticStatus == DiplomaticStatus.Protector) {
+                // the pledge is broken without the penalty of the withdrawal, and cannot be renewed for the turns of the bullying lock
+                diplomacy.diplomaticStatus = DiplomaticStatus.Peace
+                diplomacy.setFlag(DiplomacyFlags.RecentlyWithdrewProtection, 30)
+            }
+        }
+        cityStateBullied(demandingCiv)
+        diplomacy.turnLastBullied = civInfo.gameInfo.turns
     }
 
     fun tributeWorker(demandingCiv: Civilization) {
@@ -690,8 +834,14 @@ class CityStateFunctions(val civInfo: Civilization) {
         if (buildableWorkerLikeUnits.isEmpty()) return  // Bad luck?
         demandingCiv.units.placeUnitNearTile(civInfo.getCapital()!!.location.toHexCoord(), buildableWorkerLikeUnits.values.random(rng))
 
-        civInfo.getDiplomacyManager(demandingCiv)!!.addInfluence(-50f)
-        cityStateBullied(demandingCiv)
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        if (constants.cityStateBullyLikeVp) {
+            // the heavy tribute's own drop (V:CvMinorCivAI.cpp:14976); the worker stays Brave New World's reward until the owner decides on it
+            bulliedReaction(demandingCiv, CityStateBully.influenceChangeTimes100(constants.cityStateBully, 0, 0, heavy = true))
+        } else {
+            civInfo.getDiplomacyManager(demandingCiv)!!.addInfluence(-50f)
+            cityStateBullied(demandingCiv)
+        }
         civInfo.addFlag(CivFlags.RecentlyBullied.name, 20)
     }
 

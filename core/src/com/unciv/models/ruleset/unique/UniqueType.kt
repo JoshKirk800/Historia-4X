@@ -180,6 +180,16 @@ enum class UniqueType(
     CityStateInfluenceRecoversTwiceNormalRate("City-State Influence recovers at twice the normal rate", UniqueTarget.Global),
     CityStateInfluenceGainWhenAfraid("Gain [positiveAmount] Influence per turn with City-States you could demand tribute from", UniqueTarget.Global),
     CityStateEasilyIntimidatedByForce("Units are [relativeAmount]% more effective at intimidating City-States", UniqueTarget.Global),
+    BullyMilitaryStrengthModifier("[relativeAmount]% military strength when demanding tribute from City-States", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `cityStateBullyLikeVp`: the original's `Traits.CSBullyMilitaryStrengthModifier` (the Zulu, 50), added to both military parts of the score " +
+            "of a demand for tribute (V:CvMinorCivAI.cpp:14108-14111, 14155-14158)"),
+    IgnoresBullyPenalties("Demanding tribute ignores the penalties of the allies and protectors of City-States", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `cityStateBullyLikeVp`: the original's `Traits.IgnoreBullyPenalties` (the Zulu, V:CvMinorCivAI.cpp:14306)"),
+    CanBullyFriendlyCityStates("Tribute demands cost no Influence and do not break our Pledges to Protect", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `cityStateBullyLikeVp`: the original's `Policies.CanBullyFriendlyCS` (V:CvMinorCivAI.cpp:15033-15045)"),
+    BullyGlobalInfluenceShift("Demanding tribute raises our Influence with that City-State by [positiveAmount]% and lowers the Influence of every other civilization by the same percentage", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `cityStateBullyLikeVp`: the original's `Policies.BullyGlobalCSInfluenceShift` (V:CvMinorCivAI.cpp:14674-14730). The percentages are of " +
+            "the influence each civilization has; the demand then costs our influence nothing"),
     // endregion
 
     /////// region Other global uniques
@@ -1401,6 +1411,9 @@ enum class UniqueType(
     TriggerUponPlunderingTradeRoute("upon plundering a trade route", UniqueTarget.TriggerCondition, UniqueTarget.UnitTriggerCondition,
         docDescription = "When a unit of the civilization plunders a trade route, in the city the unit was made in (else the capital); as a unit's own unique it is the unit " +
             "that gains (`INSTANT_YIELD_TYPE_PLUNDER_TRADE_ROUTE`, V:CvTradeClasses.cpp:5034, V:CvPlayer.cpp:26863-26870)"),
+    TriggerUponDemandingTribute("upon demanding tribute from a City-State", UniqueTarget.TriggerCondition,
+        docDescription = "When the civilization takes gold from a City-State with the ModConstants `cityStateBullyLikeVp`, in the capital. The triggering amount is the gold taken " +
+            "(`Gain [relativeAmount]% of the triggering amount as [stat]`: the original's `Policy_YieldFromMinorDemand` and `Trait_YieldFromMinorDemand`, INSTANT_YIELD_TYPE_BULLY)"),
     TriggerUponGainingLuxury("upon gaining a luxury resource", UniqueTarget.TriggerCondition,
         docDescription = "When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is " +
             "how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)"),

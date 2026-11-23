@@ -415,28 +415,33 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
             modifierTable.add(item.value.tr().toLabel(color)).row()
         }
         modifierTable.add("Sum:".toLabel())
-        modifierTable.add(tributeModifiers.values.sum().toLabel()).row()
+        val vpTribute = otherCiv.gameInfo.ruleset.modOptions.constants.cityStateBullyLikeVp
+        modifierTable.add((if (vpTribute) otherCiv.cityStateFunctions.getTributeWillingness(viewingCiv) else tributeModifiers.values.sum()).toLabel()).row()
         diplomacyTable.add(modifierTable).row()
-        diplomacyTable.add("At least 0 to take gold, at least 30 and size 4 city for worker".toLabel()).row()
+        val bullyConstants = otherCiv.gameInfo.ruleset.modOptions.constants.cityStateBully
+        diplomacyTable.add((if (vpTribute) "At least [${bullyConstants.goldThreshold}] to take gold, at least [${bullyConstants.heavyThreshold}] for a worker"
+            else "At least 0 to take gold, at least 30 and size 4 city for worker").toLabel()).row()
         diplomacyTable.addSeparator()
 
-        val demandGoldButton = "Take [${otherCiv.cityStateFunctions.goldGainedByTribute()}] gold (-15 Influence)".toTextButton()
+        val demandGoldButton = (if (vpTribute) "Take [${otherCiv.cityStateFunctions.goldGainedByTribute(viewingCiv)}] gold (-[${otherCiv.cityStateFunctions.tributeInfluenceCost(viewingCiv)}] Influence)"
+            else "Take [${otherCiv.cityStateFunctions.goldGainedByTribute()}] gold (-15 Influence)").toTextButton()
         demandGoldButton.onClick {
             otherCiv.cityStateFunctions.tributeGold(viewingCiv)
             diplomacyScreen.rightSideTable.clear()
             diplomacyScreen.rightSideTable.add(ScrollPane(getCityStateDiplomacyTable(otherCiv)))
         }
         diplomacyTable.add(demandGoldButton).row()
-        if (otherCiv.cityStateFunctions.getTributeWillingness(viewingCiv, demandingWorker = false) < 0)   demandGoldButton.disable()
+        if (!otherCiv.cityStateFunctions.canBullyGold(viewingCiv))   demandGoldButton.disable()
 
-        val demandWorkerButton = "Take worker (-50 Influence)".toTextButton()
+        val demandWorkerButton = (if (vpTribute) "Take worker (-[${otherCiv.cityStateFunctions.tributeInfluenceCost(viewingCiv, heavy = true)}] Influence)"
+            else "Take worker (-50 Influence)").toTextButton()
         demandWorkerButton.onClick {
             otherCiv.cityStateFunctions.tributeWorker(viewingCiv)
             diplomacyScreen.rightSideTable.clear()
             diplomacyScreen.rightSideTable.add(ScrollPane(getCityStateDiplomacyTable(otherCiv)))
         }
         diplomacyTable.add(demandWorkerButton).row()
-        if (otherCiv.cityStateFunctions.getTributeWillingness(viewingCiv, demandingWorker = true) < 0)    demandWorkerButton.disable()
+        if (!otherCiv.cityStateFunctions.canBullyHeavy(viewingCiv))    demandWorkerButton.disable()
 
         val backButton = "Back".toTextButton()
         backButton.onClick {

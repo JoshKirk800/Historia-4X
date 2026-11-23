@@ -273,6 +273,9 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
      * and skipping the getter bypasses the modified value when at war */
     internal var influence = 0f
 
+    /** For city-states: the game turn this major last demanded tribute from it (CvMinorCivAI::m_aiTurnLastBullied), -1 if it never did. Only kept with [com.unciv.models.ModConstants.cityStateBullyLikeVp] */
+    var turnLastBullied = -1
+
     /** Total of each turn Science during Research Agreement */
     internal var totalOfScienceDuringRA = 0
 
@@ -282,6 +285,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         toReturn.diplomaticStatus = diplomaticStatus
         toReturn.trades.addAll(trades.map { it.clone() })
         toReturn.influence = influence
+        toReturn.turnLastBullied = turnLastBullied
         toReturn.flagsCountdown.putAll(flagsCountdown)
         toReturn.diplomaticModifiers.putAll(diplomaticModifiers)
         toReturn.negativeArchaeologyPoints = negativeArchaeologyPoints
@@ -385,7 +389,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         val level = relationshipIgnoreAfraid()
         return when {
             level != RelationshipLevel.Neutral || !civInfo.isCityState -> level
-            civInfo.cityStateFunctions.getTributeWillingness(otherCiv) > 0 -> RelationshipLevel.Afraid
+            civInfo.cityStateFunctions.isAfraidOf(otherCiv) -> RelationshipLevel.Afraid
             else -> RelationshipLevel.Neutral
         }
     }
@@ -532,7 +536,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
             val routes = min(otherCiv.tradeRoutes.routes.count { it.getDestinationCiv()?.isCityState == true }, constants.tradeRouteBonusRoutes)
             otherCiv.forEachMatchingUnique(UniqueType.CityStateInfluenceWithTradeRoute) { shift += it.params[0].toInt() * routes * 100 }
         }
-        if (otherCiv.hasUnique(UniqueType.CityStateInfluenceGainWhenAfraid) && civInfo.cityStateFunctions.getTributeWillingness(otherCiv) >= 0)
+        if (otherCiv.hasUnique(UniqueType.CityStateInfluenceGainWhenAfraid) && civInfo.cityStateFunctions.canBullyGold(otherCiv))
             otherCiv.forEachMatchingUnique(UniqueType.CityStateInfluenceGainWhenAfraid) { shift += it.params[0].toInt() * 100 }
 
         var recoveryPercent = 100 + if (shared) constants.sharedReligionRatePercent else 0

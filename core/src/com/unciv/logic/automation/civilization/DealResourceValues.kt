@@ -131,7 +131,7 @@ object DealResourceValues {
 
     /** CvPlayer::getNumResourceUnimproved: the copies of [resource] on tiles of [civ]'s cities that its improvement does not yet provide */
     fun numResourceUnimproved(civ: Civilization, resource: TileResource): Int {
-        if (!civ.tech.isRevealed(resource)) return 0
+        if (!civ.canSeeResource(resource)) return 0
         var amount = 0
         for (city in civ.cities)
             for (tile in city.getTiles())
@@ -264,7 +264,7 @@ object DealResourceValues {
      */
     fun strategicValue(us: Civilization, them: Civilization, resource: TileResource, quantity: Int, numTurns: Int, fromMe: Boolean, netGoldOfReceiver: Int): Int? {
         val peaceDeal = us.isAtWarWith(them)
-        if (!us.tech.isRevealed(resource)) return null
+        if (!us.canSeeResource(resource)) return null
         if (quantity == 0) return 0
         val turns = max(1, numTurns)
         var available = DealAi.numResourceAvailable(us, resource, !fromMe)

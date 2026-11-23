@@ -72,6 +72,36 @@
 					"Generated on every [20] tiles <in [{Featureless} {Plains}] tiles> <in [Hill] Regions>",
 					"Generated on every [20] tiles <in [{Fresh Water} {Desert}] tiles> <in tiles without [Hill]> <in [Hill] Regions>"]
 	},
+	// Vox Populi's bonus resources. Its script places maize on tropical flat plains and rice on tropical flat grassland (16 and 14 in its ratios, up to the latitudes 50 and 40 percent of
+	// the way to the pole); the ruleset has no latitude, so the ratios are those spread over all latitudes (16 / 0.5 and 14 / 0.4). Figs have no placement in the script
+	{
+		"name": "Maize",
+		"resourceType": "Bonus",
+		"terrainsCanBeFoundOn": ["Plains"],
+		"food": 1,
+		"revealedBy": "Agriculture",
+		"improvement": "Farm",
+		"improvementStats": {"gold": 2},
+		"uniques": ["Generated on every [32] tiles <in [{Featureless} {Plains}] tiles>"]
+	},
+	{
+		"name": "Rice",
+		"resourceType": "Bonus",
+		"terrainsCanBeFoundOn": ["Grassland"],
+		"food": 1,
+		"revealedBy": "Agriculture",
+		"improvement": "Farm",
+		"improvementStats": {"production": 1},
+		"uniques": ["Generated on every [35] tiles <in [{Featureless} {Grassland}] tiles>"]
+	},
+	{
+		"name": "Figs",
+		"resourceType": "Bonus",
+		"terrainsCanBeFoundOn": ["Grassland","Plains","Desert","Tundra","Hill","Jungle","Forest","Flood plains"],
+		"food": 1,
+		"improvement": "Plantation",
+		"improvementStats": {"food": 1, "production": 1, "gold": -1}
+	},
 	{
 		"name": "Stone",
 		"resourceType": "Bonus",
@@ -283,7 +313,7 @@
 					"Doesn't generate naturally <in [Forest] tiles> <in tiles without [Hill]>"]
 	},
 	{
-		"name": "Gold Ore", // Not called "Gold" in order to not conflict with siege type units for translations
+		"name": "Gold",
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Desert","Hill","Forest","Jungle"],
 		"gold": 2,
@@ -350,7 +380,7 @@
 					"Doesn't generate naturally <in [Hill] tiles>"]
 	},
 	{
-		"name": "Spices",
+		"name": "Cinnamon",
 		"resourceType": "Luxury",
 		"terrainsCanBeFoundOn": ["Jungle","Forest","Marsh"],
 		"gold": 2,
@@ -521,6 +551,129 @@
 					"Generated with weight [20] <in [Grassland] Regions>",
 					"Generated with weight [20] <in [Hybrid] Regions>",
 					"Generated near City States with weight [15]"]
+	},
+	// Vox Populi's luxuries, with the weights of its AssignStartingPlots.lua (luxury_region_weights, luxury_city_state_weights) and the stats of its resource tables
+	// (the improvement stats are what its table gives less what the improvement of this ruleset gives to every resource it improves). Its monopolies are not here yet
+	{
+		"name": "Amber",
+		"resourceType": "Luxury",
+		"terrainsCanBeFoundOn": ["Grassland","Plains","Desert","Tundra","Hill"],
+		"production": 1,
+		"gold": 1,
+		"improvement": "Quarry",
+		"improvementStats": {"gold": 2, "production": 1},
+		"uniques": ["Generated with weight [35] <in [Tundra] Regions>",
+					"Generated with weight [10] <in [Desert] Regions>",
+					"Generated with weight [10] <in [Hill] Regions>",
+					"Generated with weight [30] <in [Hybrid] Regions>",
+					"Generated near City States with weight [10]"]
+	},
+	{
+		"name": "Jade",
+		"resourceType": "Luxury",
+		"terrainsCanBeFoundOn": ["Grassland","Plains","Desert","Tundra","Hill"],
+		"gold": 2,
+		"improvement": "Quarry",
+		"improvementStats": {"culture": 1, "production": 1},
+		"uniques": ["Generated with weight [10] <in [Tundra] Regions>",
+					"Generated with weight [15] <in [Desert] Regions>",
+					"Generated with weight [20] <in [Hill] Regions>",
+					"Generated with weight [30] <in [Hybrid] Regions>",
+					"Generated near City States with weight [10]"]
+	},
+	{
+		"name": "Lapis Lazuli",
+		"resourceType": "Luxury",
+		"terrainsCanBeFoundOn": ["Grassland","Plains","Desert","Tundra","Hill"],
+		"production": 1,
+		"improvement": "Quarry",
+		"improvementStats": {"production": 1, "science": 2},
+		"uniques": ["Generated with weight [10] <in [Tundra] Regions>",
+					"Generated with weight [35] <in [Desert] Regions>",
+					"Generated with weight [10] <in [Hill] Regions>",
+					"Generated with weight [30] <in [Hybrid] Regions>",
+					"Generated near City States with weight [10]"]
+	},
+	{
+		"name": "Coral",
+		"resourceType": "Luxury",
+		"terrainsCanBeFoundOn": ["Coast"],
+		"production": 1,
+		"gold": 2,
+		"improvement": "Fishing Boats",
+		"improvementStats": {"production": 1},
+		"uniques": ["Generated with weight [10] <in [Tundra] Regions>",
+					"Generated with weight [10] <in [Jungle] Regions>",
+					"Generated with weight [8] <in [Forest] Regions>",
+					"Generated with weight [10] <in [Desert] Regions>",
+					"Generated with weight [6] <in [Hill] Regions>",
+					"Generated with weight [11] <in [Plains] Regions>",
+					"Generated with weight [14] <in [Grassland] Regions>",
+					"Generated with weight [20] <in [Hybrid] Regions>",
+					"Generated near City States with weight [10]"]
+	},
+	{
+		"name": "Coffee",
+		"resourceType": "Luxury",
+		"terrainsCanBeFoundOn": ["Grassland","Plains"],
+		"food": 1,
+		"gold": 1,
+		"improvement": "Plantation",
+		"improvementStats": {"gold": -1, "science": 2},
+		"uniques": ["Generated with weight [40] <in [Plains] Regions>",
+					"Generated with weight [20] <in [Grassland] Regions>",
+					"Generated with weight [5] <in [Hybrid] Regions>",
+					"Generated near City States with weight [5]"]
+	},
+	{
+		"name": "Olives",
+		"resourceType": "Luxury",
+		"terrainsCanBeFoundOn": ["Grassland","Plains"],
+		"food": 1,
+		"gold": 1,
+		"improvement": "Plantation",
+		"improvementStats": {"culture": 1},
+		"uniques": ["Generated with weight [40] <in [Plains] Regions>",
+					"Generated with weight [20] <in [Grassland] Regions>",
+					"Generated with weight [5] <in [Hybrid] Regions>",
+					"Generated near City States with weight [5]"]
+	},
+	{
+		"name": "Tobacco",
+		"resourceType": "Luxury",
+		"terrainsCanBeFoundOn": ["Grassland","Plains"],
+		"gold": 2,
+		"improvement": "Plantation",
+		"improvementStats": {"gold": 2},
+		"uniques": ["Generated with weight [15] <in [Plains] Regions>",
+					"Generated with weight [50] <in [Grassland] Regions>",
+					"Generated with weight [5] <in [Hybrid] Regions>",
+					"Generated near City States with weight [5]"]
+	},
+	{
+		"name": "Tea",
+		"resourceType": "Luxury",
+		"terrainsCanBeFoundOn": ["Grassland","Plains"],
+		"food": 1,
+		"production": 1,
+		"improvement": "Plantation",
+		"improvementStats": {"gold": -1, "production": 2},
+		"uniques": ["Generated with weight [15] <in [Plains] Regions>",
+					"Generated with weight [50] <in [Grassland] Regions>",
+					"Generated with weight [5] <in [Hybrid] Regions>",
+					"Generated near City States with weight [5]"]
+	},
+	{
+		"name": "Perfume",
+		"resourceType": "Luxury",
+		"terrainsCanBeFoundOn": ["Grassland","Plains"],
+		"gold": 2,
+		"improvement": "Plantation",
+		"improvementStats": {"gold": 1, "culture": 1},
+		"uniques": ["Generated with weight [15] <in [Plains] Regions>",
+					"Generated with weight [50] <in [Grassland] Regions>",
+					"Generated with weight [5] <in [Hybrid] Regions>",
+					"Generated near City States with weight [5]"]
 	},
 	{
 		"name": "Salt",

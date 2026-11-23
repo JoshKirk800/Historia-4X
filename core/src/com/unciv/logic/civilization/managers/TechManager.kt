@@ -185,6 +185,13 @@ class TechManager : IsPartOfGameInfoSerialization {
         return isResearched(revealedBy) || civInfo.policies.isAdopted(revealedBy)
     }
 
+    /** The technology that makes the resource obsolete ([TileResource.obsoleteBy], the original's `TechObsolete`) is researched (or adopted, as a policy can reveal): the civilization no longer sees it, V:CvPlot.cpp:7743 */
+    @Readonly
+    fun isObsolete(resource: TileResource): Boolean {
+        val obsoleteBy = resource.obsoleteBy ?: return false
+        return isResearched(obsoleteBy) || civInfo.policies.isAdopted(obsoleteBy)
+    }
+
     @Readonly fun isObsolete(unit: BaseUnit): Boolean = unit.techsThatObsoleteThis().any { obsoleteTech -> isResearched(obsoleteTech) }
 
     @Readonly

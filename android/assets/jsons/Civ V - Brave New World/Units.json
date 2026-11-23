@@ -2160,7 +2160,7 @@
 		"name": "Great Merchant",
 		"unitType": "Civilian",
 		"uniques": ["Can undertake a trade mission with City-State, giving a large sum of gold and [30] Influence",
-            "Can instantly construct a [Customs house] improvement <by consuming this unit>",
+            "Can instantly construct a [Town] improvement <by consuming this unit>",
             "Is part of Great Person group [Great Person]",
             "[This Unit] gets a name from the [Merchant] group",
 			"Great Person - [Gold]", "Unbuildable", "Uncapturable"],
@@ -2173,7 +2173,7 @@
 		"unitType": "Civilian",
 		"replaces": "Great Merchant",
 		"uniqueTo": "Venice",
-		"uniques": ["Can undertake a trade mission with City-State, giving a large sum of gold and [60] Influence", "[+100]% Gold from Great Merchant trade missions", "Can instantly construct a [Customs house] improvement <by consuming this unit>", "Is part of Great Person group [Great Person]", "Great Person - [Gold]", "Unbuildable", "Uncapturable"],
+		"uniques": ["Can undertake a trade mission with City-State, giving a large sum of gold and [60] Influence", "[+100]% Gold from Great Merchant trade missions", "Can instantly construct a [Town] improvement <by consuming this unit>", "Is part of Great Person group [Great Person]", "Great Person - [Gold]", "Unbuildable", "Uncapturable"],
 		"movement": 2,
 		"purchaseCooldown": 1,
 		"globalFaithPurchaseCooldown": 5

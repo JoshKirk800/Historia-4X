@@ -319,7 +319,8 @@ enum class UniqueType(
             "Not read yet: slice T3 of the trade plan"),
     ResourceQuantityPercent("[relativeAmount]% quantity of [resource]", UniqueTarget.Global, UniqueTarget.FollowerBelief,
         docDescription = "Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), " +
-            "as the original's `Belief_ResourceQuantityModifiers` do. Not read yet: slice T1 of the trade plan"),
+            "as the original's `Belief_ResourceQuantityModifiers` do (V:CvPlayer.cpp:38843-38865; there the modifier is the amount times the number of cities that follow the belief, " +
+            "at most 25, on the whole supply: here each city has its own amount on the copies it gives)"),
     MonopolyFlatBonus("[relativeAmount] to the flat bonus of each monopoly", UniqueTarget.Global,
         docDescription = "Added to every flat yield, happiness or tile bonus that a global monopoly of the civilization gives (the original's `MonopolyModFlat`)"),
     MonopolyPercentBonus("[relativeAmount]% to the percentage bonus of each monopoly", UniqueTarget.Global,
@@ -847,11 +848,13 @@ enum class UniqueType(
         docDescription = "Only in `globalMonopolyUniques`: local happiness that every copy-owning civilization with the monopoly gets (the original's `MonopolyHappiness`; " +
             "`MonopolyFlatBonus` is added)"),
     ResourceProductionCost("[relativeAmount]% Production of [baseUnitFilter] units in cities with this resource", UniqueTarget.Resource,
-        docDescription = "Vox Populi's `Resource_UnitCombatProductionCostModifiersLocal` (option `RESOURCES_PRODUCTION_COST_MODIFIERS`: Ivory against Siege). Use the modifier `<before the [era]>` " +
-            "for the era it ends in. Not read yet: slice T1 of the trade plan"),
+        docDescription = "Vox Populi's `Resource_UnitCombatProductionCostModifiersLocal` (option `RESOURCES_PRODUCTION_COST_MODIFIERS`: Ivory against Siege, V:CvCity.cpp:11422-11452). " +
+            "The amount is the change of the production cost, as in the original: -15 makes matching units 15% cheaper in a city that has the resource (whole numbers, after the other cost rules). " +
+            "The modifier `<before the [era]>` is compared with the era of the unit's technology (the current era of the civilization for a unit without one), not with the era of the civilization"),
     ResourceWonderProduction("[relativeAmount]% Production of Wonders in cities with this resource", UniqueTarget.Resource,
-        docDescription = "Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (the modifier `<before the [era]>`). " +
-            "Not read yet: slice T1 of the trade plan"),
+        docDescription = "Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (V:CvCity.cpp:18351-18420): added to the production " +
+            "of a wonder in a city that has the resource. The modifier `<before the [era]>` is compared with the era of the wonder's technology (no limit for a wonder without one), " +
+            "not with the era of the civilization"),
 
     // Improvements
     ImprovementStatsOnRoute("[stats] if a trade route crosses this tile on a [improvementName]", UniqueTarget.Improvement,

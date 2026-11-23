@@ -31,7 +31,7 @@
 		"shortcutKey": "M"
 	},
 	{
-		"name": "Trading post",
+		"name": "Village",
 		"terrainsCanBeBuiltOn": ["Plains","Grassland","Desert","Hill","Tundra","Forest","Jungle","Flood plains"],
 		"gold": 1,
 		"turnsToBuild": 7,
@@ -224,7 +224,7 @@
             "Removes removable features when built", "Pillaging this improvement yields approximately [+20 Gold]"]
 	},
 	{
-		"name": "Customs house",
+		"name": "Town",
 		"terrainsCanBeBuiltOn": ["Land"],
 		"gold": 4,
 		"uniques": ["Great Improvement", "Can be built on tiles with any resource", "[+1 Gold] <after discovering [Economics]>", "Removes removable features when built",
@@ -262,7 +262,7 @@
 		"shortcutKey": "M"
 	},
 	{
-		"name": "Terrace farm",
+		"name": "Pata-Pata",
 		"uniqueTo": "Inca",
 		"terrainsCanBeBuiltOn": ["Hill"],
 		"food": 1,

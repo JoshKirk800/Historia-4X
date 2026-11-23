@@ -44,7 +44,7 @@ class TileResource : RulesetStatsObject(), GameResource {
     var improvedBy: List<String> = listOf()
 
     /** Name of the Technology (or era-bound policy) that makes the resource obsolete: a team that has it no longer sees the resource and cannot trade it
-     *  (the original's `Resources.TechObsolete`: Horses with Rocketry, Paper with Agriculture). null: never. Not read yet: slice T1 of `phaseE/vp-trade-plan.md` */
+     *  (the original's `Resources.TechObsolete`: Horses with Rocketry, Paper with Agriculture). null: never. See [com.unciv.logic.civilization.Civilization.canSeeResource] and [com.unciv.logic.civilization.managers.TechManager.isObsolete] */
     var obsoleteBy: String? = null
 
     /** Whether owning most of the copies on the map gives a monopoly bonus (the original's `Resources.IsMonopoly`, V:CvPlayer.cpp:38944-39266). The bonuses are the

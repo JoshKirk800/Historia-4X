@@ -6992,7 +6992,7 @@
     },
     {
       "kind": "Resource",
-      "name": "Gold Ore",
+      "name": "Gold",
       "flavors": {
         "Happiness": 10
       }
@@ -7041,7 +7041,7 @@
     },
     {
       "kind": "Resource",
-      "name": "Spices",
+      "name": "Cinnamon",
       "flavors": {
         "Happiness": 10
       }
@@ -10940,7 +10940,7 @@
         },
         {
           "table": "ImprovementYieldChanges",
-          "key": "Trading post",
+          "key": "Village",
           "yield": "Science",
           "value": 1
         }
@@ -11026,7 +11026,7 @@
       "rows": [
         {
           "table": "ImprovementYieldChanges",
-          "key": "Trading post",
+          "key": "Village",
           "yield": "Gold",
           "value": 1
         }
@@ -11322,7 +11322,7 @@
         },
         {
           "table": "ImprovementYieldChanges",
-          "key": "Customs house",
+          "key": "Town",
           "yield": "Gold",
           "value": 4
         },

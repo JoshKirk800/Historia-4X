@@ -585,7 +585,7 @@ class Civilization : IsPartOfGameInfoSerialization {
     fun canSeeResource(resource: TileResource?): Boolean {
         contract { returns(true) implies(resource != null) }
         if (resource == null) return false
-        return tech.isRevealed(resource)
+        return tech.isRevealed(resource) && !tech.isObsolete(resource)
     }
 
     /**

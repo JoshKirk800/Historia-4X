@@ -34,7 +34,7 @@ import kotlin.math.min
  *  Deviations: Unciv's hills are a base terrain, so "a hill on grass, plains or tundra without a feature" (+1 production) is a hill without a
  *  feature, whatever the climate under it; a plot's river is the one of CvPlot::isRiver by adjacency; "the way a neighbor's city is found by
  *  its outward direction" ([neighborOutward]) takes the neighbor of the plot that is farthest from the capital instead of the original's
- *  six-way direction bucket; the Inca hills ([INCA_MULTIPLIER]) are the hills next to mountains where the original's Terrace farm
+ *  six-way direction bucket; the Inca hills ([INCA_MULTIPLIER]) are the hills next to mountains where the original's Pata-Pata (Terrace farm in Civ V)
  *  stands on mountains themselves, and mountains count for them as the original's [MOUNTAIN_MULTIPLIER]; the strategic monopolies of
  *  Vox Populi's tradeable resource value (BALANCE_RESOURCE_MONOPOLIES) and the Persian-style "rivers are roads" trait have no counterpart in the
  *  ruleset; the logging flag bCoastOnly of the original (set only while it writes its debug file) is not modelled.
@@ -165,7 +165,7 @@ class CitySiteEvaluator(private val civ: Civilization, private val ignorePlots: 
     private val isBrazil = isUniqueImprovementOwner("Brazilwood Camp")
     private val isMorocco = isUniqueImprovementOwner("Kasbah")
     private val isNetherlands = isUniqueImprovementOwner("Polder")
-    private val isInca = isUniqueImprovementOwner("Terrace farm")
+    private val isInca = isUniqueImprovementOwner("Pata-Pata") || isUniqueImprovementOwner("Terrace farm") // the other base rulesets keep Civ V's name
     private val isFrance = isUniqueImprovementOwner("Chateau")
 
     /** The original looks these up by the civilization an improvement requires */

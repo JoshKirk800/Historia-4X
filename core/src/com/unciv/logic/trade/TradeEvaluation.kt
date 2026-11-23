@@ -78,6 +78,9 @@ class TradeEvaluation {
 
         @Readonly
         fun hasResource(tradeOffer: TradeOffer): Boolean {
+            // CvDeal::IsPossibleToTradeItem, V:CvDealClasses.cpp:546-548: nothing is traded that the technology of either side made obsolete
+            val resource = offerer.gameInfo.ruleset.tileResources[tradeOffer.name]
+            if (resource != null && (offerer.tech.isObsolete(resource) || tradePartner.tech.isObsolete(resource))) return false
             val resourcesByName = offerer.getCivResourcesByName()
             return resourcesByName.containsKey(tradeOffer.name) && resourcesByName[tradeOffer.name]!! >= tradeOffer.amount
         }

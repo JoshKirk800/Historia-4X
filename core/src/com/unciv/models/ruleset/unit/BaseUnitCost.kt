@@ -2,6 +2,7 @@ package com.unciv.models.ruleset.unit
 
 import com.unciv.logic.city.City
 import com.unciv.logic.city.PurchaseRules
+import com.unciv.logic.city.ResourceProductionModifiers
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
@@ -35,7 +36,8 @@ class BaseUnitCost(val baseUnit: BaseUnit) {
         // Spaceship parts are projects in the original game, which have their own percentage
         val startingEra = civInfo.gameInfo.getStartingEra()
         productionCost *= (if (baseUnit.hasUnique(UniqueType.AddInCapital)) startingEra.createPercent else startingEra.trainPercent) / 100f
-        return productionCost.toInt()
+        // What the city has (Ivory against siege units) comes last (CvCity::getProductionNeeded(UnitTypes), V:CvCity.cpp:11422-11452)
+        return if (city == null) productionCost.toInt() else ResourceProductionModifiers.unitCost(city, baseUnit, productionCost.toInt())
     }
 
 

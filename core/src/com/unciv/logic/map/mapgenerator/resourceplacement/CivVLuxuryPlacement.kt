@@ -47,23 +47,36 @@ class CivVLuxuryPlacement(
 
         /** luxury_fallback_weights: also the list of the luxuries that are assigned or left out */
         private val fallbackWeights = linkedMapOf(
-            "Whales" to 10, "Pearls" to 10, "Gold Ore" to 10, "Silver" to 5, "Gems" to 10, "Ivory" to 5, "Furs" to 10, "Dyes" to 5,
-            "Spices" to 5, "Silk" to 5, "Sugar" to 5, "Cotton" to 5, "Wine" to 5, "Incense" to 5, "Copper" to 5, "Salt" to 5,
-            "Citrus" to 5, "Truffles" to 5, "Cocoa" to 5, "Crab" to 10
+            "Whales" to 10, "Pearls" to 10, "Gold" to 10, "Silver" to 5, "Gems" to 10, "Ivory" to 5, "Furs" to 10, "Dyes" to 5,
+            "Cinnamon" to 5, "Silk" to 5, "Sugar" to 5, "Cotton" to 5, "Wine" to 5, "Incense" to 5, "Copper" to 5, "Salt" to 5,
+            "Citrus" to 5, "Truffles" to 5, "Cocoa" to 5, "Crab" to 10,
+            // Vox Populi's luxuries (V:(2) Vox Populi/Core Files/Overrides/AssignStartingPlots.lua:735-760); its water luxuries weigh 30 each, here on the scale of
+            // Whales, Pearls and Crab of this table, which are equal in the original too
+            "Amber" to 10, "Jade" to 10, "Lapis Lazuli" to 10, "Coffee" to 5, "Tobacco" to 5, "Tea" to 5, "Perfume" to 5, "Olives" to 5, "Coral" to 10
         )
         private const val MARBLE = "Marble"
         private const val IVORY = "Ivory"
-        private val waterLuxuries = setOf("Whales", "Pearls", "Crab")
+        private val waterLuxuries = setOf("Whales", "Pearls", "Crab", "Coral")
+        /** Vox Populi's luxuries that stand on bare land of any climate next to marble, and those of the flat plains and grass (see [listsOf]) */
+        private val rockLuxuries = listOf("Amber", "Jade", "Lapis Lazuli")
+        private val plantationLuxuries = listOf("Coffee", "Tea", "Tobacco", "Perfume", "Olives")
 
         /** GetIndicesForLuxuryType: the numbers (1-15) of the plot lists a luxury goes on, best first */
         private val listsOf = mapOf(
             "Whales" to listOf(1), "Pearls" to listOf(1), "Crab" to listOf(1),
-            "Gold Ore" to listOf(4, 10, 5), "Silver" to listOf(4, 5, 14, 12), "Gems" to listOf(6, 7, 4, 8),
+            "Gold" to listOf(4, 10, 5), "Silver" to listOf(4, 5, 14, 12), "Gems" to listOf(6, 7, 4, 8),
             MARBLE to listOf(12, 10, 11, 4), "Ivory" to listOf(11, 12), "Furs" to listOf(14, 15), "Dyes" to listOf(9, 8, 2),
-            "Spices" to listOf(8, 15, 2), "Silk" to listOf(15, 8), "Sugar" to listOf(2, 8, 3, 13), "Cotton" to listOf(3, 13, 12),
+            "Cinnamon" to listOf(8, 15, 2), "Silk" to listOf(15, 8), "Sugar" to listOf(2, 8, 3, 13), "Cotton" to listOf(3, 13, 12),
             "Wine" to listOf(11, 12, 13), "Incense" to listOf(10, 3, 11), "Copper" to listOf(4, 5, 12, 14),
             "Salt" to listOf(11, 10, 14, 9), "Citrus" to listOf(8, 6, 15, 3), "Truffles" to listOf(15, 8, 2, 5),
-            "Cocoa" to listOf(8, 6, 15)
+            "Cocoa" to listOf(8, 6, 15),
+            // Vox Populi's lists (GetIndicesForLuxuryType, lines 6433-6730) in the 15 lists of this class: coral on the coast, the three rock luxuries as marble and
+            // jade do (hills without a feature, flat desert and tundra, flat plains and grass without a feature), the plantation luxuries on flat plains and grass
+            // without a feature (the coffee and olives start on plains, tobacco, tea and perfume on grass, as in the original); a feature or a marsh cannot hold them
+            "Coral" to listOf(1),
+            "Amber" to listOf(4, 10, 14, 11, 12, 13), "Jade" to listOf(4, 10, 14, 11, 12, 13), "Lapis Lazuli" to listOf(4, 10, 14, 11, 12, 13),
+            "Coffee" to listOf(11, 12, 13), "Olives" to listOf(11, 12, 13),
+            "Tobacco" to listOf(12, 13, 11), "Tea" to listOf(12, 13, 11), "Perfume" to listOf(12, 13, 11)
         )
 
         /** GetRegionLuxuryTargetNumbers, by number of civs (index 1 = 1 civ) */
@@ -394,28 +407,28 @@ class CivVLuxuryPlacement(
         val allowed = HashSet<String>()
         for (ring in 1..radius) for (tile in site.getTilesAtDistance(ring)) {
             if (tile.isWater) {
-                if (tile.baseTerrain == Constants.coast && "Atoll" !in tile.terrainFeatures && Constants.ice !in tile.terrainFeatures) allowed += listOf("Whales", "Pearls")
+                if (tile.baseTerrain == Constants.coast && "Atoll" !in tile.terrainFeatures && Constants.ice !in tile.terrainFeatures) allowed += listOf("Whales", "Pearls", "Coral")
                 continue
             }
             val terrain = tile.baseTerrain
             val features = tile.terrainFeatures.filter { it != Constants.hill }
             if (Constants.hill in tile.terrainFeatures && terrain != Constants.snow) {
-                allowed += listOf("Gold Ore", "Silver", "Gems")
-                if (features.isEmpty()) allowed += MARBLE
+                allowed += listOf("Gold", "Silver", "Gems")
+                if (features.isEmpty()) allowed += listOf(MARBLE) + rockLuxuries
             } else if (tile.baseTerrain != Constants.mountain) {
                 if (features.isEmpty()) when (terrain) {
-                    Constants.tundra -> allowed += listOf("Furs", "Silver", MARBLE)
-                    Constants.desert -> allowed += listOf("Gold Ore", MARBLE, "Incense")
-                    Constants.plains -> allowed += listOf(MARBLE, "Ivory", "Wine", "Incense")
-                    Constants.grassland -> allowed += if (tile.isAdjacentTo(Constants.freshWater)) listOf("Sugar", "Cotton", "Wine")
-                        else listOf(MARBLE, "Ivory", "Cotton", "Wine")
+                    Constants.tundra -> allowed += listOf("Furs", "Silver", MARBLE) + rockLuxuries
+                    Constants.desert -> allowed += listOf("Gold", MARBLE, "Incense") + rockLuxuries
+                    Constants.plains -> allowed += listOf(MARBLE, "Ivory", "Wine", "Incense") + rockLuxuries + plantationLuxuries
+                    Constants.grassland -> allowed += (if (tile.isAdjacentTo(Constants.freshWater)) listOf("Sugar", "Cotton", "Wine")
+                        else listOf(MARBLE, "Ivory", "Cotton", "Wine")) + rockLuxuries + plantationLuxuries
                 } else when (features.first()) {
                     "Marsh" -> allowed += listOf("Dyes", "Sugar")
                     "Flood plains" -> allowed += listOf("Cotton", "Incense")
-                    Constants.jungle -> allowed += listOf("Gems", "Dyes", "Spices", "Silk", "Sugar", "Cocoa")
+                    Constants.jungle -> allowed += listOf("Gems", "Dyes", "Cinnamon", "Silk", "Sugar", "Cocoa")
                     Constants.forest -> {
                         allowed += listOf("Furs", "Dyes")
-                        if (terrain == Constants.tundra) allowed += "Silver" else allowed += listOf("Spices", "Silk")
+                        if (terrain == Constants.tundra) allowed += "Silver" else allowed += listOf("Cinnamon", "Silk")
                     }
                 }
             }

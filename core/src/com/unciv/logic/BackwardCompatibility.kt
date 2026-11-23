@@ -25,6 +25,7 @@ object BackwardCompatibility {
      * This function removes them so the game doesn't crash when it tries to access them.
      */
     fun GameInfo.removeMissingModReferences() {
+        migrateRenamedResourcesAndImprovements() // before anything is removed for not being in the ruleset
         tileMap.removeMissingTerrainModReferences(ruleset)
 
         removeUnitsAndPromotions()
@@ -40,6 +41,31 @@ object BackwardCompatibility {
         updateMissingStartingEra()
         removeMissingLeagueReferences()
         migrateCivID()
+    }
+
+    /** Slice T1 of `phaseE/vp-trade-plan.md` took the names of Vox Populi for these objects of Brave New World's ruleset (old name to new name) */
+    private val renamedResources = mapOf("Spices" to "Cinnamon", "Gold Ore" to "Gold")
+    private val renamedImprovements = mapOf("Terrace farm" to "Pata-Pata", "Trading post" to "Village", "Customs house" to "Town")
+
+    /**
+     * A save from before the renames of [renamedResources] and [renamedImprovements] names the old ones, and what a ruleset no longer has the game would remove from
+     * the map. The renamed objects are those of the tiles, the improvements being built, the last improvements seen, the resource of a City-State and the offers
+     * of deals and of trade requests. A ruleset that has the old name (the other base rulesets and mods do) or lacks the new one is not touched.
+     */
+    private fun GameInfo.migrateRenamedResourcesAndImprovements() {
+        val resources = renamedResources.filter { (old, new) -> old !in ruleset.tileResources && new in ruleset.tileResources }
+        val improvements = renamedImprovements.filter { (old, new) -> old !in ruleset.tileImprovements && new in ruleset.tileImprovements }
+        if (resources.isEmpty() && improvements.isEmpty()) return
+
+        for (tile in tileMap.values) tile.migrateRenamedObjects(resources, improvements)
+        for (civ in civilizations) {
+            for ((position, improvement) in civ.lastSeenImprovement.toList())
+                improvements[improvement]?.let { civ.lastSeenImprovement[position] = it }
+            civ.cityStateResource?.let { resources[it] }?.let { civ.cityStateResource = it }
+            val trades = civ.diplomacy.values.flatMap { it.trades } + civ.tradeRequests.map { it.trade }
+            for (trade in trades) for (offers in listOf(trade.ourOffers, trade.theirOffers))
+                offers.replaceAll { offer -> resources[offer.name]?.let { offer.copy(name = it) } ?: offer }
+        }
     }
 
     /** A mod that no longer has a resolution: the World Congress forgets it being proposed or in effect (and is gone if no resolution is left) */

@@ -460,7 +460,7 @@ enum class UniqueParameterType(
     },
 
     /** For [UniqueType.CreatesOneImprovement] */
-    ImprovementName("improvementName", "Trading Post", "The name of any improvement excluding 'Cancel improvement order'") {
+    ImprovementName("improvementName", "Village", "The name of any improvement excluding 'Cancel improvement order'") {
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = ruleset.tileImprovements.keys - Constants.cancelImprovementOrder
         override fun getErrorSeverity(parameterText: String, ruleset: Ruleset) =
             if (parameterText == Constants.cancelImprovementOrder) UniqueType.UniqueParameterErrorSeverity.RulesetInvariant

@@ -1049,6 +1049,18 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
     fun removeTerrainFeatures() =
         setTerrainFeatures(listOf())
 
+    /** A ruleset renamed a resource or improvement: what this tile names is renamed too, the improvements being built with their turns left.
+     *  Works with no transients, like [removeMissingTerrainModReferences]; see [com.unciv.logic.BackwardCompatibility] */
+    fun migrateRenamedObjects(resourceNames: Map<String, String>, improvementNames: Map<String, String>) {
+        resource?.let { resourceNames[it] }?.let {
+            resource = it
+            tileResourceCache = null
+        }
+        improvement?.let { improvementNames[it] }?.let { improvement = it }
+        for ((index, entry) in improvementQueue.withIndex())
+            improvementNames[entry.improvement]?.let { improvementQueue[index] = ImprovementQueueEntry(it, entry.turnsToImprovement) }
+    }
+
     /** Clean stuff missing in [ruleset] - called from [TileMap.removeMissingTerrainModReferences]
      *  Must be able to run before [setTransients] - and does not need to fix transients.
      */

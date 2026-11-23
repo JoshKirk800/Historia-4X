@@ -372,6 +372,12 @@ class CityStats(val city: City) {
         }
 
 
+        // "[relativeAmount]% Production of Wonders in cities with this resource" (CvCity::GetWonderProductionModifierFromLocalResources)
+        if (currentConstruction is Building) {
+            val resourcePercent = ResourceProductionModifiers.wonderPercent(city, currentConstruction)
+            if (resourcePercent != 0) sourceToStats.addStats(Stats(production = resourcePercent.toFloat()), "Resources")
+        }
+
         city.forEachMatchingUnique(UniqueType.StatPercentFromReligionFollowers) { unique ->
             addUniqueStats(unique, Stat.valueOf(unique.params[1]),
                 min(
@@ -421,6 +427,7 @@ class CityStats(val city: City) {
         })
         for (unique in productionUniquesToCheck(construction))
             signature.add(constructionMatchesFilter(construction, unique.params[1]) && city.matchesFilter(unique.params[2]))
+        signature.add(if (construction is Building) ResourceProductionModifiers.wonderPercent(city, construction) else 0)
         signature.add(construction is Building && city.civ.getCapital()?.cityConstructions?.isBuilt(construction.name) == true)
         signature.add(construction is INonPerpetualConstruction && construction.hasUnique(UniqueType.ConvertFoodToProductionWhenConstructed))
         if (city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) // what unhappiness takes off the production of a unit depends on the kind of unit

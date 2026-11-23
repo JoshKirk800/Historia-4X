@@ -451,7 +451,7 @@
             {
                 "name": "Commerce Complete",
                 "uniques": [
-                    "[+1 Gold] from every [Trading post]",
+                    "[+1 Gold] from every [Village]",
                     "May buy [Great Merchant] units for [1000] [Faith] [in all cities in which the majority religion is a major religion] at an increasing price ([500]) <starting from the [Industrial era]>",
                     "Get the leader title of [Doge [leaderName]]"
                 ]
@@ -565,7 +565,7 @@
             {
                 "name": "Free Thought",
                 "uniques": [
-                    "[+1 Science] from every [Trading post]",
+                    "[+1 Science] from every [Village]",
                     "[+17]% [Science] from every [University]"
                 ],
                 "requires": ["Humanism"],
@@ -696,7 +696,7 @@
                 "uniques": [
                     "Tenet Level 2",
                     "[+4 Science] from every [Academy]",
-                    "[+4 Gold] from every [Customs house]",
+                    "[+4 Gold] from every [Town]",
                     "[+4 Production] from every [Manufactory]",
                     "[+4 Faith] from every [Holy site]",
                     "[+4 Culture] from every [Landmark]",

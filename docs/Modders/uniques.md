@@ -1174,7 +1174,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, FollowerBelief
 
 ??? example  "[relativeAmount]% quantity of [resource]"
-	Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), as the original's `Belief_ResourceQuantityModifiers` do. Not read yet: slice T1 of the trade plan
+	Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), as the original's `Belief_ResourceQuantityModifiers` do (V:CvPlayer.cpp:38843-38865; there the modifier is the amount times the number of cities that follow the belief, at most 25, on the whole supply: here each city has its own amount on the copies it gives)
 
 	Example: "[+20]% quantity of [Iron]"
 
@@ -2316,7 +2316,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, FollowerBelief
 
 ??? example  "[relativeAmount]% quantity of [resource]"
-	Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), as the original's `Belief_ResourceQuantityModifiers` do. Not read yet: slice T1 of the trade plan
+	Changes the number of copies of the resource that the civilization owns, in the cities that follow the belief (a follower belief) or everywhere (global), as the original's `Belief_ResourceQuantityModifiers` do (V:CvPlayer.cpp:38843-38865; there the modifier is the amount times the number of cities that follow the belief, at most 25, on the whole supply: here each city has its own amount on the copies it gives)
 
 	Example: "[+20]% quantity of [Iron]"
 
@@ -2603,7 +2603,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Creates a [improvementName] improvement on a specific tile"
 	When choosing to construct this building, the player must select a tile where the improvement can be built. Upon building completion, the tile will gain this improvement. Limited to one per building.
 
-	Example: "Creates a [Trading Post] improvement on a specific tile"
+	Example: "Creates a [Village] improvement on a specific tile"
 
 	This unique does not support conditionals.
 
@@ -3804,7 +3804,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "[stats] if a trade route crosses this tile on a [improvementName]"
 	Vox Populi's `Improvement_RouteYieldChanges`: the improvement gives the stats while a trade route of any civilization passes over the tile along a road or a railroad (name the route's improvement: `Road` or `Railroad`; a railroad is read instead of the road from the fourth era). Not read yet: slice T3 of the trade plan
 
-	Example: "[+1 Gold, +2 Production] if a trade route crosses this tile on a [Trading Post]"
+	Example: "[+1 Gold, +2 Production] if a trade route crosses this tile on a [Village]"
 
 	Applicable to: Improvement
 
@@ -3997,14 +3997,14 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Resource
 
 ??? example  "[relativeAmount]% Production of [baseUnitFilter] units in cities with this resource"
-	Vox Populi's `Resource_UnitCombatProductionCostModifiersLocal` (option `RESOURCES_PRODUCTION_COST_MODIFIERS`: Ivory against Siege). Use the modifier `<before the [era]>` for the era it ends in. Not read yet: slice T1 of the trade plan
+	Vox Populi's `Resource_UnitCombatProductionCostModifiersLocal` (option `RESOURCES_PRODUCTION_COST_MODIFIERS`: Ivory against Siege, V:CvCity.cpp:11422-11452). The amount is the change of the production cost, as in the original: -15 makes matching units 15% cheaper in a city that has the resource (whole numbers, after the other cost rules). The modifier `<before the [era]>` is compared with the era of the unit's technology (the current era of the civilization for a unit without one), not with the era of the civilization
 
 	Example: "[+20]% Production of [Melee] units in cities with this resource"
 
 	Applicable to: Resource
 
 ??? example  "[relativeAmount]% Production of Wonders in cities with this resource"
-	Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (the modifier `<before the [era]>`). Not read yet: slice T1 of the trade plan
+	Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (V:CvCity.cpp:18351-18420): added to the production of a wonder in a city that has the resource. The modifier `<before the [era]>` is compared with the era of the wonder's technology (no limit for a wonder without one), not with the era of the civilization
 
 	Example: "[+20]% Production of Wonders in cities with this resource"
 

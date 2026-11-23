@@ -51,6 +51,11 @@ object CityResources {
                     modifiers[resource.name] = (modifiers[resource.name] ?: 1f) + bonus
             }
         }
+        // "[relativeAmount]% quantity of [resource]" (Belief_ResourceQuantityModifiers, CvPlayer::getResourceModFromReligion, V:CvPlayer.cpp:38843-38865)
+        city.forEachMatchingUnique(UniqueType.ResourceQuantityPercent) { unique ->
+            val resource = unique.params[1]
+            modifiers[resource] = (modifiers[resource] ?: 1f) + unique.params[0].toFloat() / 100f
+        }
         return modifiers
     }
 

@@ -9,6 +9,8 @@ import com.unciv.ui.components.extensions.addSeparator
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.extensions.toTextButton
 import com.unciv.ui.components.input.onClick
+import com.unciv.ui.components.widgets.NeedsRowsTable
+import com.unciv.ui.screens.TradeRouteRows
 import com.unciv.view.CivView
 
 /** The trade routes of the civilization, those it started and those that end in one of its cities, and how many it may have */
@@ -54,6 +56,9 @@ class TradeRoutesOverviewTab(
                 worldScreen.mapHolder.setCenterPosition(route.getCurrentTile().position)
             }
             add(show).row()
+            // The yields of every stat, the proximity penalty, the route end and passing effects and the plunder risk, with the route model of Vox Populi
+            val details = TradeRouteRows.rows(route, viewingPlayer.getCiv(), isOwn)
+            if (details.isNotEmpty()) add(NeedsRowsTable(details)).colspan(COLUMNS).left().row()
         }
     }
 

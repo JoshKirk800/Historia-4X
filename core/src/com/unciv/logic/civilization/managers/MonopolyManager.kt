@@ -31,7 +31,7 @@ import kotlin.math.max
  *  unique types, the plan's section 4.4); the percentages, flat amounts, tile yields, happiness, and golden age length that the plan lists are read by their own
  *  functions below, because they add the civilization's `MonopolyFlatBonus` and `MonopolyPercentBonus` (V:CvPlayer.cpp:31444-31476).
  *
- *  Not ported: the notifications of a monopoly gained or lost, the great person rates of a monopoly (no data in the original), the trait that counts imports
+ *  The notifications of a monopoly gained or lost are told by [MonopolyNotices]. Not ported: the great person rates of a monopoly (no data in the original), the trait that counts imports
  *  (no such trait), and the siphoned copies of a Feitoria, which count with the City-States' copies here.
  */
 class MonopolyManager : IsPartOfGameInfoSerialization {
@@ -174,7 +174,10 @@ class MonopolyManager : IsPartOfGameInfoSerialization {
             if (banned) setGlobal(name, false)
         }
         val changed = hadGlobal != hasGlobalMonopoly(name) || hadStrategic != hasStrategicMonopoly(name)
-        if (changed) game.updateGreatestMonopolyPlayer(name)
+        if (changed) {
+            game.updateGreatestMonopolyPlayer(name)
+            MonopolyNotices.notify(civInfo, resource, hadGlobal, hadStrategic)
+        }
         return changed
     }
 

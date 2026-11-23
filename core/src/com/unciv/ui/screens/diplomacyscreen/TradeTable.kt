@@ -1,10 +1,13 @@
 package com.unciv.ui.screens.diplomacyscreen
 
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.unciv.Constants
 import com.unciv.logic.trade.TradeOfferType
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.isEnabled
+import com.unciv.ui.components.extensions.toLabel
+import com.unciv.ui.screens.TradeOfferRows
 import com.unciv.ui.components.extensions.toTextButton
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.screens.basescreen.BaseScreen
@@ -23,6 +26,8 @@ class TradeTable(
 
     val offerTradeText = "{Offer trade}\n({They'll decide on their turn})"
     private val offerButton = offerTradeText.toTextButton()
+    /** Why the rules of the deals forbid the staged trade (see [TradeOfferRows.blockReasons]), empty when they do not */
+    private val blockLabel = "".toLabel(Color.SCARLET)
 
     private fun retractOffer() {
         tradeView.tryRetractOffer()
@@ -72,6 +77,7 @@ class TradeTable(
         }
 
         lowerTable.add(offerButton)
+        lowerTable.add(blockLabel)
 
         lowerTable.pack()
         lowerTable.y = 10f
@@ -83,6 +89,7 @@ class TradeTable(
         offerColumnsTable.update()
         retractOffer()
         offerButton.isEnabled = tradeView.canProposeStagedTrade()
+        blockLabel.setText(tradeView.stagedBlockReasons().joinToString("\n") { it.tr() })
     }
 
     fun enableOfferButton(isEnabled: Boolean) {

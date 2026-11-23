@@ -7,6 +7,7 @@ import com.unciv.logic.trade.TradeOfferType
 import com.unciv.logic.trade.TradeLogic
 import com.unciv.logic.trade.TradeOffersList
 import com.unciv.logic.trade.TradeRequest
+import com.unciv.ui.screens.TradeOfferRows
 import yairm210.purity.annotations.Readonly
 
 /** View of a trade negotiation between [civ] (always the viewer's own civ) and [otherCiv].
@@ -38,10 +39,15 @@ class TradeView(private val civ: Civilization, private val otherCiv: Civilizatio
     }
 
     // Actions - proposing
+    /** Why the rules of the deals forbid the staged trade, see [TradeOfferRows.blockReasons]; empty when they do not */
+    @Readonly
+    fun stagedBlockReasons(): List<String> = TradeOfferRows.blockReasons(tradeLogic.currentTrade, civ, otherCiv)
+
     @Readonly
     fun canProposeStagedTrade(): Boolean {
         val trade = tradeLogic.currentTrade
         if (trade.ourOffers.isEmpty() && trade.theirOffers.isEmpty()) return false
+        if (stagedBlockReasons().isNotEmpty()) return false
         if (trade.ourOffers.none { it.type == TradeOfferType.GreatWork }
             && trade.theirOffers.none { it.type == TradeOfferType.GreatWork }) return true
         return TradeEvaluation().isTradeValid(trade, civ, otherCiv)

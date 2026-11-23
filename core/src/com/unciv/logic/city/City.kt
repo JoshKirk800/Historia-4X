@@ -88,6 +88,8 @@ class City : IsPartOfGameInfoSerialization, INamed {
     var everLiberatedBy = HashSet<String>()
     var turnAcquired = 0
     var health = 200
+    /** VP CvCity::GetDefenseProcessTurns: consecutive turns running a growing defense process. */
+    var defenseProcessTurns = 0
     /** CvCity::m_iDamageTakenThisTurn (Vox Populi): combat damage taken since the owner's turn began (CityCombatant.takeDamage) */
     var damageTakenThisTurn = 0
     /** CvCity::m_iDamageTakenLastTurn: 80% of the last turn's damage and 20% of the one before, smoothed at each turn's start */
@@ -217,6 +219,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
         toReturn.id = if (id != NO_ID) id else pseudoRandomId(civ)
         toReturn.name = name
         toReturn.health = health
+        toReturn.defenseProcessTurns = defenseProcessTurns
         toReturn.damageTakenThisTurn = damageTakenThisTurn
         toReturn.damageTakenLastTurn = damageTakenLastTurn
         toReturn.extraBuildingMaintenance = extraBuildingMaintenance
@@ -326,6 +329,21 @@ class City : IsPartOfGameInfoSerialization, INamed {
         }
     }
 
+    /** VP CvPlot::isBlockaded(eForPlayer): occupancy first, then native-domain enemy blockade halos. */
+    @Readonly internal fun isVpPlotBlockaded(tile: Tile): Boolean {
+        if (tile.isCityCenter()) return false
+        tile.militaryUnit?.let { return it.civ.isAtWarWith(civ) }
+        val values = civ.gameInfo.ruleset.modOptions.constants.cityCombat
+        val range = if (tile.isWater) values.navalBlockadeRange else values.landBlockadeRange
+        return tile.getTilesInDistance(range).any { neighbor ->
+            if (neighbor == tile || neighbor.isWater != tile.isWater || neighbor.getContinent() != tile.getContinent()) false
+            else neighbor.militaryUnit?.let { unit ->
+                unit.civ.isAtWarWith(civ) && !unit.isEmbarked() && unit.baseUnit.isWaterUnit == tile.isWater &&
+                    unit.movement.canMoveTo(tile)
+            } == true
+        }
+    }
+
     @Readonly fun getRuleset() = civ.gameInfo.ruleset
 
     @Readonly fun getResourcesGeneratedByCity() = CityResources.getResourcesGeneratedByCity(this)
@@ -402,7 +420,24 @@ class City : IsPartOfGameInfoSerialization, INamed {
         else -> getStatReserve(stat) >= price
     }
 
-    @Readonly internal fun getMaxHealth() = 200 + cityConstructions.getBuiltBuildings().sumOf { it.cityHealth }
+    /** VP CvCity::GetMaxHitPoints: population and building HP are added to the configured base. */
+    @Readonly internal fun getMaxHealth(): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        val base = if (constants.cityCombatLikeVp)
+            constants.cityCombat.baseHealth + population.population * constants.cityCombat.healthPerPopulation
+        else 200
+        return base + cityConstructions.getBuiltBuildings().sumOf { it.cityHealth }
+    }
+
+    /** VP CvCity::updateStrengthValue: production times the current defense-process value, in hundredths. */
+    @Readonly internal fun getDefenseProcessStrength(): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (!constants.cityCombatLikeVp) return 0
+        val process = constants.cityCombat.defenseProcesses[cityConstructions.getCurrentConstruction().name] ?: return 0
+        var value = process.defense + defenseProcessTurns * process.defensePerTurn
+        if (process.defenseCap > 0) value = value.coerceAtMost(process.defenseCap)
+        return ((cityStats.currentCityStats.production * 100).toInt() * value) / 100
+    }
 
     @Readonly fun getStrength() = cityConstructions.getBuiltBuildings().sumOf { it.cityStrength }.toFloat()
 

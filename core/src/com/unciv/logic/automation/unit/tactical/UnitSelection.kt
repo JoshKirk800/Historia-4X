@@ -155,11 +155,17 @@ object UnitSelection {
         if (UnitAiTypes.defaultOf(base, ctx.rules) == UnitAiType.EXPLORE) extra -= RECON_GARRISON_PENALTY
 
         // Score candidate by effective city-strength contribution relative to city strength without garrison
-        val garrisonShare = civ.gameInfo.ruleset.modOptions.constants.cityStrengthFromGarrison * 100
-        var cityStrength = CityCombatant(city).getCityStrength() * 100
-        city.getGarrison()?.let { cityStrength -= (max(it.baseUnit.strength, it.baseUnit.rangedStrength) * garrisonShare).toInt() }
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        val garrisonShare = constants.cityStrengthFromGarrison * 100
+        val combatant = CityCombatant(city)
+        var cityStrength = combatant.getCityStrength() * 100
+        city.getGarrison()?.let {
+            cityStrength -= if (constants.cityCombatLikeVp) combatant.vpGarrisonStrength(it)
+                else (max(it.baseUnit.strength, it.baseUnit.rangedStrength) * garrisonShare).toInt()
+        }
         cityStrength = max(1, cityStrength)
-        val contribution = (max(base.strength, base.rangedStrength) * garrisonShare).toInt()
+        val contribution = if (constants.cityCombatLikeVp) combatant.vpGarrisonStrength(unit)
+            else (max(base.strength, base.rangedStrength) * garrisonShare).toInt()
         extra += GARRISON_STRENGTH_WEIGHT * contribution / cityStrength
 
         // Don't put units with a defense boosted from promotions in cities, these boosts are ignored

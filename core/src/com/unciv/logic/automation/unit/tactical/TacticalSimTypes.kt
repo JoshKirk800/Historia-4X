@@ -50,6 +50,7 @@ class SimAssignment(
     var unitDamage: Map<Int, Int> = emptyMap()
     var cityIndex = -1
     var cityDamage = 0
+    var garrisonDamage = 0
     var selfDamage = 0
     var plotScore = 0
         private set
@@ -84,6 +85,7 @@ class SimAssignment(
         result.unitDamage = unitDamage
         result.cityIndex = cityIndex
         result.cityDamage = cityDamage
+        result.garrisonDamage = garrisonDamage
         result.selfDamage = selfDamage
         result.plotScore = plotScore
         result.bonusScore = bonusScore

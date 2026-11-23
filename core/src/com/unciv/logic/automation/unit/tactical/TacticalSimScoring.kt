@@ -77,12 +77,14 @@ class SimScoring(private val w: SimWorld) {
             val city = sim.city
             val previousCityDamage = overlay.city[cityIndex]
             result.cityIndex = cityIndex
-            val key = w.cachedAttack(unit.index, from, -1, cityIndex, unit.selfDamage, 0, previousCityDamage) {
-                val (dealt, taken) = w.damageOnCity(mu, attackerTile, attackerHealth, city)
-                intArrayOf(dealt, taken)
+            val previousGarrisonDamage = overlay.garrison[cityIndex]
+            val key = w.cachedAttack(unit.index, from, -1, cityIndex, unit.selfDamage, previousGarrisonDamage, previousCityDamage) {
+                val (dealt, taken, garrison) = w.damageOnCity(mu, attackerTile, attackerHealth, city, previousGarrisonDamage)
+                intArrayOf(dealt, taken, garrison)
             }
             cityDamageDealt = key[0]
             damageReceived = key[1]
+            result.garrisonDamage = key[2]
             previousCityHitPoints = (sim.health - previousCityDamage).coerceAtLeast(1)
             // A city that is surrounded cannot heal
             val blockaded = pos.adjacentFriendlies(enemyPlot, SimDomain.Both, -1) == w.passableNeighbors(enemyPlot)
@@ -126,6 +128,13 @@ class SimScoring(private val w: SimWorld) {
                 val delta = pos.adjacentFriendlies(enemyPlot, domain, from) - pos.adjacentEnemies(from, domain)
                 dealt += delta * dealt / 10
                 damageReceived -= delta * damageReceived / 10
+                if (mu.civ.gameInfo.ruleset.modOptions.constants.combatHealthStrengthLikeVp) {
+                    val attackerCombatant = SimCombatant(mu, attackerTile, attackerHealth.coerceAtLeast(1))
+                    val defenderCombatant = SimCombatant(enemy, enemyTile, previousHitPoints.coerceAtLeast(1))
+                    val corrected = com.unciv.logic.battle.BattleDamage.resolveMeleeDeaths(attackerCombatant, defenderCombatant, dealt, damageReceived)
+                    dealt = corrected.first
+                    damageReceived = corrected.second
+                }
             }
             // Do not be as aggressive when attacking embarked units
             if (!TacticalAttacks.canAttack(enemy) || enemy.isEmbarked()) aggressionBias /= 2
@@ -226,7 +235,7 @@ class SimScoring(private val w: SimWorld) {
         if (scoreReduction) bonus -= 10
         if (cityKill) bonus += 100 else if (unitKill) bonus += 15
 
-        result.setScore(0, bonus, actualCityDamage + totalActualUnitDamageDealt - actualDamageTaken)
+        result.setScore(0, bonus, actualCityDamage + totalActualUnitDamageDealt + result.garrisonDamage - actualDamageTaken)
         return cityKill || unitKill
     }
     //endregion

@@ -455,7 +455,9 @@ object TacticalSimulation {
                 // The actual siege will typically be longer because not all units attack the city each turn
                 val maxSiegeTurns = 13
                 // Community Patch uses 20 HP per turn; population healing belongs to full Vox Populi.
-                val healRate = if (city.getCenterTile().isBlockaded()) 0 else CITY_HIT_POINTS_HEALED_PER_TURN
+                val healRate = if (civ.gameInfo.ruleset.modOptions.constants.cityCombatLikeVp)
+                    com.unciv.logic.city.managers.CityTurnManager(city).getHealPerTurn()
+                else if (city.getCenterTile().isBlockaded()) 0 else CITY_HIT_POINTS_HEALED_PER_TURN
                 if ((expectedPerTurn - healRate) * maxSiegeTurns < requiredDamage) {
                     ctx.log { "too early for attacking ${city.name}, required damage $requiredDamage, expected maximum damage per turn $expectedPerTurn" }
                     continue

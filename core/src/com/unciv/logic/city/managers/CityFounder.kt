@@ -102,7 +102,8 @@ class CityFounder {
         triggerCitiesSettledNearOtherCiv(city)
 
         addStartingBuildings(city, civInfo, startingEra)
-        
+        if (ruleset.modOptions.constants.cityCombatLikeVp) city.health = city.getMaxHealth()
+
         city.resetDisabledConstructions()
         city.resetSpecialistsControl()
 

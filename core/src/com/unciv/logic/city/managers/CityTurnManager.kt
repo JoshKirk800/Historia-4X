@@ -153,7 +153,21 @@ class CityTurnManager(val city: City) {
 
     /** Hit points a city heals at the end of a turn: 20, and with cityHealLikeCivV also what CvCity::doTurn adds:
      *  +1 for the capital of a major civilization and the strength of the buildings (100 per point, as the Defense of a Civ V building) / 500 */
-    private fun getHealPerTurn(): Int {
+    fun getHealPerTurn(): Int {
+        val constants = city.civ.gameInfo.ruleset.modOptions.constants
+        if (constants.cityCombatLikeVp) {
+            // VP CvCity::IsBlockadedWaterAndLand tests each passable adjacent plot for this city owner.
+            if (city.getCenterTile().neighbors.filterNot { it.isImpassible() }.all { city.isVpPlotBlockaded(it) }) return 0
+            var buildingDefense = (city.getStrength() * 100).toInt()
+            city.civ.forEachMatchingUnique(UniqueType.BetterDefensiveBuildings, city.state) {
+                buildingDefense = (buildingDefense * (1f + it.params[0].toInt() / 100f)).toInt()
+            }
+            var healing = constants.cityCombat.healing + buildingDefense / 1000 + city.population.population
+            if (city.damageTakenLastTurn == 0 && city.getTiles().none { city.isVpPlotBlockaded(it) })
+                healing *= constants.cityCombat.safeHealingMultiplier
+            healing += city.getDefenseProcessStrength() / 100
+            return healing
+        }
         var healed = 20
         if (city.civ.gameInfo.ruleset.modOptions.constants.cityHealLikeCivV) {
             if (city.isCapital() && city.civ.isMajorCiv) healed++
@@ -167,6 +181,13 @@ class CityTurnManager(val city: City) {
             UniqueTriggerActivation.triggerUnique(unique, city)
         }
         val stats = city.cityStats.currentCityStats
+        val constants = city.civ.gameInfo.ruleset.modOptions.constants
+        if (constants.cityCombatLikeVp) {
+            // VP CvCity::doTurn heals and advances the current defense process before production and growth.
+            city.health = (city.health + getHealPerTurn()).coerceAtMost(city.getMaxHealth())
+            val process = constants.cityCombat.defenseProcesses[city.cityConstructions.getCurrentConstruction().name]
+            city.defenseProcessTurns = if (process != null && process.defensePerTurn != 0) city.defenseProcessTurns + 1 else 0
+        }
 
         city.cityConstructions.endTurn(stats)
         city.expansion.nextTurn(stats.culture)
@@ -198,7 +219,8 @@ class CityTurnManager(val city: City) {
         if (city.civ.gameInfo.isReligionEnabled()) city.religion.endTurn()
 
         if (city in city.civ.cities) { // city was not destroyed
-            city.health = (city.health + getHealPerTurn()).coerceAtMost(city.getMaxHealth())
+            if (!constants.cityCombatLikeVp)
+                city.health = (city.health + getHealPerTurn()).coerceAtMost(city.getMaxHealth())
             city.population.unassignExtraPopulation()
         }
         

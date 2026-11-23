@@ -15,7 +15,7 @@ import yairm210.purity.annotations.Readonly
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-class CityCombatant(val city: City) : ICombatant {
+class CityCombatant(val city: City, private val ignoreGarrison: Boolean = false) : ICombatant {
     override fun getMaxHealth(): Int {
         return city.getMaxHealth()
     }
@@ -38,13 +38,17 @@ class CityCombatant(val city: City) : ICombatant {
     }
 
     override fun getUnitType(): UnitType = UnitType.City
-    override fun getAttackingStrength(defender: ICombatant?): Int =
-        (getCityStrength(defender, CombatAction.Attack, forRangedStrike = true) * 0.75).roundToInt()
+    override fun getAttackingStrength(defender: ICombatant?): Int {
+        val strength = getCityStrength(defender, CombatAction.Attack, forRangedStrike = true)
+        return if (city.civ.gameInfo.ruleset.modOptions.constants.cityCombatLikeVp) strength
+        else (strength * 0.75).roundToInt()
+    }
     @Readonly override fun getDefendingStrength(attacker: ICombatant?): Int = getCityStrength(attacker)
 
     @Readonly
     fun getCityStrength(theirCombatant: ICombatant? = null, combatAction: CombatAction = CombatAction.Defend, forRangedStrike: Boolean = false): Int { // Civ fanatics forum, from a modder who went through the original code
         val modConstants = getCivInfo().gameInfo.ruleset.modOptions.constants
+        if (modConstants.cityCombatLikeVp) return getVpCityStrength(theirCombatant, combatAction, forRangedStrike)
         var strength = modConstants.cityStrengthBase
         strength += (city.population.population * modConstants.cityStrengthPerPop) // Each 5 pop gives 2 defence
         val cityTile = city.getCenterTile()
@@ -90,6 +94,93 @@ class CityCombatant(val city: City) : ICombatant {
         strength += extraStrength
 
         return strength.roundToInt()
+    }
+
+    /** VP CvCity::updateStrengthValue and getStrengthValue: ranged retains buildings but excludes garrison. */
+    @Readonly
+    private fun getVpCityStrength(other: ICombatant?, action: CombatAction, ranged: Boolean): Int {
+        val values = city.civ.gameInfo.ruleset.modOptions.constants.cityCombat
+        val context = GameContext(city.civ, city, ourCombatant = this, theirCombatant = other, combatAction = action)
+        var buildings = (city.getStrength() * 100).toInt()
+        city.civ.forEachMatchingUnique(UniqueType.BetterDefensiveBuildings, context) {
+            buildings = (buildings * it.params[0].toPercent()).toInt()
+        }
+        val processStrength = city.getDefenseProcessStrength()
+        var strength = values.baseStrengthHundredths + buildings + processStrength
+        val wonders = city.cityConstructions.getBuiltBuildings().count { it.isWonder }
+        city.forEachMatchingUnique(UniqueType.CityDefensePerWonder, context, includeCivUniques = false) {
+            val divisor = it.params[1].toInt()
+            if (divisor > 0) strength += it.params[0].toInt() * wonders * 100 / divisor
+        }
+        val airUnits = city.getCenterTile().airUnits.count { it.civ == city.civ && !it.hasUnique(UniqueType.SelfDestructs) }
+        city.civ.forEachMatchingUnique(UniqueType.CityDefensePerAirUnit, context) { strength += it.params[0].toInt() * airUnits * 100 }
+        if (city.civ.isCityState) strength += city.population.population * values.minorStrengthPerPopulationHundredths
+        city.civ.forEachMatchingUnique(UniqueType.CityStrengthMultiplier, context) {
+            strength = (strength * it.params[0].toPercent()).toInt()
+        }
+        if (city.civ.isCityState && city.isCapital()) {
+            city.civ.allyCiv?.let { ally ->
+                var allyBonus = values.minorAllyDefensePercent
+                ally.forEachMatchingUnique(UniqueType.AlliedCityStateDefenseModifier) { allyBonus += it.params[0].toInt() }
+                if (allyBonus > 0) strength = strength * (100 + allyBonus) / 100
+            }
+            val protection = (city.civ.cityStateFunctions.getProtectorCivs().size * values.minorProtectionDefensePercent)
+                .coerceAtMost(values.minorProtectionDefenseMaxPercent)
+            strength = strength * (100 + protection) / 100
+        }
+        val tile = city.getCenterTile()
+        if (tile.isHill()) strength += values.hillStrengthHundredths
+        if (tile.getBaseTerrain().isMountain) strength += values.hillStrengthHundredths * 2
+        // VP adds the hill-sized bonus when a positive general/admiral area effect reaches the city.
+        if (city.civ.units.getCivUnits().any { unit ->
+                unit.cache.hasStrengthBonusInRadiusUnique && unit.getMatchingUniques(UniqueType.StrengthBonusInRadius, context).any {
+                    it.params[0].toInt() > 0 && unit.getTile().aerialDistanceTo(tile) <= it.params[2].toInt()
+                }
+            }) strength += values.hillStrengthHundredths
+        if (!ranged && !ignoreGarrison) city.getGarrison()?.let { strength += vpGarrisonStrength(it) }
+        city.forEachMatchingUnique(UniqueType.StrengthAmount, context) { strength += it.params[0].toInt() * 100 }
+        if (!ranged) {
+            var adjacentModifier = 0
+            for (nearby in tile.getTilesInDistance(1)) for (unit in nearby.getUnits()) {
+                if (unit.civ != city.civ) continue
+                unit.forEachMatchingUnique(UniqueType.AdjacentCityDefenseModifier, context) { adjacentModifier += it.params[0].toInt() }
+            }
+            if (adjacentModifier > 0) strength = strength * (100 + adjacentModifier) / 100
+        }
+        if (ranged) {
+            strength -= processStrength
+            var modifier = values.rangedStrengthModifier
+            city.forEachMatchingUnique(UniqueType.CityRangeStrikeModifier, context) { modifier += it.params[0].toInt() }
+            if (!ignoreGarrison && city.getGarrison() != null)
+                city.forEachMatchingUnique(UniqueType.GarrisonedCityRangeStrikeModifier, context) { modifier += it.params[0].toInt() }
+            if (other is MapUnitCombatant) {
+                val previousAttacks = other.unit.getTimesAttackedBy(city.civ.civID)
+                city.civ.forEachMatchingUnique(UniqueType.MultipleAttackCityStrikeModifier, context) {
+                    modifier += it.params[0].toInt() * previousAttacks
+                }
+            }
+            strength = strength * (100 + modifier) / 100
+        }
+        return (strength / 100f).roundToInt()
+    }
+
+    /** VP CvCity::processBuilding and getDamageReductionFlat: building reductions apply before garrison absorption. */
+    @Readonly
+    fun getFlatDamageReduction(): Int {
+        if (!city.civ.gameInfo.ruleset.modOptions.constants.cityCombatLikeVp) return 0
+        var reduction = 0
+        city.forEachMatchingUnique(UniqueType.CityFlatDamageReduction, city.state, includeCivUniques = false) {
+            reduction += it.params[0].toInt()
+        }
+        return reduction
+    }
+
+    /** Garrison contribution in hundredths of strength, independent of current HP. */
+    @Readonly
+    fun vpGarrisonStrength(unit: com.unciv.logic.map.mapunit.MapUnit): Int {
+        val values = city.civ.gameInfo.ruleset.modOptions.constants.cityCombat
+        val divisor = if (unit.baseUnit.isLandUnit) values.landGarrisonDivisor else values.navalGarrisonDivisor
+        return (maxOf(unit.baseUnit.strength, unit.baseUnit.rangedStrength) * 100 / divisor) * 100
     }
 
     @Readonly

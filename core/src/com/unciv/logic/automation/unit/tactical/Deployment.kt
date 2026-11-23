@@ -514,7 +514,8 @@ object Deployment {
         if (tile.isCityCenter()) {
             friendlyCity = true
             val city = tile.getCity()!!
-            val maxHitPoints = ctx.rules.define(AiDefine.MAX_CITY_HIT_POINTS)
+            val maxHitPoints = if (civ.gameInfo.ruleset.modOptions.constants.cityCombatLikeVp) city.getMaxHealth()
+                else ctx.rules.define(AiDefine.MAX_CITY_HIT_POINTS)
             friendlyCityStrength = CityCombatant(city).getCityStrength() * 100 * city.health / maxHitPoints
             dangerDivisor = dangerDivisorFor(ctx.danger.get(city), city.health)
         } else if (bestDefender != null && bestDefender != general) {

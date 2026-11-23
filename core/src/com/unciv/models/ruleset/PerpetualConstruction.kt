@@ -51,6 +51,17 @@ sealed class PerpetualConstruction(override var name: String, val description: S
     object Faith : StatConversion(Stat.Faith)
     object Food : StatConversion(Stat.Food)
 
+    /** VP PROCESS_DEFENSE: the actual values are ruleset-configured and staged off. */
+    object Defense : PerpetualConstruction("Defense", "Increase city defense") {
+        override fun getProductionTooltip(city: City, withIcon: Boolean) = "\r\n${city.getDefenseProcessStrength() / 100f} Strength"
+        override fun isBuildable(cityConstructions: CityConstructions): Boolean {
+            val constants = cityConstructions.city.getRuleset().modOptions.constants
+            if (!constants.cityCombatLikeVp) return false
+            val process = constants.cityCombat.defenseProcesses[name] ?: return false
+            return process.requiredTech?.let { cityConstructions.city.civ.tech.isResearched(it) } ?: true
+        }
+    }
+
     /**
      * The city production target of a League project (a Process in the original, CvCity::doProcess, CvCity.cpp:13081-13099): nothing is built,
      * the production of the city goes to the contribution of its civilization to the project, see [com.unciv.logic.league.League.addContribution].
@@ -76,7 +87,7 @@ sealed class PerpetualConstruction(override var name: String, val description: S
     private object Mapper {
         /** Map of names to instances: Cannot be part of the companion due to initialization order injustice - a companion is nobility, members are peasants */
         val perpetualConstructionsMap: Map<String, PerpetualConstruction> =
-            mapOf(Science.name to Science, Gold.name to Gold, Culture.name to Culture, Faith.name to Faith, Food.name to Food, Idle.name to Idle,
+            mapOf(Science.name to Science, Gold.name to Gold, Culture.name to Culture, Faith.name to Faith, Food.name to Food, Defense.name to Defense, Idle.name to Idle,
                 WorldsFair.name to WorldsFair, InternationalGames.name to InternationalGames, InternationalSpaceStation.name to InternationalSpaceStation)
     }
 

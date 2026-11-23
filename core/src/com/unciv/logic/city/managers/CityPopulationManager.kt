@@ -149,6 +149,10 @@ class CityPopulationManager : IsPartOfGameInfoSerialization {
     fun addPopulation(count: Int) {
         val changedAmount = count.coerceAtLeast(1 - population)
         population += changedAmount
+        // VP CvCity::setPopulation stores damage, not remaining HP; shrinking must leave at least one HP.
+        val constants = city.civ.gameInfo.ruleset.modOptions.constants
+        if (constants.cityCombatLikeVp)
+            city.health = (city.health + changedAmount * constants.cityCombat.healthPerPopulation).coerceIn(1, city.getMaxHealth())
         val grewBeyondHighest = population > city.highestPopulation
         if (grewBeyondHighest) city.highestPopulation = population
         val freePopulation = getFreePopulation()

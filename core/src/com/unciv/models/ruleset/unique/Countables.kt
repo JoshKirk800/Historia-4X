@@ -371,6 +371,17 @@ enum class Countables(
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
     },
 
+    OwnedTilesCity("Owned [tileFilter] Tiles in this city") {
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val city = gameContext.city ?: return null
+            val filter = parameterText.getPlaceholderParameters()[0]
+            return city.getTiles().count { it.matchesFilter(filter, city.civ) }
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.TileFilter.getTranslatedErrorSeverity(parameterText, ruleset)
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
+    },
+
     OwnedTiles("Owned [tileFilter] Tiles") {
         override fun eval(parameterText: String, gameContext: GameContext): Int? {
             val filter = parameterText.getPlaceholderParameters()[0]

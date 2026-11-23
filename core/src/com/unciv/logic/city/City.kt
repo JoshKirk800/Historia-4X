@@ -92,6 +92,9 @@ class City : IsPartOfGameInfoSerialization, INamed {
     var damageTakenThisTurn = 0
     /** CvCity::m_iDamageTakenLastTurn: 80% of the last turn's damage and 20% of the one before, smoothed at each turn's start */
     var damageTakenLastTurn = 0
+    /** CvCity::m_iExtraBuildingMaintenance: percent the buildings of the whole civilization cost more, from the copies of short resources this city's buildings were refunded at the turn's
+     *  start ([com.unciv.logic.civilization.managers.ResourceShortage.refundBuildings], with `resourceShortageLikeVp`) */
+    var extraBuildingMaintenance = 0
 
 
     var population = CityPopulationManager()
@@ -216,6 +219,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
         toReturn.health = health
         toReturn.damageTakenThisTurn = damageTakenThisTurn
         toReturn.damageTakenLastTurn = damageTakenLastTurn
+        toReturn.extraBuildingMaintenance = extraBuildingMaintenance
         toReturn.population = population.clone()
         toReturn.highestPopulation = highestPopulation
         toReturn.purchaseCooldowns = purchaseCooldowns.clone()

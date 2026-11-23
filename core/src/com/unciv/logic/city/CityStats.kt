@@ -2,6 +2,7 @@ package com.unciv.logic.city
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.civilization.CivFlags
+import com.unciv.logic.civilization.managers.ResourceShortage
 import com.unciv.logic.civilization.managers.TradeRouteManager
 import com.unciv.logic.civilization.managers.TradeRouteValue
 import com.unciv.logic.map.tile.RoadStatus
@@ -483,6 +484,9 @@ class CityStats(val city: City) {
     private fun getBuildingMaintenanceCosts(): Float {
         // Same here - will have a different UI display.
         var buildingsMaintenance = city.cityConstructions.getMaintenanceCosts() // this is AFTER the bonus calculation!
+        // CvTreasury::GetBuildingGoldMaintenance: the copies of short resources that buildings were refunded make all of them cost more
+        val extraPercent = ResourceShortage.extraMaintenancePercent(city.civ)
+        if (extraPercent != 0) buildingsMaintenance = buildingsMaintenance * (100 + extraPercent) / 100f
         // CvTreasury::GetBuildingGoldMaintenance: a human pays the building cost percentage of the handicap, the others the AI one of the chosen difficulty
         buildingsMaintenance *= if (city.civ.isHuman()) city.civ.getDifficulty().buildingCostModifier
             else city.civ.gameInfo.getDifficulty().aiBuildingMaintenanceModifier

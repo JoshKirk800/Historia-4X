@@ -12,6 +12,7 @@ import com.unciv.logic.battle.MapUnitCombatant
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
+import com.unciv.logic.civilization.managers.ResourceShortage
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.movement.UnitMovement
@@ -566,6 +567,7 @@ class MapUnit : IsPartOfGameInfoSerialization {
         isEmbarked() -> 0 // embarked units can't heal
         health >= 100 -> 0 // No need to heal if at max health
         hasUnique(UniqueType.HealOnlyByPillaging, checkCivInfoUniques = true) -> 0
+        ResourceShortage.cannotHeal(this) -> 0 // CvUnit::canHeal: short of a resource the unit needs (resourceShortageLikeVp)
         else -> healingAmountForTile(getTile(), noTerrainDamage = true)
     }
 

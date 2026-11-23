@@ -40,6 +40,7 @@ class GameInfoCloneTests {
         field.type == VictoryData::class.java -> VictoryData("someCiv", "someVictory", 7)
         field.type == NeedsMedians::class.java -> NeedsMedians().apply { basic = 11; gold = 22; science = 33; culture = 44; techs = 5 }
         field.type == HashMap::class.java && field.name == "diplomaticVictoryVotesCast" -> hashMapOf<String, String?>("a" to "b", "c" to null)
+        field.type == HashMap::class.java && field.name == "greatestMonopolyPlayer" -> hashMapOf("Some Resource" to "someCiv")
         field.type == ArrayList::class.java && field.name == "unitNamesTaken" -> arrayListOf("Some Name")
         else -> throw AssertionError(
             "GameInfo has a new serialized field '${field.name}' of type ${field.type.simpleName}: " +

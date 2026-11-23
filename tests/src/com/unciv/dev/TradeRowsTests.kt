@@ -104,7 +104,7 @@ class TradeRowsTests {
     }
 
     @Test
-    fun `the monopoly tally counts the copies on tiles the civ owns against all copies on the map`() {
+    fun `the monopoly row lists the monopolies of the civ's manager`() {
         val civ = game.addCiv()
         val built = game.createTileImprovement().apply { terrainsCanBeBuiltOn = listOf("Plains") }
         for (tile in game.tileMap.values) game.setTileTerrain(tile.position, "Plains")
@@ -118,7 +118,7 @@ class TradeRowsTests {
             val tile = game.getTile(HexCoord(x, y))
             tile.setTileResource(resource)
             if (amount > 0) tile.resourceAmount = amount
-            if (ours) { tile.setOwningCity(city); tile.setImprovement(built.name) }
+            if (ours) { game.addTileToCity(city, tile); tile.setOwningCity(city); tile.setImprovement(built.name) }
         }
         // a luxury: three copies of four are ours (75 percent, more than half): a global monopoly
         place(luxury.name, 1, 0, ours = true); place(luxury.name, 0, 1, ours = true); place(luxury.name, -1, 1, ours = true); place(luxury.name, 6, 0, ours = false)
@@ -127,6 +127,7 @@ class TradeRowsTests {
         // a bonus resource is never a global monopoly (a luxury or strategic one only) and not a strategic one
         place(bonus.name, 0, -1, ours = true)
 
+        civ.cache.updateCivResources()
         val row = rowOf("AI_MONOPOLY", civ.civName).drop(3)
         assertEquals(listOf("1", "1", "${luxury.name},${strategic.name}:strategic"), row)
         assertEquals(listOf(luxury.name to true, strategic.name to false), TradeColumns.monopolies(civ).map { it.first to it.second })

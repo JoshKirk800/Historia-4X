@@ -3,7 +3,6 @@ package com.unciv.dev
 import com.unciv.logic.GameInfo
 import com.unciv.logic.civilization.Civilization
 import com.unciv.models.TradeRoute
-import com.unciv.models.ruleset.tile.ResourceType
 
 /**
  * The trade rows of [DecisionLog] (phaseE/vp-trade-plan.md, slice T0: the before row of the trade measures): AI_TRADE and AI_MONOPOLY per living major
@@ -19,13 +18,11 @@ import com.unciv.models.ruleset.tile.ResourceType
  * start in and the yields of the routes of others that end in a city of it, [TradeRoute.originYields] and [TradeRoute.destinationYields], rounded towards 0 as the
  * treasury rows are), partners the civilizations at the other end of those routes, the civilization itself and barbarians not counted.
  *
- * AI_MONOPOLY: a tally of the copies of every resource with `isMonopoly` on the map that the civilization owns, and not the monopolies of the engine (they come with
- * slice T2 of the plan, which replaces this tally by its own state). A copy is owned when it lies on a tile of the civilization that provides the resource (a strategic
- * resource counts its quantity, any other resource one per tile), `total` is every copy on the map. The civilization has a global monopoly when it owns more than the
- * [com.unciv.models.ModConstants.MonopolyConstants.globalThreshold] percent of the copies of a luxury or strategic resource and a strategic monopoly when it owns more
- * than the strategicThreshold percent of the copies of a strategic resource (a strategic resource it has the global monopoly of counts for both, as in
- * V:CvPlayer.cpp:39139-39232). resources are the names of the resources of the monopolies, comma-separated (`-` for none), a strategic monopoly that is no global monopoly
- * with the suffix `:strategic`. A ruleset with no resource that is `isMonopoly` has 0, 0 and `-` in every row.
+ * AI_MONOPOLY: the monopolies the civilization has now, as [com.unciv.logic.civilization.managers.MonopolyManager] (slice T2 of the plan) holds them: a global monopoly
+ * of a luxury or strategic resource it owns more of than the greatest share and than the globalThreshold percent of the copies on the map, a strategic monopoly of a
+ * strategic resource it owns more than the strategicThreshold percent of (a strategic resource it has the global monopoly of counts for both, V:CvPlayer.cpp:39139-39232).
+ * resources are the names of the resources of the monopolies, comma-separated (`-` for none), a strategic monopoly that is no global monopoly with the suffix
+ * `:strategic`. A ruleset with no resource that is `isMonopoly` has 0, 0 and `-` in every row.
  */
 object TradeColumns {
     const val EVERY_TURNS = 10
@@ -60,29 +57,13 @@ object TradeColumns {
         HappinessColumns.Column("partners") { flows(it).partners.toString() },
     )
 
-    /** The monopolies of [civ] by the tally of the class comment: (resource name, global, strategic), in the order of the ruleset's resources */
-    fun monopolies(civ: Civilization): List<Triple<String, Boolean, Boolean>> {
-        val ruleset = civ.gameInfo.ruleset
-        val constants = ruleset.modOptions.constants.monopoly
-        val monopolyResources = ruleset.tileResources.values.filter { it.isMonopoly }
-        if (monopolyResources.isEmpty()) return emptyList()
-        val total = HashMap<String, Int>()
-        val owned = HashMap<String, Int>()
-        for (tile in civ.gameInfo.tileMap.values) {
-            val resource = tile.tileResource ?: continue
-            if (!resource.isMonopoly) continue
-            val copies = if (resource.resourceType == ResourceType.Strategic) tile.resourceAmount else 1
-            total.merge(resource.name, copies, Int::plus)
-            if (tile.getOwner() == civ && tile.providesResources(civ)) owned.merge(resource.name, copies, Int::plus)
-        }
-        return monopolyResources.mapNotNull { resource ->
-            val all = total[resource.name] ?: return@mapNotNull null
-            val mine = owned[resource.name] ?: 0
-            val global = resource.resourceType != ResourceType.Bonus && mine * 100 > all * constants.globalThreshold
-            val strategic = resource.resourceType == ResourceType.Strategic && mine * 100 > all * constants.strategicThreshold
+    /** The monopolies of [civ] by its [com.unciv.logic.civilization.managers.MonopolyManager]: (resource name, global, strategic), in the order of the ruleset's resources */
+    fun monopolies(civ: Civilization): List<Triple<String, Boolean, Boolean>> =
+        civ.gameInfo.ruleset.tileResources.values.filter { it.isMonopoly }.mapNotNull { resource ->
+            val global = civ.monopolies.hasGlobalMonopoly(resource.name)
+            val strategic = civ.monopolies.hasStrategicMonopoly(resource.name)
             if (global || strategic) Triple(resource.name, global, strategic) else null
         }
-    }
 
     /** Columns after `turn  name` of AI_MONOPOLY */
     val monopolyColumns: MutableList<HappinessColumns.Column<Civilization>> = mutableListOf(

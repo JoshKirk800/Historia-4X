@@ -41,7 +41,7 @@ import java.io.File
  *     AI_YIELD    turn  name  gold  goldPerTurn  sciencePerTurn  culturePerTurn  faith  production  food  techs  era  policies  wonders  buildings
  *     AI_INSTANT  turn  name  event  stat  amount
  * Trade rows every 10 turns (columns in [TradeColumns], the header line names them): AI_TRADE per living major civilization (its routes and what they bring),
- * AI_MONOPOLY (the resources whose copies on the map it owns most of, a tally of the log until the engine has monopolies):
+ * AI_MONOPOLY (the global and strategic monopolies of its monopoly manager):
  *     AI_TRADE     turn  name  international  domestic  plundered  gold  science  culture  partners
  *     AI_MONOPOLY  turn  name  globalMonopolies  strategicMonopolies  resources
  * The columns the original's observer wrote for the same measures (`tools/bnw_cap/snap.lua` civRow: gold, `CalculateGoldRate`, `GetScience`,

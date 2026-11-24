@@ -10,6 +10,10 @@ import com.unciv.models.Counter
 class LeagueMember : IsPartOfGameInfoSerialization {
     /** Permanent delegates that failed World Leader votes gave (CvVotingClasses.cpp:5446-5456) */
     var extraDelegates = 0
+    /** Source name to the delegates that Vox Populi caches (`m_iFaithToVotes` and the like, CvPlayer::DoProcessVotes, V:CvPlayer.cpp:24527-24604): faith, friendships, original capitals
+     *  and defensive pacts (the fifth, research agreements, has no unique here: no Vox Populi row uses it). Refreshed by [League.refreshCachedSources] at the start of the
+     *  civilization's own turn, so what happens during a turn counts from the next; empty until then and always without `leagueDelegatesLikeVp` */
+    var cachedSources = LinkedHashMap<String, Int>()
     /** Delegates not yet spent in the running session (`iVotes`) */
     var delegatesLeft = 0
     /** Delegates at the start of the running session, for display */
@@ -26,6 +30,7 @@ class LeagueMember : IsPartOfGameInfoSerialization {
     fun clone(): LeagueMember {
         val toReturn = LeagueMember()
         toReturn.extraDelegates = extraDelegates
+        toReturn.cachedSources.putAll(cachedSources)
         toReturn.delegatesLeft = delegatesLeft
         toReturn.delegatesAtStart = delegatesAtStart
         toReturn.abstained = abstained

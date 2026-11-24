@@ -97,8 +97,12 @@ object WorldCongressOverview {
             table.add("Proposals you may make: [${member.proposalsLeft}]".toLabel(Color.GOLD)).colspan(COLUMNS).row()
         if (league.inSession)
             table.add("Delegates you have left: [${member.delegatesLeft}]".toLabel(if (member.delegatesLeft > 0) Color.GOLD else Color.WHITE)).colspan(COLUMNS).row()
-        else
+        else {
             table.add("Delegates you will have in the next session: [${league.getDelegates(civ)}]".toLabel()).colspan(COLUMNS).row()
+            if (civ.gameInfo.ruleset.modOptions.constants.leagueDelegatesLikeVp)
+                for ((source, amount) in league.getDelegateSources(civ))
+                    table.add("[$source]: [$amount]".toLabel(Color.LIGHT_GRAY)).colspan(COLUMNS).row()
+        }
     }
 
     private fun addMembers(table: Table, civ: Civilization, league: League) {

@@ -3,8 +3,11 @@ package com.unciv.logic.league
 import com.unciv.logic.GameInfo
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.automation.civilization.LeagueAutomation
+import com.unciv.logic.automation.diplomacy.OpinionAi
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.OverviewAction
@@ -17,6 +20,7 @@ import com.unciv.models.ruleset.ResolutionDecision
 import com.unciv.models.ruleset.tech.Era
 import com.unciv.models.ruleset.tech.WorldCongressSessionInfo
 import com.unciv.models.ruleset.tile.ResourceType
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueType
@@ -249,6 +253,28 @@ class League : IsPartOfGameInfoSerialization {
     companion object {
         const val YES = "Yes"
         const val NO = "No"
+
+        // The keys of [getDelegateSources], which the World Congress screen translates; in the order of CvLeague::CalculateStartingVotesForMember
+        const val SOURCE_SESSION = "Delegates of the era"
+        const val SOURCE_HOST = "Host of the World Congress"
+        const val SOURCE_CITY_STATES = "Allied City-States"
+        const val SOURCE_FAILED_VOTES = "Failed World Leader votes"
+        const val SOURCE_DIPLOMATS = "Diplomats in capitals"
+        const val SOURCE_BUILDINGS_AND_POLICIES = "Buildings, wonders and policies"
+        const val SOURCE_IMPROVEMENTS = "Improvements of our religion"
+        const val SOURCE_FAITH = "Cities following our religion"
+        const val SOURCE_FRIENDSHIPS = "Declarations of Friendship"
+        const val SOURCE_CAPITALS = "Conquered capitals"
+        const val SOURCE_PACTS = "Defensive Pacts"
+        const val SOURCE_GOLD = "Gold per turn"
+        const val SOURCE_WORLD_RELIGION = "World Religion"
+        const val SOURCE_WORLD_IDEOLOGY = "World Ideology"
+
+        @Readonly
+        private tailrec fun gcd(a: Int, b: Int): Int = if (b == 0) a else gcd(b, a % b)
+        @Readonly
+        private tailrec fun gcd(a: Long, b: Long): Long = if (b == 0L) a else gcd(b, a % b)
+
         /**
          * The delegates each of [civ]'s diplomats in a capital gives: the sum of [UniqueType.WorldCongressDelegatesPerDiplomat] over its researched technologies
          * (CvPlayer::GetExtraVotesPerDiplomat, V:CvPlayer.cpp:29722, which CvTeam::processTech fills, V:CvTeam.cpp:8045). Brave New World's Globalization carries 1
@@ -484,6 +510,7 @@ class League : IsPartOfGameInfoSerialization {
      * Globalization's delegate per active diplomat, and those of the World Religion and World Ideology in effect.
      */
     fun getDelegates(civ: Civilization): Int {
+        if (gameInfo.ruleset.modOptions.constants.leagueDelegatesLikeVp) return getDelegateSources(civ).values.sum()
         if (!canEverVote(civ)) return 0
         val session = getSessionInfo()
         var total = session.civDelegates + (members[civ.civID]?.extraDelegates ?: 0)
@@ -501,6 +528,161 @@ class League : IsPartOfGameInfoSerialization {
             }
             if (resolution.votesForFollowingIdeology != 0 && active.choice != null && civ.getIdeology()?.name == active.choice)
                 total += resolution.votesForFollowingIdeology
+        }
+        return total
+    }
+
+    /**
+     * The delegates of [civ] by source, in the order of CvLeague::CalculateStartingVotesForMember (V:CvVotingClasses.cpp:4046-4390), only with
+     * [com.unciv.models.ModConstants.leagueDelegatesLikeVp]; the sum is [getDelegates]. A source that gives nothing is not listed. The keys are what the World Congress screen shows.
+     * Faith, friendships, original capitals and defensive pacts are those [refreshCachedSources] stored at the start of the civilization's last turn (CvPlayer::DoProcessVotes).
+     */
+    fun getDelegateSources(civ: Civilization): LinkedHashMap<String, Int> {
+        val sources = LinkedHashMap<String, Int>()
+        if (!canEverVote(civ)) return sources
+        val session = getSessionInfo()
+        val member = members[civ.civID]
+
+        fun add(name: String, amount: Int) { if (amount != 0) sources[name] = amount }
+        add(SOURCE_SESSION, session.civDelegates)
+        if (civ.civID == host) add(SOURCE_HOST, session.hostDelegates)
+        add(SOURCE_CITY_STATES, session.cityStateDelegates * gameInfo.getAliveCityStates().count { it.allyCiv == civ })
+        add(SOURCE_FAILED_VOTES, member?.extraDelegates ?: 0)
+        add(SOURCE_DIPLOMATS, getDelegatesPerDiplomat(civ) * gameInfo.getAliveMajorCivs().count { civ.espionageManager.getActiveDiplomatFor(it) != null })
+        var flat = 0
+        civ.forEachMatchingUnique(UniqueType.WorldCongressDelegates) { flat += it.params[0].toInt() }
+        add(SOURCE_BUILDINGS_AND_POLICIES, max(flat, 0))
+        add(SOURCE_IMPROVEMENTS, getDelegatesFromImprovements(civ))
+        for ((name, amount) in member?.cachedSources.orEmpty()) add(name, amount)
+        add(SOURCE_GOLD, getDelegatesFromGold(civ))
+        add(SOURCE_WORLD_RELIGION, getDelegatesFromWorldReligion(civ))
+        add(SOURCE_WORLD_IDEOLOGY, getDelegatesFromWorldIdeology(civ))
+        return sources
+    }
+
+    /**
+     * CvPlayer::DoProcessVotes (V:CvPlayer.cpp:24527-24604), at the start of [civ]'s turn: stores what faith, friendships, original capitals and defensive pacts give.
+     * Only with [com.unciv.models.ModConstants.leagueDelegatesLikeVp]; otherwise it clears the member's cache. Faith is each building's `cities * 100 / N` in whole hundredths, summed,
+     * and floored once; a civilization without a religion gets what its buildings give, as there is no state religion for Vox Populi's policy term (not built)
+     */
+    fun refreshCachedSources(civ: Civilization) {
+        val member = members[civ.civID] ?: return
+        member.cachedSources.clear()
+        if (!gameInfo.ruleset.modOptions.constants.leagueDelegatesLikeVp || !canEverVote(civ)) return
+
+        val followingCities = civ.religionManager.numberOfCitiesFollowingThisReligion()
+        var faithHundredths = 0
+        civ.forEachMatchingUnique(UniqueType.WorldCongressDelegatesPerReligionCities) { faithHundredths += followingCities * 100 / it.params[0].toInt() }
+        var perFriendshipPair = 0
+        civ.forEachMatchingUnique(UniqueType.WorldCongressDelegatesPerFriendships) { perFriendshipPair += it.params[0].toInt() }
+        var perCapital = 0
+        civ.forEachMatchingUnique(UniqueType.WorldCongressDelegatesPerCapitals) { perCapital += it.params[0].toInt() }
+        var perPact = 0
+        civ.forEachMatchingUnique(UniqueType.WorldCongressDelegatesPerDefensivePacts) { perPact += it.params[0].toInt() }
+
+        val friendships = gameInfo.getAliveMajorCivs().count { it != civ && OpinionAi.isDoFAccepted(civ, it) }
+        val pacts = gameInfo.getAliveMajorCivs().count { it != civ && civ.getDiplomacyManager(it)?.diplomaticStatus == DiplomaticStatus.DefensivePact }
+        fun store(name: String, amount: Int) { if (amount > 0) member.cachedSources[name] = amount }
+        store(SOURCE_FAITH, faithHundredths / 100)
+        store(SOURCE_FRIENDSHIPS, friendships / 2 * perFriendshipPair)
+        store(SOURCE_CAPITALS, VictoryProgressAi.capitalsConquered(civ) * perCapital)
+        store(SOURCE_PACTS, pacts * perPact)
+    }
+
+    /**
+     * CvPlayer::CalculateReligionVotesFromImprovements (V:CvPlayer.cpp:23812-23848): for each improvement the civilization owns, `1 / amount` of a delegate per improvement
+     * for each [UniqueType.WorldCongressDelegatesPerImprovements] of its religion's beliefs, the fractions of all of them added exactly and truncated once. Read live
+     */
+    @Readonly
+    private fun getDelegatesFromImprovements(civ: Civilization): Int {
+        val religion = civ.religionManager.religion ?: return 0
+        val perImprovement = HashMap<String, Int>() // improvement to the denominator of the sum of the fractions, see below
+        val numerators = HashMap<String, Long>()
+        for (belief in religion.getAllBeliefsOrdered()) {
+            for (unique in belief.getMatchingUniques(UniqueType.WorldCongressDelegatesPerImprovements, GameContext.IgnoreConditionals)) {
+                val improvement = unique.params[1]
+                val amount = unique.params[0].toInt()
+                val denominator = perImprovement[improvement] ?: 1
+                val numerator = numerators[improvement] ?: 0L
+                // numerator / denominator + 1 / amount, over the least common multiple
+                val common = denominator / gcd(denominator, amount) * amount
+                numerators[improvement] = numerator * (common / denominator) + common / amount
+                perImprovement[improvement] = common
+            }
+        }
+        if (numerators.isEmpty()) return 0
+        val owned = HashMap<String, Int>()
+        for (city in civ.cities) for (tile in city.getTiles()) {
+            val improvement = tile.improvement ?: continue
+            if (improvement in numerators && tile.getOwner() == civ) owned.merge(improvement, 1, Int::plus)
+        }
+        // The sum of numerator * owned / denominator over the improvements, as an exact fraction
+        var denominator = 1L
+        var numerator = 0L
+        for ((improvement, count) in owned) {
+            val d = perImprovement.getValue(improvement).toLong()
+            val n = numerators.getValue(improvement) * count
+            val common = denominator / gcd(denominator, d) * d
+            numerator = numerator * (common / denominator) + n * (common / d)
+            denominator = common
+        }
+        return (numerator / denominator).toInt()
+    }
+
+    /** CvVotingClasses.cpp:4230-4247: the gross gold per turn divided by the sum of [UniqueType.WorldCongressDelegatesPerGold], at most a quarter of the city-states originally in the game, but 1. Read live */
+    @Readonly
+    private fun getDelegatesFromGold(civ: Civilization): Int {
+        var perVote = 0
+        civ.forEachMatchingUnique(UniqueType.WorldCongressDelegatesPerGold) { perVote += it.params[0].toInt() }
+        if (perVote <= 0) return 0
+        val gross = getGrossGoldPerTurn(civ)
+        if (gross <= 0) return 0
+        return min(gross / perVote, max(gameInfo.civilizations.count { it.isCityState } / 4, 1))
+    }
+
+    /**
+     * CvTreasury::CalculateGrossGold (V:CvTreasury.cpp:381-420): the income before costs, so the gold of the cities without the maintenance of their buildings, the trade and what
+     * the uniques give, without the upkeep of units and roads. Vox Populi's list is longer (annexed city-states, espionage events) and some of it has no counterpart here
+     */
+    @Readonly
+    private fun getGrossGoldPerTurn(civ: Civilization): Int {
+        var gold = 0f
+        for ((source, stats) in civ.stats.getStatMapForNextTurn()) {
+            if (source == "Maintenance" || source == "Unit upkeep" || source == "Transportation upkeep") continue
+            gold += stats.gold
+        }
+        return gold.toInt()
+    }
+
+    /** CvLeague::GetExtraVotesForFollowingReligion, with MOD_BALANCE_VP (V:CvVotingClasses.cpp:5319-5372): the first resolution that applies ends the sum */
+    @Readonly
+    private fun getDelegatesFromWorldReligion(civ: Civilization): Int {
+        for (active in activeResolutions) {
+            val resolution = gameInfo.ruleset.resolutions[active.resolution] ?: continue
+            if (resolution.votesForFollowingReligion == 0) continue
+            val religion = active.choice?.let { gameInfo.religions[it] } ?: continue
+            val followsIt = civ.religionManager.isMajorityReligionForCiv(religion)
+            val holyCityOwner = gameInfo.getCities().firstOrNull { it.isHolyCityOf(religion.name) }?.civ
+            // "owns it" is GetOwnedReligion() == the religion: the state religion whose holy city the civilization holds, which is the only case that reaches the holy city branch below
+            if (!followsIt && holyCityOwner != civ) continue
+            if (holyCityOwner == civ) {
+                val others = gameInfo.getAliveMajorCivs().count { it != civ && it.religionManager.isMajorityReligionForCiv(religion) }
+                return resolution.votesForFollowingReligion + others
+            }
+            if (followsIt) return resolution.votesForFollowingReligion
+        }
+        return 0
+    }
+
+    /** CvLeague::GetExtraVotesForFollowingIdeology, with MOD_BALANCE_VP (V:CvVotingClasses.cpp:5413-5460): one more for every other civilization of that ideology, dead or alive */
+    @Readonly
+    private fun getDelegatesFromWorldIdeology(civ: Civilization): Int {
+        var total = 0
+        val own = civ.getIdeology()?.name ?: return 0
+        for (active in activeResolutions) {
+            val resolution = gameInfo.ruleset.resolutions[active.resolution] ?: continue
+            if (resolution.votesForFollowingIdeology == 0 || active.choice == null || own != active.choice) continue
+            total += resolution.votesForFollowingIdeology + gameInfo.civilizations.count { it != civ && it.getIdeology()?.name == active.choice }
         }
         return total
     }

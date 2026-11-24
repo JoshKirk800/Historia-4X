@@ -633,6 +633,14 @@ enum class UniqueParameterType(
         override val staticKnownValues = com.unciv.logic.civilization.TileAcquisition.entries.map { it.label }.toSet()
     },
 
+    /** What became of a foreign spy in a city, used by [UniqueType.TriggerUponSpyOutcome], see [com.unciv.logic.civilization.SpyOutcome] */
+    SpyOutcome("spyOutcome", "killing",
+        "One of `killing`, `identifying`, `identifying without killing` or `killing or identifying`", "Spy Outcomes",
+        severityDefault = UniqueType.UniqueParameterErrorSeverity.RulesetInvariant
+    ) {
+        override val staticKnownValues = com.unciv.logic.civilization.SpyOutcome.entries.map { it.label }.toSet()
+    },
+
     /** The name of a work in GreatWorks.json */
     GreatWorkName("greatWork", "Mona Lisa", "The name of any Great Work") {
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = ruleset.greatWorks.keys

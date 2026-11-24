@@ -1,6 +1,7 @@
 package com.unciv.logic.civilization.managers
 
 import com.unciv.logic.automation.diplomacy.DiplomacyEvents
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
@@ -127,6 +128,11 @@ object SpyMissionResolver {
             owner.getDiplomacyManager(civ)?.setFlag(DiplomacyFlags.DiscoveredSpiesInOurCities, 30, true)
         }
         if (killed) DiplomacyEvents.onSpyKilled(owner, civ)
+
+        // The instant yields of the result (V:CvEspionageClasses.cpp:1586-1637, 1663-1669), while the spy is still in the city: the city's owner is paid in that city for a spy that was found out
+        // (its buildings' tables, its counterspy focus and Double Agents, one trigger filtered by what became of the spy), and the spy's owner in every city for any mission
+        InstantYields.spyOutcome(owner, city, killed, identified)
+        InstantYields.spyMissionPerformed(civ)
 
         // the effects of the mission happen whether or not the spy lives (V:CvCity.cpp:6616-6640)
         val random = Random(seed xor 0x777777)

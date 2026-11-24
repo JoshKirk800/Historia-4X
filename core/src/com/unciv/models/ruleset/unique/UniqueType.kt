@@ -1584,6 +1584,17 @@ enum class UniqueType(
     TriggerUponGainingLuxury("upon gaining a luxury resource", UniqueTarget.TriggerCondition,
         docDescription = "When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is " +
             "how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)"),
+    TriggerUponSpyMission("upon performing a spy mission", UniqueTarget.TriggerCondition,
+        docDescription = "Only with the ModConstants `espionageLikeVp`. When a spy of the civilization finishes a mission, killed or not, in every city of the civilization " +
+            "(CvPlayerEspionage::ProcessSpyMissionResult, V:CvEspionageClasses.cpp:1637, `INSTANT_YIELD_TYPE_SPY_ATTACK`: each city pays its own `Building_YieldFromSpyAttack`)"),
+    TriggerUponSpyOutcome("upon [spyOutcome] a foreign spy in one of our cities", UniqueTarget.TriggerCondition,
+        docDescription = "Only with the ModConstants `espionageLikeVp`. When a spy of another civilization did a mission in a city of this civilization and was found out, in that city only " +
+            "(V:CvEspionageClasses.cpp:1586-1627 and 1663-1669; `INSTANT_YIELD_TYPE_SPY_DEFENSE`, `..._IDENTIFY`, `..._DEFENSE_OR_ID`). `killing` when the spy was killed; `identifying without killing` " +
+            "when it was identified and lived (a spy that was killed and identified is only killed: the original's `else if`); `killing or identifying` for either; `identifying` when it was identified, " +
+            "killed or not (the counterspy focus's yields and Double Agents)"),
+    TriggerUponRiggingElection("upon winning a City-State election with our spy", UniqueTarget.TriggerCondition,
+        docDescription = "Only with the ModConstants `espionageLikeVp`. When the civilization wins a rigged City-State election, in every city of the civilization " +
+            "(CvMinorCivAI::DoElection, V:CvMinorCivAI.cpp:15296-15300, `INSTANT_YIELD_TYPE_SPY_RIG_ELECTION`: each city pays its own `Building_YieldFromSpyRigElection`)"),
 
     //endregion
 

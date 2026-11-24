@@ -76,6 +76,17 @@ class CityEspionageManager {
         focus.forEachMatchingUnique(uniqueType, gameContext) { if (!it.isTimedTriggerable) op(it) }
     }
 
+    /**
+     *  Every unique of the focus whose trigger condition [triggerFilter] accepts and whose conditionals apply, for [City.forEachLocalTriggeredUnique]: the focus's own `<upon [killing] a foreign spy
+     *  in one of our cities>` yields (V:CvEspionageClasses.cpp:1586-1613) are triggered uniques, which the typed lookups of [forEachFocusUnique] do not reach. Like the buildings' uniques,
+     *  only those that say `in this city` count
+     */
+    @Readonly
+    fun forEachFocusTriggeredUnique(trigger: UniqueType, gameContext: GameContext, triggerFilter: (Unique) -> Boolean, op: (Unique) -> Unit) {
+        val focus = getFocus() ?: return
+        focus.uniqueMap.forEachUnique({ it.isLocalEffect && it.getModifiers(trigger).any(triggerFilter) && it.conditionalsApply(gameContext) }) { it.forEachMultiplied(gameContext, op) }
+    }
+
     /** [forEachFocusUnique] as a sequence, for the callers that still ask for one */
     @Readonly
     fun getFocusUniques(uniqueType: UniqueType): Sequence<Unique> {

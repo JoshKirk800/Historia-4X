@@ -919,6 +919,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
         fun multipliedOp(unique: Unique) = unique.forEachMultiplied(gameContext, op)
         cityConstructions.builtBuildingUniqueMap.forEachUnique(::buildingFilter, ::multipliedOp)
         religion.forEachUnique(::uniqueFilter, ::multipliedOp)
+        espionage.forEachFocusTriggeredUnique(trigger, gameContext, triggerFilter, op)   // the counterspy focus's yields for the spies it catches (V:CvEspionageClasses.cpp:1586-1613)
     }
 
     //endregion

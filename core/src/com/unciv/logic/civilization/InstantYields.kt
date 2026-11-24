@@ -35,6 +35,31 @@ enum class TileAcquisition(val label: String) {
 }
 
 /**
+ *  What a spy's mission came to for the owner of the city it was done in, as the filter of [UniqueType.TriggerUponSpyOutcome]. CvPlayerEspionage::ProcessSpyMissionResult pays
+ *  `SPY_DEFENSE` and `SPY_DEFENSE_OR_ID` for a spy that was killed, and, `else if` it was identified, `SPY_IDENTIFY` and `SPY_DEFENSE_OR_ID` (V:CvEspionageClasses.cpp:1616-1627): a spy that
+ *  was both killed and identified is only killed. The yields of the counterspy focus and of Double Agents are paid for every identification (:1596-1603, :1663-1669), killed or not.
+ */
+enum class SpyOutcome(val label: String) {
+    /** `INSTANT_YIELD_TYPE_SPY_DEFENSE`: the spy was killed */
+    Killing("killing"),
+    /** `INSTANT_YIELD_TYPE_SPY_IDENTIFY` with a yield passed in: the spy was identified, killed or not */
+    Identifying("identifying"),
+    /** `INSTANT_YIELD_TYPE_SPY_IDENTIFY` from the buildings' table: identified, and it lived */
+    IdentifyingWithoutKilling("identifying without killing"),
+    /** `INSTANT_YIELD_TYPE_SPY_DEFENSE_OR_ID`: killed, or identified and lived */
+    KillingOrIdentifying("killing or identifying");
+
+    /** Whether a spy that was [killed] and [identified] earns this outcome's yields */
+    @Readonly
+    fun appliesTo(killed: Boolean, identified: Boolean): Boolean = when (this) {
+        Killing -> killed
+        Identifying -> identified
+        IdentifyingWithoutKilling -> identified && !killed
+        KillingOrIdentifying -> killed || identified
+    }
+}
+
+/**
  *  The instant yields of Vox Populi (`CvPlayer::doInstantYield`, V:CvPlayer.cpp:25909-28247): what an event gives the civilization, in one place.
  *  Vox Populi has 64 event types and a table of every yield for each of them; here the event is a trigger condition (the new ones are in
  *  [UniqueType.TriggerUponPopulationGrowth] and the following), the yield a unique of any object that has the trigger as its modifier
@@ -185,6 +210,35 @@ object InstantYields {
         if (plunderer != null)
             for (unique in plunderer.getTriggeredUniques(UniqueType.TriggerUponPlunderingTradeRoute, context).toList())
                 UniqueTriggerActivation.triggerUnique(unique, civ, city, plunderer, context.tile, triggerNotificationText = notification)
+    }
+
+    /**
+     *  INSTANT_YIELD_TYPE_SPY_ATTACK (V:CvEspionageClasses.cpp:1637): a spy of [owner] has finished a mission, whatever became of it. Fires [UniqueType.TriggerUponSpyMission] with no city,
+     *  so that every city of the civilization pays what its own buildings say.
+     */
+    fun spyMissionPerformed(owner: Civilization) {
+        fire(UniqueType.TriggerUponSpyMission, owner, triggerNotificationText = "due to a spy mission")
+    }
+
+    /**
+     *  INSTANT_YIELD_TYPE_SPY_DEFENSE, _IDENTIFY and _DEFENSE_OR_ID (V:CvEspionageClasses.cpp:1586-1627, 1663-1669): a spy of another civilization did a mission in [city], of [cityOwner], and was
+     *  [killed] and/or [identified]. Fires [UniqueType.TriggerUponSpyOutcome] in [city] only, once for each of the outcomes it earned ([SpyOutcome.appliesTo]); nothing for a spy that was neither.
+     */
+    fun spyOutcome(cityOwner: Civilization, city: City, killed: Boolean, identified: Boolean) {
+        if (!killed && !identified) return
+        for (outcome in SpyOutcome.entries) {
+            if (!outcome.appliesTo(killed, identified)) continue
+            fire(UniqueType.TriggerUponSpyOutcome, cityOwner, city, triggerNotificationText = "due to a foreign spy",
+                triggerFilter = { trigger -> trigger.params[0] == outcome.label })
+        }
+    }
+
+    /**
+     *  INSTANT_YIELD_TYPE_SPY_RIG_ELECTION (V:CvMinorCivAI.cpp:15296-15300): [winner] won a rigged City-State election. Fires [UniqueType.TriggerUponRiggingElection] with no city,
+     *  so that every city of the civilization pays what its own buildings say.
+     */
+    fun riggingWon(winner: Civilization) {
+        fire(UniqueType.TriggerUponRiggingElection, winner, triggerNotificationText = "due to winning a rigged election")
     }
 
     /** Whether [unique] is one of the effects that Vox Populi's `processBuilding` hands out only the first time a building is built in a city (V:CvCity.cpp:14830-14853) */

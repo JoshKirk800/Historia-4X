@@ -144,6 +144,7 @@ class CityStateFunctions(val civInfo: Civilization) {
                 val gained = CityStateRigging.winnerInfluence(constants, modifier, major.getEraNumber(), relation.consecutiveRiggings)
                 relation.addInfluence(gained.toFloat())
                 if (everyoneHasASpy) relation.consecutiveRiggings++
+                InstantYields.riggingWon(major)   // INSTANT_YIELD_TYPE_SPY_RIG_ELECTION (V:CvMinorCivAI.cpp:15296-15300): what the winner's buildings give for a rigged election
                 major.addNotification("Your spy [${riggers[major]!!.name}] rigged the election in [${civInfo.civName}]: [$gained] influence!",
                     capital.location, NotificationCategory.Espionage, NotificationIcon.Spy)
             } else {

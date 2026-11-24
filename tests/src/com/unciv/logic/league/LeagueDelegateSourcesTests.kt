@@ -222,6 +222,36 @@ class LeagueDelegateSourcesTests {
     }
 
     @Test
+    fun `the Consulate of the ruleset gives one delegate for every 8 city-states of the game, not eight`() {
+        val consulate = game.ruleset.buildings["Consulate"]!!
+        val owner = third
+        owner.getCapital()!!.cityConstructions.addBuilding(consulate)
+        addCityStates(count = 7)
+        val none = game.addCiv().also { game.addCity(it, game.tileMap.tileList[30], replacePalace = true) }
+        assertEquals("7 city-states: none yet", league.getDelegates(none), league.getDelegates(owner))
+        addCityStates(count = 1)
+        assertEquals("8 city-states: one", league.getDelegates(none) + 1, league.getDelegates(owner))
+        addCityStates(count = 8)
+        assertEquals("16 city-states: two, not eight", league.getDelegates(none) + 2, league.getDelegates(owner))
+    }
+
+    @Test
+    fun `the AI values a building by VP's delegate column, which is the 8 of one delegate for every 8 city-states`() {
+        // CvCityStrategyAI.cpp:4586-4588: diplomatic value 200 / ExtraLeagueVotes. The flat form and the per-8 form are the same column, 8
+        val flat = game.createBuilding("[8] World Congress Delegates")
+        val perEight = game.createBuilding("[1] World Congress Delegates <for every [8] [City-States originally in the game]>")
+        val perTwo = game.createBuilding("[1] World Congress Delegates <for every [2] [City-States originally in the game]>")
+        val none = game.createBuilding()
+        val value = { building: com.unciv.models.ruleset.Building ->
+            com.unciv.logic.automation.strategy.BuildingValueAi.grandStrategyValue(a, null, building)
+        }
+        assertEquals("the fixture's buildings are worth nothing but the delegates", 0, value(none))
+        assertTrue("a delegate column gives the building a value at all", value(flat) > 0)
+        assertEquals("the per-8 form is the column 8, as the flat form", value(flat), value(perEight))
+        assertTrue("a smaller divisor is worth more: 200 / 2 against 200 / 8", value(perTwo) > value(perEight))
+    }
+
+    @Test
     fun `the new unique types are valid for the targets that carry them`() {
         val expected = mapOf(
             UniqueType.WorldCongressDelegatesPerReligionCities to UniqueTarget.Global,

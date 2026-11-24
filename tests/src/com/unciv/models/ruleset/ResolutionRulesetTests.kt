@@ -95,7 +95,7 @@ class ResolutionRulesetTests {
     @Test
     fun `the Printing Press gives the Congress its start and the Consulate delegates`() {
         assertTrue(bnw.technologies["Printing Press"]!!.hasUnique(UniqueType.AllowsWorldCongress))
-        // Vox Populi's ExtraLeagueVotes: the Forbidden Palace has none any more (Brave New World: 2), the Consulate 8
+        // Vox Populi's ExtraLeagueVotes: the Forbidden Palace has none any more (Brave New World: 2), the Consulate one delegate for every 8 city-states (LeagueDelegateSourcesTests)
         assertFalse(bnw.buildings["Forbidden Palace"]!!.hasUnique(UniqueType.WorldCongressDelegates))
         assertTrue(bnw.buildings["Consulate"]!!.hasUnique(UniqueType.WorldCongressDelegates))
     }

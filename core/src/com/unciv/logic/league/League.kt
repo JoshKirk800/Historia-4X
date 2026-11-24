@@ -467,7 +467,29 @@ class League : IsPartOfGameInfoSerialization {
             val target = choice?.let { gameInfo.getCivilizationOrNull(it) }
             if (target == null || !target.isAlive() || target.cities.isEmpty()) return false
         }
+        if (gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp
+            && resolution.getMatchingUniques(UniqueType.ResolutionNeedsInEffect).any { !isActive(it.params[0]) }) return false
         return true
+    }
+
+    /**
+     * What [resolution] with [choice] conflicts with, in effect or on the table as an enactment: its own [UniqueType.ResolutionConflictsWith] and
+     * [UniqueType.ResolutionConflictsWithSameChoice], and those of the others that name it (V:CvVotingClasses.cpp:2909-3150 checks both directions by effect). Only with `leagueSessionRulesLikeVp`
+     */
+    private fun conflictsWithOthers(resolution: Resolution, choice: String?): Boolean {
+        if (!gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp) return false
+        val others = ArrayList<Pair<String, String?>>() // name, choice
+        for (active in activeResolutions) others += active.resolution to active.choice
+        for (proposal in proposals) if (!proposal.repeal) others += proposal.resolution to proposal.proposerChoice
+        val resolutions = gameInfo.ruleset.resolutions
+        return others.any { (otherName, otherChoice) ->
+            val other = resolutions[otherName] ?: return@any false
+            resolution.getMatchingUniques(UniqueType.ResolutionConflictsWith).any { it.params[0] == otherName }
+                || other.getMatchingUniques(UniqueType.ResolutionConflictsWith).any { it.params[0] == resolution.name }
+                || (choice == otherChoice && (
+                    resolution.getMatchingUniques(UniqueType.ResolutionConflictsWithSameChoice).any { it.params[0] == otherName }
+                    || other.getMatchingUniques(UniqueType.ResolutionConflictsWithSameChoice).any { it.params[0] == resolution.name }))
+        }
     }
 
     /** CvLeague::CheckProposalsValid and CheckResolutionsValid (CvVotingClasses.cpp:5584-5625) */
@@ -841,6 +863,11 @@ class League : IsPartOfGameInfoSerialization {
             if (choice != null) return false
         } else if (choice == null || choice !in getChoices(resolution.proposerDecision, proposer)) return false
         if (!isResolutionEffectsValid(resolution, choice)) return false
+        if (conflictsWithOthers(resolution, choice)) return false
+        // The proposer must be the ally of what it chose, for a proposal of a civilization (V:CvVotingClasses.cpp:3054-3068)
+        if (proposer != null && gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp
+            && resolution.hasUnique(UniqueType.ResolutionProposerIsAllyOfChoice)
+            && gameInfo.getCivilizationOrNull(choice ?: "")?.allyCiv != proposer) return false
         if (resolution.isWorldLeader && hasWorldLeader()) return false
         if (proposals.any { !it.repeal && it.resolution == resolution.name && (resolution.exclusive || it.proposerChoice == choice) }) return false
         if (activeResolutions.any { it.resolution == resolution.name && (resolution.exclusive || it.choice == choice) }) return false

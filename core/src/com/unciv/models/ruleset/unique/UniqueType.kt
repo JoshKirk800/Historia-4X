@@ -135,6 +135,20 @@ enum class UniqueType(
         docDescription = "Marks the resolution which the World Congress proposes itself to choose its host. The civilization with the most votes becomes the host"),
     ElectsWorldLeader("Elects the World Leader", UniqueTarget.Resolution,
         docDescription = "Marks the resolution which the World Congress proposes itself to choose the World Leader. A civilization that wins it wins the Diplomatic Victory"),
+    ResolutionConflictsWith("Cannot be proposed while [resolution] is in effect or proposed", UniqueTarget.Resolution,
+        docDescription = "Only with the ModConstants `leagueSessionRulesLikeVp`. The resolution cannot be proposed to be enacted while the named one is in effect or on the table, whatever the choice. " +
+            "Vox Populi hard-codes these pairs by their effect (CvLeague::CanProposeEnact, V:CvVotingClasses.cpp:2909-3150: World War against the unit maintenance of Standing Army Tax, " +
+            "Arts against Sciences Funding (only with MOD_BALANCE_VP), more against less tourism); here a ruleset lists them, and it is enough that ONE of the two names the other (the conflict works both ways, as VP's checks do). " +
+            "Not VP's own form: a data form is this port's departure"),
+    ResolutionConflictsWithSameChoice("Cannot be proposed while [resolution] is in effect or proposed for the same choice", UniqueTarget.Resolution,
+        docDescription = "Only with the ModConstants `leagueSessionRulesLikeVp`. As `Cannot be proposed while [resolution] is in effect or proposed`, but only when the other one has the same choice " +
+            "(Open Door against Sphere of Influence for the same City-State, V:CvVotingClasses.cpp:3025-3096)"),
+    ResolutionNeedsInEffect("Can only be proposed while [resolution] is in effect", UniqueTarget.Resolution,
+        docDescription = "Only with the ModConstants `leagueSessionRulesLikeVp`. The resolution is not valid, so it cannot be proposed and drops off the table, while the named one is not in effect. " +
+            "Vox Populi: the diplomatic victory resolution needs the `TriggerResolution` of the United Nations session (World Ideology), `CvLeague::IsResolutionEffectsValid`, V:CvVotingClasses.cpp:3237-3270"),
+    ResolutionProposerIsAllyOfChoice("Can only be proposed by the ally of the chosen civilization", UniqueTarget.Resolution,
+        docDescription = "Only with the ModConstants `leagueSessionRulesLikeVp`. The proposer must be the ally of the civilization it chose (Sphere of Influence: the City-State's ally, " +
+            "`CvLeague::CanProposeEnact`, V:CvVotingClasses.cpp:3054-3068)"),
     StatsFromGlobalCitiesFollowingReligion("[stats] for each global city following this religion", UniqueTarget.FounderBelief),
     StatsFromGlobalFollowers("[stats] from every [positiveAmount] global followers [cityFilter]", UniqueTarget.FounderBelief),
     StatsFromGlobalCitiesFollowingReligionPer("[stats] from every [positiveAmount] global cities following this religion [cityFilter]", UniqueTarget.FounderBelief,

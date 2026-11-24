@@ -103,6 +103,27 @@ enum class UniqueType(
         docDescription = "Added up over all such uniques: multiplies the research speed of a technology that any other living civilization already knows by 100% plus the sum (Scholars in Residence)"),
     WorldCongressDelegates("[amount] World Congress Delegates", UniqueTarget.Global,
         docDescription = "Delegates the civilization gets in every session of the World Congress, in addition to those of the era"),
+    WorldCongressDelegatesPerReligionCities("1 World Congress Delegate for every [positiveAmount] cities following our religion", UniqueTarget.Global,
+        docDescription = "Vox Populi's `Buildings.FaithToVotes` (V:CvPlayer.cpp:23636-23665, 24527-24604). The cities that follow the civilization's religion are counted in the whole world. " +
+            "Each such unique gives the count times 100 divided by the amount, in whole hundredths; the sum over all of them is floored once, so two uniques of 10 and 15 cities give 3 delegates, not 2. " +
+            "Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch"),
+    WorldCongressDelegatesPerFriendships("[positiveAmount] World Congress Delegates for every 2 Declarations of Friendship we have", UniqueTarget.Global,
+        docDescription = "Vox Populi's `Buildings.DoFToVotes` (V:CvPlayer.cpp:23696-23725): half the number of declarations of friendship, rounded down, times the amount. " +
+            "Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch"),
+    WorldCongressDelegatesPerCapitals("[positiveAmount] World Congress Delegates for every original capital of another civilization that we hold", UniqueTarget.Global,
+        docDescription = "Vox Populi's `Buildings.CapitalsToVotes` (V:CvPlayer.cpp:23667-23694): the cities held that were founded as the capital of another major civilization. " +
+            "Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch"),
+    WorldCongressDelegatesPerDefensivePacts("[positiveAmount] World Congress Delegates for every Defensive Pact we have", UniqueTarget.Global,
+        docDescription = "Vox Populi's `Buildings.DPToVotes` (V:CvPlayer.cpp:23756-23788; the vassals it adds are not built). Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch"),
+    WorldCongressDelegatesPerGold("1 World Congress Delegate for every [positiveAmount] Gold per turn", UniqueTarget.Global,
+        docDescription = "Vox Populi's `Buildings.VotesPerGPT` (V:CvVotingClasses.cpp:4230-4247, CvPlayer.cpp:16050-16052). The amounts of all such uniques are ADDED, then the gross gold per turn is divided by the sum once, " +
+            "and the result is at most a quarter of the City-States originally in the game, but at least 1. Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch"),
+    WorldCongressDelegatesPerDiplomat("[positiveAmount] World Congress Delegates for every capital that hosts one of our diplomats", UniqueTarget.Tech,
+        docDescription = "Vox Populi's `Technologies.ExtraVotesPerDiplomat` (V:CvTeam.cpp:8045, CvVotingClasses.cpp:4154-4166). The amounts of all researched technologies are ADDED. " +
+            "Replaces the Brave New World rule that names Globalization in the code"),
+    WorldCongressDelegatesPerImprovements("1 World Congress Delegate for every [positiveAmount] [improvementName] we own", UniqueTarget.FollowerBelief,
+        docDescription = "Vox Populi's `Belief_VotePerXImprovementOwned` (Holy Land; V:CvBeliefClasses.cpp:4956-4974, CvPlayer.cpp:23812-23848). The fractions of all such uniques of the same improvement are " +
+            "ADDED exactly (1/2 and 1/3 give 5/6), multiplied by the number owned, and truncated once"),
     AllowsWorldCongress("Allows the World Congress to be founded", UniqueTarget.Global,
         docDescription = "As long as some civilization has a technology or wonder with this unique, the World Congress meets (see Resolutions.json and the eras for its sessions)"),
     WorldCongressSession("World Congress sessions: every [positiveAmount] turns, [amount] delegates per civilization, [amount] for the host and [amount] per allied City-State", UniqueTarget.Era,

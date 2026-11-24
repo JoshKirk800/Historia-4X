@@ -352,6 +352,16 @@ enum class Countables(
                 .map { text.fillPlaceholders(it) }.toSet()
     },
 
+    OriginalCityStates("City-States originally in the game", shortDocumentation = "The number of city-states the game started with, alive or not") {
+        override val documentationStrings = listOf(
+            "Vox Populi's `GetNumMinorCivsEver(true)` (V:CvGame.cpp:4219-4231), fixed at the start of the game: city-states that were defeated still count. " +
+                "Used as `<for every [8] [City-States originally in the game]>` for 'one delegate for every 8 city-states' (Consulate, Palace of Westminster, ...)")
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val civilizations = gameContext.gameInfo?.civilizations ?: return null
+            return civilizations.count { it.isCityState }
+        }
+    },
+
     RemainingCivs("Remaining [civFilter] Civilizations") {
         override fun eval(parameterText: String, gameContext: GameContext): Int? {
             val filter = parameterText.getPlaceholderParameters()[0]

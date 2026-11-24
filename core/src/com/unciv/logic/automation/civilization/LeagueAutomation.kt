@@ -421,12 +421,12 @@ object LeagueAutomation {
         .count { (OpinionAi.isDenouncedPlayer(civ, it) || civ.isAtWarWith(it)) && OpinionAi.isDenouncedPlayer(other, it) }
 
     /**
-     * CvLeagueAI::GetDiplomatUsefulnessAtCiv (CvVotingClasses.cpp:8242-8266): +1 if our diplomats give delegates (Globalization,
-     * GetExtraVotesPerDiplomat), +1 if [other] is more than neutrally aligned with us. HIGH is never returned, as in the DLL.
+     * CvLeagueAI::GetDiplomatUsefulnessAtCiv (CvVotingClasses.cpp:8242-8266): +1 if our diplomats give delegates (GetExtraVotesPerDiplomat, which
+     * Globalization carries in Brave New World), +1 if [other] is more than neutrally aligned with us. HIGH is never returned, as in the DLL.
      */
     fun getDiplomatUsefulnessAtCiv(civ: Civilization, other: Civilization): DiplomatUsefulness {
         var score = 0
-        if (civ.tech.isResearched(League.GLOBALIZATION)) score++
+        if (League.getDelegatesPerDiplomat(civ) > 0) score++
         if (evaluateAlignment(civ, other) > LeagueAlignment.NEUTRAL) score++
         return when {
             score >= 2 -> DiplomatUsefulness.MEDIUM

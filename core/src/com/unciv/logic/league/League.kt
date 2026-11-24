@@ -249,8 +249,16 @@ class League : IsPartOfGameInfoSerialization {
     companion object {
         const val YES = "Yes"
         const val NO = "No"
-        /** The technology after which diplomats give delegates (CvTeam::processTech, ExtraVotesPerDiplomat of BNW Technologies) */
-        const val GLOBALIZATION = "Globalization"
+        /**
+         * The delegates each of [civ]'s diplomats in a capital gives: the sum of [UniqueType.WorldCongressDelegatesPerDiplomat] over its researched technologies
+         * (CvPlayer::GetExtraVotesPerDiplomat, V:CvPlayer.cpp:29722, which CvTeam::processTech fills, V:CvTeam.cpp:8045). Brave New World's Globalization carries 1
+         */
+        @Readonly
+        fun getDelegatesPerDiplomat(civ: Civilization): Int {
+            var perDiplomat = 0
+            civ.tech.techUniques.forEachMatchingUnique(UniqueType.WorldCongressDelegatesPerDiplomat, civ.state) { perDiplomat += it.params[0].toInt() }
+            return perDiplomat
+        }
 
         /**
          * What `GameInfo.nextTurn` does once per game turn: founds the World Congress if there is none yet, else lets it take its turn.
@@ -482,9 +490,7 @@ class League : IsPartOfGameInfoSerialization {
         if (civ.civID == host) total += session.hostDelegates
         total += session.cityStateDelegates * gameInfo.getAliveCityStates().count { it.allyCiv == civ }
         civ.forEachMatchingUnique(UniqueType.WorldCongressDelegates) { total += it.params[0].toInt() }
-        // CvTeam::processTech applies Globalization's ExtraVotesPerDiplomat=1 (BNW Technologies/CIV5Technologies.xml).
-        if (civ.tech.isResearched(GLOBALIZATION))
-            total += gameInfo.getAliveMajorCivs().count { civ.espionageManager.getActiveDiplomatFor(it) != null }
+        total += getDelegatesPerDiplomat(civ) * gameInfo.getAliveMajorCivs().count { civ.espionageManager.getActiveDiplomatFor(it) != null }
 
         for (active in activeResolutions) {
             val resolution = gameInfo.ruleset.resolutions[active.resolution] ?: continue

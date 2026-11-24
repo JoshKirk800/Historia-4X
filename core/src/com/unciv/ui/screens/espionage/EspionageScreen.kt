@@ -251,6 +251,13 @@ class EspionageScreen(val civInfo: Civilization, val worldScreen: WorldScreen) :
                 missions.onClick { SpyMissionsPopup(this@EspionageScreen, spy) { update() }.open(force = true) }
                 actions.add(missions).padLeft(6f)
             }
+            // the focus of a spy that counters spies in an own city (only with the espionage of Vox Populi)
+            if (location != null && spy != null && spy.action == SpyAction.CounterIntelligence && location.civ == civInfo
+                    && civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp && worldScreen.canChangeState && !civInfo.isDefeated()) {
+                val focus = "Focus".toTextButton()
+                focus.onClick { SpyFocusPopup(this@EspionageScreen, spy) { update() }.open(force = true) }
+                actions.add(focus).padLeft(6f)
+            }
             locationSelectionTable.add(actions)
         }
         locationSelectionTable.row()

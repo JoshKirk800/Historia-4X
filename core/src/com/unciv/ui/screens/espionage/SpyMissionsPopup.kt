@@ -19,7 +19,7 @@ class SpyMissionsPopup(private val screen: BaseScreen, private val spy: Spy, pri
         val speed = spy.civInfo.gameInfo.speed
         addGoodSizedLabel("Missions of [${spy.name}] in [${spy.getLocationName()}]").row()
         add("[${spy.networkPoints}] Network Points stored".toLabel()).padBottom(10f).row()
-        for (mission in spy.civInfo.gameInfo.ruleset.spyMissions.values) {
+        for (mission in spy.civInfo.gameInfo.ruleset.spyMissions.values.filter { !it.isFocus }) {   // the foci are the other popup's
             val cost = mission.getNetworkPointsNeeded(speed)
             val button = "${mission.name} ($cost)".toTextButton()
             val reason = SpyMissionResolver.unavailableReason(spy, mission)

@@ -1287,6 +1287,15 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
             owningCity!!.civ.cache.updateCivResources()
     }
 
+    /** Pillages the road or railroad of the tile and not its improvement, as a spy mission does to the roads around a city (CvCity::DoEventChoice, PillageRoadsChance); false if there is no road to pillage */
+    fun setRoadPillaged(): Boolean {
+        if (!canPillageRoad()) return false
+        if (ruleset.tileImprovements[Constants.repair] == null) removeRoad() else roadIsPillaged = true
+        clearAllPathfindingCaches()
+        owningCity?.reassignPopulationDeferred()
+        return true
+    }
+
     fun setRepaired() {
         improvementQueue.clear()
         val repairedImprovement = improvementIsPillaged

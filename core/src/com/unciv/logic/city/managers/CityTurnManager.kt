@@ -189,6 +189,7 @@ class CityTurnManager(val city: City) {
             city.defenseProcessTurns = if (process != null && process.defensePerTurn != 0) city.defenseProcessTurns + 1 else 0
         }
 
+        city.espionage.endTurn()
         city.cityConstructions.endTurn(stats)
         city.expansion.nextTurn(stats.culture)
         if (city.isBeingRazed) {

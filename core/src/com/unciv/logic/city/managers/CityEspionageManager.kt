@@ -8,6 +8,9 @@ import com.unciv.models.ruleset.SpyMission
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.ruleset.unique.endTurn
+import com.unciv.models.ruleset.unique.forEachMatchingUnique
+import com.unciv.models.ruleset.unique.getMatchingTagUniques
 import yairm210.purity.annotations.Readonly
 
 enum class SpyFleeReason {
@@ -72,6 +75,8 @@ class CityEspionageManager {
      */
     @Readonly
     fun forEachFocusUnique(uniqueType: UniqueType, gameContext: GameContext, op: (unique: Unique) -> Unit) {
+        // the effects that spy missions left here and that last for some turns are uniques of the city too (CvCity::DoEventChoice, V:CvCity.cpp:6560-7126)
+        city.missionEffects.forEachMatchingUnique(uniqueType, gameContext, op)
         val focus = getFocus() ?: return
         focus.forEachMatchingUnique(uniqueType, gameContext) { if (!it.isTimedTriggerable) op(it) }
     }
@@ -90,8 +95,18 @@ class CityEspionageManager {
     /** [forEachFocusUnique] as a sequence, for the callers that still ask for one */
     @Readonly
     fun getFocusUniques(uniqueType: UniqueType): Sequence<Unique> {
-        val focus = getFocus() ?: return emptySequence()
-        return focus.getMatchingUniques(uniqueType).filter { !it.isTimedTriggerable }
+        val effects = city.missionEffects.getMatchingTagUniques(uniqueType, city.state)
+        val focus = getFocus() ?: return effects
+        return effects + focus.getMatchingUniques(uniqueType).filter { !it.isTimedTriggerable }
+    }
+
+    /** A turn of the city has passed: the effects of the missions that ran their turns end, and with them the missions (CvCity::DoTurn, V:CvCity.cpp:3264-3293) */
+    fun endTurn() {
+        if (city.missionEffects.isNotEmpty()) city.missionEffects.endTurn()
+        if (city.activeMissions.isNotEmpty()) {
+            val turn = city.civ.gameInfo.turns
+            city.activeMissions.values.removeAll { it <= turn }
+        }
     }
 
     /**

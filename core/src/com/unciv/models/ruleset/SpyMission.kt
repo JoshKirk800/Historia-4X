@@ -30,6 +30,10 @@ class SpyMission : RulesetObject() {
     var requiredSpyRank = 1
     /** What the city must be, as a city filter: "Capital" for `CapitalOnly` */
     var cityFilter = "All"
+    /** The turns the mission's effects last in the city (`EventDuration`); while they do, neither this mission nor another of the same [group] can be done there (CvCity::CanDoEventChoice, V:CvCity.cpp:4059-4100) */
+    var duration = 0
+    /** `MutuallyExclusiveGroup`: missions with the same group above 0 cannot run in a city together; 0 for none */
+    var group = 0
     /** The names of the foci that stop this mission in a city whose counterspy has one of them (`CityEventChoice_EventLinks`, V:CvCity.cpp:4125-4180) */
     var blockedBy = ArrayList<String>()
     /** Focus: the Network Points a spy of another civilization gathering intel in the city loses each turn for each effective rank of the counterspy (`CounterspyNPRateReduction`) */

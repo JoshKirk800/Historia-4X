@@ -641,6 +641,14 @@ enum class UniqueParameterType(
         override val staticKnownValues = com.unciv.logic.civilization.SpyOutcome.entries.map { it.label }.toSet()
     },
 
+    /** What a spy mission needs of the city it is done in, besides its building and city filters, see [com.unciv.logic.civilization.managers.SpyMissionRequirement] */
+    SpyMissionRequirement("spyMissionRequirement", "no fresh water",
+        "One of `the city`, `no fresh water`, `a trade connection`, `an unhappy owner` or `no puppet`", "Spy Mission Requirements",
+        severityDefault = UniqueType.UniqueParameterErrorSeverity.RulesetInvariant
+    ) {
+        override val staticKnownValues = com.unciv.logic.civilization.managers.SpyMissionRequirement.entries.map { it.label }.toSet()
+    },
+
     /** The name of a work in GreatWorks.json */
     GreatWorkName("greatWork", "Mona Lisa", "The name of any Great Work") {
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = ruleset.greatWorks.keys

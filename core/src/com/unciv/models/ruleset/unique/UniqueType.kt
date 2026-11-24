@@ -546,6 +546,30 @@ enum class UniqueType(
     StealTechnologies("Steal [positiveAmount] random technology/technologies the target knows and we can research", UniqueTarget.SpyMission,
         docDescription = "A spy mission's effect (CvCity::DoEventChoice, StealNumTechs): the spy's owner learns this many technologies the city's owner has and the owner could research now, " +
             "chosen at random. The mission cannot be done when there are fewer"),
+    MissionNeeds("Needs [spyMissionRequirement]", UniqueTarget.SpyMission,
+        docDescription = "A condition of a spy mission beside its technology, city filter and the focus that blocks it (CvCity::IsCityEventChoiceValid, NoFreshWater V:CvCity.cpp:4191, HasTradeConnection 4412, " +
+            "EnemyUnhappy 4721, RequiresNotPuppet): the city has no fresh water, it is the start or the end of a trade route of any civilization, its owner is unhappy, or it is no puppet, " +
+            "or `the city` for a condition that is only its modifiers. The unique's conditionals are tested with the target city, so `Needs [the city] <in cities with a [Temple]>` is how a mission asks for a " +
+            "building and `<in cities without a [Medical Lab]>` for the lack of one. The mission cannot be done where any of its `Needs` is not met"),
+    StealTreasury("Steal [positiveAmount]% of the treasury of the target", UniqueTarget.SpyMission,
+        docDescription = "A spy mission's effect (CvCity::DoEventChoice, StealFromTreasuryPercent, V:CvCity.cpp:6616-6630): the spy's owner takes this percent of the gold of the city's owner, divided by the " +
+            "game speed's production cost modifier (more on a faster speed), rounded down"),
+    SiphonYield("Siphon [positiveAmount]% of the [stat] of the city for [positiveAmount] turns", UniqueTarget.SpyMission,
+        docDescription = "A spy mission's effect (CvCity::DoEventChoice, YieldSiphon, V:CvCity.cpp:6822-6843): for the given turns the spy's owner gains, and the city's owner loses, each turn the amount " +
+            "the city yielded at the moment of the mission, whole points, not changed by the owner's modifiers afterwards. Each side keeps it as a temporary `[stats]` unique of the civilization " +
+            "(flat, added after the cities, like the passive spy science)"),
+    PillageAroundCity("Pillage [positiveAmount]% of the [improvementFilter] improvements in the city's tiles", UniqueTarget.SpyMission,
+        docDescription = "A spy mission's effect (CvCity::DoEventChoice, PillageFortificationsChance, V:CvCity.cpp:7097-7122): every unpillaged improvement of the city's tiles, except in the city centre, " +
+            "that matches the filter (the ruleset tags the improvements it counts as fortifications) is pillaged with the chance, rolled for each tile unless it is 100"),
+    PillageResourcesAroundCity("Pillage [positiveAmount]% of the improved resource tiles in the city's tiles", UniqueTarget.SpyMission,
+        docDescription = "A spy mission's effect (CvCity::DoEventChoice, PillageResourceTilesChance, V:CvCity.cpp:7047-7074): every tile of the city with a resource whose improvement is unpillaged and " +
+            "connects it is pillaged with the chance, rolled for each tile unless it is 100"),
+    PillageRoadsAroundCity("Pillage [positiveAmount]% of the roads in the city's tiles", UniqueTarget.SpyMission,
+        docDescription = "A spy mission's effect (CvCity::DoEventChoice, PillageRoadsChance, V:CvCity.cpp:7075-7096): every unpillaged road or railroad of the city's tiles, except in the city centre, is " +
+            "pillaged with the chance, rolled for each tile unless it is 100"),
+    CitySapped("City is sapped", UniqueTarget.Global,
+        docDescription = "Only with the ModConstants `espionageLikeVp`, given by a spy mission with `<for [amount] turns>` (CvCity::GetSappedTurns, V:CvCity.cpp:21936, 33031): the city cannot make a ranged " +
+            "strike and counts as blockaded. The strike and the blockade read it in the military code"),
     DiplomatRevealsTrueApproaches("The spy reveals the true approaches of this civilization", UniqueTarget.SpyBonus,
         docDescription = "A diplomat's bonus (SpyPassiveBonusesDiplomat.RevealTrueApproaches)"),
 

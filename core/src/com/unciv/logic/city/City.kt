@@ -27,6 +27,7 @@ import com.unciv.models.ruleset.ArtifactClasses
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.ruleset.unique.TemporaryUnique
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
@@ -112,8 +113,13 @@ class City : IsPartOfGameInfoSerialization, INamed {
     /** Strategic AI state: city strategies, specialization, city flavors - see [CityAi] */
     var ai = CityAi()
 
-    @Transient // Class carries no persisted fields
+    @Transient // Class carries no persisted fields: what it keeps of a mission is in the two fields below
     var espionage = CityEspionageManager()
+    /** The effects of the spy missions done against this city that last for some turns (Poison the Water Supply, Assassinate the City Governor, ...), as uniques of the city that end by themselves
+     *  ([CityEspionageManager.forEachFocusUnique] reads them beside the focus); empty without [com.unciv.models.ModConstants.espionageLikeVp] */
+    var missionEffects = ArrayList<TemporaryUnique>()
+    /** The missions whose effect is still running here, by the turn it ends (CvCity::GetEventChoiceDuration > 0): such a mission, and any of its mutual exclusion group, cannot be done here again */
+    var activeMissions = HashMap<String, Int>()
 
     /** Effect: moved to disabled section in construction list, and not built during automation */
     var disabledConstructions = HashSet<String>()
@@ -225,6 +231,8 @@ class City : IsPartOfGameInfoSerialization, INamed {
         toReturn.extraBuildingMaintenance = extraBuildingMaintenance
         toReturn.population = population.clone()
         toReturn.highestPopulation = highestPopulation
+        missionEffects.mapTo(toReturn.missionEffects) { it.clone() }
+        toReturn.activeMissions.putAll(activeMissions)
         toReturn.purchaseCooldowns = purchaseCooldowns.clone()
         toReturn.cityConstructions = cityConstructions.clone()
         toReturn.expansion = expansion.clone()

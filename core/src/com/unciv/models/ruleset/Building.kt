@@ -516,7 +516,8 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
             }
         }
 
-        for (unique in civ.getMatchingUniques(UniqueType.CannotBuildBuildings, stateForConditionals))
+        // the civilization's, and the city's own: a spy mission can stop what a city builds for some turns (CvCity::canConstruct, V:CvCity.cpp:9133)
+        for (unique in city.getMatchingUniques(UniqueType.CannotBuildBuildings, stateForConditionals))
             if (this@Building.matchesFilter(unique.params[0], stateForConditionals)) {
                 yield(RejectionReasonType.CannotBeBuilt.toInstance())
             }

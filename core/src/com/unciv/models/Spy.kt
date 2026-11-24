@@ -135,7 +135,7 @@ class Spy private constructor() : IsPartOfGameInfoSerialization {
     fun setAction(newAction: SpyAction, turns: Int = 0) {
         assert(!newAction.hasCountdownTurns || turns > 0) // hasTurns==false but turns > 0 is allowed (CounterIntelligence), hasTurns==true and turns==0 is not.
         // a spy that stops countering spies has no focus: the city derives its focus from the spy's state, so the change must be noticed (CvPlayerEspionage::ExtractSpyFromCity)
-        if (newAction != SpyAction.CounterIntelligence && focus != null) clearFocus()
+        if (newAction != SpyAction.CounterIntelligence && (focus != null || focusPending)) clearFocus()   // also the spy that waited for its choice and never made one
         if (newAction != SpyAction.GatheringIntel) targetMission = null   // the mission is worked towards only while gathering intel
         if (newAction != action) espionageManager.focusVersion++
         action = newAction

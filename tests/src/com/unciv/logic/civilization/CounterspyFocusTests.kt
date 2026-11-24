@@ -190,6 +190,26 @@ class CounterspyFocusTests {
     }
 
     @Test
+    fun `a human spy that left without choosing is no longer waiting for a choice and can go to any city`() {
+        focus("Sentinel", "[+30]% City ranged strike strength")
+        arrive(homeSpy, aCity)
+        assertTrue(homeSpy.focusPending)
+        homeSpy.moveTo(null)
+        assertFalse("the choice was for the city it left", homeSpy.focusPending)
+        assertTrue("so it is free to go to another city", homeSpy.canMoveTo(bCity))
+        assertEquals(0, homeSpy.getMovementBlockedTurns())
+    }
+
+    @Test
+    fun `a human spy that was sent to another city while it waited for its choice does not wait there`() {
+        focus("Sentinel", "[+30]% City ranged strike strength")
+        arrive(homeSpy, aCity)
+        assertTrue(homeSpy.focusPending)
+        homeSpy.setAction(SpyAction.GatheringIntel)
+        assertFalse(homeSpy.focusPending)
+    }
+
+    @Test
     fun `an AI spy does not wait for a choice`() {
         val ai = b.espionageManager.addSpy()
         arrive(ai, bCity)

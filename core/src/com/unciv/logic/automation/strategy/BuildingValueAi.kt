@@ -64,6 +64,19 @@ object BuildingValueAi {
 
     private fun Building.count(type: UniqueType) = getMatchingUniques(type, ignoreConditionals).count()
 
+    /**
+     * VP's `Buildings.ExtraLeagueVotes` (CvCityStrategyAI.cpp:4586-4588 divides 200 by it): in the data it is the N of "one delegate for every N city-states", which
+     * the ruleset writes as `[1] World Congress Delegates <for every [N] [City-States originally in the game]>`; a flat `[n] World Congress Delegates` is read as n.
+     * Read from the unique's own text, not through the multiplier, which evaluates the countable of a game
+     */
+    private fun leagueVotesColumn(building: Building): Int = building.uniqueObjects
+        .filter { it.type == UniqueType.WorldCongressDelegates }
+        .sumOf { unique ->
+            val perCityStates = unique.getModifiers(UniqueType.ForEveryAmountCountable)
+                .firstOrNull { it.params[1] == "City-States originally in the game" }
+            perCityStates?.params?.get(0)?.toInt() ?: unique.params[0].toInt()
+        }
+
     /** The sum of a unique type's amounts over every source of the civilization that applies to all its cities */
     private fun Civilization.amount(type: UniqueType, amountParam: Int = 0): Int {
         var sum = 0
@@ -263,7 +276,7 @@ object BuildingValueAi {
         var cultureValue = 0
         var tourismValue = 0
 
-        val extraVotes = building.amount(UniqueType.WorldCongressDelegates)
+        val extraVotes = leagueVotesColumn(building)
         if (extraVotes > 0) diploValue += 200 / extraVotes
 
         val upgradeCost = building.amount(UniqueType.UnitUpgradeCost)

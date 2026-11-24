@@ -244,6 +244,19 @@ class RiggedElectionTests {
     }
 
     @Test
+    fun `the winner of a rigged election is paid what its buildings give for it and the others are not`() {
+        for (civ in listOf(a, b, c)) inEra(civ, 1)
+        a.cities.first().cityConstructions.addBuilding(game.createBuilding("Gain [7] [Gold] <upon winning a City-State election with our spy> <in this city>"))
+        b.cities.first().cityConstructions.addBuilding(game.createBuilding("Gain [9] [Gold] <upon winning a City-State election with our spy> <in this city>"))
+        for (civ in listOf(a, b, c)) setInfluence(civ, 20f)
+        onlyHasVotes(spyA)
+        val goldBefore = listOf(a.gold, b.gold)
+        cs.cityStateFunctions.holdElectionsLikeVp()
+        assertEquals("the winner a is paid by its own building", goldBefore[0] + 7, a.gold)
+        assertEquals("b lost and is not paid for the election it did not win", goldBefore[1], b.gold)
+    }
+
+    @Test
     fun `an election is held on the turns that are a multiple of the interval, in every city-state alike`() {
         val between = cs.cityStateFunctions.getTurnsBetweenElectionsLikeVp()
         assertEquals(15, between)

@@ -124,6 +124,7 @@ open class RulesetValidator protected constructor(
         addDifficultyErrors(lines)
         addEventErrors(lines)
         addCityStateTypeErrors(lines)
+        addSpyMissionErrors(lines)
         addResolutionErrors(lines)
         addAiErrors(lines)
 
@@ -179,6 +180,21 @@ open class RulesetValidator protected constructor(
                 lines.addAll(errors)
             }
             uniqueValidator.checkUniques(cityStateType, lines, reportRulesetSpecificErrors)
+        }
+    }
+
+    /** The spy missions and counterspy foci (SpyMissions.json): their uniques, the technology they need, and the foci they name as blocking them */
+    protected open fun addSpyMissionErrors(lines: RulesetErrorList) {
+        for (mission in ruleset.spyMissions.values) {
+            uniqueValidator.checkUniques(mission, lines, reportRulesetSpecificErrors)
+            val tech = mission.requiredTech
+            if (tech != null && tech !in ruleset.technologies)
+                lines.add("Spy mission ${mission.name} needs the unknown technology $tech!", sourceObject = mission)
+            for (focus in mission.blockedBy)
+                if (ruleset.spyMissions[focus]?.isFocus != true)
+                    lines.add("Spy mission ${mission.name} is blocked by [$focus], which is no counterspy focus of this ruleset!", RulesetErrorSeverity.Warning, sourceObject = mission)
+            if (mission.duration < 0 || mission.group < 0)
+                lines.add("Spy mission ${mission.name} has a negative duration or group!", sourceObject = mission)
         }
     }
 

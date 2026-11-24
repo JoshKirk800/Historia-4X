@@ -118,7 +118,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
     /** The effects of the spy missions done against this city that last for some turns (Poison the Water Supply, Assassinate the City Governor, ...), as uniques of the city that end by themselves
      *  ([CityEspionageManager.forEachFocusUnique] reads them beside the focus); empty without [com.unciv.models.ModConstants.espionageLikeVp] */
     var missionEffects = ArrayList<TemporaryUnique>()
-    /** The missions whose effect is still running here, by the turn it ends (CvCity::GetEventChoiceDuration > 0): such a mission, and any of its mutual exclusion group, cannot be done here again */
+    /** The missions whose effect is still running here, with the turns they have left (CvCity::GetEventChoiceDuration > 0): such a mission, and any of its mutual exclusion group, cannot be done here again */
     var activeMissions = HashMap<String, Int>()
 
     /** Effect: moved to disabled section in construction list, and not built during automation */

@@ -104,8 +104,9 @@ class CityEspionageManager {
     fun endTurn() {
         if (city.missionEffects.isNotEmpty()) city.missionEffects.endTurn()
         if (city.activeMissions.isNotEmpty()) {
-            val turn = city.civ.gameInfo.turns
-            city.activeMissions.values.removeAll { it <= turn }
+            // CvCity::GetEventChoiceDuration: counted down once a turn, and the mission ends with the effects when it reaches 0
+            for (entry in city.activeMissions.entries) entry.setValue(entry.value - 1)
+            city.activeMissions.values.removeAll { it <= 0 }
         }
     }
 

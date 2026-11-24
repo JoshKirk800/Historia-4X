@@ -96,9 +96,7 @@ object SpyMissionResolver {
         // a mission that still runs here, or one of its group, is not done again (V:CvCity.cpp:4059-4100, "active" is a duration above 0)
         if (city.activeMissions.isNotEmpty()) {
             val missions = civ.gameInfo.ruleset.spyMissions
-            val turn = civ.gameInfo.turns
-            for ((name, endTurn) in city.activeMissions) {
-                if (endTurn <= turn) continue
+            for (name in city.activeMissions.keys) {
                 if (name == mission.name) return "[$name] is still going on in this city"
                 if (mission.group != 0 && missions[name]?.group == mission.group) return "[$name] is still going on in this city"
             }
@@ -148,7 +146,6 @@ object SpyMissionResolver {
         val civ = spy.civInfo
         val city = spy.getCity()
         val owner = city.civ
-        val turn = civ.gameInfo.turns
         for (unique in mission.uniqueObjects) {
             when (unique.type) {
                 UniqueType.StealTreasury -> {
@@ -175,8 +172,7 @@ object SpyMissionResolver {
                 }
             }
         }
-        if (mission.duration > 0) city.activeMissions[mission.name] = turn + mission.duration
-        if (city.missionEffects.isNotEmpty()) civ.cache.updateCivResources()
+        if (mission.duration > 0) city.activeMissions[mission.name] = mission.duration
     }
 
     /**

@@ -7,6 +7,7 @@ import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.NotificationCategory
@@ -76,6 +77,11 @@ class League : IsPartOfGameInfoSerialization {
     var lastResultsTurn = -1
     /** The League projects started by the World Congress, see `LeagueProjects.kt`; each is there once, running or complete */
     var projects = ArrayList<LeagueProject>()
+    /** Only the host may propose until its proposals are used, then the others (`m_bHostProposing`, V:CvVotingClasses.cpp:2619, 2658, 4391, 8368). Only with `leagueSessionRulesLikeVp` */
+    var hostProposing = false
+    /** The proposals that were on the table when the last session started, which cannot be proposed (enacted) again except a project (`m_vLastTurnEnactProposals` and `...Repeal...`,
+     *  V:CvVotingClasses.cpp:7278-7288, 2820-2850). Only with `leagueSessionRulesLikeVp` */
+    var lastSessionProposals = ArrayList<LeagueProposalKey>()
 
     @Transient
     lateinit var gameInfo: GameInfo
@@ -104,6 +110,8 @@ class League : IsPartOfGameInfoSerialization {
         toReturn.lastResults.addAll(lastResults.map { it.clone() })
         toReturn.lastResultsTurn = lastResultsTurn
         toReturn.projects.addAll(projects.map { it.clone() })
+        toReturn.hostProposing = hostProposing
+        toReturn.lastSessionProposals.addAll(lastSessionProposals.map { it.clone() })
         return toReturn
     }
 
@@ -395,9 +403,25 @@ class League : IsPartOfGameInfoSerialization {
     private fun checkStartSession() {
         if (members.values.any { it.proposalsLeft > 0 }) return
         inSession = true
+        val likeVp = gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp
+        if (likeVp) {
+            // StartSession: the proposals on the table are what the next session cannot propose again (V:CvVotingClasses.cpp:7278-7288); a special session leaves the table alone
+            lastSessionProposals.clear()
+            for (proposal in proposals) lastSessionProposals.add(LeagueProposalKey(proposal.resolution, proposal.proposerChoice, proposal.repeal))
+        }
         assignStartingVotes()
+        if (likeVp) fireSessionYields()
         honorVoteCommitments()
         checkFinishSession()
+    }
+
+    /** `INSTANT_YIELD_TYPE_DELEGATES` for every living major with delegates, in the capital, with the delegates as the amount (CvLeague::StartSession, V:CvVotingClasses.cpp:7292-7303) */
+    private fun fireSessionYields() {
+        for (civ in gameInfo.getAliveMajorCivs()) {
+            val delegates = members[civ.civID]?.delegatesAtStart ?: continue
+            if (delegates > 0)
+                InstantYields.fire(UniqueType.TriggerUponWorldCongressSession, civ, civ.getCapital(), delegates, triggerNotificationText = "due to a session of the World Congress")
+        }
     }
 
     /** CvLeague::AssignStartingVotes (CvVotingClasses.cpp:5514-5524): a snapshot, later changes do not alter this session */
@@ -489,8 +513,11 @@ class League : IsPartOfGameInfoSerialization {
         for ((id, member) in members) {
             if (member.proposalsLeft <= 0) continue
             val civ = gameInfo.getCivilizationOrNull(id) ?: continue
-            if (getProposableResolutions(civ).isEmpty() && activeResolutions.none { canProposeRepeal(it.id, civ) })
+            if (!hasAnythingToPropose(civ)) {
                 member.proposalsLeft = 0
+                // Vox Populi's host is done only by proposing (DoProposeEnact, V:CvVotingClasses.cpp:2619); here it can also be done for having nothing to propose, and then the others must not wait for it
+                if (id == host) hostProposing = false
+            }
         }
     }
 
@@ -726,6 +753,7 @@ class League : IsPartOfGameInfoSerialization {
         val hostCiv = voters.firstOrNull { it.civID == host }
         if (hostCiv != null && slots > 0) {
             members.getValue(hostCiv.civID).proposalsLeft = constants.leagueRegularHostProposals
+            hostProposing = constants.leagueSessionRulesLikeVp // SetHostProposing(true), V:CvVotingClasses.cpp:8368
             assigned++
         }
         for (civ in voters.filter { it != hostCiv }.sortedByDescending { getDelegates(it) }) {
@@ -737,10 +765,29 @@ class League : IsPartOfGameInfoSerialization {
 
     private fun clearProposalPrivileges() {
         for (member in members.values) member.proposalsLeft = 0
+        hostProposing = false // CvLeague::FinishSession clears both, V:CvVotingClasses.cpp:8284-8285
     }
 
+    /**
+     * Whether [civ] may put a proposal on the table now: it has proposals left and, with `leagueSessionRulesLikeVp`, it is the host while the host proposes
+     * and one of the others once it is over (CvLeague::CanPropose, V:CvVotingClasses.cpp:4385-4399)
+     */
     @Readonly
-    fun canPropose(civ: Civilization): Boolean = civ.isMajorCiv && civ.isAlive() && (members[civ.civID]?.proposalsLeft ?: 0) > 0
+    fun canPropose(civ: Civilization): Boolean = hasProposal(civ, needsTurn = true)
+
+    /** Whether [civ] has a proposal left and, if [needsTurn] and with `leagueSessionRulesLikeVp`, it is its turn to propose: [canPropose] is `hasProposal(civ, true)` */
+    @Readonly
+    private fun hasProposal(civ: Civilization, needsTurn: Boolean): Boolean {
+        if (!civ.isMajorCiv || !civ.isAlive() || (members[civ.civID]?.proposalsLeft ?: 0) <= 0) return false
+        return !needsTurn || !gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp || (civ.civID == host) == hostProposing
+    }
+
+    /** Whether [civ] has anything it could propose, whoever's turn it is: the question [removeUselessPrivileges] asks */
+    private fun hasAnythingToPropose(civ: Civilization): Boolean =
+        gameInfo.ruleset.resolutions.values.any { resolution ->
+            val choices: List<String?> = if (resolution.proposerDecision == ResolutionDecision.None) listOf(null) else getChoices(resolution, civ)
+            choices.any { canProposeEnact(resolution, it, civ, needsTurn = false) }
+        } || activeResolutions.any { canProposeRepeal(it.id, civ, needsTurn = false) }
 
     @Readonly
     fun canVote(civ: Civilization): Boolean = civ.isMajorCiv && civ.isAlive() && (members[civ.civID]?.delegatesLeft ?: 0) > 0
@@ -780,9 +827,16 @@ class League : IsPartOfGameInfoSerialization {
      * the resolution is valid ([isResolutionEffectsValid]); is not on the table and not in effect already (for [Resolution.exclusive] ones whatever the choice);
      * the technology it requires is known by any living civilization; the World Leader is not elected twice.
      */
-    fun canProposeEnact(resolution: Resolution, choice: String?, proposer: Civilization?): Boolean {
+    fun canProposeEnact(resolution: Resolution, choice: String?, proposer: Civilization?): Boolean =
+        canProposeEnact(resolution, choice, proposer, needsTurn = true)
+
+    /** [needsTurn] false: whether [proposer] could propose it if it were its turn to propose, which is what [removeUselessPrivileges] asks before the host has proposed */
+    private fun canProposeEnact(resolution: Resolution, choice: String?, proposer: Civilization?, needsTurn: Boolean): Boolean {
         if (gameInfo.ruleset.resolutions[resolution.name] == null) return false
-        if (proposer != null && (!resolution.playerProposable || !canPropose(proposer))) return false
+        if (proposer != null && (!resolution.playerProposable || !hasProposal(proposer, needsTurn))) return false
+        // Not what was on the table last session, enactment or repeal, whatever the choice was made by whom; a project can always be tried again (V:CvVotingClasses.cpp:2820-2850)
+        if (gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp && !resolution.isProject
+            && lastSessionProposals.any { it.resolution == resolution.name && it.choice == choice }) return false
         if (resolution.proposerDecision == ResolutionDecision.None) {
             if (choice != null) return false
         } else if (choice == null || choice !in getChoices(resolution.proposerDecision, proposer)) return false
@@ -798,8 +852,11 @@ class League : IsPartOfGameInfoSerialization {
     }
 
     /** CvLeague::CanProposeRepeal (CvVotingClasses.cpp:2550-2590): [proposer] may propose, the resolution is in effect and no repeal of it is proposed */
-    fun canProposeRepeal(activeResolutionId: Int, proposer: Civilization): Boolean =
-        canPropose(proposer)
+    fun canProposeRepeal(activeResolutionId: Int, proposer: Civilization): Boolean = canProposeRepeal(activeResolutionId, proposer, needsTurn = true)
+
+    /** As [canProposeEnact]'s: with [needsTurn] false it ignores whether the host is still proposing. A repeal is not refused for having been on the table last session (V:CvVotingClasses.cpp:3166-3223) */
+    private fun canProposeRepeal(activeResolutionId: Int, proposer: Civilization, needsTurn: Boolean): Boolean =
+        hasProposal(proposer, needsTurn)
             && activeResolutions.any { it.id == activeResolutionId && gameInfo.ruleset.resolutions[it.resolution]?.isProject != true } // a project is no resolution in effect
             && proposals.none { it.repeal && it.targetId == activeResolutionId }
 
@@ -809,7 +866,14 @@ class League : IsPartOfGameInfoSerialization {
         val proposal = LeagueProposal(nextProposalId++, resolution.name, false, proposer?.civID, choice)
         proposals.add(proposal)
         if (proposer != null) LeagueAutomation.recordProposal(this, proposal)
-        if (proposer != null) members.getValue(proposer.civID).proposalsLeft--
+        if (proposer != null) spendProposal(proposer)
+    }
+
+    /** One proposal of [proposer] is used; the host's last one hands the turn to propose to the others (V:CvVotingClasses.cpp:2619 and 2658) */
+    private fun spendProposal(proposer: Civilization) {
+        val member = members.getValue(proposer.civID)
+        member.proposalsLeft--
+        if (proposer.civID == host && member.proposalsLeft <= 0) hostProposing = false
     }
 
     /** Puts the repeal of an [ActiveResolution] on the table, costing [proposer] his proposal (CvLeague::DoProposeRepeal, CvVotingClasses.cpp:2306-2350) */
@@ -819,7 +883,7 @@ class League : IsPartOfGameInfoSerialization {
         val proposal = LeagueProposal(nextProposalId++, active.resolution, true, proposer.civID, active.choice, activeResolutionId)
         proposals.add(proposal)
         LeagueAutomation.recordProposal(this, proposal)
-        members.getValue(proposer.civID).proposalsLeft--
+        spendProposal(proposer)
     }
 
     /** A proposal of the World Congress itself, which costs nobody anything (host election, World Leader) */
@@ -942,6 +1006,7 @@ class League : IsPartOfGameInfoSerialization {
             val tally = getTally(proposal)
             val about = if (!proposal.repeal && resolution.voterDecision == ResolutionDecision.MajorCiv) decision else proposal.proposerChoice
             results.add(LeagueResultEntry(resolution.name, about, passed, proposal.repeal, tally))
+            if (passed) firePassedProposalYield(proposal)
             when {
                 proposal.repeal -> if (passed) repeal(proposal)
                 passed -> enact(proposal, resolution, decision)
@@ -971,6 +1036,16 @@ class League : IsPartOfGameInfoSerialization {
             resetTurnsUntilSession()
         }
         inSession = false
+    }
+
+    /**
+     * `INSTANT_YIELD_TYPE_PROPOSAL` for the civilization that proposed [proposal], which has passed: in every city, before the resolution takes effect and not for the World Congress's own
+     * proposals (CvLeague::FinishSession, V:CvVotingClasses.cpp:7624 and 8028). Only with `leagueSessionRulesLikeVp`
+     */
+    private fun firePassedProposalYield(proposal: LeagueProposal) {
+        if (!gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp) return
+        val proposer = proposal.proposer?.let { gameInfo.getCivilizationOrNull(it) } ?: return
+        InstantYields.fire(UniqueType.TriggerUponPassingProposal, proposer, triggerNotificationText = "due to a proposal of ours passing")
     }
 
     /** CvLeague::DoEnactResolution (CvVotingClasses.cpp:5645-5676): only resolutions with ongoing effects are kept */

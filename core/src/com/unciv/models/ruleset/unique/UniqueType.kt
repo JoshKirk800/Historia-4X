@@ -1626,6 +1626,14 @@ enum class UniqueType(
     TriggerUponDemandingTribute("upon demanding tribute from a City-State", UniqueTarget.TriggerCondition,
         docDescription = "When the civilization takes gold from a City-State with the ModConstants `cityStateBullyLikeVp`, in the capital. The triggering amount is the gold taken " +
             "(`Gain [relativeAmount]% of the triggering amount as [stat]`: the original's `Policy_YieldFromMinorDemand` and `Trait_YieldFromMinorDemand`, INSTANT_YIELD_TYPE_BULLY)"),
+    TriggerUponWorldCongressSession("upon a World Congress session starting", UniqueTarget.TriggerCondition,
+        docDescription = "Only with the ModConstants `leagueSessionRulesLikeVp`. When a REGULAR session starts (not a special one), for every living major civilization with delegates, in the capital. " +
+            "The triggering amount is the civilization's delegates in the session (`CvLeague::StartSession`, V:CvVotingClasses.cpp:7292-7303, `INSTANT_YIELD_TYPE_DELEGATES`: " +
+            "the original's `Policy_YieldFromDelegateCount`, Statecraft's finisher)"),
+    TriggerUponPassingProposal("upon a proposal of ours passing", UniqueTarget.TriggerCondition,
+        docDescription = "Only with the ModConstants `leagueSessionRulesLikeVp`. When a proposal of a civilization passes in the World Congress, an enactment or a repeal, for the civilization that proposed it " +
+            "(not for the proposals of the World Congress itself), in every city, before the resolution takes effect (`CvLeague::FinishSession`, V:CvVotingClasses.cpp:7624 and 8028, " +
+            "`INSTANT_YIELD_TYPE_PROPOSAL`: the original's `Belief_YieldFromProposal`, Global Commandments)"),
     TriggerUponGainingLuxury("upon gaining a luxury resource", UniqueTarget.TriggerCondition,
         docDescription = "When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is " +
             "how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)"),

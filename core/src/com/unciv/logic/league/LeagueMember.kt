@@ -106,6 +106,24 @@ class VoteCommitment() : IsPartOfGameInfoSerialization {
     fun clone() = VoteCommitment(toCiv, proposalId, choice, votes, enact)
 }
 
+/**
+ * What a proposal of the last session was about, for [League.lastSessionProposals]: the [resolution], the [choice] its proposer made (`null` if it has none), and whether it was a repeal
+ * (the lists `m_vLastTurnEnactProposals` and `m_vLastTurnRepealProposals`, V:CvVotingClasses.cpp:7278-7288). Only these two are compared (V:2820-2850)
+ */
+class LeagueProposalKey() : IsPartOfGameInfoSerialization {
+    var resolution = ""
+    var choice: String? = null
+    var repeal = false
+
+    constructor(resolution: String, choice: String?, repeal: Boolean) : this() {
+        this.resolution = resolution
+        this.choice = choice
+        this.repeal = repeal
+    }
+
+    fun clone() = LeagueProposalKey(resolution, choice, repeal)
+}
+
 /** Delegates that [voter] put on [choice]: "Yes"/"No" or the id of a civilization (`CvResolutionDecision::PlayerVote`) */
 class LeagueVote() : IsPartOfGameInfoSerialization {
     var voter = ""

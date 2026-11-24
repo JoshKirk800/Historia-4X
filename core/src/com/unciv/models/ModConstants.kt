@@ -1151,7 +1151,12 @@ class ModConstants {
      *  from the next turn; the rest (wonders, policies, gold per turn, diplomats, improvements) is read live, as in Vox Populi. The World Religion and World Ideology follow its rules.
      *  Off, [League.getDelegates] adds what Brave New World does */
     var leagueDelegatesLikeVp = false
-    /** Civilizations that propose resolutions in a session (LEAGUE_PROPOSERS_PER_SESSION) */
+    /** The flow of a session as Vox Populi has it (CvLeague, V:CvVotingClasses.cpp): the host proposes first and the others only after the host's proposals are used
+     *  (`m_bHostProposing`, :2619, 2658, 4391, 8368); what was proposed last session, resolution and choice, cannot be proposed again except a project (:2820-2850); a regular
+     *  session start fires `upon a World Congress session` for each member (:7292-7303) and a proposal that passes fires `upon a proposal of ours passing` for its player proposer (:7624, 8028).
+     *  Set [leagueProposersPerSession] to 3 with it (the value of the Vox Populi ruleset, `Defines.LEAGUE_PROPOSERS_PER_SESSION`; Community Patch's is 2). Off, a session is Brave New World's */
+    var leagueSessionRulesLikeVp = false
+    /** Civilizations that propose resolutions in a session, the host included (LEAGUE_PROPOSERS_PER_SESSION: 2 in Community Patch, 3 in the Vox Populi ruleset) */
     var leagueProposersPerSession = 2
     /** Resolutions each of them proposes */
     var leagueProposalsPerProposer = 1

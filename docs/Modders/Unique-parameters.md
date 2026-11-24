@@ -407,6 +407,8 @@ Allowed values:
     - Example: `Only available <when number of [[Land] Trade Routes] is more than [0]>`
 -   `Trade Route Partners` - The number of different other civilizations, city-states included, the relevant Civilization has trade routes with, in either direction
     - Example: `Only available <when number of [Trade Route Partners] is more than [0]>`
+-   `Counterspy rank` - The effective rank, 1 to 3, of the spy that counters spies in the city the unique is checked for; 0 if there is none. Only with the ModConstants `espionageLikeVp`
+    - Example: `Only available <when number of [Counterspy rank] is more than [0]>`
 -   Stat name (`Production`, `Food`, `Gold`, `Science`, `Culture`, `Happiness` or `Faith`)
     - Example: `Only available <when number of [Science] is more than [0]>`
     - Gets the stat *reserve*, not the amount per turn (can be city stats or civilization stats, depending on where the unique is used)
@@ -424,6 +426,9 @@ Allowed values:
     - Only counts transported units matching the filter. For use with 'when number of' conditionals.
 -   `[buildingFilter] Buildings`
     - Example: `Only available <when number of [[Culture] Buildings] is more than [0]>`
+-   `[buildingFilter] Buildings in this city` - The number of matching buildings in the city
+    - Example: `Only available <when number of [[Culture] Buildings in this city] is more than [0]>`
+    - The original's per-class yields count the buildings of the class in each city (`CvCity::ChangeBaseYieldRateFromBuildings`, `Policy_BuildingClassYieldChanges`, `Building_BuildingClassYieldChanges`): `[+3] Golden Age points per turn [in all cities] <for every [[Museum] Buildings in this city]>`.
 -   `[buildingFilter] Buildings by [civFilter] Civilizations`
     - Example: `Only available <when number of [[Culture] Buildings by [City-States] Civilizations] is more than [0]>`
 -   `[populationFilter] in [cityFilter] Cities`
@@ -441,12 +446,17 @@ Allowed values:
 -   `Known [civFilter] Civilizations` - The number of other civilizations the relevant Civilization has met
     - Example: `Only available <when number of [Known [City-States] Civilizations] is more than [0]>`
     - Counts only civilizations that are still alive, and never the civilization itself
+-   `City-States originally in the game` - The number of city-states the game started with, alive or not
+    - Example: `Only available <when number of [City-States originally in the game] is more than [0]>`
+    - Vox Populi's `GetNumMinorCivsEver(true)` (V:CvGame.cpp:4219-4231), fixed at the start of the game: city-states that were defeated still count. Used as `<for every [8] [City-States originally in the game]>` for 'one delegate for every 8 city-states' (Consulate, Palace of Westminster, ...)
 -   `Remaining [civFilter] Civilizations`
     - Example: `Only available <when number of [Remaining [City-States] Civilizations] is more than [0]>`
 -   `Worked [tileFilter] Tiles in this city`
     - Example: `Only available <when number of [Worked [Farm] Tiles in this city] is more than [0]>`
 -   `Worked [tileFilter] Tiles`
     - Example: `Only available <when number of [Worked [Farm] Tiles] is more than [0]>`
+-   `Owned [tileFilter] Tiles in this city`
+    - Example: `Only available <when number of [Owned [Farm] Tiles in this city] is more than [0]>`
 -   `Owned [tileFilter] Tiles`
     - Example: `Only available <when number of [Owned [Farm] Tiles] is more than [0]>`
 -   `[tileFilter] Tiles`
@@ -470,6 +480,17 @@ Allowed values:
     - Example: `Only available <when number of [Golden Ages] is more than [0]>`
     - The Golden Ages entered by filling the happiness meter, the one that is going on included. Golden Ages from other sources (a Great Person, a unique) are not counted, as the original's `CvPlayer::GetNumGoldenAges` counts them.
     - Meant for `<for every [Golden Ages]>` (the original's `Building_YieldChangesPerGoldenAge`, `Trait_ResourceYieldChangesFromGoldenAge`).
+-   `Eras entered` - The number of eras the civilization has entered since the starting era
+    - Example: `Only available <when number of [Eras entered] is more than [0]>`
+    - The original adds `Feature_EraYieldChanges` to a team's feature yields once at each change of its era but the entry into its starting era (`CvTeam::SetCurrentEra`), so a natural wonder's yield is the amount times this count: `[+2 Science] <for every [Eras entered]>` on the terrain. It counts the difference of the era numbers, where the original counts the changes: a technology that skips an era counts the skipped one too.
+-   `[specialist] Specialists in this city` - The number of specialists of the kind in the city
+    - Example: `Only available <when number of [[Merchant] Specialists in this city] is more than [0]>`
+-   `Non-specialist citizens in this city` - The citizens of the city that are no specialists
+    - Example: `Only available <when number of [Non-specialist citizens in this city] is more than [0]>`
+    - The original's `Policy_YieldFromNonSpecialistCitizens` adds the yield for each such citizen to a city's base yield (`CvCity::getBaseYieldRateTimes100`); a fraction of a yield is a fractional stat: `[+0.25 Culture] [in all cities] <for every [Non-specialist citizens in this city]>`.
+-   `Golden Ages up to [positiveAmount]` - The number of Golden Ages the civilization has had, at most the amount
+    - Example: `Only available <when number of [Golden Ages up to [3]] is more than [0]>`
+    - The original's `YieldCap` of `Trait_ResourceYieldChangesFromGoldenAge`: the yield of the tile is the yield times the golden ages had, at most the cap (`CvPlot::calculateYield`, V:CvPlot.cpp:11129-11132), which is this count when the cap is a multiple of the yield. Not for `Building_YieldChangesPerGoldenAge`: that is a yield added to the city permanently at the start of each golden age while the building stands (`CvCity::GetYieldChangePerGoldenAge`), not a count of the golden ages had.
 -   `Triggering amount` - The amount the event that triggers this unique carries
     - Example: `Only available <when number of [Triggering amount] is more than [0]>`
     - The citizens a city gains for `upon population growth`, the price for `upon buying something with [stat]`, the production cost for `upon completing a [baseUnitFilter] unit`, the strength of the defeated unit for `upon defeating a [mapUnitFilter] unit`, the number of new luxuries for `upon gaining a luxury resource`; 0 for any other trigger.

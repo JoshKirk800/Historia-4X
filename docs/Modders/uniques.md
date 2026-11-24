@@ -269,6 +269,15 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Triggerable
 
 ??? example  "Gain an extra spy"
+	One spy; with the ModConstants `spyPointsLikeVp` it is one threshold of spy points (a spy, and the points kept below the threshold stay)
+
+	Applicable to: Triggerable
+
+??? example  "Gain [amount] Spy Points"
+	Only with the ModConstants `spyPointsLikeVp`. A spy is made for each time the points reach the threshold (100 in Vox Populi); a negative amount is a debt that the next points pay first. The original's `Buildings.ExtraSpies`, `Policies.FreeSpy` and `Units.ExtraSpies` (CvPlayer::CreateSpies)
+
+	Example: "Gain [3] Spy Points"
+
 	Applicable to: Triggerable
 
 ??? example  "Turn this tile into a [terrainName] tile"
@@ -489,6 +498,16 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, FollowerBelief
 
+??? example  "[stats] per [positiveAmount] population proportionally [cityFilter]"
+	Example: "[+1 Gold, +2 Production] per [3] population proportionally [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[stats] per [positiveAmount] citizens in the empire proportionally [cityFilter]"
+	Example: "[+1 Gold, +2 Production] per [3] citizens in the empire proportionally [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
 ??? example  "[stats] for each major religion with followers in the city [cityFilter]"
 	Counts the religions of which at least one citizen of the city is a follower, pantheons not included. Whole numbers of the stats only, as in the original (CvCity::GetYieldPerReligionTimes100)
 
@@ -650,6 +669,41 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "1 World Congress Delegate for every [positiveAmount] cities following our religion"
+	Vox Populi's `Buildings.FaithToVotes` (V:CvPlayer.cpp:23636-23665, 24527-24604). The cities that follow the civilization's religion are counted in the whole world. Each such unique gives the count times 100 divided by the amount, in whole hundredths; the sum over all of them is floored once, so two uniques of 10 and 15 cities give 3 delegates, not 2. Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+
+	Example: "1 World Congress Delegate for every [3] cities following our religion"
+
+	Applicable to: Global
+
+??? example  "[positiveAmount] World Congress Delegates for every 2 Declarations of Friendship we have"
+	Vox Populi's `Buildings.DoFToVotes` (V:CvPlayer.cpp:23696-23725): half the number of declarations of friendship, rounded down, times the amount. Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+
+	Example: "[3] World Congress Delegates for every 2 Declarations of Friendship we have"
+
+	Applicable to: Global
+
+??? example  "[positiveAmount] World Congress Delegates for every original capital of another civilization that we hold"
+	Vox Populi's `Buildings.CapitalsToVotes` (V:CvPlayer.cpp:23667-23694): the cities held that were founded as the capital of another major civilization. Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+
+	Example: "[3] World Congress Delegates for every original capital of another civilization that we hold"
+
+	Applicable to: Global
+
+??? example  "[positiveAmount] World Congress Delegates for every Defensive Pact we have"
+	Vox Populi's `Buildings.DPToVotes` (V:CvPlayer.cpp:23756-23788; the vassals it adds are not built). Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+
+	Example: "[3] World Congress Delegates for every Defensive Pact we have"
+
+	Applicable to: Global
+
+??? example  "1 World Congress Delegate for every [positiveAmount] Gold per turn"
+	Vox Populi's `Buildings.VotesPerGPT` (V:CvVotingClasses.cpp:4230-4247, CvPlayer.cpp:16050-16052). The amounts of all such uniques are ADDED, then the gross gold per turn is divided by the sum once, and the result is at most a quarter of the City-States originally in the game, but at least 1. Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+
+	Example: "1 World Congress Delegate for every [3] Gold per turn"
+
+	Applicable to: Global
+
 ??? example  "Allows the World Congress to be founded"
 	As long as some civilization has a technology or wonder with this unique, the World Congress meets (see Resolutions.json and the eras for its sessions)
 
@@ -770,6 +824,41 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "Wonders need 1 fewer adopted Policy for every [positiveAmount] allied City-States"
+	Lowers the number of adopted policies that `Requires [positiveAmount] adopted Policies` asks for by the allied City-States over this number (the original's `Policies.XCSAlliesLowersPolicyNeedWonders`, CvPlayer::canConstruct, V:CvPlayer.cpp:14585-14595). The amounts of several uniques are added, as the original adds the policies' columns
+
+	Example: "Wonders need 1 fewer adopted Policy for every [3] allied City-States"
+
+	Applicable to: Global
+
+??? example  "City-State quest rewards are increased by [relativeAmount]%"
+	Adds this percentage to the modifier of the rewards of City-State quests (the original's `Policies.IncreasedQuestRewards`, CvMinorCivAI::GetQuestRewardModifier, V:CvMinorCivAI.cpp:4949-4975). Only with `cityStateQuestsLikeVp`
+
+	Example: "City-State quest rewards are increased by [+20]%"
+
+	Applicable to: Global
+
+??? example  "[amount] Influence per turn with City-States for each of their military units we gifted"
+	Only with the ModConstants `cityStateInfluenceLikeVp`: the original's `Traits.MinorInfluencePerGiftedUnit` (Germany, CvMinorCivAI::GetFriendshipChangePerTurnTimes100, V:CvMinorCivAI.cpp:10401, 10426-10437), added to the change of each turn for each living military unit of the City-State that we gave it
+
+	Example: "[3] Influence per turn with City-States for each of their military units we gifted"
+
+	Applicable to: Global
+
+??? example  "[amount] additional Influence with military unit gifts to City-States"
+	Only with the ModConstants `cityStateInfluenceLikeVp`: the original's `Policies.MilitaryUnitGiftExtraInfluence` (V:CvMinorCivAI.cpp:15520-15524), added to the influence of a gift of a military unit. `Gain [amount] Influence with a [baseUnitFilter] gift to a City-State` is Brave New World's total instead
+
+	Example: "[3] additional Influence with military unit gifts to City-States"
+
+	Applicable to: Global
+
+??? example  "Resting point for Influence with City-States we are the Ally of is increased by [amount] while we are at war"
+	Only with the ModConstants `cityStateInfluenceLikeVp`: the original's `Policies.MinimumAllyInfluenceIncreaseAtWar` (CvMinorCivAI::GetFriendshipAnchorWithMajor, V:CvMinorCivAI.cpp:10701-10704), added to the resting point of the ally of a city-state while the civilization is at war with anyone
+
+	Example: "Resting point for Influence with City-States we are the Ally of is increased by [3] while we are at war"
+
+	Applicable to: Global
+
 ??? example  "Resting point for Influence with City-States is increased by [amount]"
 	Example: "Resting point for Influence with City-States is increased by [3]"
 
@@ -807,6 +896,30 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Units are [relativeAmount]% more effective at intimidating City-States"
 	Example: "Units are [+20]% more effective at intimidating City-States"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% military strength when demanding tribute from City-States"
+	Only with the ModConstants `cityStateBullyLikeVp`: the original's `Traits.CSBullyMilitaryStrengthModifier` (the Zulu, 50), added to both military parts of the score of a demand for tribute (V:CvMinorCivAI.cpp:14108-14111, 14155-14158)
+
+	Example: "[+20]% military strength when demanding tribute from City-States"
+
+	Applicable to: Global
+
+??? example  "Demanding tribute ignores the penalties of the allies and protectors of City-States"
+	Only with the ModConstants `cityStateBullyLikeVp`: the original's `Traits.IgnoreBullyPenalties` (the Zulu, V:CvMinorCivAI.cpp:14306)
+
+	Applicable to: Global
+
+??? example  "Tribute demands cost no Influence and do not break our Pledges to Protect"
+	Only with the ModConstants `cityStateBullyLikeVp`: the original's `Policies.CanBullyFriendlyCS` (V:CvMinorCivAI.cpp:15033-15045)
+
+	Applicable to: Global
+
+??? example  "Demanding tribute raises our Influence with that City-State by [positiveAmount]% and lowers the Influence of every other civilization by the same percentage"
+	Only with the ModConstants `cityStateBullyLikeVp`: the original's `Policies.BullyGlobalCSInfluenceShift` (V:CvMinorCivAI.cpp:14674-14730). The percentages are of the influence each civilization has; the demand then costs our influence nothing
+
+	Example: "Demanding tribute raises our Influence with that City-State by [3]% and lowers the Influence of every other civilization by the same percentage"
 
 	Applicable to: Global
 
@@ -1043,6 +1156,28 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Example: "Sell [Culture] buildings [in all cities]"
 
 	Applicable to: Triggerable, Global
+
+??? example  "[relativeAmount] Golden Age points per turn [cityFilter]"
+	Added to the golden age meter at the end of each turn for every matching city (the original's YIELD_GOLDEN_AGE_POINTS as a city yield, CvPlayer::GetGoldenAgePointsFromCitiesTimes100). With `<for every [countable]>` it covers the per-specialist, per-building and per-improvement rows
+
+	Example: "[+20] Golden Age points per turn [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount] border culture [cityFilter]"
+	Example: "[+20] border culture [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount] border culture from [tileFilter] tiles [cityFilter]"
+	Example: "[+20] border culture from [Farm] tiles [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount]% border culture [cityFilter]"
+	Example: "[+20]% border culture [in all cities]"
+
+	Applicable to: Global, FollowerBelief
 
 ??? example  "[relativeAmount]% Culture cost of natural border growth [cityFilter]"
 	Multiple bonuses stack multiplicatively: +50% + +50% = x1.5 * x1.5 = +125%
@@ -1494,6 +1629,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "[relativeAmount]% influence from rigged City-State elections"
+	Only with the ModConstants `espionageLikeVp`. Multiplies what we gain when we win a rigged election and what the others lose to us (Policies.RigElectionInfluenceModifier, CvMinorCivAI::DoElection, V:CvMinorCivAI.cpp:15213). Not the votes of [RiggingElectionVotes], which is Brave New World's
+
+	Example: "[+20]% influence from rigged City-State elections"
+
+	Applicable to: Global
+
 ??? example  "New spies start with [amount] level(s)"
 	Example: "New spies start with [3] level(s)"
 
@@ -1503,6 +1645,39 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Temporary effective rank change ([relativeAmount] added to rank, e.g. +1) for spies doing the given action in a matching city. Does not permanently level the spy. Stacks additively, capped by maxSpyRank.
 
 	Example: "Spies in [in all cities] cities act as though they have [+20] levels for [Counter-intelligence]"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount] Network Points per turn for our spies in foreign cities"
+	Only with the ModConstants `espionageLikeVp`. Added to the base of every spy's Network Points a turn (Policies.EspionageNetworkPoints and the Enhancer belief's `Beliefs.EspionageNetworkPoints`: CvPlayerEspionage::CalcNetworkPointsPerTurn)
+
+	Example: "[+20] Network Points per turn for our spies in foreign cities"
+
+	Applicable to: Global, FounderBelief
+
+??? example  "[relativeAmount]% Science from the passive bonuses of our spies"
+	Only with the ModConstants `espionageLikeVp`. Changes the science the spies' passive bonuses (`SpyStealsSciencePercent`) bring in (CvPlayer::GetSciencePerTurnFromPassiveSpyBonusesTimes100, Policies.PassiveEspionageBonusModifier)
+
+	Example: "[+20]% Science from the passive bonuses of our spies"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% [stat] [cityFilter] per [positiveAmount] Spy Points ever accumulated, up to [positiveAmount]%"
+	Only with the ModConstants `spyPointsLikeVp`. The percent grows by the first amount for every second amount of spy points the civilization has ever gained (not those it spent on spies), in whole steps of that size, up to the last amount (Policy_YieldModifierFromActiveSpies, CvCity::getBaseYieldRateModifier)
+
+	Example: "[+20]% [Culture] [in all cities] per [3] Spy Points ever accumulated, up to [3]%"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount] City Security [cityFilter]"
+	Only with the ModConstants `espionageLikeVp`. Added to the security of matching cities, which lowers the Network Points that enemy spies gather in them (CvCity::CalculateCitySecurity, V:CvCity.cpp:25992-26085). Buildings, policies and wonders give it, and a counterspy focus while its spy counters spies in the city
+
+	Example: "[+20] City Security [in all cities]"
+
+	Applicable to: Global, SpyMission
+
+??? example  "City is sapped"
+	Only with the ModConstants `espionageLikeVp`, given by a spy mission with `<for [amount] turns>` (CvCity::GetSappedTurns, V:CvCity.cpp:21936, 33031): the city cannot make a ranged strike and counts as blockaded. The strike and the blockade read it in the military code
 
 	Applicable to: Global
 
@@ -1623,6 +1798,46 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, Unit
 
+??? example  "[relativeAmount]% City ranged strike strength"
+	Example: "[+20]% City ranged strike strength"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% City ranged strike strength with a garrison"
+	Example: "[+20]% City ranged strike strength with a garrison"
+
+	Applicable to: Global
+
+??? example  "[amount] city strength per stationed air unit"
+	Example: "[3] city strength per stationed air unit"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% allied city-state defense"
+	Example: "[+20]% allied city-state defense"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% city strike strength per previous attack on target"
+	Example: "[+20]% city strike strength per previous attack on target"
+
+	Applicable to: Global
+
+??? example  "Cities take [amount] less damage from attacks"
+	Example: "Cities take [3] less damage from attacks"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% damage taken"
+	Example: "[+20]% damage taken"
+
+	Applicable to: Global, Unit
+
+??? example  "[amount]% less damage from cities"
+	Example: "[3]% less damage from cities"
+
+	Applicable to: Global, Unit
+
 ??? example  "Ranged attacks may be performed over obstacles"
 	Applicable to: Global, Unit
 
@@ -1630,6 +1845,14 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, Unit
 
 ??? example  "No defensive terrain penalty"
+	Applicable to: Global, Unit
+
+??? example  "[relativeAmount]% Strength for enemy [mapUnitFilter] units within [amount] tiles"
+	Example: "[+20]% Strength for enemy [Wounded] units within [3] tiles"
+
+	Applicable to: Global, Unit
+
+??? example  "Stronger when damaged"
 	Applicable to: Global, Unit
 
 ??? example  "No damage penalty for wounded units"
@@ -1716,6 +1939,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, Unit
 
 ??? example  "Ignores Zone of Control"
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Global, Unit
+
+??? example  "Cannot enter [tileFilter] tiles"
+	Example: "Cannot enter [Farm] tiles"
+
 	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
 
 	Applicable to: Global, Unit
@@ -1852,7 +2082,123 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Resolution, Tech, Policy, FounderBelief, FollowerBelief, Building, Unit, Promotion, Improvement, Ruins, Event, EventChoice, Victory
 
+## SpyBonus uniques
+!!! note ""
+
+    Uniques of a passive bonus of a spy, which the spy's owner gets when the spy has stored enough Network Points in a city
+
+??? example  "Reveals the city screen to the spy's owner"
+	The spy's owner can look into the city's screen (SpyPassiveBonuses.RevealCityScreen)
+
+	Applicable to: SpyBonus
+
+??? example  "[positiveAmount]% of the city's Science goes to the spy's owner"
+	Every turn the spy's owner gets this percent of the science the city makes, summed over the owner's spies (SpyPassiveBonuses.SciencePercentAdded)
+
+	Example: "[3]% of the city's Science goes to the spy's owner"
+
+	Applicable to: SpyBonus
+
+??? example  "[positiveAmount] more tile(s) of vision around the city"
+	The spy's owner sees this many more rings of tiles around the city (SpyPassiveBonuses.TilesRevealed), on top of the one a set up spy sees
+
+	Example: "[3] more tile(s) of vision around the city"
+
+	Applicable to: SpyBonus
+
+??? example  "[positiveAmount]% of Congress votes can be traded with this civilization"
+	A diplomat's bonus (SpyPassiveBonusesDiplomat.VoteTradePercent), read by the World Congress
+
+	Example: "[3]% of Congress votes can be traded with this civilization"
+
+	Applicable to: SpyBonus
+
+??? example  "[positiveAmount]% Gold on trade routes between us"
+	A diplomat's bonus (SpyPassiveBonusesDiplomat.TradeRouteGoldBonus), read by the trade route model
+
+	Example: "[3]% Gold on trade routes between us"
+
+	Applicable to: SpyBonus
+
+??? example  "The spy uncovers intrigue"
+	A diplomat's bonus (SpyPassiveBonusesDiplomat.ReceiveIntrigues): the diplomat finds out what the civilization plans
+
+	Applicable to: SpyBonus
+
+??? example  "The spy reveals the true approaches of this civilization"
+	A diplomat's bonus (SpyPassiveBonusesDiplomat.RevealTrueApproaches)
+
+	Applicable to: SpyBonus
+
+## SpyMission uniques
+!!! note ""
+
+    Uniques of a spy mission, which happen when the mission is done
+
+??? example  "[relativeAmount] City Security [cityFilter]"
+	Only with the ModConstants `espionageLikeVp`. Added to the security of matching cities, which lowers the Network Points that enemy spies gather in them (CvCity::CalculateCitySecurity, V:CvCity.cpp:25992-26085). Buildings, policies and wonders give it, and a counterspy focus while its spy counters spies in the city
+
+	Example: "[+20] City Security [in all cities]"
+
+	Applicable to: Global, SpyMission
+
+??? example  "Steal [positiveAmount] random technology/technologies the target knows and we can research"
+	A spy mission's effect (CvCity::DoEventChoice, StealNumTechs): the spy's owner learns this many technologies the city's owner has and the owner could research now, chosen at random. The mission cannot be done when there are fewer
+
+	Example: "Steal [3] random technology/technologies the target knows and we can research"
+
+	Applicable to: SpyMission
+
+??? example  "Needs [spyMissionRequirement]"
+	A condition of a spy mission beside its technology, city filter and the focus that blocks it (CvCity::IsCityEventChoiceValid, NoFreshWater V:CvCity.cpp:4191, HasTradeConnection 4412, EnemyUnhappy 4721, RequiresNotPuppet): the city has no fresh water, it is the start or the end of a trade route of any civilization, its owner is unhappy, or it is no puppet, or `the city` for a condition that is only its modifiers. The unique's conditionals are tested with the target city, so `Needs [the city] <in cities with a [Temple]>` is how a mission asks for a building and `<in cities without a [Medical Lab]>` for the lack of one. The mission cannot be done where any of its `Needs` is not met
+
+	Example: "Needs [no fresh water]"
+
+	Applicable to: SpyMission
+
+??? example  "Steal [positiveAmount]% of the treasury of the target"
+	A spy mission's effect (CvCity::DoEventChoice, StealFromTreasuryPercent, V:CvCity.cpp:6616-6630): the spy's owner takes this percent of the gold of the city's owner, divided by the game speed's production cost modifier (more on a faster speed), rounded down
+
+	Example: "Steal [3]% of the treasury of the target"
+
+	Applicable to: SpyMission
+
+??? example  "Siphon [positiveAmount]% of the [stat] of the city for [positiveAmount] turns"
+	A spy mission's effect (CvCity::DoEventChoice, YieldSiphon, V:CvCity.cpp:6822-6843): for the given turns the spy's owner gains, and the city's owner loses, each turn the amount the city yielded at the moment of the mission, whole points, not changed by the owner's modifiers afterwards. Each side keeps it as a temporary `[stats]` unique of the civilization (flat, added after the cities, like the passive spy science)
+
+	Example: "Siphon [3]% of the [Culture] of the city for [3] turns"
+
+	Applicable to: SpyMission
+
+??? example  "Pillage [positiveAmount]% of the [improvementFilter] improvements in the city's tiles"
+	A spy mission's effect (CvCity::DoEventChoice, PillageFortificationsChance, V:CvCity.cpp:7097-7122): every unpillaged improvement of the city's tiles, except in the city centre, that matches the filter (the ruleset tags the improvements it counts as fortifications) is pillaged with the chance, rolled for each tile unless it is 100
+
+	Example: "Pillage [3]% of the [All Road] improvements in the city's tiles"
+
+	Applicable to: SpyMission
+
+??? example  "Pillage [positiveAmount]% of the improved resource tiles in the city's tiles"
+	A spy mission's effect (CvCity::DoEventChoice, PillageResourceTilesChance, V:CvCity.cpp:7047-7074): every tile of the city with a resource whose improvement is unpillaged and connects it is pillaged with the chance, rolled for each tile unless it is 100
+
+	Example: "Pillage [3]% of the improved resource tiles in the city's tiles"
+
+	Applicable to: SpyMission
+
+??? example  "Pillage [positiveAmount]% of the roads in the city's tiles"
+	A spy mission's effect (CvCity::DoEventChoice, PillageRoadsChance, V:CvCity.cpp:7075-7096): every unpillaged road or railroad of the city's tiles, except in the city centre, is pillaged with the chance, rolled for each tile unless it is 100
+
+	Example: "Pillage [3]% of the roads in the city's tiles"
+
+	Applicable to: SpyMission
+
 ## Tech uniques
+??? example  "[positiveAmount] World Congress Delegates for every capital that hosts one of our diplomats"
+	Vox Populi's `Technologies.ExtraVotesPerDiplomat` (V:CvTeam.cpp:8045, CvVotingClasses.cpp:4154-4166). The amounts of all researched technologies are ADDED. Replaces the Brave New World rule that names Globalization in the code
+
+	Example: "[3] World Congress Delegates for every capital that hosts one of our diplomats"
+
+	Applicable to: Tech
+
 ??? example  "Starting tech"
 	Applicable to: Tech
 
@@ -1986,6 +2332,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: FounderBelief
 
+??? example  "[relativeAmount] Network Points per turn for our spies in foreign cities"
+	Only with the ModConstants `espionageLikeVp`. Added to the base of every spy's Network Points a turn (Policies.EspionageNetworkPoints and the Enhancer belief's `Beliefs.EspionageNetworkPoints`: CvPlayerEspionage::CalcNetworkPointsPerTurn)
+
+	Example: "[+20] Network Points per turn for our spies in foreign cities"
+
+	Applicable to: Global, FounderBelief
+
 ??? example  "Only available"
 	Meant to be used together with conditionals, like "Only available &lt;after adopting [policy]&gt; &lt;while the empire is happy&gt;". Only allows Building when ALL conditionals are met. Will also block Upgrade and Transform actions. See also CanOnlyBeBuiltWhen
 
@@ -2045,6 +2398,16 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "[stats] per [positiveAmount] population [cityFilter]"
 	Example: "[+1 Gold, +2 Production] per [3] population [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[stats] per [positiveAmount] population proportionally [cityFilter]"
+	Example: "[+1 Gold, +2 Production] per [3] population proportionally [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[stats] per [positiveAmount] citizens in the empire proportionally [cityFilter]"
+	Example: "[+1 Gold, +2 Production] per [3] citizens in the empire proportionally [in all cities]"
 
 	Applicable to: Global, FollowerBelief
 
@@ -2119,6 +2482,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Example: "[+20]% of [Culture] [in all cities] added to [Culture]"
 
 	Applicable to: Global, FollowerBelief
+
+??? example  "1 World Congress Delegate for every [positiveAmount] [improvementName] we own"
+	Vox Populi's `Belief_VotePerXImprovementOwned` (Holy Land; V:CvBeliefClasses.cpp:4956-4974, CvPlayer.cpp:23812-23848). The fractions of all such uniques of the same improvement are ADDED exactly (1/2 and 1/3 give 5/6), multiplied by the number owned, and truncated once
+
+	Example: "1 World Congress Delegate for every [3] [Village] we own"
+
+	Applicable to: FollowerBelief
 
 ??? example  "[relativeAmount]% [stat]"
 	Multiple bonuses stack additively: +50% + +50% = +100%
@@ -2318,6 +2688,28 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, FollowerBelief
 
+??? example  "[relativeAmount] Golden Age points per turn [cityFilter]"
+	Added to the golden age meter at the end of each turn for every matching city (the original's YIELD_GOLDEN_AGE_POINTS as a city yield, CvPlayer::GetGoldenAgePointsFromCitiesTimes100). With `<for every [countable]>` it covers the per-specialist, per-building and per-improvement rows
+
+	Example: "[+20] Golden Age points per turn [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount] border culture [cityFilter]"
+	Example: "[+20] border culture [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount] border culture from [tileFilter] tiles [cityFilter]"
+	Example: "[+20] border culture from [Farm] tiles [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
+??? example  "[relativeAmount]% border culture [cityFilter]"
+	Example: "[+20]% border culture [in all cities]"
+
+	Applicable to: Global, FollowerBelief
+
 ??? example  "[relativeAmount]% Culture cost of natural border growth [cityFilter]"
 	Multiple bonuses stack multiplicatively: +50% + +50% = x1.5 * x1.5 = +125%
 
@@ -2500,6 +2892,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Building, Unit
 
+??? example  "Requires [positiveAmount] adopted Policies"
+	The civilization must have adopted this many policies, not counting the branches and their finishers (the original's `Buildings.NumPoliciesNeeded` of the wonders, CvPlayer::canConstruct, V:CvPlayer.cpp:14578-14650); not for City-States and barbarians. Lowered by `Wonders need 1 fewer adopted Policy for every [positiveAmount] allied City-States`
+
+	Example: "Requires [3] adopted Policies"
+
+	Applicable to: Building
+
 ??? example  "Triggers a global alert upon build start"
 	Applicable to: Building, Unit
 
@@ -2598,6 +2997,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Never destroyed when the city is captured"
 	Applicable to: Building
 
+??? example  "Has a [nonNegativeAmount]% chance of surviving when the city is captured"
+	The chance, rolled once per building when a city is conquered, that this building is not destroyed (Buildings.ConquestProb). 0 destroys it, 100 keeps it. Buildings with `Destroyed when the city is captured` or `Never destroyed when the city is captured`, wonders and the capital's buildings are not rolled. Conditionals are not evaluated. Only read with the ModConstants switch `conquestLikeVp`; without a unique the chance is `conquestConstants.buildingSurvivalPercent`.
+
+	Example: "Has a [3]% chance of surviving when the city is captured"
+
+	Applicable to: Building
+
 ??? example  "[relativeAmount]% Gold given to enemy if city is captured"
 	Example: "[+20]% Gold given to enemy if city is captured"
 
@@ -2640,10 +3046,22 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Building
 
+??? example  "[amount] city strength per [amount] world wonders"
+	Example: "[3] city strength per [3] world wonders"
+
+	Applicable to: Building
+
 ??? example  "Can carry [amount] extra [mapUnitFilter] units"
 	For buildings, supports using `Air` for `mapUnitFilter` to increase city air unit capacity.
 
 	Example: "Can carry [3] extra [Wounded] units"
+
+	Applicable to: Building, Unit
+
+??? example  "[amount] air defense"
+	The damage this unit (the sum over its own uniques and promotions) or this city (the sum over its buildings) does to an air unit that attacks it, before the attacker's interception damage reduction and a random addition. Only read with the ModConstants switch `airDefenseLikeVp`.
+
+	Example: "[3] air defense"
 
 	Applicable to: Building, Unit
 
@@ -2753,6 +3171,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Uses unit supply"
 	Marks a non-military unit as one that counts against the civilization's unit supply, as the original's MilitarySupport does for the Caravan, the Cargo Ship and the Work Boat. Units with a combat strength use supply without it; the other civilians never do.
+
+	Applicable to: Unit
+
+??? example  "Does not use unit supply"
+	The unit does not count against the civilization's unit supply, whether the unit type or one of its promotions has it (CvUnit::isNoSupply). Conditionals are not evaluated. Only read with the ModConstants switch `unitSupplyLikeVp`.
 
 	Applicable to: Unit
 
@@ -2988,6 +3411,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, Unit
 
+??? example  "[amount] maximum hit points"
+	Added to the unit's 100 maximum hit points; conditionals are not evaluated (the sum is kept with the unit's uniques). Only read with the ModConstants switch `unitMaxHitPointsLikeVp`; the lost health stays the same when the maximum changes (CvUnit::changeMaxHitPointsChange leaves the damage as it is).
+
+	Example: "[3] maximum hit points"
+
+	Applicable to: Unit
+
 ??? example  "Before engaging in combat performs an extra ranged attack with [amount]% of melee combat strength"
 	Example: "Before engaging in combat performs an extra ranged attack with [3]% of melee combat strength"
 
@@ -3024,6 +3454,24 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Self-destructs when attacking"
 	Applicable to: Unit
 
+??? example  "Attacks bypass garrison damage absorption"
+	Applicable to: Unit
+
+??? example  "[relativeAmount]% defense for this and adjacent cities"
+	Example: "[+20]% defense for this and adjacent cities"
+
+	Applicable to: Unit
+
+??? example  "[relativeAmount]% damage taken"
+	Example: "[+20]% damage taken"
+
+	Applicable to: Global, Unit
+
+??? example  "[amount]% less damage from cities"
+	Example: "[3]% less damage from cities"
+
+	Applicable to: Global, Unit
+
 ??? example  "Eliminates combat penalty for attacking across a coast"
 	Applicable to: Unit
 
@@ -3052,10 +3500,28 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "No defensive terrain penalty"
 	Applicable to: Global, Unit
 
+??? example  "Is a mounted unit"
+	Applicable to: Unit
+
+??? example  "[relativeAmount]% Strength for enemy [mapUnitFilter] units within [amount] tiles"
+	Example: "[+20]% Strength for enemy [Wounded] units within [3] tiles"
+
+	Applicable to: Global, Unit
+
+??? example  "Stronger when damaged"
+	Applicable to: Global, Unit
+
 ??? example  "No damage penalty for wounded units"
 	Applicable to: Global, Unit
 
 ??? example  "Uncapturable"
+	Applicable to: Unit
+
+??? example  "Becomes [baseUnitFilter] when captured"
+	The unit name the unit becomes for the capturer (the default unit of the capture class; the capturer's own unique replacement is looked up through `getEquivalentUnit`). Only read with the ModConstants switch `captureClassLikeVp`; with barbarians involved the unit stays as it is (CvUnit::getCaptureDefinition).
+
+	Example: "Becomes [Melee] when captured"
+
 	Applicable to: Unit
 
 ??? example  "Withdraws before melee combat"
@@ -3066,6 +3532,62 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Unable to pillage tiles"
 	Applicable to: Global, Unit
+
+??? example  "[amount] extra flanking power"
+	Each flank-supporting unit counts as 1 plus the sum of its `extra flanking power` (VP CvUnit::GetFlankPower), so the flanking bonus of the unit it surrounds is 10% x that sum. Only read with the ModConstants switch `flankPowerLikeVp`.
+
+	Example: "[3] extra flanking power"
+
+	Applicable to: Unit
+
+??? example  "Ignores terrain cost in [tileFilter] tiles"
+	Entering a matching tile costs 1 movement instead of the terrain's cost (the river crossing still takes the whole turn), before the unit's half-movement and extra movement cost uniques apply. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`.
+
+	Example: "Ignores terrain cost in [Farm] tiles"
+
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Unit
+
+??? example  "Half movement in [tileFilter] tiles"
+	The mirror of `Double movement in`: the cost of entering a matching tile is doubled unless the unit also has double movement there. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`.
+
+	Example: "Half movement in [Farm] tiles"
+
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Unit
+
+??? example  "[amount] extra movement cost in [tileFilter] tiles"
+	Entering a matching tile costs this much more, after the unit's other movement cost modifiers. Only the most specific matching kind counts, in VP's order: a Mountain, a Hill, the base terrain, a terrain feature. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`.
+
+	Example: "[3] extra movement cost in [Farm] tiles"
+
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Unit
+
+??? example  "Gains XP from scouting"
+	Each tile the unit newly reveals to its civilization is worth 1 point, a visible resource scoutXpRandomValue / 4, ancient ruins scoutXpRandomValue / 3 and a natural wonder scoutXpRandomValue (ModConstants, 12 as in VP), and every `scoutXpDenominator` points are 1 experience point, scaled by the game speed. City-states and barbarians do not earn it. Only read with the ModConstants switch `scoutingXpLikeVp`.
+
+	Applicable to: Unit
+
+??? example  "[amount] XP when pillaging"
+	Experience for pillaging an improvement (not a road), scaled by the game speed; barbarians get none. Also makes the AI pillage (CvUnit::shouldPillage). Only read with the ModConstants switch `pillageXpLikeVp`.
+
+	Example: "[3] XP when pillaging"
+
+	Applicable to: Unit
+
+??? example  "Can be gifted by city-states"
+	A militaristic city-state may be given this unit as its unique unit whoever it belongs to, even when no civilization of the game could build it, and is somewhat more likely to be; no civilization but the barbarians can build it. Only read with the ModConstants switch `cityStateGiftUnitFlagsLikeVp`.
+
+	Applicable to: Unit
+
+??? example  "Cannot be gifted by city-states"
+	A city-state never gives this unit, neither as its unique unit nor as the military unit it gives its patron. Only read with the ModConstants switch `cityStateGiftUnitFlagsLikeVp`.
+
+	Applicable to: Unit
 
 ??? example  "Destroys [cityFilter] cities instead of capturing"
 	The unit will destroy [cityFilter] cities instead of capturing them, also allows non-melee units to destroy cities.Capital cities (including city states) are immune to this effect.
@@ -3122,6 +3644,26 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Unit
 
+??? example  "Units on this tile heal [amount] HP when healing"
+	Example: "Units on this tile heal [3] HP when healing"
+
+	Applicable to: Unit
+
+??? example  "[amount] HP healing for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles"
+	Example: "[3] HP healing for [Wounded] units on [Farm] tiles within [3] tiles"
+
+	Applicable to: Unit
+
+??? example  "[amount] HP healing in neutral territory for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles"
+	Example: "[3] HP healing in neutral territory for [Wounded] units on [Farm] tiles within [3] tiles"
+
+	Applicable to: Unit
+
+??? example  "[amount] HP healing in enemy territory for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles"
+	Example: "[3] HP healing in enemy territory for [Wounded] units on [Farm] tiles within [3] tiles"
+
+	Applicable to: Unit
+
 ??? example  "No Sight"
 	Applicable to: Unit
 
@@ -3144,6 +3686,27 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Cannot be carried by [mapUnitFilter] units"
 	Example: "Cannot be carried by [Wounded] units"
+
+	Applicable to: Unit
+
+??? example  "Counts [amount] against the air unit capacity"
+	Only read with the ModConstants switch `airBasingLikeVp`, for air units standing in a city untransported; an air unit without it counts 1. A carrier's cargo slots are counted by units and ignore it.
+
+	Example: "Counts [3] against the air unit capacity"
+
+	Applicable to: Unit
+
+??? example  "[amount] air defense"
+	The damage this unit (the sum over its own uniques and promotions) or this city (the sum over its buildings) does to an air unit that attacks it, before the attacker's interception damage reduction and a random addition. Only read with the ModConstants switch `airDefenseLikeVp`.
+
+	Example: "[3] air defense"
+
+	Applicable to: Building, Unit
+
+??? example  "[amount]% chance to evade interception"
+	An air attacker with it rolls this chance (summed, at most 100) before the interceptor rolls its own, and is not intercepted if it succeeds. Only read with the ModConstants switch `airInterceptionLikeVp`.
+
+	Example: "[3]% chance to evade interception"
 
 	Applicable to: Unit
 
@@ -3320,6 +3883,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Cannot enter ocean tiles"
 	Applicable to: Unit
 
+??? example  "Cannot enter [tileFilter] tiles"
+	Example: "Cannot enter [Farm] tiles"
+
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Global, Unit
+
 ??? example  "May enter foreign tiles without open borders"
 	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
 
@@ -3432,6 +4002,29 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "May choose the reward when entering Ancient Ruins"
 	Applicable to: Unit, Promotion
+
+??? example  "Requires [promotion] promotion"
+	Example: "Requires [Shock I] promotion"
+
+	Applicable to: Promotion
+
+??? example  "Requires at least [amount] attack range"
+	Example: "Requires at least [3] attack range"
+
+	Applicable to: Promotion
+
+??? example  "Requires at most [amount] attack range"
+	Example: "Requires at most [3] attack range"
+
+	Applicable to: Promotion
+
+??? example  "Only for mounted units"
+	Applicable to: Promotion
+
+??? example  "Lost when the unit is gifted"
+	A unit that is gifted to another civilization loses this promotion, and gets it back only if its unit type gives it for free. Only read with the ModConstants switch `giftPromotionLossLikeVp`.
+
+	Applicable to: Promotion
 
 ??? example  "Not shown on world screen"
 	This unique is automatically hidden from users.
@@ -4855,6 +5448,26 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "&lt;when defending&gt;"
 	Applicable to: Conditional
 
+??? example  "&lt;when making a ranged attack&gt;"
+	True while a unit that has a ranged strength attacks (a unit, a city, or an interception by an air unit). Not true for a city's own strike or while defending.
+
+	Applicable to: Conditional
+
+??? example  "&lt;vs fully healed units&gt;"
+	True while a unit attacks a unit that has all its hit points. Never true against a city or while defending.
+
+	Applicable to: Conditional
+
+??? example  "&lt;vs units above half health&gt;"
+	True while a unit attacks a unit whose lost hit points are below half of its maximum (rounded down for a melee attacker, up for a ranged one). Never true against a city or while defending.
+
+	Applicable to: Conditional
+
+??? example  "&lt;vs units at or below half health&gt;"
+	True while a unit attacks a unit that is not above half health (see `vs units above half health`). Never true against a city or while defending.
+
+	Applicable to: Conditional
+
 ??? example  "&lt;when fighting in [tileFilter] tiles&gt;"
 	Example: "&lt;when fighting in [Farm] tiles&gt;"
 
@@ -5158,8 +5771,30 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: TriggerCondition, UnitTriggerCondition
 
+??? example  "&lt;upon demanding tribute from a City-State&gt;"
+	When the civilization takes gold from a City-State with the ModConstants `cityStateBullyLikeVp`, in the capital. The triggering amount is the gold taken (`Gain [relativeAmount]% of the triggering amount as [stat]`: the original's `Policy_YieldFromMinorDemand` and `Trait_YieldFromMinorDemand`, INSTANT_YIELD_TYPE_BULLY)
+
+	Applicable to: TriggerCondition
+
 ??? example  "&lt;upon gaining a luxury resource&gt;"
 	When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon performing a spy mission&gt;"
+	Only with the ModConstants `espionageLikeVp`. When a spy of the civilization finishes a mission, killed or not, in every city of the civilization (CvPlayerEspionage::ProcessSpyMissionResult, V:CvEspionageClasses.cpp:1637, `INSTANT_YIELD_TYPE_SPY_ATTACK`: each city pays its own `Building_YieldFromSpyAttack`)
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon [spyOutcome] a foreign spy in one of our cities&gt;"
+	Only with the ModConstants `espionageLikeVp`. When a spy of another civilization did a mission in a city of this civilization and was found out, in that city only (V:CvEspionageClasses.cpp:1586-1627 and 1663-1669; `INSTANT_YIELD_TYPE_SPY_DEFENSE`, `..._IDENTIFY`, `..._DEFENSE_OR_ID`). `killing` when the spy was killed; `identifying without killing` when it was identified and lived (a spy that was killed and identified is only killed: the original's `else if`); `killing or identifying` for either; `identifying` when it was identified, killed or not (the counterspy focus's yields and Double Agents)
+
+	Example: "&lt;upon [killing] a foreign spy in one of our cities&gt;"
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon winning a City-State election with our spy&gt;"
+	Only with the ModConstants `espionageLikeVp`. When the civilization wins a rigged City-State election, in every city of the civilization (CvMinorCivAI::DoElection, V:CvMinorCivAI.cpp:15296-15300, `INSTANT_YIELD_TYPE_SPY_RIG_ELECTION`: each city pays its own `Building_YieldFromSpyRigElection`)
 
 	Applicable to: TriggerCondition
 
@@ -5460,6 +6095,8 @@ There is a conversion affecting dashes and leading/trailing blanks. Please make 
 *[specialist]: The name of any specialist.
 *[speed]: The name of any speed.
 *[spyAction]: A spy action display name, e.g. `Counter-intelligence`, `Stealing Tech`.
+*[spyMissionRequirement]: One of `the city`, `no fresh water`, `a trade connection`, `an unhappy owner` or `no puppet`.
+*[spyOutcome]: One of `killing`, `identifying`, `identifying without killing` or `killing or identifying`.
 *[stat]: This is one of the 7 major stats in the game - `Gold`, `Science`, `Production`, `Food`, `Happiness`, `Culture` and `Faith`. Note that the stat names need to be capitalized!
 *[stats]: For example: `+2 Production, +3 Food`. Note that the stat names need to be capitalized!
 *[stockpile]: The name of any stockpiled resource.

@@ -670,35 +670,35 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global
 
 ??? example  "1 World Congress Delegate for every [positiveAmount] cities following our religion"
-	Vox Populi's `Buildings.FaithToVotes` (V:CvPlayer.cpp:23636-23665, 24527-24604). The cities that follow the civilization's religion are counted in the whole world. Each such unique gives the count times 100 divided by the amount, in whole hundredths; the sum over all of them is floored once, so two uniques of 10 and 15 cities give 3 delegates, not 2. Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+	Vox Populi's `Buildings.FaithToVotes` (V:CvPlayer.cpp:23636-23665, 24527-24604). The cities that follow the civilization's religion are counted in the whole world. Each such unique gives the count times 100 divided by the amount, in whole hundredths; the sum over all of them is floored once, so two uniques of 10 and 15 cities give 3 delegates, not 2. Only with the ModConstants `leagueDelegatesLikeVp`; cached at the start of the civilization's own turn. A civilization without a religion gets nothing
 
 	Example: "1 World Congress Delegate for every [3] cities following our religion"
 
 	Applicable to: Global
 
 ??? example  "[positiveAmount] World Congress Delegates for every 2 Declarations of Friendship we have"
-	Vox Populi's `Buildings.DoFToVotes` (V:CvPlayer.cpp:23696-23725): half the number of declarations of friendship, rounded down, times the amount. Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+	Vox Populi's `Buildings.DoFToVotes` (V:CvPlayer.cpp:23696-23725): half the number of declarations of friendship, rounded down, times the amount. Only with the ModConstants `leagueDelegatesLikeVp`; cached at the start of the civilization's own turn, so a new friendship counts from the next
 
 	Example: "[3] World Congress Delegates for every 2 Declarations of Friendship we have"
 
 	Applicable to: Global
 
 ??? example  "[positiveAmount] World Congress Delegates for every original capital of another civilization that we hold"
-	Vox Populi's `Buildings.CapitalsToVotes` (V:CvPlayer.cpp:23667-23694): the cities held that were founded as the capital of another major civilization. Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+	Vox Populi's `Buildings.CapitalsToVotes` (V:CvPlayer.cpp:23667-23694): the cities held that were founded as the capital of another major civilization. Only with the ModConstants `leagueDelegatesLikeVp`; cached at the start of the civilization's own turn
 
 	Example: "[3] World Congress Delegates for every original capital of another civilization that we hold"
 
 	Applicable to: Global
 
 ??? example  "[positiveAmount] World Congress Delegates for every Defensive Pact we have"
-	Vox Populi's `Buildings.DPToVotes` (V:CvPlayer.cpp:23756-23788; the vassals it adds are not built). Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+	Vox Populi's `Buildings.DPToVotes` (V:CvPlayer.cpp:23756-23788; the vassals it adds are not built). Only with the ModConstants `leagueDelegatesLikeVp`; cached at the start of the civilization's own turn
 
 	Example: "[3] World Congress Delegates for every Defensive Pact we have"
 
 	Applicable to: Global
 
 ??? example  "1 World Congress Delegate for every [positiveAmount] Gold per turn"
-	Vox Populi's `Buildings.VotesPerGPT` (V:CvVotingClasses.cpp:4230-4247, CvPlayer.cpp:16050-16052). The amounts of all such uniques are ADDED, then the gross gold per turn is divided by the sum once, and the result is at most a quarter of the City-States originally in the game, but at least 1. Nothing reads it yet: the delegates of Vox Populi (`leagueDelegatesLikeVp`) come with the next branch
+	Vox Populi's `Buildings.VotesPerGPT` (V:CvVotingClasses.cpp:4230-4247, CvPlayer.cpp:16050-16052). The amounts of all such uniques are ADDED, then the gross gold per turn is divided by the sum once, and the result is at most a quarter of the City-States originally in the game, but at least 1. Only with the ModConstants `leagueDelegatesLikeVp`; read live. The gross gold is the gold of the cities without the maintenance of their buildings, plus trade and the uniques, without the upkeep of units and roads
 
 	Example: "1 World Congress Delegate for every [3] Gold per turn"
 

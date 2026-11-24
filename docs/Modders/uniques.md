@@ -5776,6 +5776,16 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: TriggerCondition
 
+??? example  "&lt;upon a World Congress session starting&gt;"
+	Only with the ModConstants `leagueSessionRulesLikeVp`. When a REGULAR session starts (not a special one), for every living major civilization with delegates, in the capital. The triggering amount is the civilization's delegates in the session (`CvLeague::StartSession`, V:CvVotingClasses.cpp:7292-7303, `INSTANT_YIELD_TYPE_DELEGATES`: the original's `Policy_YieldFromDelegateCount`, Statecraft's finisher)
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon a proposal of ours passing&gt;"
+	Only with the ModConstants `leagueSessionRulesLikeVp`. When a proposal of a civilization passes in the World Congress, an enactment or a repeal, for the civilization that proposed it (not for the proposals of the World Congress itself), in every city, before the resolution takes effect (`CvLeague::FinishSession`, V:CvVotingClasses.cpp:7624 and 8028, `INSTANT_YIELD_TYPE_PROPOSAL`: the original's `Belief_YieldFromProposal`, Global Commandments)
+
+	Applicable to: TriggerCondition
+
 ??? example  "&lt;upon gaining a luxury resource&gt;"
 	When the civilization has more of a luxury resource than it ever had (without what it imports), in the capital. The triggering amount is how many it has more (`CvPlayer::CheckForLuxuryResourceGainInstantYields`, `INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN`)
 

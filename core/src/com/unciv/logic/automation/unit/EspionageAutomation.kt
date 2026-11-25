@@ -64,6 +64,7 @@ class EspionageAutomation(private val civInfo: Civilization) {
 
         // EvaluateUnassignedSpies, EvaluateDefensiveSpies, EvaluateDiplomatSpies, and the flags CvPlayerEspionage::ProcessSpy sets every turn
         for (spy in spies) if (spy.isAlive() && isReconsideredEveryTurn(spy)) spy.evaluateReassignment = true
+        evaluateMinorCivSpies()
 
         // When the United Nations countdown starts, every spy reconsiders its post
         if (!espionage.unCountdownStarted && gameInfo.league?.unitedNations == true) {
@@ -459,17 +460,48 @@ class EspionageAutomation(private val civInfo: Civilization) {
     /** CvEspionageAI::BuildDefenseCityList: our cities by how fast a spy would steal there, fastest first */
     fun buildDefenseCityList(): List<City> = civInfo.cities.sortedByDescending { espionage.getBaseStealRateTimes100(it) }
 
-    /** CvEspionageAI::BuildMinorCityList: one city per met city-state at peace with us, by [minorCityScore], highest first */
+    /**
+     *  CvEspionageAI::BuildMinorCityList: one city per met city-state at peace with us, by [minorCityScore], highest first. Not the City-States that no spy can do anything in
+     *  (V:CvEspionageClasses.cpp:9962-9966, 9976-9991): one with an Open Door in force (nobody can be its ally), one with a permanent ally (a Sphere of Influence), one with an
+     *  enactment of either on the table. NOT built: the other skips of the original (a razing capital, `CanEverMoveSpyTo`, a teammate's ally, V:9957-9974).
+     */
     fun buildMinorCityList(): List<City> {
         val plan = getCityStatePlan()
         val growthFlavor = civInfo.ai.personalityAndGrandStrategy(Flavor.Growth)
         val scored = ArrayList<Pair<City, Long>>()
         for (cityState in gameInfo.civilizations) {
             if (!cityState.isCityState || !cityState.isAlive() || !civInfo.knows(cityState) || civInfo.isAtWarWith(cityState)) continue
+            if (cityState.noAlly || cityState.permanentAllyCiv != null || hasDoorOrSphereProposal(cityState)) continue
             val city = cityState.cities.firstOrNull { it.getCenterTile().isExplored(civInfo) } ?: continue
             scored.add(city to minorCityScore(cityState, plan, growthFlavor))
         }
         return scored.sortedByDescending { it.second }.map { it.first }
+    }
+
+    /**
+     *  Whether an enactment (a proposal that is not a repeal, as VP reads only `m_vEnactProposals`) of Open Door or Sphere of Influence for [cityState] is on the table
+     *  (V:CvEspionageClasses.cpp:9976-9991, 10489-10509; the same test in V:CvPlayerAI.cpp:2803-2814). Only with `leagueSessionRulesLikeVp`: no other game has the resolutions.
+     */
+    private fun hasDoorOrSphereProposal(cityState: Civilization): Boolean {
+        if (!gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp) return false
+        val league = gameInfo.league ?: return false
+        return league.proposals.any { proposal ->
+            val resolution = gameInfo.ruleset.resolutions[proposal.resolution]
+            !proposal.repeal && proposal.proposerChoice == cityState.civID && resolution != null && (resolution.opensDoor || resolution.putsInSphere)
+        }
+    }
+
+    /**
+     *  CvEspionageAI::EvaluateMinorCivSpies (V:CvEspionageClasses.cpp:10423-10512): a spy in a city-state flags itself to be reassigned when the city-state has an Open Door in force
+     *  (10433), has a permanent ally (10447) or has an enactment of either on the table (10489-10509). NOT built: the flag for a war (V:10461) and for a teammate's ally
+     *  (10475, no teams here); not looked for elsewhere in the engine, only that this file does not set a war flag for a spy that is already in a city-state.
+     */
+    private fun evaluateMinorCivSpies() {
+        for (spy in espionage.spyList) {
+            if (!spy.isAlive()) continue
+            val cityState = spy.getCityOrNull()?.civ?.takeIf { it.isCityState } ?: continue
+            if (cityState.noAlly || cityState.permanentAllyCiv != null || hasDoorOrSphereProposal(cityState)) spy.evaluateReassignment = true
+        }
     }
 
     /** The score of a city-state in CvEspionageAI::BuildMinorCityList */

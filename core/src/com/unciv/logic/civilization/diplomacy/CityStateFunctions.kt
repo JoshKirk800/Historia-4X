@@ -128,7 +128,7 @@ class CityStateFunctions(val civInfo: Civilization) {
             if (spy.action != SpyAction.RiggingElections || spy.civInfo !in majors) continue
             riggers[spy.civInfo] = spy
             if (spy.networkPoints > 0) votes[spy.civInfo] = spy.networkPoints
-            spy.spendNetworkPoints(spy.networkPoints)   // CvCityEspionage::ResetProgress: the votes are counted, so the spy begins again (V:CvMinorCivAI.cpp:15195)
+            spy.spendNetworkPoints(spy.networkPoints)   // CvMinorCivAI::DoElection calls CvCityEspionage::ResetProgress once the votes are counted, so the spy begins again (V:CvMinorCivAI.cpp:15195)
         }
         if (votes.isEmpty()) return
 
@@ -1044,7 +1044,7 @@ class CityStateFunctions(val civInfo: Civilization) {
     }
 
     /**
-     *  CvMinorCivAI::DoBulliedByMajorReaction and the global shift of DoMajorBullyGold (V:CvMinorCivAI.cpp:14674-14730, 15025-15080): a civilization that cannot bully friendly
+     *  The global shift of CvMinorCivAI::DoMajorBullyGold and CvMinorCivAI::DoBulliedByMajorReaction (V:CvMinorCivAI.cpp:14674-14730, 15025-15081): a civilization that cannot bully friendly
      *  city-states pays the influence of the demand and breaks its pledge to protect (the pledge cannot be renewed for a while, nothing is paid for that); with a global shift
      *  the demand raises its influence by a percentage of it, and lowers that of the other civilizations by the same percentage; the others hear of it, the quests are tested
      */
@@ -1231,7 +1231,7 @@ class CityStateFunctions(val civInfo: Civilization) {
         val context = GameContext(civInfo, attacker)
         val rng = context.stateBasedRandom("CityStateFunctions.cityStateAttacked")
 
-        // CvMinorCivAI::DoChangeAggressorStatus (V:CvMinorCivAI.cpp:16235-16258): for a while its resting point is lowered and no quest is offered, unless it is a friend or was liberated by the attacker
+        // The jerk turns (V:CvMinorCivAI.cpp:16235-16259, CvMinorCivAI::GetJerkTurnsRemaining reads how many are left of BALANCE_CS_WAR_COOLDOWN_RATE scaled by the speed): for a while its resting point is lowered and no quest is offered, unless it is a friend or was liberated by the attacker
         val modConstants = civInfo.gameInfo.ruleset.modOptions.constants
         val attackerDiplomacy = civInfo.getDiplomacyManager(attacker)
         if (modConstants.cityStateInfluenceLikeVp && attackerDiplomacy != null && attackerDiplomacy.isRelationshipLevelLT(RelationshipLevel.Friend))

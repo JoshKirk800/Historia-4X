@@ -312,7 +312,7 @@ class ModConstants {
     // Gold maintenance of units (CvTreasury::CalculateUnitCost), with 0.5 gold per unit that is not free:
     // cost = (paidUnits * 0.5 * (1 + unitMaintenanceGameMultiplier * progress)) ^ (1 + progress / unitMaintenanceExponentDivisor)
     // where progress is the turn divided by the number of turns of the game speed. The defaults are the original Unciv values; Gods & Kings uses 0, 8 and 7, Brave New World 0, 8 and 5 (Vox Populi's value).
-    // Departure: Vox Populi takes progress from the techs known (CvTeam::GetTechProgressPercent, CvTreasury.cpp:522-525), we from the turn.
+    // Departure: Vox Populi takes progress from the techs known (CvTreasury::CalculateUnitCost reads CvTeam::GetTechProgressPercent, V:CvTreasury.cpp:522-525), we from the turn.
     var unitMaintenanceFreeUnits = 3
     var unitMaintenanceGameMultiplier = 1f
     var unitMaintenanceExponentDivisor = 3f
@@ -717,7 +717,7 @@ class ModConstants {
     // in Vox Populi). Empty: no increase. A wonder without a technology does not count
     var worldWonderCostIncrease: List<Int> = emptyList()
 
-    // Whether buying a unit sets a cooldown (CvCity::Purchase, V:CvCity.cpp:2485-2503, 31100): the unit's `purchaseCooldown` (less the city's
+    // Whether buying a unit sets a cooldown (CvCity::PurchaseUnit sets it, V:CvCity.cpp:31100, and CvCity::doTurn counts it down, V:2485-2503): the unit's `purchaseCooldown` (less the city's
     // reduction from its buildings, [com.unciv.models.ruleset.Building.purchaseCooldownReduction]) for gold, its `globalFaithPurchaseCooldown` and
     // `localFaithPurchaseCooldown` (times the game speed's production cost percentage) for faith, during which that kind of unit cannot be bought
     var purchaseCooldownEnabled = false
@@ -1003,7 +1003,7 @@ class ModConstants {
     /**
      *  The defines of spy points and of the time a dead spy needs, `spyToPlayerRatio`, `majorPlayerMultiplier`, `thresholdMin`, `thresholdMax` and `pointUnit` read only with [spyPointsLikeVp].
      *  The threshold is `100 x spyToPlayerRatio / (city-states + majorPlayerMultiplier x majors)` of the players at the start, at least 1 of each, kept between the minimum and the
-     *  maximum (CvGame::initSpyThreshold, V:CvGame.cpp:10722-10767: BALANCE_SPY_TO_PLAYER_RATIO 20, BALANCE_SPY_POINT_MAJOR_PLAYER_MULTIPLIER 2,
+     *  maximum (CvGame::initSpyThreshold and CvGame::GetSpyThreshold, V:CvGame.cpp:10722-10764: BALANCE_SPY_TO_PLAYER_RATIO 20, BALANCE_SPY_POINT_MAJOR_PLAYER_MULTIPLIER 2,
      *  BALANCE_SPY_POINT_THRESHOLD_MIN and _MAX, which Vox Populi sets to 100 both, so a spy costs 100 points on every map). [pointUnit] is the points of 1 in the original's tables
      *  (ESPIONAGE_SPY_POINT_UNIT, 1 in Vox Populi), applied by the generator when it writes `Gain [n] Spy Points`. [respawnTurns] is how long a killed spy stays dead
      *  (BALANCE_SPY_RESPAWN_TIMER, Vox Populi 10; the default is Brave New World's 5), read with or without [spyPointsLikeVp]. Can only be modded all-or-nothing.
@@ -1036,7 +1036,7 @@ class ModConstants {
         val travelBaseTurns: Int = 1,
         val travelTurnsByProximity: List<Int> = listOf(1, 2, 3, 4),
         /** The turns a spy that did a mission must wait for its next one, at standard speed times the speed's modifier (`ESPIONAGE_TURNS_BETWEEN_CITY_STATE_ELECTIONS`,
-         *  CvGame::GetTurnsBetweenMinorCivElections and CvPlayerEspionage::GetNumTurnsSpyActiveMissionsBlocked, V:CvEspionageClasses.cpp:2844-2856) */
+         *  CvGame::GetTurnsBetweenMinorCivElections, V:CvGame.cpp:11667-11673, and CvPlayerEspionage::GetNumTurnsSpyActiveMissionsBlocked, V:CvEspionageClasses.cpp:2844-2856) */
         val missionCooldownTurns: Int = 15,
         /** The turns a spy cannot move after it chose a counterspy focus (`ESPIONAGE_COUNTERSPY_CHANGE_FOCUS_COOLDOWN`, CvPlayerEspionage::GetNumTurnsSpyMovementBlocked, V:CvEspionageClasses.cpp:2829-2842) */
         val counterspyChangeCooldownTurns: Int = 5,

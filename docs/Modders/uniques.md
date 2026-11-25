@@ -1383,11 +1383,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, Unit
 
 ??? example  "[relativeAmount]% Influence from diplomatic missions"
-	On a unit: `Units.TradeMissionInfluenceModifier`; on a policy or other global source: `Policies.MissionInfluenceModifier` (Foreign Service 10). Each is its own multiplication, rounded down. Only with the ModConstants `diplomaticMissionsLikeVp`
+	On a unit or a promotion: `UnitPromotions.TradeMissionInfluenceModifier`; on a policy or other global source: `Policies.MissionInfluenceModifier` (Foreign Service 10). Each is its own multiplication, rounded down. Only with the ModConstants `diplomaticMissionsLikeVp`
 
 	Example: "[+20]% Influence from diplomatic missions"
 
-	Applicable to: Global, Unit
+	Applicable to: Global, Unit, Promotion
 
 ??? example  "Great General provides double combat bonus"
 	Applicable to: Global, Unit
@@ -3226,11 +3226,23 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Unit
 
 ??? example  "[relativeAmount]% Influence from diplomatic missions"
-	On a unit: `Units.TradeMissionInfluenceModifier`; on a policy or other global source: `Policies.MissionInfluenceModifier` (Foreign Service 10). Each is its own multiplication, rounded down. Only with the ModConstants `diplomaticMissionsLikeVp`
+	On a unit or a promotion: `UnitPromotions.TradeMissionInfluenceModifier`; on a policy or other global source: `Policies.MissionInfluenceModifier` (Foreign Service 10). Each is its own multiplication, rounded down. Only with the ModConstants `diplomaticMissionsLikeVp`
 
 	Example: "[+20]% Influence from diplomatic missions"
 
-	Applicable to: Global, Unit
+	Applicable to: Global, Unit, Promotion
+
+??? example  "[amount] to the resting point of the influence of the City-State, for the civilization of the unit, from its diplomatic mission"
+	`Units.RestingPointChange` (Tadodaho 45), added to the resting point of the civilization's influence with the City-State where the mission is done (`DiplomacyManager.restingPointChange`, V:CvUnit.cpp:12094-12098). Only with the ModConstants `diplomaticMissionsLikeVp` and `cityStateInfluenceLikeVp`, which reads it
+
+	Example: "[3] to the resting point of the influence of the City-State, for the civilization of the unit, from its diplomatic mission"
+
+	Applicable to: Unit
+
+??? example  "Lowers the influence of every other civilization that knows the City-State by as much as it gives, with its diplomatic mission"
+	The Great Diplomat (`Units.NumInfPerEra` above 0 under `MOD_BALANCE_VP`, V:CvUnit.cpp:12086 and 12101-12179): the influence of the mission is taken from each other major civilization that has met the City-State, and their ally status is updated after ours has risen. Only with the ModConstants `diplomaticMissionsLikeVp`
+
+	Applicable to: Unit
 
 ??? example  "Great General provides double combat bonus"
 	Applicable to: Global, Unit
@@ -4062,6 +4074,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Example: "[3] Influence from diplomatic missions"
 
 	Applicable to: Unit, Promotion
+
+??? example  "[relativeAmount]% Influence from diplomatic missions"
+	On a unit or a promotion: `UnitPromotions.TradeMissionInfluenceModifier`; on a policy or other global source: `Policies.MissionInfluenceModifier` (Foreign Service 10). Each is its own multiplication, rounded down. Only with the ModConstants `diplomaticMissionsLikeVp`
+
+	Example: "[+20]% Influence from diplomatic missions"
+
+	Applicable to: Global, Unit, Promotion
 
 ??? example  "Only available"
 	Meant to be used together with conditionals, like "Only available &lt;after adopting [policy]&gt; &lt;while the empire is happy&gt;". Only allows Building when ALL conditionals are met. Will also block Upgrade and Transform actions. See also CanOnlyBeBuiltWhen

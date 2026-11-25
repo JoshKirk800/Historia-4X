@@ -314,7 +314,8 @@ class FullGameSim {
         val combatLosses = CombatLosses(game).also { this.combatLosses = it }
         val barbarianStats = BarbarianStats(game).also { this.barbarianStats = it }
         val embarkedStats = EmbarkedStats(game).also { this.embarkedStats = it }
-        val espionageStats = if (game.isEspionageEnabled()) EspionageStats(game).also { this.espionageStats = it } else null
+        val espionageTrace = if (System.getenv("FULL_SIM_ESPIONAGE_TRACE") != null) File(System.getenv("FULL_SIM_OUT")!! + ".espionage.tsv") else null
+        val espionageStats = if (game.isEspionageEnabled()) EspionageStats(game, espionageTrace).also { this.espionageStats = it } else null
         val decisionLog = System.getenv("FULL_SIM_DECISION_LOG")?.let { DecisionLog(game, File(it)) }
         val outPath = System.getenv("FULL_SIM_OUT")!!
         val spans = System.getenv("FULL_SIM_SPANS") != null

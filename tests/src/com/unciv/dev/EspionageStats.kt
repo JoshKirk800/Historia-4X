@@ -1,7 +1,11 @@
 package com.unciv.dev
 
 import com.unciv.logic.GameInfo
+import com.unciv.logic.automation.unit.EspionageScoring
+import com.unciv.logic.civilization.managers.SpyMissionResolver
+import com.unciv.models.Spy
 import com.unciv.models.SpyAction
+import java.io.File
 import java.util.Locale
 
 /**
@@ -10,7 +14,11 @@ import java.util.Locale
  * the spies lost (a spy whose action became Dead), and the Network Points stored. Technologies and gold stolen are not told apart from what a civilization gets otherwise, so the
  * missions by name stand for them (Steal a Technology, Burgle the National Treasury).
  */
-class EspionageStats(private val game: GameInfo) {
+class EspionageStats(private val game: GameInfo, private val traceFile: File? = null) {
+    init {
+        traceFile?.writeText("turn\tevent\tciv\tspy\tcity\tpoints\ttarget\ttargetScore\tbest\tbestScore\tdetail\n")
+    }
+
     private class Civ {
         var spyTurns = 0
         var gatheringTurns = 0
@@ -37,6 +45,7 @@ class EspionageStats(private val game: GameInfo) {
     }
 
     fun afterTurn(turn: Int) {
+        trace(turn)
         for (civ in game.civilizations) {
             if (civ.isBarbarian || civ.isSpectator || civ.isCityState) continue
             val stats = civs.getOrPut(civ.civName) { Civ() }
@@ -60,6 +69,67 @@ class EspionageStats(private val game: GameInfo) {
     }
 
     private val lastMissionSeen = HashMap<String, Int>()
+
+    // --- the trace of FULL_SIM_ESPIONAGE_TRACE: what each spy decides, turn by turn, with the scores the AI read ---
+    private val missionTraced = HashMap<String, Int>()
+    private val lastTarget = HashMap<String, String?>()
+    private val lastCity = HashMap<String, String?>()
+
+    /** What the AI reads for [mission] in the city of [spy]: -1 where it cannot be worked towards (`EspionageAutomation.missionScore`) */
+    private fun aiScore(spy: Spy, mission: String?): Int? {
+        val city = spy.getCityOrNull() ?: return null
+        val rule = mission?.let { game.ruleset.spyMissions[it] } ?: return null
+        if (city.civ == spy.civInfo) return null
+        return if (SpyMissionResolver.canWorkTowards(spy, rule)) EspionageScoring.missionScore(spy.civInfo, spy, city, rule) else -1
+    }
+
+    /** The best mission of the city by the AI's own rule: the highest score of those that can be worked towards, the first of equals */
+    private fun best(spy: Spy): Pair<String, Int>? {
+        val city = spy.getCityOrNull() ?: return null
+        if (city.civ == spy.civInfo) return null
+        var best: Pair<String, Int>? = null
+        for (mission in game.ruleset.spyMissions.values) {
+            if (mission.isFocus) continue
+            val score = aiScore(spy, mission.name) ?: continue
+            if (score >= 0 && (best == null || score > best.second)) best = mission.name to score
+        }
+        return best
+    }
+
+    private fun line(turn: Int, event: String, spy: Spy, detail: String = "") {
+        val file = traceFile ?: return
+        val city = spy.getCityOrNull()
+        val target = aiScore(spy, spy.targetMission)
+        val best = best(spy)
+        file.appendText(listOf(turn, event, spy.civInfo.civName, spy.name, city?.let { "${it.civ.civName}/${it.name}" } ?: "-", spy.networkPoints,
+            spy.targetMission ?: "-", target ?: "", best?.first ?: "-", best?.second ?: "", detail).joinToString("\t") + "\n")
+    }
+
+    /** Called after the turn: the events of every spy that changed what it works towards, where it is, whether it lives or did a mission, and a snapshot every 10 turns */
+    private fun trace(turn: Int) {
+        if (traceFile == null) return
+        for (civ in game.civilizations) {
+            if (civ.isBarbarian || civ.isSpectator || civ.isCityState) continue
+            for (spy in civ.espionageManager.spyList) {
+                val id = key(civ.civName, spy.name)
+                val city = spy.getCityOrNull()?.let { "${it.civ.civName}/${it.name}" }
+                if (!spy.isAlive()) { if (lastCity.put(id, "dead") != "dead") line(turn, "lost", spy); continue }
+                if (lastCity.put(id, city) != city && (turn > 1 || city != null)) line(turn, "move", spy, "to ${city ?: "the hideout"}")
+                val target = spy.targetMission
+                if (lastTarget.put(id, target) != target) {
+                    // when a target is given up, why it can no longer be worked towards (the reason the resolver gives for the mission it had), and the points against its price
+                    val was = targetBefore[id]
+                    val rule = was?.let { game.ruleset.spyMissions[it] }
+                    val why = if (target == null && rule != null && spy.getCityOrNull() != null)
+                        SpyMissionResolver.unavailableReason(spy, rule)?.let { "; now: $it" } ?: "; still workable" else ""
+                    line(turn, "target", spy, "was ${was ?: "-"}${rule?.let { " (${it.networkPoints} points)" } ?: ""}$why")
+                }
+                // the same reading as the report: a mission is a change of lastMissionTurn since the last turn (the turn the game stamps on it is not this turn's number)
+                if (spy.lastMissionTurn != (missionTraced.put(id, spy.lastMissionTurn) ?: 0)) line(turn, "mission", spy, "did ${targetBefore[id] ?: "(opportunity)"}, stamped ${spy.lastMissionTurn}")
+                if (turn % 10 == 0 && spy.action == SpyAction.GatheringIntel) line(turn, "snapshot", spy)
+            }
+        }
+    }
 
     fun report(): String {
         val text = StringBuilder("## Espionage\n")

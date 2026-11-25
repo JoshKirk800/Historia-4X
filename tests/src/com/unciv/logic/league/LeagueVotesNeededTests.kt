@@ -10,7 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The delegates needed to be elected World Leader (CvGame::DoUpdateDiploVictory, V:CvGame.cpp:5679-5760): what a living and a defeated civilization and city-state count (four `Defines` rows,
+ * The delegates needed to be elected World Leader (CvGame::DoUpdateDiploVictory, V:CvGame.cpp:5679-5761): what a living and a defeated civilization and city-state count (four `Defines` rows,
  * here constants), and, with `ModConstants.leagueSessionRulesLikeVp`, that a city-state counts only if its original capital is still a city.
  * The result is `floor(1.443 ln(civs) + 7 + 16.023 ln(cityStates) - 13.758)` between 2+4+1 and `2 + 4 * civs + 2 * cityStates` (the Atomic era's United Nations: 4 delegates per civilization, 2 for the host and
  * per city-state), `civs` and `cityStates` being the weighted counts. Each expected number is worked out in the test.

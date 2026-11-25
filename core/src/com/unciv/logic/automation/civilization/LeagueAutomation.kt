@@ -45,7 +45,7 @@ import kotlin.math.roundToInt
  * World Congress proposals, votes and vote commitments (CvLeagueAI, Vox Populi CvVotingClasses.cpp:10196-14450). No teams or vassals.
  */
 object LeagueAutomation {
-    /** CvLeagueAI::DoProposals and DoVotes stop after this many loops (CvVotingClasses.cpp:7449-7486) */
+    /** CvLeagueAI::DoVotes and DoProposals stop after this many loops (SDK:CvVotingClasses.cpp:7449-7466 and 7473-7486) */
     const val MAX_LOOPS = 100
     // (VP's AllocateProposals takes the best proposal, not a weighted roll among the top ones of LeagueHelpers::AI_CHOOSE_PROPOSAL_FROM_TOP)
     /** The Congress memory [observer] keeps of [other] */
@@ -422,7 +422,7 @@ object LeagueAutomation {
         .count { (OpinionAi.isDenouncedPlayer(civ, it) || civ.isAtWarWith(it)) && OpinionAi.isDenouncedPlayer(other, it) }
 
     /**
-     * CvLeagueAI::GetDiplomatUsefulnessAtCiv (CvVotingClasses.cpp:8242-8266): +1 if our diplomats give delegates (GetExtraVotesPerDiplomat, which
+     * CvLeagueAI::GetDiplomatUsefulnessAtCiv (SDK:CvVotingClasses.cpp:8243-8267): +1 if our diplomats give delegates (GetExtraVotesPerDiplomat, which
      * Globalization carries in Brave New World), +1 if [other] is more than neutrally aligned with us. HIGH is never returned, as in the DLL.
      */
     fun getDiplomatUsefulnessAtCiv(civ: Civilization, other: Civilization): DiplomatUsefulness {

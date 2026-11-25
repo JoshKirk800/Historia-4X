@@ -18,7 +18,7 @@ import com.unciv.models.ruleset.GreatWorkType
 import com.unciv.models.ruleset.ThemingBonus
 
 /**
- * How the AI arranges its Great Works each turn (CvPlayerCulture::DoSwapGreatWorks and what it calls, CvCultureClasses.cpp:941-1749):
+ * How the AI arranges its Great Works each turn (CvPlayerCulture::DoSwapGreatWorks and what it calls, SDK:CvCultureClasses.cpp:941-1749):
  * per kind of slot (writing, art and artifacts, music), the buildings in the order of the AI priority of their first theming bonus are
  * themed with whole matching sets of works, undamaged cities first; then those still one work short try to swap with another civilization;
  * then the first work left of each kind is marked as the one to swap; then the leftovers fill the unthemed buildings.

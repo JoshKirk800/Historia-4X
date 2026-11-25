@@ -936,7 +936,7 @@ class CityStateFunctions(val civInfo: Civilization) {
         if (civInfo.getDiplomacyManager(demandingCiv)!!.getInfluence() < -30)
             modifiers["Influence below -30"] = -300
 
-        // CvMinorCivAI::CalculateBullyMetric (CvMinorCivAI.cpp:7963-7982): the policy modifier (Gunboat Diplomacy) is applied to the sum of the
+        // CvMinorCivAI::CalculateBullyMetric (SDK:CvMinorCivAI.cpp:7963-7982): the policy modifier (Gunboat Diplomacy) is applied to the sum of the
         // global military score (our rank) and the local power score (force near the City-State); here it is its own entry of the table
         var intimidationPercent = 0
         demandingCiv.forEachMatchingUnique(UniqueType.CityStateEasilyIntimidatedByForce) { intimidationPercent += it.params[0].toInt() }

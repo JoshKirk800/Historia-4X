@@ -1202,7 +1202,7 @@ class ModConstants {
     var leagueWorldLeaderCityStateConstant = -13.758f
     /**
      * How much each counts in those `count`s: a living civilization, a defeated one, a living city-state, a defeated one (DIPLO_VICTORY_CIV_DELEGATES_ALIVE, _ELIMINATED, DIPLO_VICTORY_CS_DELEGATES_ALIVE and _ELIMINATED,
-     * `Defines` rows: 1, 0.5, 1 and 0.5 in Community Patch, 1.5, 0.75, 1.34 and 0.75 in the Vox Populi ruleset, V:CvGame.cpp:5679-5760). Data, not behind `leagueSessionRulesLikeVp`
+     * `Defines` rows: 1, 0.5, 1 and 0.5 in Community Patch, 1.5, 0.75, 1.34 and 0.75 in the Vox Populi ruleset, V:CvGame.cpp:5679-5761). Data, not behind `leagueSessionRulesLikeVp`
      */
     var leagueWorldLeaderCivAliveWeight = 1f
     var leagueWorldLeaderCivDefeatedWeight = 0.5f

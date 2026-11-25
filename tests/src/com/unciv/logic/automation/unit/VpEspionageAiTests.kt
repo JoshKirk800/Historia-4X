@@ -21,8 +21,8 @@ import org.junit.runner.RunWith
 
 /**
  *  The spy AI of the Network Points model (CvEspionageAI::DoTurn and PerformSpyMissions, V:CvEspionageClasses.cpp:7723-7800 and 7999-8181; EvaluateDefensiveSpies, 10338-10363). V: is
- *  `ref/vp-5.4.8/CvGameCoreDLL_Expansion2/`. Only with [ModConstants.espionageLikeVp]; with it off the original's AI is unchanged. The scoring of missions is a stand-in until slice P4.4f, so
- *  these tests say what the loop does with a mission that can be done, waits for or cannot be done, not which of several missions is best. [a] is an AI civilization, [b] another whose capital it spies on.
+ *  `ref/vp-5.4.8/CvGameCoreDLL_Expansion2/`. Only with [ModConstants.espionageLikeVp]; with it off the original's AI is unchanged. These tests say what the loop does with a mission that can be done, waits for or cannot be done; which of
+ *  several missions scores best is [EspionageScoringTests]'. [a] is an AI civilization, [b] another whose capital it spies on.
  */
 @RunWith(GdxTestRunner::class)
 class VpEspionageAiTests {
@@ -149,8 +149,51 @@ class VpEspionageAiTests {
     }
 
     @Test
-    fun `a spy making slow progress with another mission available does that one`() {
-        val expensive = steal(100000)               // the mission it works towards: out of reach
+    fun `a spy making slow progress does a mission it can do even if another scores better`() {
+        // the mission it works towards: out of reach (1000 points, 50 stored), scoring 28 in this setup, above the 20 that is kept
+        val expensive = steal(1000)
+        // one it can do now but that does nothing, so it scores 0 and does not replace the target: only the slow-progress rule picks it
+        val idle = SpyMission().apply { name = "Idle"; networkPoints = 10; cityFilter = "All"; identifyChance = 0; killChance = 0 }
+        game.ruleset.spyMissions[idle.name] = idle
+        addedMissions += idle.name
+        b.tech.addTechnology("Pottery")
+        game.ruleset.modOptions.constants.espionage =
+            game.ruleset.modOptions.constants.espionage.copy(networkPointsBase = 5)   // a rate of 4, at most 15: slow progress
+        val spy = gathering()
+        spy.addNetworkPoints(50)
+        spy.targetMission = expensive.name
+        assertEquals("the setup of the scores", 4, a.espionageManager.networkPointsPerTurn(spy, bCity))
+        assertEquals(28, EspionageScoring.missionScore(a, spy, bCity, expensive))
+        assertEquals(0, EspionageScoring.missionScore(a, spy, bCity, idle))
+
+        ai.automateSpies()
+
+        assertEquals("the mission that could be done was done, by the spy, this turn", 50, spy.lastMissionTurn)
+        assertNull("and the target it could not reach is dropped", spy.targetMission)
+    }
+
+    @Test
+    fun `a spy keeps a mission that scores 20 and gives one up that scores less, as the original does`() {
+        // the setup of the scores in EspionageScoringTests: 41 points a turn, one technology to steal, 1000 points score 20 and 1500 points score 9 (V:8063, the floor of 20)
+        b.tech.addTechnology("Pottery")
+        val kept = steal(1000)
+        val spy = gathering()
+        spy.targetMission = kept.name
+        assertEquals(20, EspionageScoring.missionScore(a, spy, bCity, kept))
+        ai.automateSpies()
+        assertEquals("a mission that scores 20 is kept", "Steal a Technology", spy.targetMission)
+        assertFalse(spy.evaluateReassignment)
+
+        game.ruleset.spyMissions["Steal a Technology"]!!.networkPoints = 1500
+        assertEquals(9, EspionageScoring.missionScore(a, spy, bCity, kept))
+        ai.automateSpies()
+        assertNull("one that scores 9 is given up", spy.targetMission)
+        assertEquals("the spy did nothing and it is not at its post for a mission", 0, spy.lastMissionTurn)
+    }
+
+    @Test
+    fun `a spy replaces the mission it works towards by one that scores better and does it`() {
+        steal(1000)                                  // out of reach: scores 28
         val cheap = SpyMission().apply {
             name = "Cheap"; networkPoints = 10; cityFilter = "All"; identifyChance = 0; killChance = 0
             uniques = arrayListOf("Steal [1] random technology/technologies the target knows and we can research")
@@ -158,18 +201,17 @@ class VpEspionageAiTests {
         game.ruleset.spyMissions[cheap.name] = cheap
         addedMissions += cheap.name
         b.tech.addTechnology("Pottery")
-        game.ruleset.modOptions.constants.espionage =
-            game.ruleset.modOptions.constants.espionage.copy(networkPointsBase = 1)   // a rate of at most 15: slow progress
+        game.ruleset.modOptions.constants.espionage = game.ruleset.modOptions.constants.espionage.copy(networkPointsBase = 5)
         val spy = gathering()
         spy.addNetworkPoints(50)
-        spy.targetMission = expensive.name
+        spy.targetMission = "Steal a Technology"
         val before = a.tech.researchedTechnologies.size
 
         ai.automateSpies()
 
-        assertEquals("the opportunity mission was done", before + 1, a.tech.researchedTechnologies.size)
-        assertEquals("by the spy, this turn", 50, spy.lastMissionTurn)
-        assertNull("and the target it could not reach is dropped", spy.targetMission)
+        assertEquals("the cheaper mission scores 208 against 28, replaced the target and was done", before + 1, a.tech.researchedTechnologies.size)
+        assertEquals(50, spy.lastMissionTurn)
+        assertNull(spy.targetMission)
     }
 
     @Test
@@ -231,13 +273,15 @@ class VpEspionageAiTests {
     }
 
     @Test
-    fun `an AI spy with no focus to choose from counters spies without one`() {
+    fun `an AI spy with no focus to choose from is taken out of the city and sent out again`() {
+        // TriggerSpyFocusSetup: no best mission (none to choose from) extracts the spy (V:1531); it is then unassigned, and its owner's defense needs a spy in this city, so it travels there again
         val spy = a.espionageManager.addSpy()
         spy.moveTo(aCity)
         a.espionageManager.endTurn()
+        assertEquals(SpyAction.CounterIntelligence, spy.action)
         ai.automateSpies()
         assertNull(spy.focus)
-        assertEquals(SpyAction.CounterIntelligence, spy.action)
+        assertEquals("it left and set out again, instead of staying with no focus", SpyAction.Moving, spy.action)
     }
 
     @Test

@@ -2105,6 +2105,16 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Resolution
 
+??? example  "Opens the door of the chosen City-State to every civilization"
+	Open Door (`bOpenDoor`, V:CvVotingClasses.cpp:1425-1440): when it is enacted every living major civilization meets the chosen City-State if it has not, and its influence with it is SET to 40, up or down; the City-State can have no ally while the resolution is in effect, and has none after the enactment. When it is repealed, or stops being valid, the City-State can have an ally again (V:1921-1927); the influence stays where it was. The resolution must have the proposerDecision CityState. Only with the ModConstants `leagueSessionRulesLikeVp`
+
+	Applicable to: Resolution
+
+??? example  "Puts the chosen City-State in the sphere of influence of the proposer"
+	Sphere of Influence (`bSphereOfInfluence`, V:CvVotingClasses.cpp:1442-1454): when it is enacted the City-State makes peace with the proposer and the proposer is its permanent ally, whatever the influence. When it is repealed, or stops being valid, the permanent ally is gone (V:1928-1929). The resolution must have the proposerDecision CityState. Only with the ModConstants `leagueSessionRulesLikeVp`
+
+	Applicable to: Resolution
+
 ??? example  "Only available"
 	Meant to be used together with conditionals, like "Only available &lt;after adopting [policy]&gt; &lt;while the empire is happy&gt;". Only allows Building when ALL conditionals are met. Will also block Upgrade and Transform actions. See also CanOnlyBeBuiltWhen
 

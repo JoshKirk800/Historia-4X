@@ -154,8 +154,7 @@ class EspionageAutomation(private val civInfo: Civilization) {
      *  mission replaces the current one; the mission is done when it can be; a spy that makes slow progress does any other mission that can be done, else is flagged for reassignment.
      *  As in the original the loop ends at the first spy that acted or was flagged (`break`): one spy a turn.
      *
-     *  [missionScore] is NOT VP's `GetMissionScore` (V:8392-9410, slice P4.4f): it ranks nothing and only says whether a mission can be done. With Steal a Technology the one whole mission
-     *  that is all there is to choose from; P4.4f replaces it with VP's scoring and the offense list scoring.
+     *  [missionScore] is VP's `GetMissionScore` ([EspionageScoring]): with it a spy moves on from a city where nothing scores [MISSION_SCORE_FLOOR], as in the original.
      */
     private fun performMissions() {
         val speedPercent = (gameInfo.speed.productionCostModifier * 100).toInt()
@@ -208,12 +207,13 @@ class EspionageAutomation(private val civInfo: Civilization) {
 
     /**
      *  How much [spy] wants [mission] in the city it is in, -1 if the mission cannot be worked towards at all (CvEspionageAI::GetMissionScore returns -1 for a mission whose requirements are not
-     *  met). A stand-in until P4.4f: a mission that is possible at all (the spy's rank, its owner's technology, the city and the city's focus allow it, and there is something to do) scores
-     *  [STAND_IN_SCORE], above the floor, whatever the Network Points stored; being short of points is what the loop waits for.
+     *  met: the spy's rank, its owner's technology, the city and the city's focus allow it, and there is something to do; being short of points or waiting after the last mission does not refuse
+     *  a mission, the spy works towards it). The value is [EspionageScoring.missionScore]
      */
-    private fun missionScore(spy: Spy, mission: SpyMission): Int =
-        // being short of points or waiting after the last mission does not refuse a mission: the spy works towards it
-        if (SpyMissionResolver.canWorkTowards(spy, mission)) STAND_IN_SCORE else -1
+    private fun missionScore(spy: Spy, mission: SpyMission): Int {
+        if (!SpyMissionResolver.canWorkTowards(spy, mission)) return -1
+        return EspionageScoring.missionScore(civInfo, spy, spy.getCity(), mission)
+    }
 
     /**
      *  The focus an AI spy chooses when it arrives to counter spies (CvEspionageAI::EvaluateDefensiveSpies flags it; CvCity::DoEventChoice takes the choice): the first focus its owner can
@@ -221,8 +221,15 @@ class EspionageAutomation(private val civInfo: Civilization) {
      */
     internal fun chooseCounterspyFocus(spy: Spy) {
         if (spy.action != SpyAction.CounterIntelligence || spy.focus != null) return
-        val focus = SpyMissionResolver.availableFoci(spy).firstOrNull() ?: return
-        spy.chooseFocus(focus)
+        // CvPlayerEspionage::TriggerSpyFocusSetup (V:1478-1553) with GetBestMissionInCity (V:9387-9411): the first of the foci with the highest score (a score from 0 up; -1 is none), and
+        // if none qualifies the spy is taken out of the city
+        var best: SpyMission? = null
+        var bestScore = -1
+        for (focus in SpyMissionResolver.availableFoci(spy)) {
+            val score = EspionageScoring.missionScore(civInfo, spy, spy.getCity(), focus)
+            if (score > bestScore) { bestScore = score; best = focus }
+        }
+        if (best == null) spy.moveTo(null) else spy.chooseFocus(best)
     }
     //endregion
 
@@ -548,8 +555,6 @@ class EspionageAutomation(private val civInfo: Civilization) {
 
         /** CvEspionageAI::PerformSpyMissions: a spy whose mission scores under this is reassigned (V:CvEspionageClasses.cpp:8063) */
         private const val MISSION_SCORE_FLOOR = 20
-        /** What [missionScore] gives a mission that can be worked towards, until P4.4f ports VP's scoring; above [MISSION_SCORE_FLOOR] */
-        private const val STAND_IN_SCORE = 100
         /** The Network Points a spy has stored that make the AI less willing to reassign it: `ESPIONAGE_NP_BASE` times this, scaled by the speed (V:CvEspionageClasses.cpp:8009-8011) */
         private const val HIGH_POINTS_FACTOR = 20
         /** A spy gathering at most this many points a turn makes slow progress (V:CvEspionageClasses.cpp:8143) */

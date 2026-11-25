@@ -294,19 +294,28 @@ class EspionageManager : IsPartOfGameInfoSerialization {
      */
     @Readonly
     fun networkPointsPerTurn(spy: Spy, city: City): Int {
+        if (spy.action != SpyAction.GatheringIntel && spy.action != SpyAction.Schmoozing) return 0
+        return networkPointsPerTurn(spy, city, spy.action == SpyAction.GatheringIntel)
+    }
+
+    /**
+     *  The same for [spy] that gathers intel ([gathering]) or schmoozes, and for no spy at all (CalcNetworkPointsPerTurn with `iSpyIndex` -1, which the AI asks when it chooses a city to send a spy to):
+     *  without a spy there is no rank term and no loss to the counterspy of the city, "only calculate if we actually have a spy in the city, not if we calculate NP per turn for AI city selection"
+     *  (V:CvEspionageClasses.cpp:3321-3322), and the security of the city still takes its percent
+     */
+    @Readonly
+    fun networkPointsPerTurn(spy: Spy?, city: City, gathering: Boolean): Int {
         if (!civInfo.gameInfo.ruleset.modOptions.constants.espionageLikeVp) return 0
-        val gathering = spy.action == SpyAction.GatheringIntel
-        if (!gathering && spy.action != SpyAction.Schmoozing) return 0
         val constants = civInfo.gameInfo.ruleset.modOptions.constants.espionage
         var points = constants.networkPointsBase
-        points += (spy.getEffectiveRank() - 1) * constants.networkPointsPerSpyRank
+        if (spy != null) points += (spy.getEffectiveRank() - 1) * constants.networkPointsPerSpyRank
         val level = civInfo.culture.getInfluenceLevel(city.civ)?.ordinal ?: 0
         points += maxOf(0, (level - 1) * constants.networkPointsPerInfluenceLevel)
         val techsAhead = city.civ.tech.researchedTechnologies.size - civInfo.tech.researchedTechnologies.size
         points += maxOf(0, minOf(techsAhead, constants.networkPointsMaxTechDifference)) * constants.networkPointsPerTechBehind
         points += civInfo.getMatchingUniques(UniqueType.EspionageNetworkPoints).sumOf { it.params[0].toInt() }
         // the counterspy of the city loses a spy that gathers intel its focus's points for each of its ranks, before the points are kept at 0 (V:CvEspionageClasses.cpp:3315-3333)
-        if (gathering) {
+        if (gathering && spy != null) {
             val counter = city.espionage.counterspy()
             val reduction = city.espionage.getFocus()?.counterspyNetworkPointsReduction ?: 0
             if (counter != null && reduction != 0) points -= reduction * counter.getEffectiveRank()

@@ -241,4 +241,153 @@ class DiplomaticMissionTests {
         assertEquals(before + 30f, csInfluence(), 0.001f)
         assertTrue("gold came too", us.gold > goldBefore)
     }
+
+    // ---- the Great Diplomat (CvUnit::trade, V:CvUnit.cpp:12086-12179) ----
+
+    private val greatDiplomat = "Lowers the influence of every other civilization that knows the City-State by as much as it gives, with its diplomatic mission"
+    private val gives = "[%d] Influence from diplomatic missions"
+
+    /** [us] and two other majors that all know the city-state, with the ally rule of Vox Populi */
+    private lateinit var b: Civilization
+    private lateinit var c: Civilization
+
+    private fun setUpThree() {
+        setUpGame()
+        game.ruleset.modOptions.constants.cityStateInfluenceLikeVp = true
+        b = game.addCiv()
+        c = game.addCiv()
+        game.addCity(b, game.getTile(-3, 3), replacePalace = true)
+        game.addCity(c, game.getTile(-3, -3), replacePalace = true)
+        b.diplomacyFunctions.makeCivilizationsMeet(cityState)
+        c.diplomacyFunctions.makeCivilizationsMeet(cityState)
+    }
+
+    private fun set(civ: Civilization, amount: Float) = cityState.getDiplomacyManager(civ)!!.setInfluenceWithoutSideEffects(amount)
+    private fun of(civ: Civilization) = cityState.getDiplomacyManager(civ)!!.getInfluence()
+
+    private fun great(amount: Int, vararg more: String) = diplomat(can, gives.format(amount), greatDiplomat, *more)
+
+    @Test
+    fun `a Great Diplomat takes the influence of the mission from every other civilization that knows the city-state`() {
+        setUpThree()
+        set(b, 50f); set(c, 20f); set(us, 0f)
+        DiplomaticMission.conduct(great(40), cityState)
+        assertEquals(40f, of(us), 0.001f)
+        assertEquals(10f, of(b), 0.001f)
+        assertEquals(-20f, of(c), 0.001f)
+    }
+
+    @Test
+    fun `a plain mission leaves the others alone`() {
+        setUpThree()
+        set(b, 50f); set(c, 20f)
+        DiplomaticMission.conduct(diplomat(can, gives.format(40)), cityState)
+        assertEquals(50f, of(b), 0.001f)
+        assertEquals(20f, of(c), 0.001f)
+    }
+
+    @Test
+    fun `what is taken stops at the lowest influence there is`() {
+        setUpThree()
+        set(b, -50f)
+        DiplomaticMission.conduct(great(40), cityState)
+        assertEquals(-60f, of(b), 0.001f)
+    }
+
+    @Test
+    fun `a civilization that has not met the city-state, one that is defeated, a city-state and the owner are not lowered`() {
+        setUpThree()
+        val stranger = game.addCiv()
+        game.addCity(stranger, game.getTile(0, 6), replacePalace = true)
+        val other = game.addCiv(cityStateType = "Maritime")
+        game.addCity(other, game.getTile(0, -6), replacePalace = true)
+        set(b, 50f); set(c, 50f)
+        c.cities.toList().forEach { it.destroyCity(overrideSafeties = true) }
+        assertTrue("c is defeated", c.isDefeated())
+        DiplomaticMission.conduct(great(40), cityState)
+        assertEquals("b is lowered", 10f, of(b), 0.001f)
+        assertEquals("a defeated civilization is not", 50f, of(c), 0.001f)
+        assertEquals("the owner gains and does not lose", 40f, of(us), 0.001f)
+        assertFalse("a civilization that does not know it has no relation to change", cityState.knows(stranger))
+    }
+
+    @Test
+    fun `the ally is updated after ours has risen, from what each had before`() {
+        setUpThree()
+        // b is the ally with 90 and c has 90 too (a tie keeps the ally); the mission gives 10.
+        // Together: b 80, c 80, us 10; b stays the ally, as a tie does not take the place (V:CvMinorCivAI.cpp:11393-11452).
+        // Had the ally been updated while b was lowered, c (still at 90) would have taken the place and then kept it: c, not b.
+        set(b, 90f); set(c, 90f); set(us, 0f)
+        cityState.allyCiv = b
+        DiplomaticMission.conduct(great(10), cityState)
+        assertEquals(80f, of(b), 0.001f)
+        assertEquals(80f, of(c), 0.001f)
+        assertEquals(b, cityState.allyCiv)
+    }
+
+    @Test
+    fun `an ally that falls under 60 is no ally and our own rise can make us the ally`() {
+        setUpThree()
+        // b is the ally with 70, us at 30; a mission of 40 takes b to 30 first, then gives us 70: above 60 and more than b has by then (30), so we take the place;
+        // updating b afterwards (70 -> 30) changes nothing, as b is no longer the ally
+        set(b, 70f); set(c, 0f); set(us, 30f)
+        cityState.allyCiv = b
+        DiplomaticMission.conduct(great(40), cityState)
+        assertEquals(70f, of(us), 0.001f)
+        assertEquals(30f, of(b), 0.001f)
+        assertEquals(us, cityState.allyCiv)
+    }
+
+    @Test
+    fun `an ally that was lowered under 60 loses the alliance in the second pass, though our own rise does not reach 60`() {
+        setUpThree()
+        // b is the ally with 70, us at 0; a mission of 40 takes b to 30 and gives us 40. Our rise alone changes nothing (40 is under 60, the ally stays b);
+        // only the update of b from 70 to 30 ends its alliance
+        set(b, 70f); set(c, 0f); set(us, 0f)
+        cityState.allyCiv = b
+        DiplomaticMission.conduct(great(40), cityState)
+        assertEquals(30f, of(b), 0.001f)
+        assertEquals(40f, of(us), 0.001f)
+        assertEquals(null, cityState.allyCiv)
+    }
+
+    @Test
+    fun `the resting point of our influence is raised and the others' is not`() {
+        setUpThree()
+        val tadodaho = great(40, "[45] to the resting point of the influence of the City-State, for the civilization of the unit, from its diplomatic mission")
+        DiplomaticMission.conduct(tadodaho, cityState)
+        assertEquals(45f, cityState.getDiplomacyManager(us)!!.restingPointChange, 0.001f)
+        assertEquals(0f, cityState.getDiplomacyManager(b)!!.restingPointChange, 0.001f)
+        DiplomaticMission.conduct(great(40, "[45] to the resting point of the influence of the City-State, for the civilization of the unit, from its diplomatic mission"), cityState)
+        assertEquals("a second one adds again", 90f, cityState.getDiplomacyManager(us)!!.restingPointChange, 0.001f)
+    }
+
+    @Test
+    fun `the action of a Great Diplomat lowers the others and uses the unit up`() {
+        setUpThree()
+        set(b, 50f)
+        val unit = great(40)
+        mission(unit).single().action!!.invoke()
+        assertEquals(10f, of(b), 0.001f)
+        assertEquals(40f, of(us), 0.001f)
+        assertFalse(unit in us.units.getCivUnits())
+    }
+
+    @Test
+    fun `the percentage of a promotion is read like the unit's`() {
+        setUpGame()
+        val unit = diplomat(can, "[40] Influence from diplomatic missions", promotionUniques = listOf("[+25]% Influence from diplomatic missions"))
+        assertEquals(50, DiplomaticMission.influenceOf(unit, cityState))   // 40 x 125 / 100
+    }
+
+    @Test
+    fun `changing the influence without the ally update returns the old one, rises and stops at the lowest`() {
+        setUpThree()
+        set(b, 20f)
+        val manager = cityState.getDiplomacyManager(b)!!
+        assertEquals(20f, manager.changeInfluenceWithoutAllyUpdate(15f), 0.001f)
+        assertEquals(35f, manager.getInfluence(), 0.001f)
+        assertEquals(35f, manager.changeInfluenceWithoutAllyUpdate(-500f), 0.001f)
+        assertEquals(-60f, manager.getInfluence(), 0.001f)
+    }
 }

@@ -1382,6 +1382,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, Unit
 
+??? example  "[relativeAmount]% Influence from diplomatic missions"
+	On a unit: `Units.TradeMissionInfluenceModifier`; on a policy or other global source: `Policies.MissionInfluenceModifier` (Foreign Service 10). Each is its own multiplication, rounded down. Only with the ModConstants `diplomaticMissionsLikeVp`
+
+	Example: "[+20]% Influence from diplomatic missions"
+
+	Applicable to: Global, Unit
+
 ??? example  "Great General provides double combat bonus"
 	Applicable to: Global, Unit
 
@@ -2863,6 +2870,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Building
 
+??? example  "[amount] Influence from diplomatic missions of units from this city"
+	Added to the mission of a unit whose origin city has the building (`Buildings.DiplomatInfluenceBoost`, CvCity::GetDiplomatInfluenceBoost; the Wat 10). Only with the ModConstants `diplomaticMissionsLikeVp`
+
+	Example: "[3] Influence from diplomatic missions of units from this city"
+
+	Applicable to: Building
+
 ??? example  "Consumes [amount] [resource]"
 	Example: "Consumes [3] [Iron]"
 
@@ -3189,6 +3203,32 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "[relativeAmount]% Gold from Great Merchant trade missions"
 	Example: "[+20]% Gold from Great Merchant trade missions"
+
+	Applicable to: Global, Unit
+
+??? example  "Can undertake a diplomatic mission with City-State"
+	Only with the ModConstants `diplomaticMissionsLikeVp`: the unit can do the action 'Conduct Diplomatic Mission' in the territory of a City-State it is not at war with (CvUnit::canTrade, V:CvUnit.cpp:11990-12022, which asks for a gold blast or a mission influence). It is used up, and gives the City-State influence as in [com.unciv.logic.civilization.diplomacy.DiplomaticMission.influence]
+
+	Applicable to: Unit
+
+??? example  "[amount] Influence from diplomatic missions"
+	The base influence of a diplomatic mission (the original's `UnitPromotions.DiploMissionInfluence`, summed over the unit's promotions: Emissary 40, Envoy 50, Diplomat 60, Ambassador 70, Great Diplomat 100, the free promotions of buildings 10-15). Only with the ModConstants `diplomaticMissionsLikeVp`
+
+	Example: "[3] Influence from diplomatic missions"
+
+	Applicable to: Unit, Promotion
+
+??? example  "[amount] Influence from diplomatic missions for every era"
+	Added once per era number of the owner (`Units.NumInfPerEra`: Great Diplomat 15, Tadodaho 15), before the percentages. Only with the ModConstants `diplomaticMissionsLikeVp`
+
+	Example: "[3] Influence from diplomatic missions for every era"
+
+	Applicable to: Unit
+
+??? example  "[relativeAmount]% Influence from diplomatic missions"
+	On a unit: `Units.TradeMissionInfluenceModifier`; on a policy or other global source: `Policies.MissionInfluenceModifier` (Foreign Service 10). Each is its own multiplication, rounded down. Only with the ModConstants `diplomaticMissionsLikeVp`
+
+	Example: "[+20]% Influence from diplomatic missions"
 
 	Applicable to: Global, Unit
 
@@ -4016,6 +4056,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Nation, Tech, Policy, FounderBelief, FollowerBelief, Building, Unit, UnitType, Promotion, Terrain, Improvement, Resource, Ruins, Speed, Difficulty, EventChoice
 
 ## Promotion uniques
+??? example  "[amount] Influence from diplomatic missions"
+	The base influence of a diplomatic mission (the original's `UnitPromotions.DiploMissionInfluence`, summed over the unit's promotions: Emissary 40, Envoy 50, Diplomat 60, Ambassador 70, Great Diplomat 100, the free promotions of buildings 10-15). Only with the ModConstants `diplomaticMissionsLikeVp`
+
+	Example: "[3] Influence from diplomatic missions"
+
+	Applicable to: Unit, Promotion
+
 ??? example  "Only available"
 	Meant to be used together with conditionals, like "Only available &lt;after adopting [policy]&gt; &lt;while the empire is happy&gt;". Only allows Building when ALL conditionals are met. Will also block Upgrade and Transform actions. See also CanOnlyBeBuiltWhen
 

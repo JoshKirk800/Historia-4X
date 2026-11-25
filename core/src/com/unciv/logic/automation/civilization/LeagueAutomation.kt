@@ -33,6 +33,7 @@ import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.MajorCivApproach
+import com.unciv.models.ruleset.ai.MinorCivApproach
 import com.unciv.models.ruleset.ai.VictoryPursuit
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
@@ -869,7 +870,7 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
      */
     private fun scoreYesNo(resolution: Resolution, target: String?, proposerId: String?, choice: String, enact: Boolean, global: Boolean,
                            forSelf: Boolean = true, proposing: Boolean = false): Int {
-        var score = scoreEffects(resolution, target, forSelf)
+        var score = scoreEffects(resolution, target, forSelf, enact, proposerId)
         if (proposing && resolution.embargoesPlayer && target != null) score += sanctionProposalScore(target)
         if (!enact) score = -score
         if (global && proposerId != null) score += proposerAlignmentScore(proposerId)
@@ -939,11 +940,18 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
      * The effects part of ScoreVoteChoiceYesNo (CvVotingClasses.cpp:12117-13682) for YES on enacting [resolution] with the proposer's [target] choice, as the
      * sum of what each effect is worth to us, [forSelf] being false when another civilization's evaluator scores it for us (the terms that only the civilization
      * itself pays are left out). Scores are large: a desire level is 50 to 2500 of them (see [LeagueDesire]).
-     * Resolutions without a counterpart in the rules (Treasure Fleet, Wargames, United Nations, Casus Belli, Open Door, Decolonization, Spaceship Control
-     * Committee, Cold War, Reduced Tourism, Sphere of Influence, the vassal resolutions) are not scored.
+     * Open Door and Sphere of Influence are scored for a City-State [target] (V:CvVotingClasses.cpp:13271-13336 and 13583-13682, see [LeagueCityStateScoring]), Sphere
+     * by [enact] (a repeal affects the City-State's current ally, not the proposer) and the proposer [proposerId] of an enactment, and only with `leagueSessionRulesLikeVp`.
+     * Resolutions without a counterpart in the rules (Treasure Fleet, Wargames, United Nations, Casus Belli, Decolonization, Spaceship Control
+     * Committee, Cold War, Reduced Tourism, the vassal resolutions) are not scored.
      */
-    fun scoreEffects(resolution: Resolution, target: String?, forSelf: Boolean = true): Int {
+    fun scoreEffects(resolution: Resolution, target: String?, forSelf: Boolean = true, enact: Boolean = true, proposerId: String? = null): Int {
         var score = 0
+
+        if (gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp) {
+            if (resolution.opensDoor) score += scoreOpenDoor(target)
+            if (resolution.putsInSphere) score += scoreSphere(target, enact, proposerId)
+        }
 
         if (resolution.isProject) score += scoreProject(resolution.name, forSelf)
         if (resolution.embargoesCityStates) score += scoreEmbargoCityStates(forSelf)
@@ -1307,6 +1315,57 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
         val worth = potentialExtraVotes * 200 + pressure * 100
         if (ours.name == ideology) extra += worth else if (forSelf) extra -= worth
         return extra
+    }
+
+    /** The City-State [cityStateId] if it is one: both blocks score 0 for anything else (V:CvVotingClasses.cpp:13275 and 13590 test `isMinorCiv`, not whether it is alive) */
+    private fun scoredCityState(cityStateId: String?): Civilization? =
+        cityStateId?.let { gameInfo.getCivilizationOrNull(it) }?.takeIf { it.isCityState }
+
+    /** Our influence with [cityState]: CvMinorCivAI::GetEffectiveFriendshipWithMajor, -60 at war, 0 unmet */
+    private fun influenceWith(cityState: Civilization, major: Civilization) = MinorCivHelpers.influence(cityState, major)
+
+    /**
+     * Open Door (V:CvVotingClasses.cpp:13271-13336) for the chosen City-State: see [LeagueCityStateScoring.openDoor]. Its inputs: our influence and the friends
+     * threshold (the constant 30: VP scales it with the number of its cities and the era under MOD_BALANCE_CITY_STATE_SCALE, V:CvMinorCivAI.cpp:11511-11539, which
+     * the engine does not have), our approach to it ([com.unciv.logic.automation.strategy.CivAi.minorCivApproaches], neutral before the first evaluation), its
+     * proximity to us (VP reads `GetProximityToPlayer` of the City-State and sets both directions together, V:CvPlayer.cpp:37354-37355; the engine's proximity is
+     * symmetric too, `CivInfoTransientCache.updateProximity`, so ours to it is the same), the resources it has that we lack, the influence of its ally when that
+     * is another civilization, and the raw target value (average when none was evaluated).
+     */
+    private fun scoreOpenDoor(cityStateId: String?): Int {
+        val cityState = scoredCityState(cityStateId) ?: return 0
+        val ally = cityState.allyCiv
+        return LeagueCityStateScoring.openDoor(
+            influence = influenceWith(cityState, civ),
+            friendsThreshold = MinorCivHelpers.FRIENDS_THRESHOLD,
+            approach = civ.ai.minorCivApproaches[cityState.civID] ?: MinorCivApproach.Ignore,
+            proximity = civ.getProximity(cityState),
+            resourcesLacked = MinorCivHelpers.numResourcesMajorLacks(cityState, civ),
+            allyInfluence = if (ally != null && ally != civ) influenceWith(cityState, ally) else null,
+            rawTargetValue = WarStateAi.rawTargetValue(civ, cityState) ?: TargetValue.Average
+        )
+    }
+
+    /**
+     * Sphere of Influence (V:CvVotingClasses.cpp:13583-13682) for the chosen City-State: see [LeagueCityStateScoring.sphere]. The civilization it affects is the
+     * proposer of an enactment, the City-State's current ally when it is repealed (13592). The highest influence of any other major starts at 0 and counts the
+     * defeated ones too, as VP's loop over every major slot does (13606-13614).
+     */
+    private fun scoreSphere(cityStateId: String?, enact: Boolean, proposerId: String?): Int {
+        val cityState = scoredCityState(cityStateId) ?: return 0
+        val ally = cityState.allyCiv
+        val affected = if (enact) proposerId else ally?.civID
+        val highestOther = gameInfo.civilizations.filter { it.isMajorCiv && it != civ }.maxOfOrNull { influenceWith(cityState, it) }?.coerceAtLeast(0) ?: 0
+        return LeagueCityStateScoring.sphere(
+            affectedIsUs = affected == civ.civID,
+            weAreAlly = ally == civ,
+            influence = influenceWith(cityState, civ),
+            highestOtherInfluence = highestOther,
+            proximity = civ.getProximity(cityState),
+            approach = civ.ai.minorCivApproaches[cityState.civID] ?: MinorCivApproach.Ignore,
+            allyInfluence = if (ally != null && ally != civ) influenceWith(cityState, ally) else null,
+            diploVictoryEnabled = diploVictoryEnabled
+        )
     }
 
     /**

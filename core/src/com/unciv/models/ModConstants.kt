@@ -981,6 +981,26 @@ class ModConstants {
     var noCoups = false
 
     /**
+     *  Vox Populi's diplomatic missions (CvUnit::canTrade, getTradeInfluence and trade, V:CvUnit.cpp:11990-12212) instead of the Great Merchant's trade mission: a unit with
+     *  `Can undertake a diplomatic mission with City-State` does the action 'Conduct Diplomatic Mission' in a City-State's territory and is used up; the influence is
+     *  [com.unciv.logic.civilization.diplomacy.DiplomaticMission.influence]; spy points come from the unit's own `Gain [n] Spy Points` (`Units.ExtraSpies`). With it, the Great Merchant's
+     *  trade mission action is gone. Not built yet: the Great Diplomat (lowering the influence of the other civilizations in two passes, V:CvUnit.cpp:12087-12170, the resting
+     *  point change, the memory of who lowered whose influence) and the quest that raises a mission, which no quest slice has made; [DiplomaticMissionConstants] reads one
+     *  assigned by name. Staged off; the units, promotions and buildings come in the content slice
+     */
+    var diplomaticMissionsLikeVp = false
+
+    /** Read only with [diplomaticMissionsLikeVp]. [questBoostPercent] is `INFLUENCE_MINOR_QUEST_BOOST` (20 in Vox Populi, V:CvUnit.cpp:12056-12060), applied when the City-State has the quest
+     *  named [questName] assigned to the unit's owner. [noMissionInfluence] is `MINOR_FRIENDSHIP_FROM_TRADE_MISSION` (0 in Vox Populi, 30 in Community Patch): the base of a unit
+     *  that has a gold blast and no mission influence of its own */
+    data class DiplomaticMissionConstants(
+        val questBoostPercent: Int = 20,
+        val questName: String = "Influence",
+        val noMissionInfluence: Int = 0,
+    )
+    var diplomaticMission = DiplomaticMissionConstants()
+
+    /**
      *  The defines of spy points and of the time a dead spy needs, `spyToPlayerRatio`, `majorPlayerMultiplier`, `thresholdMin`, `thresholdMax` and `pointUnit` read only with [spyPointsLikeVp].
      *  The threshold is `100 x spyToPlayerRatio / (city-states + majorPlayerMultiplier x majors)` of the players at the start, at least 1 of each, kept between the minimum and the
      *  maximum (CvGame::initSpyThreshold, V:CvGame.cpp:10722-10767: BALANCE_SPY_TO_PLAYER_RATIO 20, BALANCE_SPY_POINT_MAJOR_PLAYER_MULTIPLIER 2,

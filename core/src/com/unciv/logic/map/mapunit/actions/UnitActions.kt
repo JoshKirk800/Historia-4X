@@ -81,6 +81,7 @@ object UnitActions {
         UnitActionType.HurryWonder to UnitActionsGreatPerson::getHurryWonderActions,
         UnitActionType.HurryBuilding to UnitActionsGreatPerson::getHurryBuildingActions,
         UnitActionType.ConductTradeMission to UnitActionsGreatPerson::getConductTradeMissionActions,
+        UnitActionType.ConductDiplomaticMission to UnitActionsGreatPerson::getConductDiplomaticMissionActions,
         UnitActionType.SellExoticGoods to UnitActionsExoticGoods::getActions,
         UnitActionType.FoundReligion to UnitActionsReligion::getFoundReligionActions,
         UnitActionType.EnhanceReligion to UnitActionsReligion::getEnhanceReligionActions,

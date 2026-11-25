@@ -2,6 +2,7 @@ package com.unciv.logic.map.mapunit.actions
 
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
+import com.unciv.logic.civilization.diplomacy.DiplomaticMission
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UnitAction
@@ -118,7 +119,29 @@ object UnitActionsGreatPerson {
         }
     }
 
+    /**
+     *  CvUnit::canTrade and trade (V:CvUnit.cpp:11990-12212), only with [com.unciv.models.ModConstants.diplomaticMissionsLikeVp]: a unit with `Can undertake a diplomatic mission with City-State`
+     *  and a mission influence of its own, in the territory of a city-state it is not at war with, gives the influence of [DiplomaticMission.influenceOf] and is used up. The original also
+     *  lets a unit with a gold blast and no mission influence do it; no unit of this port has a gold blast
+     */
+    internal fun getConductDiplomaticMissionActions(unit: MapUnit, tile: Tile) = sequence {
+        if (!unit.civ.gameInfo.ruleset.modOptions.constants.diplomaticMissionsLikeVp) return@sequence
+        if (!unit.hasUnique(UniqueType.CanConductDiplomaticMission) || DiplomaticMission.baseOf(unit) == null) return@sequence
+        val cityState = tile.owningCity?.civ?.takeIf { it.isCityState && it != unit.civ } ?: return@sequence
+        yield(UnitAction(
+            UnitActionType.ConductDiplomaticMission,
+            action = {
+                val influence = DiplomaticMission.influenceOf(unit, cityState)
+                cityState.getDiplomacyManager(unit.civ)!!.addInfluence(influence.toFloat())
+                unit.civ.addNotification("Your diplomatic mission to [$cityState] has earned you [$influence] influence!",
+                    NotificationCategory.General, cityState.civName, NotificationIcon.Culture)
+                unit.consume()
+            }.takeIf { unit.hasMovement() && !cityState.isAtWarWith(unit.civ) }
+        ))
+    }
+
     internal fun getConductTradeMissionActions(unit: MapUnit, tile: Tile) = sequence {
+        if (unit.civ.gameInfo.ruleset.modOptions.constants.diplomaticMissionsLikeVp) return@sequence
         val canConductTradeMission = tile.owningCity?.civ?.isCityState == true
             && tile.owningCity?.civ != unit.civ
             && tile.owningCity?.civ?.isAtWarWith(unit.civ) == false

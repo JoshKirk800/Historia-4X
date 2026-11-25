@@ -605,7 +605,7 @@ class League : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * The delegates of [civ] by source, in the order of CvLeague::CalculateStartingVotesForMember (V:CvVotingClasses.cpp:4046-4390), only with
+     * The delegates of [civ] by source, in the order of CvLeague::CalculateStartingVotesForMember (V:CvVotingClasses.cpp:4046-4383), only with
      * [com.unciv.models.ModConstants.leagueDelegatesLikeVp]; the sum is [getDelegates]. A source that gives nothing is not listed. The keys are what the World Congress screen shows.
      * Faith, friendships, original capitals and defensive pacts are those [refreshCachedSources] stored at the start of the civilization's last turn (CvPlayer::DoProcessVotes).
      */
@@ -633,7 +633,7 @@ class League : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * CvPlayer::DoProcessVotes (V:CvPlayer.cpp:24527-24604), at the start of [civ]'s turn: stores what faith, friendships, original capitals and defensive pacts give.
+     * CvPlayer::DoProcessVotes (V:CvPlayer.cpp:24527-24599), at the start of [civ]'s turn: stores what faith, friendships, original capitals and defensive pacts give.
      * Only with [com.unciv.models.ModConstants.leagueDelegatesLikeVp]; otherwise it clears the member's cache. Faith is each building's `cities * 100 / N` in whole hundredths, summed,
      * and floored once; a civilization without a religion gets what its buildings give, as there is no state religion for Vox Populi's policy term (not built)
      */
@@ -713,7 +713,7 @@ class League : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * CvTreasury::CalculateGrossGold (V:CvTreasury.cpp:381-420): the income before costs, so the gold of the cities without the maintenance of their buildings, the trade and what
+     * CvTreasury::CalculateGrossGold and CalculateGrossGoldTimes100 (V:CvTreasury.cpp:381-425): the income before costs, so the gold of the cities without the maintenance of their buildings, the trade and what
      * the uniques give, without the upkeep of units and roads. Vox Populi's list is longer (annexed city-states, espionage events) and some of it has no counterpart here
      */
     @Readonly

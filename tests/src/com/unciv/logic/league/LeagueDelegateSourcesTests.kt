@@ -18,7 +18,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The delegate sources of Vox Populi that the ruleset can now carry (CvLeague::CalculateStartingVotesForMember, V:CvVotingClasses.cpp:4046-4390):
+ * The delegate sources of Vox Populi that the ruleset can now carry (CvLeague::CalculateStartingVotesForMember, V:CvVotingClasses.cpp:4046-4383):
  * the diplomat row now comes from the technologies' data instead of the name "Globalization", and the wonder and policy rows ride `<for every [n] [City-States originally in the game]>`.
  */
 @RunWith(GdxTestRunner::class)

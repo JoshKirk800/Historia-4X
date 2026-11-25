@@ -104,7 +104,7 @@ enum class UniqueType(
     WorldCongressDelegates("[amount] World Congress Delegates", UniqueTarget.Global,
         docDescription = "Delegates the civilization gets in every session of the World Congress, in addition to those of the era"),
     WorldCongressDelegatesPerReligionCities("1 World Congress Delegate for every [positiveAmount] cities following our religion", UniqueTarget.Global,
-        docDescription = "Vox Populi's `Buildings.FaithToVotes` (V:CvPlayer.cpp:23636-23665, 24527-24604). The cities that follow the civilization's religion are counted in the whole world. " +
+        docDescription = "Vox Populi's `Buildings.FaithToVotes` (V:CvPlayer.cpp:23636-23665, 24527-24599). The cities that follow the civilization's religion are counted in the whole world. " +
             "Each such unique gives the count times 100 divided by the amount, in whole hundredths; the sum over all of them is floored once, so two uniques of 10 and 15 cities give 3 delegates, not 2. " +
             "Only with the ModConstants `leagueDelegatesLikeVp`; cached at the start of the civilization's own turn. A civilization without a religion gets nothing"),
     WorldCongressDelegatesPerFriendships("[positiveAmount] World Congress Delegates for every 2 Declarations of Friendship we have", UniqueTarget.Global,

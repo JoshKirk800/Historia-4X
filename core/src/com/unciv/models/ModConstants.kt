@@ -1166,7 +1166,7 @@ class ModConstants {
     var monopoly = MonopolyConstants()
 
     // World Congress (CvVotingClasses.cpp, GlobalDefines.xml; the values are those of Brave New World)
-    /** The delegates of Vox Populi (CvLeague::CalculateStartingVotesForMember, V:CvVotingClasses.cpp:4046-4390): [League.getDelegateSources] reads every source the ruleset
+    /** The delegates of Vox Populi (CvLeague::CalculateStartingVotesForMember, V:CvVotingClasses.cpp:4046-4383): [League.getDelegateSources] reads every source the ruleset
      *  has uniques for. Faith, friendships, original capitals and defensive pacts are cached and refreshed at the start of the civilization's own turn, so a friendship counts
      *  from the next turn; the rest (wonders, policies, gold per turn, diplomats, improvements) is read live, as in Vox Populi. The World Religion and World Ideology follow its rules.
      *  Off, [League.getDelegates] adds what Brave New World does */

@@ -15,7 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The delegates of Vox Populi, `ModConstants.leagueDelegatesLikeVp` (CvLeague::CalculateStartingVotesForMember, V:CvVotingClasses.cpp:4046-4390): [League.getDelegateSources],
+ * The delegates of Vox Populi, `ModConstants.leagueDelegatesLikeVp` (CvLeague::CalculateStartingVotesForMember, V:CvVotingClasses.cpp:4046-4383): [League.getDelegateSources],
  * the four sources that CvPlayer::DoProcessVotes caches at the start of the civilization's turn ([League.refreshCachedSources]), and the World Religion and World Ideology.
  * Every source is given by a unique of the civilization's nation, the one place of a test that needs no culture, buildings or techs.
  */

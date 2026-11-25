@@ -96,7 +96,7 @@ object EspionageScoring {
             else if (ai.isGoingForSpaceshipVictory()) score += 35
         }
         // security: nothing to lose with no security, and twice as much in the capital (V:8724-8733)
-        val securityChange = focus.getMatchingUniques(UniqueType.CitySecurity).sumOf { it.params[0].toInt() }
+        val securityChange = effects(focus, UniqueType.CitySecurity).sumOf { it.params[0].toInt() }
         if (securityChange != 0) {
             val constants = civ.gameInfo.ruleset.modOptions.constants.espionage
             val security = city.espionage.getSecurity()
@@ -105,7 +105,7 @@ object EspionageScoring {
             score += capital * (after - security) * constants.networkPointsReductionPerSecurity / 100
         }
         // yields of the specialists of the city, each yield by itself: -1 Gold, -1 Science, -1 Culture from every Civil Servant is -3 for each (V:8824-8832, CityEventChoice_SpecialistYieldChange)
-        for (unique in focus.getMatchingUniques(UniqueType.StatsFromNamedSpecialist)) {
+        for (unique in effects(focus, UniqueType.StatsFromNamedSpecialist)) {
             val specialists = city.population.specialistAllocations[unique.params[1]]
             score += unique.stats.sum().toInt() * specialists
         }
@@ -201,7 +201,7 @@ object EspionageScoring {
         val trainPercent = (civ.gameInfo.speed.productionCostModifier * 100).roundToInt()
 
         // technologies: many behind means catching up is urgent, and for a spaceship it is crucial to be first (V:8878-8891)
-        if (mission.hasUnique(UniqueType.StealTechnologies)) {
+        if (effects(mission, UniqueType.StealTechnologies).isNotEmpty()) {
             score += min(civ.espionageManager.getTechsToSteal(owner).size * 25, 75)
             if (ai.isGoingForSpaceshipVictory()) score += 150
             else if (ai.isGoingForWorldConquest()) score += 25
@@ -232,7 +232,7 @@ object EspionageScoring {
         }
 
         // the treasury of the owner, less worth the later in the game, and as much more as the speed is faster (V:8998-9009)
-        for (unique in mission.getMatchingUniques(UniqueType.StealTreasury)) {
+        for (unique in effects(mission, UniqueType.StealTreasury)) {
             val percent = unique.params[0].toInt() * 100 / trainPercent
             val amount = owner.gold * percent / 100 / era
             score += amount / 15
@@ -261,7 +261,7 @@ object EspionageScoring {
         }
 
         // siphoning a yield for some turns (V:9047-9063)
-        for (unique in mission.getMatchingUniques(UniqueType.SiphonYield)) {
+        for (unique in effects(mission, UniqueType.SiphonYield)) {
             val stat = Stat.valueOf(unique.params[1])
             var yield = (city.cityStats.currentCityStats[stat] * 100).toInt()
             yield *= unique.params[0].toInt()
@@ -294,7 +294,7 @@ object EspionageScoring {
 
         // pillaged resource tiles, by what they are: luxuries 3, strategic 5, the rest 1 (V:8492). The original counts the copies of each resource the city has (GetNumResourceLocal); here the tiles
         // of the city whose resource is improved, which is what a pillage takes away
-        for (unique in mission.getMatchingUniques(UniqueType.PillageResourcesAroundCity)) {
+        for (unique in effects(mission, UniqueType.PillageResourcesAroundCity)) {
             for (tile in city.getTiles()) {
                 val resource = tile.tileResource ?: continue
                 if (tile.getUnpillagedTileImprovement()?.name !in resource.getImprovements()) continue
@@ -308,11 +308,11 @@ object EspionageScoring {
         }
 
         // roads: worse in the capital, where it breaks the connections (V:8526)
-        for (unique in mission.getMatchingUniques(UniqueType.PillageRoadsAroundCity))
+        for (unique in effects(mission, UniqueType.PillageRoadsAroundCity))
             score -= (if (city.isCapital()) 5 else 1) * unique.params[0].toInt() / 10
 
         // fortifications (the improvements that give no follow-up, which the filter of the mission names), in a war five times worse (V:8533)
-        for (unique in mission.getMatchingUniques(UniqueType.PillageAroundCity)) {
+        for (unique in effects(mission, UniqueType.PillageAroundCity)) {
             val war = if (owner.isAtWar()) 5 else 1
             val improvements = city.getTiles().count { tile ->
                 tile.getUnpillagedTileImprovement()?.matchesFilter(unique.params[1], tile.stateThisTile) == true
@@ -321,7 +321,7 @@ object EspionageScoring {
         }
 
         // the treasury: the share stolen, less for a slower game and for a later era (V:8565)
-        for (unique in mission.getMatchingUniques(UniqueType.StealTreasury)) {
+        for (unique in effects(mission, UniqueType.StealTreasury)) {
             val percent = unique.params[0].toInt() * 100 / trainPercent
             val amount = owner.gold * percent / 100 / era
             score -= amount / 15
@@ -336,7 +336,7 @@ object EspionageScoring {
 
         // siphoned yields (V:8602) and yields changed for some turns (V:8616). Not written: the great person points (V:8549), religious pressure (V:8590), destroyed buildings (V:8644, 8657), the Great Works,
         // tourism, barbarians and needs of the start (V:8397-8452), of which this ruleset's missions have no effect
-        for (unique in mission.getMatchingUniques(UniqueType.SiphonYield)) {
+        for (unique in effects(mission, UniqueType.SiphonYield)) {
             val stat = Stat.valueOf(unique.params[1])
             var yield = (city.cityStats.currentCityStats[stat] * 100).toInt()
             yield *= unique.params[0].toInt()
@@ -345,7 +345,7 @@ object EspionageScoring {
             yield /= era
             score -= yield / 3
         }
-        for (unique in mission.getMatchingUniques(UniqueType.StatPercentBonusCities)) {
+        for (unique in effects(mission, UniqueType.StatPercentBonusCities)) {
             val turns = unique.getModifiers(UniqueType.ConditionalTimedUnique).firstOrNull()?.params?.get(0)?.toIntOrNull() ?: continue
             val stat = Stat.valueOf(unique.params[1])
             // the base yield, before the percentages of buildings and policies (getBaseYieldRateTimes100)
@@ -358,17 +358,21 @@ object EspionageScoring {
         return score
     }
 
+    /**
+     * The effects of [type] that [mission] has, whatever their conditionals say: the `<for [n] turns>` of an effect that ends by itself is a conditional that never holds outside the city that
+     * has it, so [SpyMission.getMatchingUniques] would leave out all of them. [com.unciv.logic.civilization.managers.SpyMissionResolver] reads the effects the same way
+     */
+    @Readonly
+    private fun effects(mission: SpyMission, type: UniqueType): List<com.unciv.models.ruleset.unique.Unique> = mission.uniqueObjects.filter { it.type == type }
+
     /** The turns the missions saps a city for (`SapCityTurns`: `City is sapped <for [n] turns>`) */
     @Readonly
-    private fun sapTurns(mission: SpyMission): Int = timedTurns(mission, UniqueType.CitySapped)
+    private fun sapTurns(mission: SpyMission): Int = effects(mission, UniqueType.CitySapped).maxOfOrNull { timedTurns(it) } ?: 0
 
     /** The turns it stops a city from building anything (`BlockBuildingTurns`: `Cannot build [All] buildings <for [n] turns>`) */
     @Readonly
     private fun blockBuildingTurns(mission: SpyMission): Int =
-        mission.getMatchingUniques(UniqueType.CannotBuildBuildings).filter { it.params[0] == "All" }.maxOfOrNull { timedTurns(it) } ?: 0
-
-    @Readonly
-    private fun timedTurns(mission: SpyMission, type: UniqueType): Int = mission.getMatchingUniques(type).maxOfOrNull { timedTurns(it) } ?: 0
+        effects(mission, UniqueType.CannotBuildBuildings).filter { it.params[0] == "All" }.maxOfOrNull { timedTurns(it) } ?: 0
 
     @Readonly
     private fun timedTurns(unique: com.unciv.models.ruleset.unique.Unique): Int =

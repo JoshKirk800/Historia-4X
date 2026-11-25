@@ -737,8 +737,9 @@ class League : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * Delegates in a vote for the World Leader needed to win (CvGame::DoUpdateDiploVictory, CvGame.cpp:5040-5137): `civs` is the number of major civilizations,
-     * `cs` that of city-states, each counted 1 if alive and 0.5 if defeated. Clamped to what the host, all civilizations and all city-states have together in the United Nations.
+     * Delegates in a vote for the World Leader needed to win (CvGame::DoUpdateDiploVictory, CvGame.cpp:5040-5137 in the original, V:CvGame.cpp:5679-5760 in Vox Populi): `civs` is the number of major
+     * civilizations, `cs` that of city-states, each counted by the `leagueWorldLeader...Weight` constants (1 if alive and 0.5 if defeated in Community Patch). With `leagueSessionRulesLikeVp` a city-state
+     * whose original capital is gone is not counted at all. Clamped to what the host, all civilizations and all city-states have together in the United Nations.
      */
     fun getVotesNeededForWorldLeader(): Int {
         val constants = gameInfo.ruleset.modOptions.constants
@@ -749,10 +750,14 @@ class League : IsPartOfGameInfoSerialization {
 
         var civs = 0f
         var cityStates = 0f
+        val capitalsFounded = if (constants.leagueSessionRulesLikeVp) gameInfo.getCities().filter { it.isOriginalCapital }.mapNotNull { it.foundingCivObject }.toSet() else emptySet()
         for (civ in gameInfo.civilizations) {
-            val weight = if (civ.isAlive()) 1f else 0.5f
-            if (civ.isMajorCiv) civs += weight
-            else if (civ.isCityState) cityStates += weight
+            if (civ.isMajorCiv) civs += if (civ.isAlive()) constants.leagueWorldLeaderCivAliveWeight else constants.leagueWorldLeaderCivDefeatedWeight
+            else if (civ.isCityState) {
+                // Only a city-state whose original capital still stands as a city counts (V:CvGame.cpp:5718-5731); a position fixed when the city-state founded it, so a city of any owner there counts
+                if (constants.leagueSessionRulesLikeVp && civ !in capitalsFounded) continue
+                cityStates += if (civ.isAlive()) constants.leagueWorldLeaderCityStateAliveWeight else constants.leagueWorldLeaderCityStateDefeatedWeight
+            }
         }
         val civPortion = max(0f, constants.leagueWorldLeaderCivCoefficient * ln(civs) + constants.leagueWorldLeaderCivConstant)
         val cityStatePortion = max(0f, constants.leagueWorldLeaderCityStateCoefficient * ln(cityStates) + constants.leagueWorldLeaderCityStateConstant)

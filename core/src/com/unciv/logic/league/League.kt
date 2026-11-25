@@ -467,6 +467,13 @@ class League : IsPartOfGameInfoSerialization {
             val target = choice?.let { gameInfo.getCivilizationOrNull(it) }
             if (target == null || !target.isAlive() || target.cities.isEmpty()) return false
         }
+        // a city-state to be chosen: the one chosen is a city-state, alive and has a city (V:CvVotingClasses.cpp:3383-3399, which asks it of Open Door and Sphere of Influence, the two
+        // resolutions that choose one; any resolution that does is asked here, as the engine has no such effects to ask by). The original first asks that the game has ever had a
+        // city-state (V:3372); that is no test here, as a choice that is a city-state says so already
+        if (resolution.proposerDecision == ResolutionDecision.CityState) {
+            val target = choice?.let { gameInfo.getCivilizationOrNull(it) }
+            if (target == null || !target.isCityState || !target.isAlive() || target.cities.isEmpty()) return false
+        }
         if (gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp
             && resolution.getMatchingUniques(UniqueType.ResolutionNeedsInEffect).any { !isActive(it.params[0]) }) return false
         return true
@@ -855,6 +862,9 @@ class League : IsPartOfGameInfoSerialization {
             .filter { it.isMajorReligion() && it.foundingCiv.isMajorCiv && it.foundingCiv.isAlive() }
             .map { it.name }
         ResolutionDecision.Ideology -> gameInfo.ruleset.policyBranches.values.filter { it.isIdeology }.map { it.name }
+        // the original lists the members that are city-states (V:CvVotingClasses.cpp:3666-3676); here the city-states are not members, so all of them, and the validity of a choice
+        // (isResolutionEffectsValid) leaves out the dead ones and those with no city, as the original does
+        ResolutionDecision.CityState -> gameInfo.civilizations.filter { it.isCityState }.map { it.civID }
     }
 
     /** The resolutions with at least one choice that [civ] can propose to enact now */

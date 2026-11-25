@@ -33,6 +33,7 @@ object ResolutionDescriptions {
             ResolutionDecision.Luxury -> "The proposer chooses a luxury resource"
             ResolutionDecision.Religion -> "The proposer chooses a religion"
             ResolutionDecision.Ideology -> "The proposer chooses an ideology"
+            ResolutionDecision.CityState -> "The proposer chooses a city-state"
             ResolutionDecision.None, ResolutionDecision.YesNo -> null
         }
         if (proposerLine != null) lines += proposerLine

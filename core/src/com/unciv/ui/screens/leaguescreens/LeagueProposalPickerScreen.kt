@@ -82,7 +82,7 @@ class LeagueProposalPickerScreen(private val civ: Civilization) : PickerScreen()
         else openChoicePopup(resolution)
     }
 
-    /** The proposer has to choose a civilization, luxury, religion or ideology: list those that can be proposed */
+    /** The proposer has to choose a civilization, city-state, luxury, religion or ideology: list those that can be proposed */
     private fun openChoicePopup(resolution: Resolution) {
         val popup = Popup(this)
         val caption = when (resolution.proposerDecision) {
@@ -90,6 +90,7 @@ class LeagueProposalPickerScreen(private val civ: Civilization) : PickerScreen()
             ResolutionDecision.Luxury -> "Choose a luxury resource"
             ResolutionDecision.Religion -> "Choose a religion"
             ResolutionDecision.Ideology -> "Choose an ideology"
+            ResolutionDecision.CityState -> "Choose a city-state"
             else -> resolution.name
         }
         popup.addGoodSizedLabel(caption, Constants.headingFontSize).row()

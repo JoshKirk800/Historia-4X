@@ -19,7 +19,12 @@ enum class ResolutionDecision {
     /** Choose a religion */
     Religion,
     /** Choose an ideology */
-    Ideology
+    Ideology,
+    /**
+     *  Choose a city-state (`RESOLUTION_DECISION_CITY_CSD`, V:CvVotingClasses.cpp:3666-3676: the city-states of the league, which here are all of them; the Open Door and Sphere of
+     *  Influence of Vox Populi use it). A proposal of one is only valid for a city-state that is alive and has a city (V:3383-3399)
+     */
+    CityState
 }
 
 /**
@@ -29,7 +34,7 @@ enum class ResolutionDecision {
 class Resolution : RulesetObject() {
     /** [ResolutionDecision.YesNo] for most, [ResolutionDecision.MajorCiv] for the host election and World Leader */
     var voterDecision = ResolutionDecision.YesNo
-    /** What the proposer has to choose: None, OtherMajorCiv (Embargo), Luxury (Ban Luxury), Religion or Ideology */
+    /** What the proposer has to choose: None, OtherMajorCiv (Embargo), Luxury (Ban Luxury), Religion, Ideology or CityState */
     var proposerDecision = ResolutionDecision.None
     /** The resolution can only be proposed while any living civilization knows this technology */
     var requiredTechAnyMember: String? = null

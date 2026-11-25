@@ -4730,7 +4730,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Resource
 
 ??? example  "[relativeAmount]% Production of Wonders in cities with this resource"
-	Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (V:CvCity.cpp:18351-18420): added to the production of a wonder in a city that has the resource. The modifier `<before the [era]>` is compared with the era of the wonder's technology (no limit for a wonder without one), not with the era of the civilization
+	Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (V:CvCity.cpp:18351-18416): added to the production of a wonder in a city that has the resource. The modifier `<before the [era]>` is compared with the era of the wonder's technology (no limit for a wonder without one), not with the era of the civilization
 
 	Example: "[+20]% Production of Wonders in cities with this resource"
 
@@ -5864,7 +5864,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: TriggerCondition
 
 ??? example  "&lt;upon a trade route unit moving&gt;"
-	Once each turn that a trade unit of the civilization moves along its route, and when it starts, in the city the route starts in, however many steps it makes (`INSTANT_YIELD_TYPE_TR_MOVEMENT`, V:CvTradeClasses.cpp:2085-2150, V:CvPlayer.cpp:26826-26838)
+	Once each turn that a trade unit of the civilization moves along its route, and when it starts, in the city the route starts in, however many steps it makes (`INSTANT_YIELD_TYPE_TR_MOVEMENT`, V:CvTradeClasses.cpp:2069-2146, V:CvPlayer.cpp:26826-26838)
 
 	Applicable to: TriggerCondition
 

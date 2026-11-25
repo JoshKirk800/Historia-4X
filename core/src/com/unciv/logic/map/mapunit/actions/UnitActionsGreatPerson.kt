@@ -131,8 +131,7 @@ object UnitActionsGreatPerson {
         yield(UnitAction(
             UnitActionType.ConductDiplomaticMission,
             action = {
-                val influence = DiplomaticMission.influenceOf(unit, cityState)
-                cityState.getDiplomacyManager(unit.civ)!!.addInfluence(influence.toFloat())
+                val influence = DiplomaticMission.conduct(unit, cityState)
                 unit.civ.addNotification("Your diplomatic mission to [$cityState] has earned you [$influence] influence!",
                     NotificationCategory.General, cityState.civName, NotificationIcon.Culture)
                 unit.consume()

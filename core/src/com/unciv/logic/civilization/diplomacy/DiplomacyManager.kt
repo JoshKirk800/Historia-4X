@@ -488,6 +488,18 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         civInfo.cityStateFunctions.updateAllyCivForCityState(otherCiv, old)
     }
 
+    /**
+     *  Changes the influence by [amount] (CvMinorCivAI::ChangeFriendshipWithMajor with bUpdateStatus false, V:CvMinorCivAI.cpp:10587-10660): to at least [MINIMUM_INFLUENCE], and WITHOUT
+     *  updating the ally, so a caller that changes several civilizations can update them all afterwards with
+     *  [CityStateFunctions.updateAllyCivForCityState] and the influence each had before. Updating after each one would let the ally change while the loop is half done (the Great
+     *  Diplomat's mission, V:CvUnit.cpp:12101-12115 with its comment on the status, says so: the city-state could declare war on the wrong civilization). Returns the influence it had before
+     */
+    fun changeInfluenceWithoutAllyUpdate(amount: Float): Float {
+        val old = influence
+        influence = max(influence + amount, MINIMUM_INFLUENCE)
+        return old
+    }
+
     @VisibleForTesting
     fun setInfluenceWithoutSideEffects(amount: Float) {
         influence =amount

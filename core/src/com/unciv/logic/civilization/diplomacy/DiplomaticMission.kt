@@ -11,8 +11,9 @@ import yairm210.purity.annotations.Readonly
  *  The influence of a diplomatic mission to a city-state (CvUnit::canTrade and getTradeInfluence, V:CvUnit.cpp:11990-12062) in the original's integer order: every percentage multiplies, then
  *  divides by 100 and truncates, so the results are the original's and not a float's. V: is `ref/vp-5.4.8/CvGameCoreDLL_Expansion2/`. Only with [ModConstants.diplomaticMissionsLikeVp].
  *
- *  Not built: the Great Diplomat's other half (CvUnit::trade, V:CvUnit.cpp:12087-12170: lowering the influence of the other civilizations, the resting point change, the memory of
- *  who lowered whose influence). The era is [Civilization.getEraNumber], as in the other influence formulas of this port (rigging, protection, bullying).
+ *  [conduct] is the rest of CvUnit::trade (V:CvUnit.cpp:12064-12212): the Great Diplomat's lowering of the other civilizations' influence and the resting point change. Not built: the memory of
+ *  who lowered whose influence (`NumTimesTheyLoweredOurInfluence`, which only the diplomacy AI of Vox Populi reads) and the gold blast. The era is [Civilization.getEraNumber], as in the
+ *  other influence formulas of this port (rigging, protection, bullying).
  */
 object DiplomaticMission {
     /**
@@ -82,5 +83,39 @@ object DiplomaticMission {
         var civPercent = 0
         for (unique in owner.getMatchingUniques(UniqueType.PercentInfluenceFromDiplomaticMissions)) civPercent += unique.params[0].toInt()
         return influence(constants, base, if (base != null) cityBoostOf(origin) else 0, perEra, owner.getEraNumber(), unitPercent, civPercent, hasQuest(constants, cityState, owner))
+    }
+
+    /**
+     *  What a mission of [unit] does to [cityState] (CvUnit::trade, V:CvUnit.cpp:12064-12212, without the gold, the notifications and the unit's death, which the action does); returns the
+     *  influence given. In this order, as the original:
+     *  1. The resting point of our influence is raised by [UniqueType.RestingPointChangeFromDiplomaticMission] (V:12094-12098).
+     *  2. A unit with [UniqueType.GreatDiplomatLowersOthersInfluence] takes the same influence from every other major civilization that has met the city-state, WITHOUT updating the ally and
+     *     remembering what each had (V:12101-12115: updating inside the loop could change the city-state's ally in between and make it declare war on the wrong civilization).
+     *  3. Ours rises, with the update of the ally (V:12165).
+     *  4. The others' ally status is updated from what each had before (V:12170-12179, `DoFriendshipChangeEffects`; this port has no stored friend status, `relationshipLevel` is derived).
+     *  Departures: a defeated civilization is skipped; the original's count of the times a civilization lowered another's influence (`NumTimesTheyLoweredOurInfluence`) is not kept, as nothing in
+     *  this port reads it (the diplomacy AI of Vox Populi does: V:CvDiplomacyAI.cpp:12941, 12981, 13111, 19056)
+     */
+    fun conduct(unit: MapUnit, cityState: Civilization): Int {
+        val owner = unit.civ
+        val influence = influenceOf(unit, cityState)
+        val ours = cityState.getDiplomacyManager(owner)!!
+
+        for (unique in unit.getMatchingUniques(UniqueType.RestingPointChangeFromDiplomaticMission))
+            ours.restingPointChange += unique.params[0].toFloat()
+
+        val lowered = ArrayList<Pair<Civilization, Float>>()
+        if (unit.hasUnique(UniqueType.GreatDiplomatLowersOthersInfluence)) {
+            for (other in cityState.gameInfo.civilizations) {
+                if (other == owner || !other.isMajorCiv || other.isDefeated() || !other.knows(cityState)) continue
+                lowered += other to cityState.getDiplomacyManager(other)!!.changeInfluenceWithoutAllyUpdate(-influence.toFloat())
+            }
+        }
+
+        ours.addInfluence(influence.toFloat())
+
+        for ((other, before) in lowered)
+            cityState.cityStateFunctions.updateAllyCivForCityState(other, before)
+        return influence
     }
 }

@@ -434,9 +434,15 @@ enum class UniqueType(
             "Only with the ModConstants `diplomaticMissionsLikeVp`"),
     InfluenceFromDiplomaticMissionsPerEra("[amount] Influence from diplomatic missions for every era", UniqueTarget.Unit,
         docDescription = "Added once per era number of the owner (`Units.NumInfPerEra`: Great Diplomat 15, Tadodaho 15), before the percentages. Only with the ModConstants `diplomaticMissionsLikeVp`"),
-    PercentInfluenceFromDiplomaticMissions("[relativeAmount]% Influence from diplomatic missions", UniqueTarget.Unit, UniqueTarget.Global,
-        docDescription = "On a unit: `Units.TradeMissionInfluenceModifier`; on a policy or other global source: `Policies.MissionInfluenceModifier` (Foreign Service 10). Each is its own multiplication, " +
-            "rounded down. Only with the ModConstants `diplomaticMissionsLikeVp`"),
+    PercentInfluenceFromDiplomaticMissions("[relativeAmount]% Influence from diplomatic missions", UniqueTarget.Unit, UniqueTarget.Promotion, UniqueTarget.Global,
+        docDescription = "On a unit or a promotion: `UnitPromotions.TradeMissionInfluenceModifier`; on a policy or other global source: `Policies.MissionInfluenceModifier` (Foreign Service 10). " +
+            "Each is its own multiplication, rounded down. Only with the ModConstants `diplomaticMissionsLikeVp`"),
+    RestingPointChangeFromDiplomaticMission("[amount] to the resting point of the influence of the City-State, for the civilization of the unit, from its diplomatic mission", UniqueTarget.Unit,
+        docDescription = "`Units.RestingPointChange` (Tadodaho 45), added to the resting point of the civilization's influence with the City-State where the mission is done " +
+            "(`DiplomacyManager.restingPointChange`, V:CvUnit.cpp:12094-12098). Only with the ModConstants `diplomaticMissionsLikeVp` and `cityStateInfluenceLikeVp`, which reads it"),
+    GreatDiplomatLowersOthersInfluence("Lowers the influence of every other civilization that knows the City-State by as much as it gives, with its diplomatic mission", UniqueTarget.Unit,
+        docDescription = "The Great Diplomat (`Units.NumInfPerEra` above 0 under `MOD_BALANCE_VP`, V:CvUnit.cpp:12086 and 12101-12179): the influence of the mission is taken from each other major civilization " +
+            "that has met the City-State, and their ally status is updated after ours has risen. Only with the ModConstants `diplomaticMissionsLikeVp`"),
     GreatGeneralProvidesDoubleCombatBonus("Great General provides double combat bonus", UniqueTarget.Unit, UniqueTarget.Global),
     // This should probably support conditionals, e.g. <after discovering [tech]>
     MayanGainGreatPerson("Receive a free Great Person at the end of every [comment] (every 394 years), after researching [tech]. Each bonus person can only be chosen once.", UniqueTarget.Global),

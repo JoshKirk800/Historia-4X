@@ -984,9 +984,9 @@ class ModConstants {
      *  Vox Populi's diplomatic missions (CvUnit::canTrade, getTradeInfluence and trade, V:CvUnit.cpp:11990-12212) instead of the Great Merchant's trade mission: a unit with
      *  `Can undertake a diplomatic mission with City-State` does the action 'Conduct Diplomatic Mission' in a City-State's territory and is used up; the influence is
      *  [com.unciv.logic.civilization.diplomacy.DiplomaticMission.influence]; spy points come from the unit's own `Gain [n] Spy Points` (`Units.ExtraSpies`). With it, the Great Merchant's
-     *  trade mission action is gone. Not built yet: the Great Diplomat (lowering the influence of the other civilizations in two passes, V:CvUnit.cpp:12087-12170, the resting
-     *  point change, the memory of who lowered whose influence) and the quest that raises a mission, which no quest slice has made; [DiplomaticMissionConstants] reads one
-     *  assigned by name. Staged off; the units, promotions and buildings come in the content slice
+     *  trade mission action is gone. The Great Diplomat lowers the influence of the other civilizations that know the city-state in two passes (V:CvUnit.cpp:12101-12179) and a unit can raise
+     *  the resting point of our influence (V:12094-12098). Not built: the memory of who lowered whose influence (only the diplomacy AI of Vox Populi reads it) and the quest that raises a mission,
+     *  which no quest slice has made; [DiplomaticMissionConstants] reads one assigned by name. Staged off; the units, promotions and buildings come in the content slice
      */
     var diplomaticMissionsLikeVp = false
 

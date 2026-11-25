@@ -50,12 +50,12 @@ object DiplomaticMission {
         return sum
     }
 
-    /** `CvCity::GetDiplomatInfluenceBoost`: the sum over the city's buildings; 0 without a city */
+    /** `CvCity::GetDiplomatInfluenceBoost`: the sum over the buildings of THIS city only (not the civilization's, which would count the Wat of every city); 0 without a city */
     @Readonly
     fun cityBoostOf(city: City?): Int {
         if (city == null) return 0
         var sum = 0
-        for (unique in city.getMatchingUniques(UniqueType.InfluenceFromDiplomaticMissionsOfCity))
+        for (unique in city.getMatchingUniques(UniqueType.InfluenceFromDiplomaticMissionsOfCity, includeCivUniques = false))
             sum += unique.params[0].toInt()
         return sum
     }

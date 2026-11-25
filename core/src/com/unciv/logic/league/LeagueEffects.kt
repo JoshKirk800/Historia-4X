@@ -47,13 +47,34 @@ object LeagueEffects {
      *  end state is the same: nobody can be the ally of a City-State with the flag, and the ally rule gives none while it is set
      */
     private fun openDoor(civilizations: List<Civilization>, cityState: Civilization) {
-        for (major in civilizations) {
-            if (!major.isMajorCiv || !major.isAlive()) continue
-            if (!major.knows(cityState)) major.diplomacyFunctions.makeCivilizationsMeet(cityState)
-            cityState.getDiplomacyManager(major)!!.setInfluence(OPEN_DOOR_INFLUENCE)
-        }
+        for (major in civilizations) openDoorFor(major, cityState)
         cityState.noAlly = true
         cityState.cityStateFunctions.updateAllyCivForCityState()
+    }
+
+    /** The run of Open Door's effect for one member (V:CvVotingClasses.cpp:1425-1440, the part that names `ePlayer`): a living major civilization meets [cityState] and its influence is set to 40 */
+    private fun openDoorFor(major: Civilization, cityState: Civilization) {
+        if (!major.isMajorCiv || !major.isAlive()) return
+        if (!major.knows(cityState)) major.diplomacyFunctions.makeCivilizationsMeet(cityState)
+        cityState.getDiplomacyManager(major)!!.setInfluence(OPEN_DOOR_INFLUENCE)
+    }
+
+    /**
+     *  A civilization became a member of the World Congress while resolutions are in effect (CvLeague::AddMember, V:CvVotingClasses.cpp:3823-3827, which `CvGameLeagues::DoPlayerAliveStatusChanged`
+     *  calls when a player is alive again, V:9683-9699: a civilization that a liberated city resurrected): the effects of each resolution are done for it. Only Open Door has a part that names
+     *  the member (V:1425-1440): it meets the City-State and its influence is 40. The influence is set the way the enactment set it, and the ally rule gives no ally while the flag is set.
+     *  Sphere of Influence acts only for its original proposer (V:1445), whose permanent ally is still set (VP does not clear it when the proposer is defeated, V:CvMinorCivAI.cpp:10868-10870),
+     *  and the other effects are read from the League. Only with `leagueSessionRulesLikeVp`.
+     */
+    fun onJoin(league: League, civ: Civilization) {
+        val gameInfo = league.gameInfo
+        if (!gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp) return
+        for (active in league.activeResolutions) {
+            val resolution = gameInfo.ruleset.resolutions[active.resolution] ?: continue
+            if (!resolution.opensDoor) continue
+            val cityState = active.choice?.let { gameInfo.getCivilizationOrNull(it) } ?: continue
+            if (cityState.isCityState && cityState.isAlive()) openDoorFor(civ, cityState)
+        }
     }
 
     /**

@@ -361,11 +361,16 @@ class League : IsPartOfGameInfoSerialization {
         checkProjects()
     }
 
-    /** One row in [members] for each living major civilization, none for the others */
+    /**
+     * One row in [members] for each living major civilization, none for the others. A civilization that gets a row while resolutions are in effect (one that a liberated city
+     * resurrected, CvGameLeagues::DoPlayerAliveStatusChanged, V:CvVotingClasses.cpp:9683-9699) has their effects done for it ([LeagueEffects.onJoin], CvLeague::AddMember, V:3823-3827)
+     */
     private fun syncMembers() {
         val alive = gameInfo.getAliveMajorCivs()
-        for (civ in alive) members.getOrPut(civ.civID) { LeagueMember() }
+        val joined = alive.filter { it.civID !in members }
+        for (civ in joined) members[civ.civID] = LeagueMember()
         members.keys.removeAll { id -> alive.none { it.civID == id } }
+        for (civ in joined) LeagueEffects.onJoin(this, civ)
     }
 
     /** The session era that was reached and not yet held, the last one if several (CvVotingClasses.cpp:6689-6720) */

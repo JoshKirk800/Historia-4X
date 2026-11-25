@@ -122,7 +122,7 @@ enum class UniqueType(
         docDescription = "Vox Populi's `Technologies.ExtraVotesPerDiplomat` (V:CvTeam.cpp:8045, CvVotingClasses.cpp:4154-4166). The amounts of all researched technologies are ADDED. " +
             "Replaces the Brave New World rule that names Globalization in the code"),
     WorldCongressDelegatesPerImprovements("1 World Congress Delegate for every [positiveAmount] [improvementName] we own", UniqueTarget.FollowerBelief,
-        docDescription = "Vox Populi's `Belief_VotePerXImprovementOwned` (Holy Land; V:CvBeliefClasses.cpp:4956-4974, CvPlayer.cpp:23812-23848). The fractions of all such uniques of the same improvement are " +
+        docDescription = "Vox Populi's `Belief_VotePerXImprovementOwned` (Holy Land; V:CvBeliefClasses.cpp:4956-4974, CvPlayer.cpp:23818-23835). The fractions of all such uniques of the same improvement are " +
             "ADDED exactly (1/2 and 1/3 give 5/6), multiplied by the number owned, and truncated once"),
     AllowsWorldCongress("Allows the World Congress to be founded", UniqueTarget.Global,
         docDescription = "As long as some civilization has a technology or wonder with this unique, the World Congress meets (see Resolutions.json and the eras for its sessions)"),

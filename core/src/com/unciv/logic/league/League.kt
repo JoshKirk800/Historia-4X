@@ -662,7 +662,7 @@ class League : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * CvPlayer::CalculateReligionVotesFromImprovements (V:CvPlayer.cpp:23812-23848): for each improvement the civilization owns, `1 / amount` of a delegate per improvement
+     * CvPlayer::CalculateReligionVotesFromImprovements (V:CvPlayer.cpp:23818-23835): for each improvement the civilization owns, `1 / amount` of a delegate per improvement
      * for each [UniqueType.WorldCongressDelegatesPerImprovements] of its religion's beliefs, the fractions of all of them added exactly and truncated once. Read live
      */
     @Readonly
@@ -760,7 +760,7 @@ class League : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * Delegates in a vote for the World Leader needed to win (CvGame::DoUpdateDiploVictory, CvGame.cpp:5040-5137 in the original, V:CvGame.cpp:5679-5760 in Vox Populi): `civs` is the number of major
+     * Delegates in a vote for the World Leader needed to win (CvGame::DoUpdateDiploVictory, SDK:CvGame.cpp:5053-5133 in the original, V:CvGame.cpp:5679-5761 in Vox Populi): `civs` is the number of major
      * civilizations, `cs` that of city-states, each counted by the `leagueWorldLeader...Weight` constants (1 if alive and 0.5 if defeated in Community Patch). With `leagueSessionRulesLikeVp` a city-state
      * whose original capital is gone is not counted at all. Clamped to what the host, all civilizations and all city-states have together in the United Nations.
      */

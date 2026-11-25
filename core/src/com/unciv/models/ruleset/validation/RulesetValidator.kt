@@ -461,6 +461,8 @@ open class RulesetValidator protected constructor(
                 lines.add("Resolution ${resolution.name} has voterDecision ${resolution.voterDecision}, but voters can only decide YesNo or MajorCiv!", sourceObject = resolution)
             if (resolution.embargoesPlayer && resolution.proposerDecision != ResolutionDecision.OtherMajorCiv)
                 lines.add("Resolution ${resolution.name} embargoes a player, so its proposerDecision must be OtherMajorCiv!", sourceObject = resolution)
+            if ((resolution.opensDoor || resolution.putsInSphere) && resolution.proposerDecision != ResolutionDecision.CityState)
+                lines.add("Resolution ${resolution.name} changes the alliances of a City-State, so its proposerDecision must be CityState!", sourceObject = resolution)
             if (resolution.bansLuxuryHappiness && resolution.proposerDecision != ResolutionDecision.Luxury)
                 lines.add("Resolution ${resolution.name} bans a luxury, so its proposerDecision must be Luxury!", sourceObject = resolution)
             if (resolution.votesForFollowingReligion != 0 || resolution.holyCityTourismPercent != 0 || resolution.religionSpreadStrengthPercent != 0)

@@ -149,6 +149,15 @@ enum class UniqueType(
     ResolutionProposerIsAllyOfChoice("Can only be proposed by the ally of the chosen civilization", UniqueTarget.Resolution,
         docDescription = "Only with the ModConstants `leagueSessionRulesLikeVp`. The proposer must be the ally of the civilization it chose (Sphere of Influence: the City-State's ally, " +
             "`CvLeague::CanProposeEnact`, V:CvVotingClasses.cpp:3054-3068)"),
+    ResolutionOpensDoorOfCityState("Opens the door of the chosen City-State to every civilization", UniqueTarget.Resolution,
+        docDescription = "Open Door (`bOpenDoor`, V:CvVotingClasses.cpp:1425-1440): when it is enacted every living major civilization meets the chosen City-State if it has not, and its influence " +
+            "with it is SET to 40, up or down; the City-State can have no ally while the resolution is in effect, and has none after the enactment. When it is repealed, or stops being valid, the " +
+            "City-State can have an ally again (V:1921-1927); the influence stays where it was. The resolution must have the proposerDecision CityState. Only with the ModConstants " +
+            "`leagueSessionRulesLikeVp`"),
+    ResolutionPutsCityStateInSphere("Puts the chosen City-State in the sphere of influence of the proposer", UniqueTarget.Resolution,
+        docDescription = "Sphere of Influence (`bSphereOfInfluence`, V:CvVotingClasses.cpp:1442-1454): when it is enacted the City-State makes peace with the proposer and the proposer is its permanent ally, " +
+            "whatever the influence. When it is repealed, or stops being valid, the permanent ally is gone (V:1928-1929). The resolution must have the proposerDecision CityState. " +
+            "Only with the ModConstants `leagueSessionRulesLikeVp`"),
     StatsFromGlobalCitiesFollowingReligion("[stats] for each global city following this religion", UniqueTarget.FounderBelief),
     StatsFromGlobalFollowers("[stats] from every [positiveAmount] global followers [cityFilter]", UniqueTarget.FounderBelief),
     StatsFromGlobalCitiesFollowingReligionPer("[stats] from every [positiveAmount] global cities following this religion [cityFilter]", UniqueTarget.FounderBelief,

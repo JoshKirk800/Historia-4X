@@ -78,6 +78,12 @@ class Resolution : RulesetObject() {
     /** The resolution elects the World Leader, winning the Diplomatic Victory */
     val isWorldLeader get() = hasUnique(UniqueType.ElectsWorldLeader)
 
+    /** Open Door: the chosen City-State has no ally and every civilization has 40 influence with it, see [UniqueType.ResolutionOpensDoorOfCityState] */
+    val opensDoor get() = hasUnique(UniqueType.ResolutionOpensDoorOfCityState)
+
+    /** Sphere of Influence: the proposer is the permanent ally of the chosen City-State, see [UniqueType.ResolutionPutsCityStateInSphere] */
+    val putsInSphere get() = hasUnique(UniqueType.ResolutionPutsCityStateInSphere)
+
     /** The resolution starts a League project, see [projectCostPerPlayer]; it never stays in effect and cannot be repealed */
     val isProject get() = projectCostPerPlayer > 0
 

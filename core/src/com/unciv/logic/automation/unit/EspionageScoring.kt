@@ -120,7 +120,7 @@ object EspionageScoring {
 
     //region Foreign city, an offensive mission
     /** The foreign-city branch of GetMissionScore (V:9225-9383); that the mission can be done at all (V:9231) is for the caller, [EspionageAutomation], to say */
-    private fun offenseScore(civ: Civilization, spy: Spy?, city: City, mission: SpyMission): Int {
+    private fun offenseScore(civ: Civilization, spy: Spy?, city: City, mission: SpyMission, parts: Breakdown? = null): Int {
         if (mission.isFocus) return NOT_POSSIBLE
         val owner = city.civ
         val diplomacy = civ.ai.diplomacy
@@ -130,8 +130,11 @@ object EspionageScoring {
         if (memory.victoryDisputeLevel == DisputeLevel.Fierce || memory.victoryBlockLevel == BlockLevel.Fierce) hateFactor = 200
         else if (CompetitorAi.biggestCompetitor(civ) == owner.civID) hateFactor = 100
         else if (civ.getDiplomacyManager(owner)?.diplomaticStatus == com.unciv.logic.civilization.diplomacy.DiplomaticStatus.DefensivePact) hateFactor = min(hateFactor, 0)
-        var score = -(negativeForOwner(civ, city, owner, mission) * hateFactor / 100)
-        score += offensiveBenefits(civ, city, owner, mission, spy)
+        val lossToOwner = negativeForOwner(civ, city, owner, mission)
+        var score = -(lossToOwner * hateFactor / 100)
+        val benefits = offensiveBenefits(civ, city, owner, mission, spy)
+        score += benefits
+        parts?.also { it.hateFactor = hateFactor; it.lossToOwner = lossToOwner; it.benefits = benefits; it.beforePrice = score }
 
         // cheaper and safer missions are better because there are more of them (V:9265-9288)
         val manager = civ.espionageManager
@@ -149,6 +152,7 @@ object EspionageScoring {
         val denominator = leftover + max(electionCooldown(civ) * expectedNp, effectiveCost)
         if (denominator <= 0) return NOT_POSSIBLE
         score *= numerator / denominator
+        parts?.also { it.expectedNp = expectedNp; it.numerator = numerator; it.denominator = denominator; it.afterPrice = score }
         // normalize to a typical cheap mission
         score /= 2
 
@@ -164,7 +168,31 @@ object EspionageScoring {
 
         // the difference of the Network Points here from the base, which is the security of the city (V:9339-9342)
         total = total * expectedNp / civ.gameInfo.ruleset.modOptions.constants.espionage.networkPointsBase
+        parts?.also { it.idOffset = idOffset; it.total = total }
         return total
+    }
+
+    /** The terms of [missionScore] for a foreign city, for a developer's dump: the same arithmetic, written down as it goes (DevDump's `espionage` mode) */
+    class Breakdown {
+        var hateFactor = 0
+        /** What the mission takes from the owner, as a negative number */
+        var lossToOwner = 0
+        var benefits = 0
+        var beforePrice = 0
+        var expectedNp = 0
+        var numerator = 0
+        var denominator = 0
+        var afterPrice = 0
+        var idOffset = 0
+        var total = 0
+    }
+
+    /** [missionScore] of an offensive mission with its terms; null where the mission cannot be scored in this city */
+    fun explainOffense(civ: Civilization, spy: Spy?, city: City, mission: SpyMission): Breakdown? {
+        if (city.civ.isCityState || city.civ == civ || mission.isFocus) return null
+        val parts = Breakdown()
+        if (offenseScore(civ, spy, city, mission, parts) == NOT_POSSIBLE) return null
+        return parts
     }
 
     /**

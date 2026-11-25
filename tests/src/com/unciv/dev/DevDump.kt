@@ -17,6 +17,7 @@ import com.unciv.logic.automation.unit.BuilderAssignment
 import com.unciv.logic.automation.unit.BuilderDirective
 import com.unciv.logic.automation.unit.BuilderDirectives
 import com.unciv.logic.automation.unit.BuilderTaskingAi
+import com.unciv.logic.automation.unit.EspionageScoring
 import com.unciv.logic.files.UncivFiles
 import com.unciv.models.metadata.GameSettings
 import com.unciv.models.ruleset.RulesetCache
@@ -44,6 +45,10 @@ import java.io.File
  * - `builders`: per civilization with cities, this turn's builder plan ([BuilderTaskingAi.directives], the first DEV_DUMP_BUILDER_LIMIT, default 60):
  *   type, build, tile, whether it can be built now, the score parts (base, potential, unused yield, penalty), the priority score, the weight
  *   without time; then, for each builder of the civilization, the directive it would pick with its weight, build and move turns.
+ * - `espionage`: for each major civilization with a spy, each spy (city, action, Network Points, target mission), then for the city of each of its
+ *   spies and for the capital of every other major civilization, every spy mission with the terms of [com.unciv.logic.automation.unit.EspionageScoring]:
+ *   how much we mind the owner, what it takes from them, what it gives us, the price (numerator and denominator of the whole-number ratio), the
+ *   identification offset and the total, and whether the mission can be worked towards. The game must be played with the ruleset that has the missions.
  * A developer tool, not a test: it does nothing unless DEV_DUMP_SAVE is set. Run it with tools/dev_dump.py.
  */
 @RunWith(GdxTestRunner::class)
@@ -73,7 +78,8 @@ class DevDump {
                 "targets" -> targets(game, out)
                 "military" -> military(game, out)
                 "builders" -> builders(game, out)
-                else -> out.append("unknown mode $mode (approach, operations, nukes, targets, military, builders)\n")
+                "espionage" -> espionage(game, out)
+                else -> out.append("unknown mode $mode (approach, operations, nukes, targets, military, builders, espionage)\n")
             }
             out.append("\n")
         }
@@ -210,6 +216,46 @@ class DevDump {
                 for (city in enemyCities.filter { tile.aerialDistanceTo(it.getCenterTile()) <= nuke.getRange() })
                     out.append("    ${city.civ.civName} ${city.name} at ${tile.aerialDistanceTo(city.getCenterTile())}: " +
                         "blast value ${NavalOperationLogic.nukeCityValue(civ, nuke, city)}\n")
+            }
+        }
+    }
+
+    private fun espionage(game: GameInfo, out: StringBuilder) {
+        out.append("spy missions at turn ${game.turns}\n")
+        val missions = game.ruleset.spyMissions.values.filter { !it.isFocus }
+        out.append("missions: ${missions.joinToString { "${it.name} (${it.networkPoints} points, kill ${it.killChance}, found ${it.identifyChance}, ${it.cityFilter})" }}\n")
+        val majors = game.civilizations.filter { it.isMajorCiv && it.isAlive() && it.cities.isNotEmpty() }
+        for (civ in majors) {
+            val spies = civ.espionageManager.spyList.filter { it.isAlive() }
+            if (spies.isEmpty()) continue
+            out.append("\n${civ.civName}: gold ${civ.gold}, grand strategy ${civ.ai.grandStrategy}\n")
+            for (spy in spies) {
+                val city = spy.getCityOrNull()
+                // what PerformSpyMissions reads: -1 when the target can no longer be worked towards, under 20 the spy is flagged for reassignment
+                val target = spy.targetMission?.let { game.ruleset.spyMissions[it] }
+                val aiScore = if (target == null || city == null || city.civ == civ) null else
+                    if (com.unciv.logic.civilization.managers.SpyMissionResolver.canWorkTowards(spy, target)) EspionageScoring.missionScore(civ, spy, city, target) else -1
+                out.append("  spy ${spy.name}: ${spy.action} in ${city?.let { "${it.civ.civName} ${it.name}" } ?: "the hideout"}, ${spy.networkPoints} points, target ${spy.targetMission}" +
+                    "${if (aiScore != null) ", the AI scores it $aiScore${if (aiScore < 20) " (UNDER THE FLOOR: flagged when the loop reaches this spy)" else ""}" else ""}, flagged ${spy.evaluateReassignment}\n")
+            }
+            // the cities to explain: where the spies are, and the capital of every other major
+            val cities = LinkedHashSet<com.unciv.logic.city.City>()
+            for (spy in spies) spy.getCityOrNull()?.let { if (it.civ != civ && !it.civ.isCityState) cities += it }
+            for (other in majors) if (other != civ) other.getCapital()?.let { cities += it }
+            for (city in cities) {
+                val spy = spies.firstOrNull { it.getCityOrNull() == city }
+                val owner = city.civ
+                out.append("  -> ${owner.civName} ${city.name}${if (city.isCapital()) " (capital)" else ""}: gold ${owner.gold}, pop ${city.population.population}, " +
+                    "security ${city.espionage.getSecurity()}, building ${city.cityConstructions.currentConstructionName()}, approach ${civ.ai.diplomacy.approachTowards(owner)}, " +
+                    "${if (spy != null) "OUR SPY (${spy.networkPoints} points)" else "no spy of ours"}\n")
+                for (mission in missions) {
+                    val parts = EspionageScoring.explainOffense(civ, spy, city, mission)
+                    val workable = spy != null && com.unciv.logic.civilization.managers.SpyMissionResolver.canWorkTowards(spy, mission)
+                    if (parts == null) { out.append("       ${mission.name}: not scored\n"); continue }
+                    out.append("       ${mission.name.padEnd(34)} total ${parts.total.toString().padStart(5)} | hate ${parts.hateFactor}, loss ${parts.lossToOwner}, " +
+                        "benefit ${parts.benefits}, before price ${parts.beforePrice}, np ${parts.expectedNp}, ratio ${parts.numerator}/${parts.denominator}, after price ${parts.afterPrice}, " +
+                        "found offset ${parts.idOffset}${if (spy != null) ", ${if (workable) "workable" else "NOT WORKABLE: the AI reads -1"}" else ""}\n")
+                }
             }
         }
     }

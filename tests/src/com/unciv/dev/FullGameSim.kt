@@ -118,6 +118,8 @@ class FullGameSim {
             difficulty = "Prince"
             speed = "Standard"
             numberOfCityStates = env("FULL_SIM_CITYSTATES", "8").toInt()
+            // espionage is a game option that is off unless asked for: the studies before 2026-11-24 never had a spy (opt in with FULL_SIM_ESPIONAGE)
+            espionageEnabled = System.getenv("FULL_SIM_ESPIONAGE") != null
             // as the new game screen does: every victory that does not need a turn limit; without any, the game never ends
             victoryTypes.addAll(victories.ifEmpty { ruleset.selectableVictories().filter { !it.enablesMaxTurns() }.map { it.name } })
             shufflePlayerOrder = false
@@ -197,6 +199,7 @@ class FullGameSim {
     private var combatLosses: CombatLosses? = null
     private var barbarianStats: BarbarianStats? = null
     private var embarkedStats: EmbarkedStats? = null
+    private var espionageStats: EspionageStats? = null
 
     private fun violation(turn: Int, text: String) {
         val key = text.substringBefore(':')
@@ -286,6 +289,7 @@ class FullGameSim {
         combatLosses?.let { text.append(it.report()).appendLine() }
         barbarianStats?.let { text.append(it.report()).appendLine() }
         embarkedStats?.let { text.append(it.report()).appendLine() }
+        espionageStats?.let { text.append(it.report()).appendLine() }
         performance?.let { text.append(it.report()).appendLine() }
         text.appendLine("## Snapshots")
         text.append(out)
@@ -310,6 +314,7 @@ class FullGameSim {
         val combatLosses = CombatLosses(game).also { this.combatLosses = it }
         val barbarianStats = BarbarianStats(game).also { this.barbarianStats = it }
         val embarkedStats = EmbarkedStats(game).also { this.embarkedStats = it }
+        val espionageStats = if (game.isEspionageEnabled()) EspionageStats(game).also { this.espionageStats = it } else null
         val decisionLog = System.getenv("FULL_SIM_DECISION_LOG")?.let { DecisionLog(game, File(it)) }
         val outPath = System.getenv("FULL_SIM_OUT")!!
         val spans = System.getenv("FULL_SIM_SPANS") != null
@@ -367,6 +372,7 @@ class FullGameSim {
             }
             try {
                 performance.beforeTurn()
+                espionageStats?.beforeTurn()
                 game.nextTurn()
                 performance.afterTurn(turn)
             } catch (ex: Throwable) {
@@ -380,6 +386,7 @@ class FullGameSim {
             combatLosses.afterTurn()
             barbarianStats.afterTurn()
             embarkedStats.afterTurn()
+            espionageStats?.afterTurn(turn)
             decisionLog?.afterTurn(turn)
             for (civTrace in civTraces) civTrace.afterTurn(turn)
             val dump = dumpDir != null && (dumpAll || turn in dumpTurns)

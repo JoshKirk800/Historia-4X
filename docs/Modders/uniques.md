@@ -670,7 +670,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global
 
 ??? example  "1 World Congress Delegate for every [positiveAmount] cities following our religion"
-	Vox Populi's `Buildings.FaithToVotes` (V:CvPlayer.cpp:23636-23665, 24527-24604). The cities that follow the civilization's religion are counted in the whole world. Each such unique gives the count times 100 divided by the amount, in whole hundredths; the sum over all of them is floored once, so two uniques of 10 and 15 cities give 3 delegates, not 2. Only with the ModConstants `leagueDelegatesLikeVp`; cached at the start of the civilization's own turn. A civilization without a religion gets nothing
+	Vox Populi's `Buildings.FaithToVotes` (V:CvPlayer.cpp:23636-23665, 24527-24599). The cities that follow the civilization's religion are counted in the whole world. Each such unique gives the count times 100 divided by the amount, in whole hundredths; the sum over all of them is floored once, so two uniques of 10 and 15 cities give 3 delegates, not 2. Only with the ModConstants `leagueDelegatesLikeVp`; cached at the start of the civilization's own turn. A civilization without a religion gets nothing
 
 	Example: "1 World Congress Delegate for every [3] cities following our religion"
 
@@ -2527,7 +2527,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, FollowerBelief
 
 ??? example  "1 World Congress Delegate for every [positiveAmount] [improvementName] we own"
-	Vox Populi's `Belief_VotePerXImprovementOwned` (Holy Land; V:CvBeliefClasses.cpp:4956-4974, CvPlayer.cpp:23812-23848). The fractions of all such uniques of the same improvement are ADDED exactly (1/2 and 1/3 give 5/6), multiplied by the number owned, and truncated once
+	Vox Populi's `Belief_VotePerXImprovementOwned` (Holy Land; V:CvBeliefClasses.cpp:4956-4974, CvPlayer.cpp:23818-23835). The fractions of all such uniques of the same improvement are ADDED exactly (1/2 and 1/3 give 5/6), multiplied by the number owned, and truncated once
 
 	Example: "1 World Congress Delegate for every [3] [Village] we own"
 

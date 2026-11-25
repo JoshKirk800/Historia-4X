@@ -981,7 +981,7 @@ class ModConstants {
     var noCoups = false
 
     /**
-     *  Vox Populi's diplomatic missions (CvUnit::canTrade, getTradeInfluence and trade, V:CvUnit.cpp:11990-12212) instead of the Great Merchant's trade mission: a unit with
+     *  Vox Populi's diplomatic missions (CvUnit::canTrade, getTradeInfluence and trade, V:CvUnit.cpp:11990-12219) instead of the Great Merchant's trade mission: a unit with
      *  `Can undertake a diplomatic mission with City-State` does the action 'Conduct Diplomatic Mission' in a City-State's territory and is used up; the influence is
      *  [com.unciv.logic.civilization.diplomacy.DiplomaticMission.influence]; spy points come from the unit's own `Gain [n] Spy Points` (`Units.ExtraSpies`). With it, the Great Merchant's
      *  trade mission action is gone. The Great Diplomat lowers the influence of the other civilizations that know the city-state in two passes (V:CvUnit.cpp:12101-12179) and a unit can raise

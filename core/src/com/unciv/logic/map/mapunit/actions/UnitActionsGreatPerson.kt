@@ -120,7 +120,7 @@ object UnitActionsGreatPerson {
     }
 
     /**
-     *  CvUnit::canTrade and trade (V:CvUnit.cpp:11990-12212), only with [com.unciv.models.ModConstants.diplomaticMissionsLikeVp]: a unit with `Can undertake a diplomatic mission with City-State`
+     *  CvUnit::canTrade and trade (V:CvUnit.cpp:11990-12021 and 12064-12219), only with [com.unciv.models.ModConstants.diplomaticMissionsLikeVp]: a unit with `Can undertake a diplomatic mission with City-State`
      *  and a mission influence of its own, in the territory of a city-state it is not at war with, gives the influence of [DiplomaticMission.influenceOf] and is used up. The original also
      *  lets a unit with a gold blast and no mission influence do it; no unit of this port has a gold blast
      */

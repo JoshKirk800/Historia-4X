@@ -4,9 +4,13 @@ import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
+import com.unciv.logic.league.League
+import com.unciv.logic.league.LeagueProposal
 import com.unciv.models.Spy
 import com.unciv.models.SpyAction
 import com.unciv.models.metadata.BaseRuleset
+import com.unciv.models.ruleset.Resolution
+import com.unciv.models.ruleset.ResolutionDecision
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
@@ -249,6 +253,145 @@ class EspionageAutomationTests {
         val spy = addSpies(1).single()
         spy.moveTo(city)
         assertFalse(ai.isCoupCandidate(spy))
+    }
+    // endregion
+
+    // region open door and sphere of influence
+    // CvEspionageAI::BuildMinorCityList skips a city-state with an Open Door in force (IsNoAlly, V:CvEspionageClasses.cpp:9962), with a permanent ally (9965) and with an
+    // enactment of either on the table for it (9976-9991); EvaluateMinorCivSpies (10423-10512, called by DoTurn at 7750) flags a spy in such a city-state to be reassigned
+    // (10433, 10447, 10489-10509), and a flagged spy that is not in the top of its role's list leaves (the engine's automateSpies).
+    private fun door(): Resolution = game.ruleset.resolutions.getOrPut("Test Door") {
+        Resolution().apply {
+            name = "Test Door"
+            proposerDecision = ResolutionDecision.CityState
+            uniques = arrayListOf("Opens the door of the chosen City-State to every civilization")
+        }
+    }
+
+    private fun sphere(): Resolution = game.ruleset.resolutions.getOrPut("Test Sphere") {
+        Resolution().apply {
+            name = "Test Sphere"
+            proposerDecision = ResolutionDecision.CityState
+            uniques = arrayListOf("Puts the chosen City-State in the sphere of influence of the proposer")
+        }
+    }
+
+    private fun onTheTable(resolution: String, choice: String?, repeal: Boolean = false) {
+        val league = game.gameInfo.league ?: League().also { game.gameInfo.league = it; it.setTransients(game.gameInfo) }
+        league.proposals.add(LeagueProposal(100 + league.proposals.size, resolution, repeal, b.civID, choice))
+    }
+
+    private fun listed(city: City) = city in ai.buildMinorCityList()
+
+    @Test
+    fun `an ordinary city-state is on the list and one with an open door or a permanent ally is not`() {
+        val plain = cityStateAllied(null, -5)
+        val opened = cityStateAllied(null, -6)
+        val spheres = cityStateAllied(null, -7)
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        assertTrue(listed(plain))
+        assertTrue(listed(opened))
+        assertTrue(listed(spheres))
+        opened.civ.noAlly = true
+        spheres.civ.permanentAllyCiv = b
+        assertTrue(listed(plain))
+        assertFalse("an open door in force", listed(opened))
+        assertFalse("a sphere of influence in force", listed(spheres))
+    }
+
+    @Test
+    fun `a city-state with an open door or a sphere on the table for it is not on the list, a repeal or another city-state's proposal does not count`() {
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        door(); sphere()
+        val one = cityStateAllied(null, -5)
+        val two = cityStateAllied(null, -6)
+        val three = cityStateAllied(null, -7)
+        onTheTable("Test Door", one.civ.civID)
+        onTheTable("Test Sphere", two.civ.civID)
+        onTheTable("Test Door", three.civ.civID, repeal = true)
+        assertFalse("an open door proposed", listed(one))
+        assertFalse("a sphere proposed", listed(two))
+        assertTrue("a repeal is no enactment (VP reads m_vEnactProposals)", listed(three))
+    }
+
+    @Test
+    fun `a proposal of a resolution with neither effect, or without the switch, leaves the city-state on the list`() {
+        game.ruleset.resolutions["Plain"] = Resolution().apply { name = "Plain"; proposerDecision = ResolutionDecision.CityState }
+        door()
+        val one = cityStateAllied(null, -5)
+        val two = cityStateAllied(null, -6)
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        onTheTable("Plain", one.civ.civID)
+        onTheTable("Test Door", two.civ.civID)
+        assertTrue("a plain resolution", listed(one))
+        assertFalse(listed(two))
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = false
+        assertTrue("the switch is off", listed(two))
+    }
+
+    private fun spyInCityStateWithOneCityOfOurs(): Pair<Spy, City> {
+        a.ai.setGrandStrategyAndPursuit(null)
+        game.addCity(a, game.tileMap[0, -3])
+        val city = cityStateAllied(null, -5)
+        val spy = addSpies(1).single()
+        setUpIn(spy, city)
+        return spy to city
+    }
+
+    @Test
+    fun `a spy in an ordinary city-state stays, in one with an open door or a sphere it leaves`() {
+        val (spy, city) = spyInCityStateWithOneCityOfOurs()
+        ai.automateSpies()
+        assertSame("nothing flags it", city, spy.getCityOrNull())
+        city.civ.noAlly = true
+        ai.automateSpies()
+        assertTrue("an open door in force sends it away", spy.getCityOrNull() != city)
+    }
+
+    @Test
+    fun `a city-state whose permanent ally is us is left off the list too`() {
+        val city = cityStateAllied(null, -5)
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        assertTrue(listed(city))
+        city.civ.permanentAllyCiv = a
+        assertFalse("V:CvEspionageClasses.cpp:9965 has no exception for our own sphere", listed(city))
+    }
+
+    @Test
+    fun `a spy in the city of a major civilization is not flagged by a proposal that names that civilization`() {
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        door()
+        a.ai.setGrandStrategyAndPursuit(null)
+        game.addCity(a, game.tileMap[0, -3])
+        val spy = addSpies(1).single()
+        setUpIn(spy, bCapital)
+        ai.automateSpies()
+        val before = spy.getCityOrNull()
+        onTheTable("Test Door", b.civID) // never valid (the choice is a major), but in the list by hand
+        ai.automateSpies()
+        assertSame("what a city-state's door does not reach a major's city", before, spy.getCityOrNull())
+    }
+
+    @Test
+    fun `a spy leaves a city-state with a sphere of influence in force`() {
+        val (spy, city) = spyInCityStateWithOneCityOfOurs()
+        city.civ.permanentAllyCiv = b
+        ai.automateSpies()
+        assertTrue(spy.getCityOrNull() != city)
+    }
+
+    @Test
+    fun `a spy leaves a city-state that has an open door proposed and stays when the proposal is a repeal or for another`() {
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        door()
+        val (spy, city) = spyInCityStateWithOneCityOfOurs()
+        onTheTable("Test Door", city.civ.civID, repeal = true)
+        onTheTable("Test Door", b.civID)
+        ai.automateSpies()
+        assertSame("neither a repeal nor a proposal for another civilization flags it", city, spy.getCityOrNull())
+        onTheTable("Test Door", city.civ.civID)
+        ai.automateSpies()
+        assertTrue(spy.getCityOrNull() != city)
     }
     // endregion
 

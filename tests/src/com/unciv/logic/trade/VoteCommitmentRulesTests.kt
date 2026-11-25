@@ -122,6 +122,7 @@ class VoteCommitmentRulesTests {
     @Test
     fun `the trade screen calls a vote commitment a permanent item only with both rules on`() {
         val item = offer(LeagueProposal(1, "Embargo", false, null, null), League.NO, 1)
+        constants.dealsBlockTemporaryForPermanent = false
         assertNull("the permanence is not shown while the deals do not block temporary for permanent", TradeOfferRows.permanenceNote(item, b))
         constants.dealsBlockTemporaryForPermanent = true
         assertEquals("Permanent item", TradeOfferRows.permanenceNote(item, b))

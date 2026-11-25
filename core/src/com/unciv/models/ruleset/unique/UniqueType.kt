@@ -1137,7 +1137,7 @@ enum class UniqueType(
             "The amount is the change of the production cost, as in the original: -15 makes matching units 15% cheaper in a city that has the resource (whole numbers, after the other cost rules). " +
             "The modifier `<before the [era]>` is compared with the era of the unit's technology (the current era of the civilization for a unit without one), not with the era of the civilization"),
     ResourceWonderProduction("[relativeAmount]% Production of Wonders in cities with this resource", UniqueTarget.Resource,
-        docDescription = "Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (V:CvCity.cpp:18351-18420): added to the production " +
+        docDescription = "Vox Populi's `Resources.WonderProductionMod` (Marble, Stone), until `WonderProductionModObsoleteEra` (V:CvCity.cpp:18351-18416): added to the production " +
             "of a wonder in a city that has the resource. The modifier `<before the [era]>` is compared with the era of the wonder's technology (no limit for a wonder without one), " +
             "not with the era of the civilization"),
 
@@ -1663,7 +1663,7 @@ enum class UniqueType(
             "that was plundered or cancelled"),
     TriggerUponTradeUnitMoving("upon a trade route unit moving", UniqueTarget.TriggerCondition,
         docDescription = "Once each turn that a trade unit of the civilization moves along its route, and when it starts, in the city the route starts in, however many steps it makes " +
-            "(`INSTANT_YIELD_TYPE_TR_MOVEMENT`, V:CvTradeClasses.cpp:2085-2150, V:CvPlayer.cpp:26826-26838)"),
+            "(`INSTANT_YIELD_TYPE_TR_MOVEMENT`, V:CvTradeClasses.cpp:2069-2146, V:CvPlayer.cpp:26826-26838)"),
     TriggerUponPlunderingTradeRoute("upon plundering a trade route", UniqueTarget.TriggerCondition, UniqueTarget.UnitTriggerCondition,
         docDescription = "When a unit of the civilization plunders a trade route, in the city the unit was made in (else the capital); as a unit's own unique it is the unit " +
             "that gains (`INSTANT_YIELD_TYPE_PLUNDER_TRADE_ROUTE`, V:CvTradeClasses.cpp:5034, V:CvPlayer.cpp:26863-26870)"),

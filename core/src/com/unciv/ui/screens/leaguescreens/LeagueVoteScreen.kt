@@ -22,7 +22,7 @@ import com.unciv.ui.screens.pickerscreens.PickerScreen
 /**
  * Where a human member of the World Congress spends its delegates in a session: for each proposal on the table and each of its choices
  * (Yes or No, or a civilization for the host and the World Leader) a counter, bounded by the delegates that are left.
- * Delegates may be split over any proposals and choices (CvLeague::DoVoteEnact/DoVoteRepeal, CvVotingClasses.cpp:2204-2247).
+ * Delegates may be split over any proposals and choices (CvLeague::DoVoteEnact/DoVoteRepeal, SDK:CvVotingClasses.cpp:2204-2247).
  * [castVotes] spends what was set up, the delegates that are not set up stay for later; [abstainRemaining] gives up all that are left.
  */
 class LeagueVoteScreen(private val civ: Civilization) : PickerScreen() {

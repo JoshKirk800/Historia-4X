@@ -19,7 +19,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The League projects: World's Fair, International Games, International Space Station (CvVotingClasses.cpp:3583-3808, 6008-6232) */
+/** The League projects: World's Fair, International Games, International Space Station (SDK:CvVotingClasses.cpp:3583-3808, 6008-6232) */
 @RunWith(GdxTestRunner::class)
 class LeagueProjectTests {
     private lateinit var game: TestGame

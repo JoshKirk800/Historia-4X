@@ -37,7 +37,7 @@ class LeagueProject : IsPartOfGameInfoSerialization {
     }
 }
 
-// The rules of the projects, CvVotingClasses.cpp:3583-3808 and 6008-6232. Contributions are whole production points, the original keeps hundredths.
+// The rules of the projects, SDK:CvVotingClasses.cpp:3583-3808 and 6008-6232. Contributions are whole production points, the original keeps hundredths.
 
 @Readonly
 fun League.getProject(name: String): LeagueProject? = projects.firstOrNull { it.name == name }
@@ -65,11 +65,11 @@ fun League.getProjectCostPerPlayer(name: String): Int {
 fun League.getProjectCost(name: String): Int =
     getProjectCostPerPlayer(name) * gameInfo.civilizations.count { it.isMajorCiv }
 
-/** What all civilizations have put into [project] together (`GetProjectProgress`, CvVotingClasses.cpp:3669-3690) */
+/** What all civilizations have put into [project] together (`GetProjectProgress`, SDK:CvVotingClasses.cpp:3669-3690) */
 @Readonly
 fun League.getProjectProgress(project: LeagueProject): Int = project.contributions.values.sum()
 
-/** Whether a major member can put production into [name], which is running (`CanMemberContribute`, CvVotingClasses.cpp:3692-3705) */
+/** Whether a major member can put production into [name], which is running (`CanMemberContribute`, SDK:CvVotingClasses.cpp:3692-3705) */
 @Readonly
 fun League.canContribute(civ: Civilization, name: String): Boolean =
     civ.isMajorCiv && isMember(civ) && isProjectActive(name)
@@ -92,7 +92,7 @@ fun League.getTierThreshold(project: LeagueProject, tier: Int): Int {
 }
 
 /**
- * The reward tier 0 to 3 that [civ] has earned in [project] (`GetMemberContributionTier`, CvVotingClasses.cpp:3751-3768).
+ * The reward tier 0 to 3 that [civ] has earned in [project] (`GetMemberContributionTier`, SDK:CvVotingClasses.cpp:3751-3768).
  * Only one civilization gets tier 3, if several reach it the first of the members does and the others have tier 2 (CvVotingClasses.cpp:6079-6097).
  */
 @Readonly
@@ -163,7 +163,7 @@ private fun League.completeProject(project: LeagueProject) {
 
 /**
  * Triggers the uniques of [resolution] with the conditional [UniqueType.TriggerUponProjectTier] of [tier] and of every lower tier for [civ]
- * (`DoProjectReward`, CvVotingClasses.cpp:6105-6232, where the tiers fall through the same way).
+ * (`DoProjectReward`, SDK:CvVotingClasses.cpp:6105-6232, where the tiers fall through the same way).
  */
 private fun League.grantProjectRewards(civ: Civilization, resolution: Resolution, tier: Int) {
     for (reached in tier downTo 1)

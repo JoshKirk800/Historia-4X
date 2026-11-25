@@ -21,7 +21,7 @@ import org.junit.runner.RunWith
 
 /**
  * Vox Populi's trade route value (slice T3 of `phaseE/vp-trade-plan.md`): CvPlayerTrade::GetTradeConnectionValueTimes100 and the functions it sums
- * (V:CvTradeClasses.cpp:2747-4247), the route events (2548-2650, 2085-2150, 4965-5045), the per-city and per-tile effects of routes (V:CvCity.cpp:23328, 22495,
+ * (V:CvTradeClasses.cpp:2747-4247), the route events (2548-2650, 2069-2146, 4965-5045), the per-city and per-tile effects of routes (V:CvCity.cpp:23328, 22495,
  * V:CvPlot.cpp:10716-10760) behind `ModConstants.tradeRouteModelLikeVp`. V: is `ref/vp-5.4.8/CvGameCoreDLL_Expansion2/`.
  *
  * Every expected number is worked out by hand from the cited lines, in hundredths of a yield (VP's `Times100`). The test world has no city gold (a capital whose palace
@@ -661,7 +661,7 @@ class TradeRouteValueTests {
         val (origin, destination) = twoCities(8)
         establish(origin, destination) // the trader moves right away: V:CvTradeClasses.cpp:848
         assertEquals(4, civA.gold)
-        repeat(3) { civA.tradeRoutes.startTurn() } // 2 steps each: V:CvTradeClasses.cpp:2085-2150 yields after the steps
+        repeat(3) { civA.tradeRoutes.startTurn() } // 2 steps each: V:CvTradeClasses.cpp:2069-2146 yields after the steps
         assertEquals(16, civA.gold)
     }
 

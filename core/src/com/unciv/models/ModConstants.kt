@@ -1139,7 +1139,7 @@ class ModConstants {
     var tradeRouteVp = TradeRouteVpConstants()
 
     /** What the route range (the unit's base range plus the traits' and techs') is multiplied by for the size of the map: the percentage of the entry with the greatest
-     *  `tiles` that the map has at least (the original's `Worlds.TradeRouteDistanceMod`, V:CvTradeClasses.cpp:5332-5390: 80 Duel and Tiny, 90 Small, 100 Standard, 130 Large,
+     *  `tiles` that the map has at least (the original's `Worlds.TradeRouteDistanceMod`, CvPlayerTrade::GetTradeRouteRange, V:CvTradeClasses.cpp:5288-5359, the factor at 5357: 80 Duel and Tiny, 90 Small, 100 Standard, 130 Large,
      *  160 Huge). Empty: 100 percent. Read by [com.unciv.logic.civilization.managers.TradeRouteManager.getRange] with [tradeRouteModelLikeVp], where the other percentages of the
      *  range add to it (O8 of phaseE/vp-trade-plan.md: by the number of tiles until the world sizes have rule tables) */
     data class WorldTradeRouteDistance(val tiles: Int = 0, val percent: Int = 100)

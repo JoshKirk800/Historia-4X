@@ -12,7 +12,7 @@ import kotlin.math.max
 
 /**
  *  What a resource a city has changes in what it builds (slice T1 of `phaseE/vp-trade-plan.md`): the production of wonders
- *  ([UniqueType.ResourceWonderProduction], `Resources.WonderProductionMod`, V:CvCity.cpp:18351-18420) and the cost of units
+ *  ([UniqueType.ResourceWonderProduction], `Resources.WonderProductionMod`, V:CvCity.cpp:18351-18416) and the cost of units
  *  ([UniqueType.ResourceProductionCost], `Resource_UnitCombatProductionCostModifiersLocal`, V:CvCity.cpp:11422-11452).
  *
  *  A city has a resource (CvCity::IsHasResourceLocal) when one of its tiles with it is improved: [com.unciv.logic.map.tile.Tile.providesResources].

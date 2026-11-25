@@ -152,7 +152,7 @@ class League : IsPartOfGameInfoSerialization {
     /**
      * Whether no trade route between [a] and [b] can be established: symmetric, a route within a civilization is never embargoed.
      * A city-state embargo hits routes where either is a city-state, an embargo of a civilization those between two major civilizations
-     * where either is the target (CvVotingClasses.cpp:3810-3841).
+     * where either is the target (SDK:CvVotingClasses.cpp:3810-3841).
      */
     @Readonly
     fun isTradeEmbargoed(a: Civilization, b: Civilization): Boolean {
@@ -204,7 +204,7 @@ class League : IsPartOfGameInfoSerialization {
         sortedEras.indices.filter { sortedEras[it].getWorldCongressSession() != null }
 
     /**
-     * The era that decides when special sessions are held (`LeagueHelpers::GetGameEraForTrigger`, CvVotingClasses.cpp:109-151) as an index into [sortedEras]:
+     * The era that decides when special sessions are held (`LeagueHelpers::GetGameEraForTrigger`, SDK:CvVotingClasses.cpp:109-151) as an index into [sortedEras]:
      * the most advanced era of a living major civilization, one before it unless at least half of them are in it. -1 for none.
      */
     private fun getGameEraIndex(): Int {
@@ -242,7 +242,7 @@ class League : IsPartOfGameInfoSerialization {
         turnsUntilSession = getSessionTurnInterval()
     }
 
-    /** Turns until the World Leader is voted for, 999 if it is not (CvLeague::GetTurnsUntilVictorySession, CvVotingClasses.cpp:2071-2140) */
+    /** Turns until the World Leader is voted for, 999 if it is not (CvLeague::GetTurnsUntilVictorySession, SDK:CvVotingClasses.cpp:2071-2140) */
     fun getTurnsUntilWorldLeaderSession(): Int {
         val worldLeader = gameInfo.ruleset.resolutions.values.firstOrNull { it.isWorldLeader } ?: return 999
         if (!worldLeader.isAvailableInGame(gameInfo) || hasWorldLeader()) return 999
@@ -309,7 +309,7 @@ class League : IsPartOfGameInfoSerialization {
         /**
          * Founds the World Congress if some living major civilization has a unique [UniqueType.AllowsWorldCongress],
          * has met every other living major civilization and more than one are alive. The first such civilization in [GameInfo.civilizations]
-         * founds it and is the host. Returns `null` if the conditions are not met (CvGameLeagues::DoTurn, CvVotingClasses.cpp:6651-6700).
+         * founds it and is the host. Returns `null` if the conditions are not met (CvGameLeagues::DoTurn, SDK:CvVotingClasses.cpp:6651-6700).
          */
         fun tryFound(gameInfo: GameInfo): League? {
             if (gameInfo.gameParameters.noLeagues || gameInfo.ruleset.resolutions.isEmpty()) return null
@@ -324,7 +324,7 @@ class League : IsPartOfGameInfoSerialization {
         }
     }
 
-    /** `CvGameLeagues::FoundLeague` and `CvLeague::Init` (CvVotingClasses.cpp:6832-6924, 1864-1871): no vote is held, the founder is the host */
+    /** `CvGameLeagues::FoundLeague` and `CvLeague::Init` (SDK:CvVotingClasses.cpp:6832-6924, 1864-1871): no vote is held, the founder is the host */
     private fun found(gameInfo: GameInfo, founder: Civilization) {
         setTransients(gameInfo)
         syncMembers()
@@ -340,7 +340,7 @@ class League : IsPartOfGameInfoSerialization {
     //endregion
     //region Per-turn tick
 
-    /** Once per game turn (CvLeague::DoTurn, CvVotingClasses.cpp:1873-1901): sweeps what became invalid, then holds a special session, counts down to a session or finishes the running one */
+    /** Once per game turn (CvLeague::DoTurn, SDK:CvVotingClasses.cpp:1873-1901): sweeps what became invalid, then holds a special session, counts down to a session or finishes the running one */
     fun doTurn() {
         syncMembers()
         checkValid()
@@ -376,11 +376,11 @@ class League : IsPartOfGameInfoSerialization {
         return sessionEraIndices().lastOrNull { it > last && it <= gameEra }?.let { sortedEras[it] }
     }
 
-    /** CvLeague::CanStartSpecialSession (CvVotingClasses.cpp:2169-2189) */
+    /** CvLeague::CanStartSpecialSession (SDK:CvVotingClasses.cpp:2169-2189) */
     private fun canStartSpecialSession(): Boolean =
         !inSession && proposals.none { it.onHold } && members.values.none { it.proposalsLeft > 0 || it.delegatesLeft > 0 }
 
-    /** CvLeague::CheckStartSpecialSession and StartSpecialSession (CvVotingClasses.cpp:5254-5316) */
+    /** CvLeague::CheckStartSpecialSession and StartSpecialSession (SDK:CvVotingClasses.cpp:5254-5316) */
     private fun startSpecialSession(era: Era) {
         lastEraTrigger = era.name
         if (era.isUnitedNations) unitedNations = true
@@ -399,7 +399,7 @@ class League : IsPartOfGameInfoSerialization {
         checkFinishSession()
     }
 
-    /** CvLeague::CheckStartSession (CvVotingClasses.cpp:5224-5242): only if every proposer has proposed */
+    /** CvLeague::CheckStartSession (SDK:CvVotingClasses.cpp:5224-5242): only if every proposer has proposed */
     private fun checkStartSession() {
         if (members.values.any { it.proposalsLeft > 0 }) return
         inSession = true
@@ -424,7 +424,7 @@ class League : IsPartOfGameInfoSerialization {
         }
     }
 
-    /** CvLeague::AssignStartingVotes (CvVotingClasses.cpp:5514-5524): a snapshot, later changes do not alter this session */
+    /** CvLeague::AssignStartingVotes (SDK:CvVotingClasses.cpp:5514-5524): a snapshot, later changes do not alter this session */
     private fun assignStartingVotes() {
         for ((id, member) in members) {
             val civ = gameInfo.getCivilizationOrNull(id)
@@ -459,7 +459,7 @@ class League : IsPartOfGameInfoSerialization {
     //endregion
     //region Validity, host
 
-    /** CvLeague::IsResolutionEffectsValid (CvVotingClasses.cpp:2592-2720) */
+    /** CvLeague::IsResolutionEffectsValid (SDK:CvVotingClasses.cpp:2592-2720) */
     private fun isResolutionEffectsValid(resolution: Resolution, choice: String?): Boolean {
         if (!resolution.isAvailableInGame(gameInfo)) return false
         if (resolution.embargoesCityStates && gameInfo.civilizations.none { it.isCityState }) return false
@@ -499,7 +499,7 @@ class League : IsPartOfGameInfoSerialization {
         }
     }
 
-    /** CvLeague::CheckProposalsValid and CheckResolutionsValid (CvVotingClasses.cpp:5584-5625) */
+    /** CvLeague::CheckProposalsValid and CheckResolutionsValid (SDK:CvVotingClasses.cpp:5584-5625) */
     private fun checkValid() {
         val resolutions = gameInfo.ruleset.resolutions
         var changed = false
@@ -521,7 +521,7 @@ class League : IsPartOfGameInfoSerialization {
         if (changed) rebuildUniqueMap()
     }
 
-    /** If the host died the member with the most delegates is the new one, the first in civ order on a tie (CvLeague::AssignNewHost, CvVotingClasses.cpp:5627-5643) */
+    /** If the host died the member with the most delegates is the new one, the first in civ order on a tie (CvLeague::AssignNewHost, SDK:CvVotingClasses.cpp:5627-5643) */
     private fun ensureHost() {
         val current = gameInfo.getCivilizationOrNull(host)
         if (current != null && current.isMajorCiv && current.isAlive()) return
@@ -557,7 +557,7 @@ class League : IsPartOfGameInfoSerialization {
     @Readonly
     private fun canEverVote(civ: Civilization) = civ.isMajorCiv && civ.isAlive()
 
-    /** CvLeague::GetCoreVotesForMember (CvVotingClasses.cpp:3194-3221): the delegates every civilization gets in the governing session */
+    /** CvLeague::GetCoreVotesForMember (SDK:CvVotingClasses.cpp:3194-3221): the delegates every civilization gets in the governing session */
     fun getCoreVotes(civ: Civilization): Int = if (canEverVote(civ)) getSessionInfo().civDelegates else 0
 
     /**
@@ -746,7 +746,7 @@ class League : IsPartOfGameInfoSerialization {
         return 0
     }
 
-    /** CvLeague::GetExtraVotesForFollowingIdeology, with MOD_BALANCE_VP (V:CvVotingClasses.cpp:5413-5460): one more for every other civilization of that ideology, dead or alive */
+    /** CvLeague::GetExtraVotesForFollowingIdeology, with MOD_BALANCE_VP (V:CvVotingClasses.cpp:5413-5446): one more for every other civilization of that ideology, dead or alive */
     @Readonly
     private fun getDelegatesFromWorldIdeology(civ: Civilization): Int {
         var total = 0
@@ -793,7 +793,7 @@ class League : IsPartOfGameInfoSerialization {
     //endregion
     //region Proposals
 
-    /** Gives the proposal right to the host and the largest other delegations, clearing the rights of everybody else (CvLeague::AssignProposalPrivileges, CvVotingClasses.cpp:5535-5582) */
+    /** Gives the proposal right to the host and the largest other delegations, clearing the rights of everybody else (CvLeague::AssignProposalPrivileges, SDK:CvVotingClasses.cpp:5535-5582) */
     private fun assignProposalPrivileges() {
         clearProposalPrivileges()
         val constants = gameInfo.ruleset.modOptions.constants
@@ -846,7 +846,7 @@ class League : IsPartOfGameInfoSerialization {
     fun getChoices(resolution: Resolution, civ: Civilization): List<String> = getChoices(resolution.proposerDecision, civ)
 
     /**
-     * The values a member can choose for [decision] (CvLeague::GetChoicesForDecision, CvVotingClasses.cpp:2853-2931):
+     * The values a member can choose for [decision] (CvLeague::GetChoicesForDecision, SDK:CvVotingClasses.cpp:2853-2931):
      * [YES] and [NO]; the living major civilizations, without [civ] for [ResolutionDecision.OtherMajorCiv];
      * luxuries that exist on the map; the religions founded by living major civilizations; the ideologies.
      */
@@ -875,7 +875,7 @@ class League : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * CvLeague::CanProposeEnact (CvVotingClasses.cpp:2406-2548). [proposer] `null` is the World Congress itself.
+     * CvLeague::CanProposeEnact (SDK:CvVotingClasses.cpp:2406-2548). [proposer] `null` is the World Congress itself.
      * All of: a player proposes only what players may propose, is a member that may propose; [choice] is one of [getChoices] (`null` if there is none);
      * the resolution is valid ([isResolutionEffectsValid]); is not on the table and not in effect already (for [Resolution.exclusive] ones whatever the choice);
      * the technology it requires is known by any living civilization; the World Leader is not elected twice.
@@ -909,7 +909,7 @@ class League : IsPartOfGameInfoSerialization {
         return true
     }
 
-    /** CvLeague::CanProposeRepeal (CvVotingClasses.cpp:2550-2590): [proposer] may propose, the resolution is in effect and no repeal of it is proposed */
+    /** CvLeague::CanProposeRepeal (SDK:CvVotingClasses.cpp:2550-2590): [proposer] may propose, the resolution is in effect and no repeal of it is proposed */
     fun canProposeRepeal(activeResolutionId: Int, proposer: Civilization): Boolean = canProposeRepeal(activeResolutionId, proposer, needsTurn = true)
 
     /** As [canProposeEnact]'s: with [needsTurn] false it ignores whether the host is still proposing. A repeal is not refused for having been on the table last session (V:CvVotingClasses.cpp:3166-3223) */
@@ -918,7 +918,7 @@ class League : IsPartOfGameInfoSerialization {
             && activeResolutions.any { it.id == activeResolutionId && gameInfo.ruleset.resolutions[it.resolution]?.isProject != true } // a project is no resolution in effect
             && proposals.none { it.repeal && it.targetId == activeResolutionId }
 
-    /** Puts [resolution] with [choice] on the table, costing [proposer] his proposal (CvLeague::DoProposeEnact, CvVotingClasses.cpp:2263-2304) */
+    /** Puts [resolution] with [choice] on the table, costing [proposer] his proposal (CvLeague::DoProposeEnact, SDK:CvVotingClasses.cpp:2263-2304) */
     fun proposeEnact(resolution: Resolution, choice: String?, proposer: Civilization?) {
         require(canProposeEnact(resolution, choice, proposer)) { "[${resolution.name}] cannot be proposed with choice [$choice]" }
         val proposal = LeagueProposal(nextProposalId++, resolution.name, false, proposer?.civID, choice)
@@ -934,7 +934,7 @@ class League : IsPartOfGameInfoSerialization {
         if (proposer.civID == host && member.proposalsLeft <= 0) hostProposing = false
     }
 
-    /** Puts the repeal of an [ActiveResolution] on the table, costing [proposer] his proposal (CvLeague::DoProposeRepeal, CvVotingClasses.cpp:2306-2350) */
+    /** Puts the repeal of an [ActiveResolution] on the table, costing [proposer] his proposal (CvLeague::DoProposeRepeal, SDK:CvVotingClasses.cpp:2306-2350) */
     fun proposeRepeal(activeResolutionId: Int, proposer: Civilization) {
         require(canProposeRepeal(activeResolutionId, proposer)) { "Resolution [$activeResolutionId] cannot be repealed" }
         val active = activeResolutions.first { it.id == activeResolutionId }
@@ -957,7 +957,7 @@ class League : IsPartOfGameInfoSerialization {
     fun getDelegatesLeft(civ: Civilization): Int = members[civ.civID]?.delegatesLeft ?: 0
 
     /**
-     * Spends [delegates] of [voter] on [choice] of a proposal on the table, any number can be split over proposals and choices (CvLeague::DoVoteEnact and DoVoteRepeal, CvVotingClasses.cpp:2204-2247).
+     * Spends [delegates] of [voter] on [choice] of a proposal on the table, any number can be split over proposals and choices (CvLeague::DoVoteEnact and DoVoteRepeal, SDK:CvVotingClasses.cpp:2204-2247).
      * [choice] is [YES] or [NO] for a vote that is about a resolution and the id of a living major civilization for one about a civilization.
      */
     fun vote(proposalId: Int, voter: Civilization, delegates: Int, choice: String) {
@@ -976,7 +976,7 @@ class League : IsPartOfGameInfoSerialization {
         member.delegatesLeft -= delegates
     }
 
-    /** Gives up the delegates [voter] has left (CvLeague::DoVoteAbstain, CvVotingClasses.cpp:2249-2262) */
+    /** Gives up the delegates [voter] has left (CvLeague::DoVoteAbstain, SDK:CvVotingClasses.cpp:2249-2261) */
     fun abstainRemaining(voter: Civilization) {
         val member = members[voter.civID] ?: return
         member.abstained += member.delegatesLeft
@@ -1006,7 +1006,7 @@ class League : IsPartOfGameInfoSerialization {
         return tally.keys.filter { tally[it] == top }
     }
 
-    /** The first [count] choices by delegates and those that tie with the last of them (CvVoterDecision::GetTopVotedChoices, CvVotingClasses.cpp:711-761) */
+    /** The first [count] choices by delegates and those that tie with the last of them (CvVoterDecision::GetTopVotedChoices, SDK:CvVotingClasses.cpp:711-761) */
     private fun topVotedChoices(tally: Counter<String>, count: Int): List<String> {
         val sorted = tally.keys.sortedByDescending { tally[it] }
         if (sorted.size <= count || count <= 0) return if (count <= 0) emptyList() else sorted
@@ -1032,7 +1032,7 @@ class League : IsPartOfGameInfoSerialization {
         return tied.minBy { civIndex(it) }
     }
 
-    /** CvEnactProposal::IsPassed and CvRepealProposal::IsPassed (CvVotingClasses.cpp:1110-1155, 1691-1723) */
+    /** CvEnactProposal::IsPassed and CvRepealProposal::IsPassed (SDK:CvVotingClasses.cpp:1110-1155, 1691-1723) */
     private fun isPassed(proposal: LeagueProposal, resolution: Resolution, totalSessionVotes: Int): Boolean {
         if (totalSessionVotes == 0) return false // 0 of 0 votes is not a quorum
         if (proposal.repeal) return getDecision(proposal) == YES
@@ -1052,7 +1052,7 @@ class League : IsPartOfGameInfoSerialization {
     //region Resolving a session
 
     /**
-     * CvLeague::FinishSession (CvVotingClasses.cpp:5338-5512): resolves the repeals, then the enactments, in the order they were proposed.
+     * CvLeague::FinishSession (SDK:CvVotingClasses.cpp:5338-5512): resolves the repeals, then the enactments, in the order they were proposed.
      * Failed World Leader votes give the leaders delegates, a passed one the Diplomatic Victory.
      * Then the proposals are cleared and, after a regular session, the next proposers chosen (or the World Leader proposed
      * if the World Congress is the United Nations and it was not on the table now) and the countdown reset.
@@ -1098,7 +1098,7 @@ class League : IsPartOfGameInfoSerialization {
             val governing = lastSpecialSession?.let { gameInfo.ruleset.eras[it] }
             if (governing?.isUnitedNations == true && worldLeader != null && !worldLeaderOnTable
                 && worldLeader.isAvailableInGame(gameInfo) && !hasWorldLeader())
-                addAutomaticProposal(worldLeader) // CvVotingClasses.cpp:5486-5500: instead of the proposals of the players
+                addAutomaticProposal(worldLeader) // SDK:CvVotingClasses.cpp:5486-5500: instead of the proposals of the players
             else assignProposalPrivileges()
             resetTurnsUntilSession()
         }
@@ -1115,7 +1115,7 @@ class League : IsPartOfGameInfoSerialization {
         InstantYields.fire(UniqueType.TriggerUponPassingProposal, proposer, triggerNotificationText = "due to a proposal of ours passing")
     }
 
-    /** CvLeague::DoEnactResolution (CvVotingClasses.cpp:5645-5676): only resolutions with ongoing effects are kept */
+    /** CvLeague::DoEnactResolution (SDK:CvVotingClasses.cpp:5645-5676): only resolutions with ongoing effects are kept */
     private fun enact(proposal: LeagueProposal, resolution: Resolution, decision: String?) {
         when {
             resolution.isHostElection -> {
@@ -1136,7 +1136,7 @@ class League : IsPartOfGameInfoSerialization {
         }
     }
 
-    /** CvLeague::DoRepealResolution (CvVotingClasses.cpp:5678-5704) */
+    /** CvLeague::DoRepealResolution (SDK:CvVotingClasses.cpp:5678-5704) */
     private fun repeal(proposal: LeagueProposal) {
         val active = activeResolutions.firstOrNull { it.id == proposal.targetId } ?: return
         activeResolutions.remove(active)
@@ -1144,7 +1144,7 @@ class League : IsPartOfGameInfoSerialization {
         LeagueEffects.onRepeal(this, active)
     }
 
-    /** The civilizations leading a failed vote for a civilization get permanent delegates (CvVotingClasses.cpp:5420-5460) */
+    /** The civilizations leading a failed vote for a civilization get permanent delegates (SDK:CvVotingClasses.cpp:5420-5460) */
     private fun giveLeadersBonus(resolution: Resolution, tally: Counter<String>) {
         if (resolution.leadersVoteBonusOnFail <= 0 || resolution.voterDecision != ResolutionDecision.MajorCiv) return
         val count = gameInfo.ruleset.modOptions.constants.leagueLeadersVoteBonusCount

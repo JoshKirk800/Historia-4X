@@ -346,7 +346,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
         updateYields()
     }
 
-    /** CvGameTrade::MoveUnit: the trader goes [TradeRoute.tilesPerTurn] tiles on, and the move is an event (V:CvTradeClasses.cpp:2085-2150, once however many steps it made).
+    /** CvGameTrade::MoveUnit: the trader goes [TradeRoute.tilesPerTurn] tiles on, and the move is an event (V:CvTradeClasses.cpp:2069-2146, once however many steps it made).
      *  @return `false` if the route was plundered on the way */
     private fun stepRoute(route: TradeRoute): Boolean {
         if (!stepAlong(route)) return false

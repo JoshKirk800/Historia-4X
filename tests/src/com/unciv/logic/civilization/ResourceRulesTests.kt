@@ -158,7 +158,7 @@ class ResourceRulesTests {
         val baseBuilding = wonderProduction(building)
 
         giveCityResource(marble)
-        // V:CvCity.cpp:18351-18420: the era of the wonder's technology decides, not the era of the player
+        // V:CvCity.cpp:18351-18416: the era of the wonder's technology decides, not the era of the player
         assertEquals(baseAncient + 15f, wonderProduction(ancient), 0f)
         assertEquals("the wonder's era is not before Industrial", baseIndustrial, wonderProduction(industrial), 0f)
         assertEquals("not a wonder", baseBuilding, wonderProduction(building), 0f)

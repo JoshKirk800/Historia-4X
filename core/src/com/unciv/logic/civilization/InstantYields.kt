@@ -190,7 +190,7 @@ object InstantYields {
     }
 
     /**
-     *  INSTANT_YIELD_TYPE_TR_MOVEMENT (V:CvTradeClasses.cpp:2085-2150): the trade unit of a route of [civ] that starts in [origin] has made its steps of the turn (and when it starts,
+     *  INSTANT_YIELD_TYPE_TR_MOVEMENT (CvGameTrade::MoveUnit, V:CvTradeClasses.cpp:2069-2146, the yield at 2114): the trade unit of a route of [civ] that starts in [origin] has made its steps of the turn (and when it starts,
      *  V:CvTradeClasses.cpp:848): fires [UniqueType.TriggerUponTradeUnitMoving] once, in the city of origin, however many steps it made.
      */
     fun tradeUnitMoved(civ: Civilization, origin: City) {

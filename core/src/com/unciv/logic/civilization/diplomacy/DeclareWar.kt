@@ -167,7 +167,9 @@ object DeclareWar {
                     NotificationCategory.Trade, diplomacyManager.otherCiv.civName, NotificationIcon.Trade)
         diplomacyManager.trades.clear()
         diplomacyManager.civInfo.tradeRequests.removeAll { it.requestingCiv == diplomacyManager.otherCiv.civID }
-        com.unciv.logic.automation.civilization.LeagueAutomation.cancelVoteCommitmentsToPlayer(diplomacyManager.civInfo, diplomacyManager.otherCiv) // CvGameDeals::DoEndTradedItem
+        // CvGameDeals::DoEndTradedItem: only without MOD_BALANCE_PERMANENT_VOTE_COMMITMENTS (V:CvDealClasses.cpp:5895), with it a war leaves the commitments
+        if (!diplomacyManager.civInfo.gameInfo.ruleset.modOptions.constants.permanentVoteCommitments)
+            com.unciv.logic.automation.civilization.LeagueAutomation.cancelVoteCommitmentsToPlayer(diplomacyManager.civInfo, diplomacyManager.otherCiv)
 
         // Must come *before* state is "at war" so units know they're not allowed in tiles without open borders anymore
         diplomacyManager.updateHasOpenBorders()

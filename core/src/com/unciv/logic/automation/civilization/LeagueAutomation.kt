@@ -439,14 +439,21 @@ object LeagueAutomation {
     //region Vote commitments
 
     /**
+     * The votes [seller] promises [buyer] in a deal: all its core votes in Brave New World (its CvDeal asserts no more and CvLeagueAI::GetDesiredVoteCommitments asks for them, CvVotingClasses.cpp:7540),
+     * with `permanentVoteCommitments` what [buyer] can buy from it with its diplomat (V:CvVotingClasses.cpp:10374-10483 and the trade screen's `GetPotentialVotesForMember`, [League.getPotentialVotes])
+     */
+    private fun votesOfCommitment(league: League, buyer: Civilization, seller: Civilization): Int =
+        if (buyer.gameInfo.ruleset.modOptions.constants.permanentVoteCommitments) league.getPotentialVotes(buyer, seller) else league.getCoreVotes(seller)
+
+    /**
      * CvLeagueAI::GetDesiredVoteCommitments (Vox Populi, CvVotingClasses.cpp:10317-10495): the commitment [civ] would like [fromCiv] to make to it, one per
      * proposal. For an AI the choice it desires most, if more than neutrally; for a human the assumed ones (yes on its own proposals, else yes or no by
-     * how much it likes the proposal without the global terms, itself as host or World Leader). The votes are the core votes of [fromCiv].
+     * how much it likes the proposal without the global terms, itself as host or World Leader). The votes are what [civ] can buy from [fromCiv] ([votesOfCommitment]).
      */
     fun desiredVoteCommitments(civ: Civilization, fromCiv: Civilization): List<VoteCommitment> {
         val league = civ.gameInfo.league ?: return emptyList()
         val resolutions = civ.gameInfo.ruleset.resolutions
-        val votes = league.getCoreVotes(fromCiv)
+        val votes = votesOfCommitment(league, civ, fromCiv)
         val desired = ArrayList<VoteCommitment>()
         for (proposal in league.proposals) {
             if (proposal.onHold) continue
@@ -505,12 +512,14 @@ object LeagueAutomation {
     /**
      * CvDeal::IsPossibleToTradeItem for TRADE_ITEM_VOTE_COMMITMENT: [civ] promises [toCiv] [votes] votes on [choice] of the proposal [proposalId]
      * (an enactment, or a repeal if [repeal]). Not while at war; [canCommitVote]; the proposal must be on the table (not on hold) and at least one vote and
-     * at most the core votes of [civ] promised. The original checks the choice nowhere (a todo) and only asserts the votes.
+     * at most the core votes of [civ] promised. The original checks the choice nowhere (a todo) and only asserts the votes (at most the core votes, in debug builds);
+     * Vox Populi does not even assert them (V:CvDealClasses.cpp:1077, `DEBUG_VARIABLE(iNumVotes)`), so with `permanentVoteCommitments` the number is not capped, it is what [votesOfCommitment] gives
      */
     fun isVoteCommitmentPossible(civ: Civilization, toCiv: Civilization, proposalId: Int, choice: String, votes: Int, repeal: Boolean): Boolean {
         if (civ.isAtWarWith(toCiv) || !canCommitVote(civ, toCiv)) return false
         val league = civ.gameInfo.league ?: return false
-        if (votes < 1 || votes > league.getCoreVotes(civ)) return false
+        if (votes < 1) return false
+        if (!civ.gameInfo.ruleset.modOptions.constants.permanentVoteCommitments && votes > league.getCoreVotes(civ)) return false
         val proposal = league.proposals.firstOrNull { it.id == proposalId && it.repeal == repeal && !it.onHold } ?: return false
         return choice in choicesOf(league, proposal, civ)
     }
@@ -522,13 +531,14 @@ object LeagueAutomation {
     }
 
     /**
-     * The vote commitments [civ] could make to [toCiv] in a deal, which the trade screen offers: all its core votes on each choice of each proposal on
-     * the table, if [isVoteCommitmentPossible] allows any. (The original's Lua offers the same items.)
+     * The vote commitments [civ] could make to [toCiv] in a deal, which the trade screen offers: [votesOfCommitment] on each choice of each proposal on
+     * the table, if [isVoteCommitmentPossible] allows any. (The original's Lua offers the same items, the core votes of the seller; Vox Populi's TradeLogic.lua
+     * the `GetPotentialVotesForMember` ones.)
      */
     fun availableVoteCommitments(civ: Civilization, toCiv: Civilization): List<VoteCommitment> {
         val league = civ.gameInfo.league ?: return emptyList()
         if (civ.isAtWarWith(toCiv) || !canCommitVote(civ, toCiv)) return emptyList()
-        val votes = league.getCoreVotes(civ)
+        val votes = votesOfCommitment(league, toCiv, civ)
         if (votes < 1) return emptyList()
         return league.proposals.filter { !it.onHold }.flatMap { proposal ->
             choicesOf(league, proposal, civ).map { VoteCommitment(toCiv.civID, proposal.id, it, votes, !proposal.repeal) }
@@ -558,6 +568,8 @@ object LeagueAutomation {
             if (!league.canVote(civ)) continue
             val proposal = league.proposals.firstOrNull { it.id == commitment.proposalId && it.repeal == !commitment.enact }
             if (proposal != null && proposal.onHold) continue
+            // The proposal is gone (a civilization it names was killed): with `permanentVoteCommitments` the votes promised are given up, not kept for something else (V:CvVotingClasses.cpp:10660, 10689)
+            if (proposal == null && league.gameInfo.ruleset.modOptions.constants.permanentVoteCommitments) league.abstain(civ, commitment.votes)
             if (proposal != null) {
                 val resolution = league.gameInfo.ruleset.resolutions[proposal.resolution]
                 val decision = if (proposal.repeal) ResolutionDecision.YesNo else resolution?.voterDecision

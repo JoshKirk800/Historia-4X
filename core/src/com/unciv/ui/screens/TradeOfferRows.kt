@@ -30,7 +30,7 @@ object TradeOfferRows {
     @Readonly
     fun permanenceNote(offer: TradeOffer, civ: Civilization): String? {
         if (!marksPermanence(civ)) return null
-        return when (TradeEvaluation.permanence(offer)) {
+        return when (TradeEvaluation.permanence(offer, civ.constants.permanentVoteCommitments)) {
             Permanence.Permanent -> PERMANENT
             Permanence.Temporary -> TEMPORARY
             null -> null

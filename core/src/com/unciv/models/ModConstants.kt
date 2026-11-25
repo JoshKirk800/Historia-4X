@@ -1156,6 +1156,13 @@ class ModConstants {
      *  session start fires `upon a World Congress session` for each member (:7292-7303) and a proposal that passes fires `upon a proposal of ours passing` for its player proposer (:7624, 8028).
      *  Set [leagueProposersPerSession] to 3 with it (the value of the Vox Populi ruleset, `Defines.LEAGUE_PROPOSERS_PER_SESSION`; Community Patch's is 2). Off, a session is Brave New World's */
     var leagueSessionRulesLikeVp = false
+    /**
+     * Vote commitments in deals as Vox Populi has them (`MOD_BALANCE_PERMANENT_VOTE_COMMITMENTS`, 1 in its database): a vote commitment is a PERMANENT item of a deal
+     * (V:CvDealClasses.cpp:1343, 1362, 1423, 1440, 1461), so it is not given for a temporary one and not taken for one; a war does not cancel the commitments (:5895);
+     * a commitment whose proposal is gone makes the member abstain the votes it promised (V:CvVotingClasses.cpp:10660, 10689); and what a civilization asks for is
+     * the votes it can buy with its diplomat (`League.getPotentialVotes`, :3943-4014), not the core votes of the original (its CvVotingClasses.cpp:7540). Off, none of it
+     */
+    var permanentVoteCommitments = false
     /** Civilizations that propose resolutions in a session, the host included (LEAGUE_PROPOSERS_PER_SESSION: 2 in Community Patch, 3 in the Vox Populi ruleset) */
     var leagueProposersPerSession = 2
     /** Resolutions each of them proposes */

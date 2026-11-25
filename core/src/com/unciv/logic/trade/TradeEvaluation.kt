@@ -150,9 +150,12 @@ class TradeEvaluation {
 
     companion object {
         /** Whether an item is permanent (gold, a city, a technology), temporary (gold per turn, resources, open borders, pacts, a war or peace with a third civilization, an embassy)
-         *  or neither (CvDeal::BlockTemporaryForPermanentTrade's lists, V:CvDealClasses.cpp:1368-1470); a peace treaty is irrelevant to the rule */
+         *  or neither (CvDeal::BlockTemporaryForPermanentTrade's lists, V:CvDealClasses.cpp:1368-1470); a peace treaty is irrelevant to the rule.
+         *  A vote commitment is permanent with [permanentVoteCommitments] (V:1343, 1362, 1423, 1440, 1461: `MOD_BALANCE_PERMANENT_VOTE_COMMITMENTS`) and neither without it: the original
+         *  counts it as temporary (its `bTemporary = true`), which this engine has never done and which an owner decision would have to change */
         @Readonly
-        fun permanence(offer: TradeOffer): Permanence? = when (offer.type) {
+        fun permanence(offer: TradeOffer, permanentVoteCommitments: Boolean): Permanence? = when (offer.type) {
+            TradeOfferType.VoteCommitment -> if (permanentVoteCommitments) Permanence.Permanent else null
             TradeOfferType.Gold, TradeOfferType.City, TradeOfferType.Technology -> Permanence.Permanent
             TradeOfferType.Gold_Per_Turn, TradeOfferType.Luxury_Resource, TradeOfferType.Strategic_Resource, TradeOfferType.Agreement,
             TradeOfferType.Embassy, TradeOfferType.WarDeclaration, TradeOfferType.PeaceProposal -> Permanence.Temporary
@@ -177,12 +180,13 @@ class TradeEvaluation {
             val noHumans = !fromHuman && !to.isHuman()
             if (fromHuman && to.isHuman()) return false
             val humanRule = constants.dealHumanPermanentForAiTemporary
-            return when (permanence(offer)) {
+            val votes = constants.permanentVoteCommitments
+            return when (permanence(offer, votes)) {
                 Permanence.Temporary ->
-                    (!humanRule || fromHuman || noHumans) && receiverGives.any { permanence(it) == Permanence.Permanent }
+                    (!humanRule || fromHuman || noHumans) && receiverGives.any { permanence(it, votes) == Permanence.Permanent }
                 Permanence.Permanent ->
                     (!humanRule || !fromHuman || noHumans) && receiverGives.any {
-                        permanence(it) == Permanence.Temporary && !(it.type == TradeOfferType.PeaceProposal && from.isAtWarWith(to))
+                        permanence(it, votes) == Permanence.Temporary && !(it.type == TradeOfferType.PeaceProposal && from.isAtWarWith(to))
                     }
                 null -> false
             }

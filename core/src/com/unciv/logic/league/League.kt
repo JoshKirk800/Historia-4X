@@ -554,6 +554,22 @@ class League : IsPartOfGameInfoSerialization {
     fun getCoreVotes(civ: Civilization): Int = if (canEverVote(civ)) getSessionInfo().civDelegates else 0
 
     /**
+     * The votes [buyer] can buy from [seller] in a deal (CvLeague::GetPotentialVotesForMember, V:CvVotingClasses.cpp:3943-4014): what [seller] has in a session, less what it already promised
+     * to anybody on the enactments on the table (its loop runs over the enact proposals only, so a commitment on a repeal is not subtracted), times the percent that [buyer]'s diplomat
+     * in [seller]'s capital makes tradable (`DiplomatVoteTradePercent`, V:CvEspionageClasses.cpp:6991-6994), at least 1. 0 without such a diplomat or when nothing is left to buy.
+     * That is Vox Populi's `MOD_BALANCE_VP` branch; the other divides by 5 less the diplomat's rank, which the diplomats of this engine do not have
+     */
+    fun getPotentialVotes(buyer: Civilization, seller: Civilization): Int {
+        if (!canEverVote(seller)) return 0
+        val promised = members[seller.civID]?.voteCommitments?.sumOf { commitment ->
+            if (proposals.any { it.id == commitment.proposalId && !it.repeal }) commitment.votes else 0
+        } ?: 0
+        val votes = getDelegates(seller) - promised
+        if (votes <= 0 || buyer.espionageManager.getActiveDiplomatFor(seller) == null) return 0
+        return maxOf(1, votes * buyer.espionageManager.getDiplomatVoteTradePercent(seller) / 100)
+    }
+
+    /**
      * The delegates [civ] has in a session with the parameters of [getSessionInfo] (CvLeague::CalculateStartingVotesForMember, CvVotingClasses.cpp:3223-3359):
      * delegates of the era, those of failed World Leader votes, the host's, those of allied city-states, [UniqueType.WorldCongressDelegates],
      * Globalization's delegate per active diplomat, and those of the World Religion and World Ideology in effect.
@@ -955,6 +971,15 @@ class League : IsPartOfGameInfoSerialization {
         val member = members[voter.civID] ?: return
         member.abstained += member.delegatesLeft
         member.delegatesLeft = 0
+    }
+
+    /** Gives up [delegates] of the delegates [voter] has left, no more than it has (Vox Populi's CvLeague::DoVoteAbstain with a number, V:CvVotingClasses.cpp:2588) */
+    fun abstain(voter: Civilization, delegates: Int) {
+        val member = members[voter.civID] ?: return
+        if (!canVote(voter)) return
+        val given = minOf(delegates, member.delegatesLeft)
+        member.abstained += given
+        member.delegatesLeft -= given
     }
 
     /** Delegates per choice of [proposal] (CvVoterDecision::ProcessVote) */

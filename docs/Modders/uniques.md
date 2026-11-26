@@ -2392,6 +2392,34 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Resolution, Tech, Policy, FounderBelief, FollowerBelief, Building, Unit, Promotion, Improvement, Ruins, Event, EventChoice, Victory
 
+??? example  "[relativeAmount]% Strength for land units in territory friendly to us against units of major civilizations"
+	Read from the beliefs of the state religion of the unit's owner that apply with its holy city (CvUnit::GetGenericMeleeStrengthModifier, V:CvUnit.cpp:16471-16507), for a land unit fighting a unit of a major civilization; the battle tile is the defender's. Only with the ModConstants `religiousCombatLikeVp`. Vox Populi's `Beliefs.CombatBonusOwnLands`: the battle tile is ours or opens its borders to us
+
+	Example: "[+20]% Strength for land units in territory friendly to us against units of major civilizations"
+
+	Applicable to: FounderBelief, FollowerBelief
+
+??? example  "[relativeAmount]% Strength for land units in territory friendly to us against units of major civilizations with another state religion"
+	Read from the beliefs of the state religion of the unit's owner that apply with its holy city (CvUnit::GetGenericMeleeStrengthModifier, V:CvUnit.cpp:16471-16507), for a land unit fighting a unit of a major civilization; the battle tile is the defender's. Only with the ModConstants `religiousCombatLikeVp`. Vox Populi's `Beliefs.CombatBonusVersusOtherReligionOwnLands`: as the one without the other religion, but only when the other civilization's state religion is not ours (or it has none)
+
+	Example: "[+20]% Strength for land units in territory friendly to us against units of major civilizations with another state religion"
+
+	Applicable to: FounderBelief, FollowerBelief
+
+??? example  "[relativeAmount]% Strength for land units in territory friendly to the enemy against units of major civilizations"
+	Read from the beliefs of the state religion of the unit's owner that apply with its holy city (CvUnit::GetGenericMeleeStrengthModifier, V:CvUnit.cpp:16471-16507), for a land unit fighting a unit of a major civilization; the battle tile is the defender's. Only with the ModConstants `religiousCombatLikeVp`. Vox Populi's `Beliefs.CombatBonusTheirLands`: the battle tile is the other civilization's or opens its borders to it
+
+	Example: "[+20]% Strength for land units in territory friendly to the enemy against units of major civilizations"
+
+	Applicable to: FounderBelief, FollowerBelief
+
+??? example  "[relativeAmount]% Strength for land units in territory friendly to the enemy against units of major civilizations with another state religion"
+	Read from the beliefs of the state religion of the unit's owner that apply with its holy city (CvUnit::GetGenericMeleeStrengthModifier, V:CvUnit.cpp:16471-16507), for a land unit fighting a unit of a major civilization; the battle tile is the defender's. Only with the ModConstants `religiousCombatLikeVp`. Vox Populi's `Beliefs.CombatBonusVersusOtherReligionTheirLands`: as the one without the other religion, but only when the other civilization's state religion is not ours (or it has none)
+
+	Example: "[+20]% Strength for land units in territory friendly to the enemy against units of major civilizations with another state religion"
+
+	Applicable to: FounderBelief, FollowerBelief
+
 ??? example  "[relativeAmount]% weight to this choice for AI decisions"
 	Example: "[+20]% weight to this choice for AI decisions"
 
@@ -2841,6 +2869,34 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Meant to be used together with conditionals, like "Unavailable &lt;after generating a Great Prophet&gt;".
 
 	Applicable to: Resolution, Tech, Policy, FounderBelief, FollowerBelief, Building, Unit, Promotion, Improvement, Ruins, Event, EventChoice, Victory
+
+??? example  "[relativeAmount]% Strength for land units in territory friendly to us against units of major civilizations"
+	Read from the beliefs of the state religion of the unit's owner that apply with its holy city (CvUnit::GetGenericMeleeStrengthModifier, V:CvUnit.cpp:16471-16507), for a land unit fighting a unit of a major civilization; the battle tile is the defender's. Only with the ModConstants `religiousCombatLikeVp`. Vox Populi's `Beliefs.CombatBonusOwnLands`: the battle tile is ours or opens its borders to us
+
+	Example: "[+20]% Strength for land units in territory friendly to us against units of major civilizations"
+
+	Applicable to: FounderBelief, FollowerBelief
+
+??? example  "[relativeAmount]% Strength for land units in territory friendly to us against units of major civilizations with another state religion"
+	Read from the beliefs of the state religion of the unit's owner that apply with its holy city (CvUnit::GetGenericMeleeStrengthModifier, V:CvUnit.cpp:16471-16507), for a land unit fighting a unit of a major civilization; the battle tile is the defender's. Only with the ModConstants `religiousCombatLikeVp`. Vox Populi's `Beliefs.CombatBonusVersusOtherReligionOwnLands`: as the one without the other religion, but only when the other civilization's state religion is not ours (or it has none)
+
+	Example: "[+20]% Strength for land units in territory friendly to us against units of major civilizations with another state religion"
+
+	Applicable to: FounderBelief, FollowerBelief
+
+??? example  "[relativeAmount]% Strength for land units in territory friendly to the enemy against units of major civilizations"
+	Read from the beliefs of the state religion of the unit's owner that apply with its holy city (CvUnit::GetGenericMeleeStrengthModifier, V:CvUnit.cpp:16471-16507), for a land unit fighting a unit of a major civilization; the battle tile is the defender's. Only with the ModConstants `religiousCombatLikeVp`. Vox Populi's `Beliefs.CombatBonusTheirLands`: the battle tile is the other civilization's or opens its borders to it
+
+	Example: "[+20]% Strength for land units in territory friendly to the enemy against units of major civilizations"
+
+	Applicable to: FounderBelief, FollowerBelief
+
+??? example  "[relativeAmount]% Strength for land units in territory friendly to the enemy against units of major civilizations with another state religion"
+	Read from the beliefs of the state religion of the unit's owner that apply with its holy city (CvUnit::GetGenericMeleeStrengthModifier, V:CvUnit.cpp:16471-16507), for a land unit fighting a unit of a major civilization; the battle tile is the defender's. Only with the ModConstants `religiousCombatLikeVp`. Vox Populi's `Beliefs.CombatBonusVersusOtherReligionTheirLands`: as the one without the other religion, but only when the other civilization's state religion is not ours (or it has none)
+
+	Example: "[+20]% Strength for land units in territory friendly to the enemy against units of major civilizations with another state religion"
+
+	Applicable to: FounderBelief, FollowerBelief
 
 ??? example  "Earn [amount]% of [mapUnitFilter] unit's [costOrStrength] as [stockpile] when killed within 4 tiles of a city following this religion"
 	Does not apply to units destroyed by nuclear explosions, which do not count as combat defeats.

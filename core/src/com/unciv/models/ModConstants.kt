@@ -209,6 +209,12 @@ class ModConstants {
      *  accepts, the pantheon belief of the second religion of the capital, and the civilization's own pantheon belief that it keeps for good
      *  (MOD_BALANCE_PERMANENT_PANTHEONS). The healing of a city's own religion next to the city is then not added again. Needs [unitHealingLikeVp]. */
     var stateReligionHealingLikeVp = false
+    /** VP 5.4.8 CvReligionBeliefs::IsBeliefValid, the Reformation branch (V:CvBeliefClasses.cpp:2229-2253): a Reformation belief works for the civilization that owns the holy city
+     *  of the religion or has it as its state religion ([com.unciv.logic.civilization.managers.ReligionManager.getStateReligion]), and in a city only if the majority religion
+     *  of that city is that religion. Without it, as before, every Reformation belief works for the founder of the religion only, and in all of its cities.
+     *  NOT modelled: `bHolyCityOnly` (2240-2252, a call-site argument that limits the belief to the holy city, or for the others to the capital); some callers pass it, for
+     *  instance `CvCity::canConstruct` (V:CvCity.cpp:8915, with the OWNED religion). Which Reformation readers pass it was not checked. */
+    var reformationBeliefsLikeVp = false
     var cityUnitHeal = 25
     var friendlyUnitHeal = 20
     var neutralUnitHeal = 10

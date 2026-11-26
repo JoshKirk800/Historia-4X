@@ -12,11 +12,13 @@ import com.unciv.models.Counter
 import com.unciv.models.Religion
 import com.unciv.models.ruleset.Belief
 import com.unciv.models.ruleset.BeliefType
+import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.ui.components.extensions.toPercent
 import com.unciv.logic.map.mapunit.actions.UnitActionModifiers
+import yairm210.purity.annotations.Cache
 import yairm210.purity.annotations.Readonly
 import java.lang.Integer.min
 import kotlin.math.roundToInt
@@ -31,6 +33,14 @@ class ReligionManager : IsPartOfGameInfoSerialization {
 
     @Transient
     var religion: Religion? = null
+
+    /** [getStateReligion] worked out once until [invalidateStateReligion]: the original keeps it in a field that CvPlayerReligions::UpdateStateReligion refreshes
+     *  (V:CvReligionClasses.cpp:3733-3739 reads it, 3769-3823 sets it; called from CvPlayer::UpdateReligion, V:CvPlayer.cpp:10836-10854), the lookup of it here sorts
+     *  the religions and scans the cities, and [forEachBeliefUniqueMap] asks it on every civilization-wide unique lookup. */
+    @Transient @Cache @Volatile
+    private var stateReligionCache: Religion? = null
+    @Transient @Cache @Volatile
+    private var stateReligionCached = false
     // You might ask why this is the transient variable, and not the one in GameInfo.
     // After all, filling a hashmap is much easier than later distributing its contents over multiple classes.
     // There is, however, a problem.
@@ -65,6 +75,10 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         clone.freeBeliefs.putAll(freeBeliefs)
         return clone
     }
+
+    /** Whether [setTransients] has run, for [forEachBeliefUniqueMap], which units ask while a game is loading. */
+    @Readonly
+    fun hasCivInfo() = ::civInfo.isInitialized
 
     fun setTransients(civInfo: Civilization) {
         this.civInfo = civInfo
@@ -644,6 +658,23 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         return civInfo.gameInfo.religions[majority.key]
     }
 
+    /** [getStateReligion], worked out once until something that it reads changes ([invalidateStateReligion]). For the hot paths. */
+    @Readonly
+    fun getStateReligionCached(): Religion? {
+        if (stateReligionCached) return stateReligionCache
+        val state = getStateReligion()
+        stateReligionCache = state
+        stateReligionCached = true
+        return state
+    }
+
+    /** Forgets the cached state religion: call it where an input of [getStateReligion] changes (a religion founded or given beliefs, the holy city of a religion
+     *  set or lost, a city founded, conquered, destroyed, or its followers recomputed), as CvCity::UpdateReligion calls CvPlayer::UpdateReligion (V:CvCity.cpp:15188). */
+    fun invalidateStateReligion() {
+        stateReligionCached = false
+        stateReligionCache = null
+    }
+
     /** Whether the belief counts for [religion] in the way CvReligionBeliefs::IsBeliefValid answers it when CvUnit::healRate asks for the friendly heal change
      *  (with the holy city as city, so beliefs that act through cities need that city to be ours and to follow the religion). */
     @Readonly
@@ -659,6 +690,40 @@ class ReligionManager : IsPartOfGameInfoSerialization {
             BeliefType.Pantheon -> holyCity == null || ((majorityHere || pantheonInReligion()) && holyCity.civ == civInfo)
             else -> true
         }
+    }
+
+    /** Whether a Reformation belief of [religion] works for this civilization, as the Reformation branch of CvReligionBeliefs::IsBeliefValid answers it
+     *  (V:CvBeliefClasses.cpp:2229-2253, without `bHolyCityOnly`): the civilization owns the holy city of the religion or has it as its state religion
+     *  ([getStateReligion]), and, when [city] is asked about, the majority religion of that city is [religion]. The caller asks only if
+     *  [com.unciv.models.ModConstants.reformationBeliefsLikeVp] is on. [getStateReligion] is dear (it sorts the religions and scans the cities), so the
+     *  owner of the holy city is asked first and the callers keep this off the hot paths. DEPARTURE: VP asks who owns the PLOT of the holy city
+     *  (V:CvBeliefClasses.cpp:2157-2176), here it is the owner of the holy CITY, so a holy city that no longer exists counts for nobody but the state religion.
+     *  Not [isBeliefValidForHealing]: that one asks with the holy city as the city and treats a religion without a holy city as valid for everybody. */
+    @Readonly
+    fun reformationBeliefApplies(religion: Religion, city: City? = null): Boolean {
+        if (city != null && city.religion.getMajorityReligion() != religion) return false
+        if (civInfo.cities.any { it.religion.religionThisIsTheHolyCityOf == religion.name }) return true // the holy city is ours: its owner is us
+        return getStateReligionCached() == religion
+    }
+
+    /** The founder-side belief uniques that every civilization-wide lookup of this civilization reads ([com.unciv.logic.civilization.Civilization.getMatchingUniques]
+     *  and its siblings), as at most two maps. Without [com.unciv.models.ModConstants.reformationBeliefsLikeVp]: all founder-side uniques of the religion it founded.
+     *  With it: the Founder and Enhancer uniques of that religion, plus the civilization-wide Reformation uniques ([Religion.reformationCivUniqueMap]; the ones scoped to
+     *  the cities that follow the religion are the cities' own, see [com.unciv.logic.city.managers.CityReligionManager]) of EVERY religion for which
+     *  [reformationBeliefApplies] holds (its own while it owns the holy city, the state religion, and any other religion whose holy city it owns, as IsBeliefValid asks it of each belief). Most games have no
+     *  Reformation belief at all, and then this is as cheap as before: [reformationBeliefApplies], which asks the state religion and that is dear, is only run for
+     *  the religions that have one. */
+    @Readonly
+    inline fun forEachBeliefUniqueMap(op: (UniqueMap) -> Unit) {
+        val founded = religion
+        // While a game loads, the units ask for uniques before this manager has its civilization: that is as without the switch
+        if (!hasCivInfo() || !civInfo.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp) {
+            if (founded != null) op(founded.founderBeliefUniqueMap)
+            return
+        }
+        if (founded != null) op(founded.founderWithoutReformationUniqueMap)
+        for (candidate in civInfo.gameInfo.religions.values)
+            if (!candidate.reformationCivUniqueMap.isEmpty() && reformationBeliefApplies(candidate)) op(candidate.reformationCivUniqueMap)
     }
 
     /** The first belief of the pantheon of this civilization, as CvGameReligions::GetBeliefInPantheon finds it: the first religion in founding order

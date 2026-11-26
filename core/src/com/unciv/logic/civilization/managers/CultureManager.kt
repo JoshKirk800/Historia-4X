@@ -6,6 +6,7 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.models.Counter
 import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
 
@@ -142,12 +143,23 @@ class CultureManager : IsPartOfGameInfoSerialization {
         for (unique in city.getMatchingUniques(UniqueType.FlatTourism, state))
             if (city.matchesFilter(unique.params[1])) base += unique.params[0].toInt()
 
-        // Sacred Sites (CvCultureClasses.cpp:4081): the beliefs of the majority religion of the city count, whoever founded it
-        city.religion.getMajorityReligion()?.founderBeliefUniqueMap
-            ?.forEachMatchingUnique(UniqueType.FlatTourismFromFaithBuildings, state) { unique ->
-                if (city.matchesFilter(unique.params[2]))
-                    base += unique.params[0].toInt() * getNumBuildingsOnlyBoughtWith(city, unique.params[1])
+        // Sacred Sites: CvCity::getBaseYieldRateTimes100 asks the majority religion of the city for GetFaithBuildingTourism(getOwner(), this) (V:CvCity.cpp:23358), which
+        // goes through IsBeliefValid. Without reformationBeliefsLikeVp the beliefs of the majority religion count, whoever founded it; with it a Reformation belief only if the
+        // owner of the city owns the holy city of the religion or has it as its state religion (the city follows it, it being the majority there)
+        val majority = city.religion.getMajorityReligion()
+        val faithBuildingTourism: (Unique) -> Unit = { unique ->
+            if (city.matchesFilter(unique.params[2]))
+                base += unique.params[0].toInt() * getNumBuildingsOnlyBoughtWith(city, unique.params[1])
+        }
+        if (majority != null) {
+            if (!constants.reformationBeliefsLikeVp)
+                majority.founderBeliefUniqueMap.forEachMatchingUnique(UniqueType.FlatTourismFromFaithBuildings, state, faithBuildingTourism)
+            else {
+                majority.founderWithoutReformationUniqueMap.forEachMatchingUnique(UniqueType.FlatTourismFromFaithBuildings, state, faithBuildingTourism)
+                if (city.civ.religionManager.reformationBeliefApplies(majority, city))
+                    majority.reformationBeliefUniqueMap.forEachMatchingUnique(UniqueType.FlatTourismFromFaithBuildings, state, faithBuildingTourism)
             }
+        }
         return base
     }
 

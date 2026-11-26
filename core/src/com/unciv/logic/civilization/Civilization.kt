@@ -246,6 +246,10 @@ class Civilization : IsPartOfGameInfoSerialization {
     // Note this relies on Gdx Json falling beck to ArrayList when deserializing json arrays for a field collection type it doesn't recognize.
     // This will NOT be an ArrayList in memory right after GameStarter - but save and reload or pass a next turn, and it will be.
     var cities = listOf<City>()
+        set(value) {
+            field = value
+            religionManager.invalidateStateReligion() // a city founded, conquered or destroyed: the state religion reads the cities
+        }
     var citiesCreated = 0
     /** The tiles this civilization has bought with gold (CvPlayer::m_iNumPlotsBought); each one raises the price of the next by 5 under plotAcquisitionLikeCivV */
     var plotsBought = 0
@@ -739,8 +743,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         yieldAll(temporaryUniques.getMatchingTagUniques(uniqueType, gameContext))
         yieldAll(getEra().getMatchingUniques(uniqueType, gameContext))
         yieldAll(cityStateFunctions.getUniquesProvidedByCityStates(uniqueType, gameContext))
-        if (religionManager.religion != null)
-            yieldAll(religionManager.religion!!.founderBeliefUniqueMap.getMatchingUniques(uniqueType, gameContext))
+        religionManager.forEachBeliefUniqueMap { yieldAll(it.getMatchingUniques(uniqueType, gameContext)) }
 
         yieldAll(civResourcesUniqueMap.getMatchingUniques(uniqueType, gameContext))
         yieldAll(monopolies.uniqueMap.getMatchingUniques(uniqueType, gameContext))
@@ -758,7 +761,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         temporaryUniques.forEachMatchingUnique(uniqueType, gameContext, op)
         getEra().forEachMatchingUnique(uniqueType, gameContext, op)
         cityStateFunctions.forEachUniqueProvidedByCityStates(uniqueType, gameContext, op)
-        religionManager.religion?.founderBeliefUniqueMap?.forEachMatchingUnique(uniqueType, gameContext, op)
+        religionManager.forEachBeliefUniqueMap { it.forEachMatchingUnique(uniqueType, gameContext, op) }
         civResourcesUniqueMap.forEachMatchingUnique(uniqueType, gameContext, op)
         monopolies.uniqueMap.forEachMatchingUnique(uniqueType, gameContext, op)
         gameInfo.getGlobalUniques().forEachMatchingUnique(uniqueType, gameContext, op)
@@ -776,8 +779,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         // Cannont use getTriggeredUniques from uniqueMaps since we don't want to check conditionals yet
         yieldAll(nation.uniqueMap.getAllUniques())
         yieldAll(cities.asSequence().flatMap { city -> city.cityConstructions.builtBuildingUniqueMap.getAllUniques() })
-        if (religionManager.religion != null)
-            yieldAll(religionManager.religion!!.founderBeliefUniqueMap.getAllUniques())
+        religionManager.forEachBeliefUniqueMap { yieldAll(it.getAllUniques()) }
         yieldAll(policies.policyUniques.getAllUniques())
         yieldAll(tech.techUniques.getAllUniques())
         yieldAll(getEra().uniqueMap.getAllUniques())
@@ -802,8 +804,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         if(!ignoreCities) yieldAll(cities.asSequence()
             .flatMap { city -> city.cityConstructions.builtBuildingUniqueMap.getAllUniques() }
         )
-        if (religionManager.religion != null)
-            yieldAll(religionManager.religion!!.founderBeliefUniqueMap.getAllUniques())
+        religionManager.forEachBeliefUniqueMap { yieldAll(it.getAllUniques()) }
         yieldAll(policies.policyUniques.getAllUniques())
         yieldAll(tech.techUniques.getAllUniques())
         yieldAll(getEra().uniqueMap.getAllUniques())
@@ -841,7 +842,7 @@ class Civilization : IsPartOfGameInfoSerialization {
                 city.cityConstructions.builtBuildingUniqueMap.forEachUnique(uniqueFilter, listOp)
             }
         }
-        religionManager.religion?.founderBeliefUniqueMap?.forEachUnique(uniqueFilter, listOp)
+        religionManager.forEachBeliefUniqueMap { it.forEachUnique(uniqueFilter, listOp) }
         policies.policyUniques.forEachUnique(uniqueFilter, listOp)
         tech.techUniques.forEachUnique(uniqueFilter, listOp)
         getEra().uniqueMap.forEachUnique(uniqueFilter, listOp)

@@ -11,6 +11,7 @@ import com.unciv.models.ruleset.Belief
 import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
+import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueMap.Companion.NO_UNIQUE_FILTER
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.ui.components.extensions.toPercent
@@ -94,9 +95,23 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         replaceWith = ReplaceWith("forEachUnique"))
     fun getUniques(uniqueType: UniqueType): Sequence<Unique> {
         val majorityReligion = getMajorityReligion() ?: return emptySequence()
-        val uniques = majorityReligion.followerBeliefUniqueMap.getUniques(uniqueType)
+        var uniques = majorityReligion.followerBeliefUniqueMap.getUniques(uniqueType)
+        val reformation = reformationMapOfMajority(majorityReligion)
+        if (reformation != null) uniques += reformation.getUniques(uniqueType)
         val secondary = getSecondaryPantheonBelief() ?: return uniques
         return uniques + secondary.uniqueMap.getUniques(uniqueType)
+    }
+
+    /** With [com.unciv.models.ModConstants.reformationBeliefsLikeVp] the Reformation uniques of the majority religion of this city that are scoped to the cities that follow
+     *  the religion ([Religion.reformationCityUniqueMap]) work in it for the owner of the city if
+     *  [com.unciv.logic.civilization.managers.ReligionManager.reformationBeliefApplies] says so (V:CvBeliefClasses.cpp:2229-2253 asked with the city, as CvCity::UpdateReligion
+     *  and the faith purchases do): the map to read in addition to the follower beliefs, or null. The other Reformation uniques come to the city with those of its civilization
+     *  ([com.unciv.logic.civilization.managers.ReligionManager.forEachBeliefUniqueMap]). Cheap when no religion has such a belief. */
+    @Readonly
+    private fun reformationMapOfMajority(majority: Religion): UniqueMap? {
+        if (majority.reformationCityUniqueMap.isEmpty()) return null
+        if (!city.civ.religionManager.hasCivInfo() || !city.civ.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp) return null
+        return if (city.civ.religionManager.reformationBeliefApplies(majority, city)) majority.reformationCityUniqueMap else null
     }
 
     @Readonly
@@ -106,13 +121,16 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
     fun forEachMatchingUnique(uniqueType: UniqueType, gameContext: GameContext=city.state, filter:(Unique)->Boolean, op: (unique: Unique)->Unit) {
         val majorityReligion = getMajorityReligion() ?: return
         majorityReligion.followerBeliefUniqueMap.forEachMatchingUnique(uniqueType, gameContext, filter, op)
+        reformationMapOfMajority(majorityReligion)?.forEachMatchingUnique(uniqueType, gameContext, filter, op)
         getSecondaryPantheonBelief()?.uniqueMap?.forEachMatchingUnique(uniqueType, gameContext, filter, op)
     }
 
     @Readonly
     fun getAllUniques(): Sequence<Unique> {
         val majorityReligion = getMajorityReligion() ?: return emptySequence()
-        val uniques = majorityReligion.followerBeliefUniqueMap.getAllUniques()
+        var uniques = majorityReligion.followerBeliefUniqueMap.getAllUniques()
+        val reformation = reformationMapOfMajority(majorityReligion)
+        if (reformation != null) uniques += reformation.getAllUniques()
         val secondary = getSecondaryPantheonBelief() ?: return uniques
         return uniques + secondary.uniqueMap.getAllUniques()
     }
@@ -121,6 +139,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
     fun forEachUnique(filter:(Unique)->Boolean, op: (unique: Unique)->Unit) {
         val majorityReligion = getMajorityReligion() ?: return
         majorityReligion.followerBeliefUniqueMap.forEachUnique(filter, op)
+        reformationMapOfMajority(majorityReligion)?.forEachUnique(filter, op)
         getSecondaryPantheonBelief()?.uniqueMap?.forEachUnique(filter, op)
     }
 
@@ -179,7 +198,16 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
             val other = city.civ.gameInfo.religions[name] ?: continue
             if (!other.isMajorReligion()) continue
             var retention = 0
-            other.founderBeliefUniqueMap.forEachMatchingUnique(UniqueType.ReligionPressureRetention, city.state) { retention += it.params[0].toInt() }
+            // CvCityReligions::ErodeOtherReligiousPressure, which RemoveOtherReligions and AddProphetSpread call, asks GetInquisitorPressureRetention(the OWNER OF THE CITY)
+            // (V:CvReligionClasses.cpp:4957; SimulateErodeOtherReligiousPressure, the same for the preview, 4999): with the switch a
+            // Reformation belief of the religion that is kept only counts if the owner of this city owns its holy city or has it as the state religion
+            if (!city.civ.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp)
+                other.founderBeliefUniqueMap.forEachMatchingUnique(UniqueType.ReligionPressureRetention, city.state) { retention += it.params[0].toInt() }
+            else {
+                other.founderWithoutReformationUniqueMap.forEachMatchingUnique(UniqueType.ReligionPressureRetention, city.state) { retention += it.params[0].toInt() }
+                if (city.civ.religionManager.reformationBeliefApplies(other))
+                    other.reformationBeliefUniqueMap.forEachMatchingUnique(UniqueType.ReligionPressureRetention, city.state) { retention += it.params[0].toInt() }
+            }
             if (retention > 0) retainedPressures.add(name, pressure * retention.coerceAtMost(100) / 100)
         }
         clearAllPressures()
@@ -234,6 +262,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
     }
 
     private fun updateNumberOfFollowers(checkForReligionAdoption: Boolean = true) {
+        city.civ.religionManager.invalidateStateReligion() // CvCity::UpdateReligion ends in CvPlayer::UpdateReligion (V:CvCity.cpp:15188)
         val oldMajorityReligion =
             if (checkForReligionAdoption) getMajorityReligionName()
             else null
@@ -358,10 +387,18 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
     @Readonly
     private fun getSpyPressureTimes(): Counter<String> {
         val result = Counter<String>()
+        val reformationLikeVp = city.civ.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp
         for (spyCiv in city.civ.gameInfo.civilizations) {
-            val religion = spyCiv.religionManager.religion?.takeIf { it.isMajorReligion() } ?: continue
+            // CvPlayerReligions::GetSpyPressure (V:CvReligionClasses.cpp:4017-4031): the spy pressure of the STATE religion of the civilization, asked with its holy city.
+            // With the switch the state religion gets the pressure and a Reformation belief counts for any civilization it applies to; without it the religion the civilization
+            // founded does, with all its founder-side beliefs. DEPARTURE with the switch: the Founder and Enhancer beliefs are still those of the religion the civilization
+            // FOUNDED (VP asks the state religion): no unique of that kind has SpyReligionPressure in the ruleset, only the Reformation belief Underground Sect.
+            val religion = (if (reformationLikeVp) spyCiv.religionManager.getStateReligionCached()?.takeIf { it.isMajorReligion() }
+                else spyCiv.religionManager.religion?.takeIf { it.isMajorReligion() }) ?: continue
             var times = 0
-            religion.founderBeliefUniqueMap.forEachMatchingUnique(UniqueType.SpyReligionPressure, spyCiv.state) { times += it.params[0].toInt() }
+            if (reformationLikeVp) spyCiv.religionManager.forEachBeliefUniqueMap { map ->
+                map.forEachMatchingUnique(UniqueType.SpyReligionPressure, spyCiv.state) { times += it.params[0].toInt() }
+            } else religion.founderBeliefUniqueMap.forEachMatchingUnique(UniqueType.SpyReligionPressure, spyCiv.state) { times += it.params[0].toInt() }
             if (times > 0 && spyCiv.espionageManager.getSpiesInCity(city).any { it.isAlive() })
                 result.add(religion.name, times)
         }

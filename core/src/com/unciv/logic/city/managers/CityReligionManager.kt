@@ -148,22 +148,20 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         if (shouldUpdateFollowers) updateNumberOfFollowers()
     }
 
-    /** The pressure of a Spread Religion action that leaves the other religions in place: as [addPressure], and the religion with
-     *  [UniqueType.ErodesOtherReligionPressure] takes that share of the added amount away from each other major religion
-     *  (after CvCityReligions::AddMissionarySpread, V:CvReligionClasses.cpp:4813-4821, which passes the belief's erosion to
-     *  CvCityReligions::ErodeOtherReligiousPressure, V:CvReligionClasses.cpp:4932-4969). NOT the same arithmetic: the original takes that percentage of each
-     *  other religion's existing pressure, this takes it of the added amount, at most the pressure there is; and here pantheons are left alone, there only atheism) */
+    /** The pressure of a Spread Religion action that leaves the other religions in place (CvCityReligions::AddMissionarySpread, V:CvReligionClasses.cpp:4813-4821):
+     *  first the religion with [UniqueType.ErodesOtherReligionPressure] takes that percentage (at most 100) of the pressure that each other religion HAS in the city
+     *  away, then the pressure is added as with [addPressure]. The erosion is CvCityReligions::ErodeOtherReligiousPressure (V:CvReligionClasses.cpp:4932-4969) with
+     *  retention off and atheism left alone: pantheons are eroded too, a religion without pressure is skipped, and the share is `percent * pressure / 100` in whole numbers */
     fun addPressureFromSpreading(religionName: String, amount: Int) {
         if (!city.civ.gameInfo.isReligionEnabled()) return // No religion, no pressures
         var erosionPercent = 0
         city.civ.gameInfo.religions[religionName]?.founderBeliefUniqueMap
             ?.forEachMatchingUnique(UniqueType.ErodesOtherReligionPressure, city.state) { erosionPercent += it.params[0].toInt() }
         if (erosionPercent > 0) {
-            val erosion = amount * erosionPercent / 100
+            val reductionPercent = minOf(100, erosionPercent)
             for ((name, pressure) in pressures.toList()) { // a copy, as the pressures change
-                if (name == religionName || name == Constants.noReligionName) continue
-                if (city.civ.gameInfo.religions[name]?.isMajorReligion() != true) continue
-                pressures.add(name, -minOf(pressure, erosion))
+                if (name == religionName || name == Constants.noReligionName || pressure == 0) continue
+                pressures.add(name, -(reductionPercent * pressure / 100))
             }
         }
         addPressure(religionName, amount)

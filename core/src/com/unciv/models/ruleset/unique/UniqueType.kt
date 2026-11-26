@@ -554,9 +554,10 @@ enum class UniqueType(
     BonusReformationBelief("If you founded a religion, gain a bonus Reformation belief", UniqueTarget.Global,
         docDescription = "Once, as soon as the civilization has founded a religion that has no Reformation belief yet: " +
             "a free belief of the type `Reformation` can be chosen, like with `Gain a free [beliefType] belief`"),
-    ErodesOtherReligionPressure("Spreading religion erodes [positiveAmount]% of the pressure it adds from the other religions in the city", UniqueTarget.FounderBelief,
+    ErodesOtherReligionPressure("Spreading religion erodes [positiveAmount]% of the pressure of the other religions in the city", UniqueTarget.FounderBelief,
         docDescription = "Read from the founder beliefs of the religion that is spread. Applies to units that do not remove the other religions altogether (see `Removes other religions when spreading religion`). " +
-            "Pantheons and the citizens of no religion are not eroded"),
+            "As in Vox Populi (CvCityReligions::ErodeOtherReligiousPressure), the percentage (at most 100, summed over the beliefs) is taken of the pressure that each other religion has in the city before the spread adds its own, " +
+            "pantheons included; the citizens of no religion are not eroded"),
     ReligionPressureRetention("[positiveAmount]% of the pressure of this religion in a city remains when other religions are removed from it", UniqueTarget.FounderBelief,
         docDescription = "Read from the founder beliefs of the religion that would be removed, which keeps that share of its pressure instead of losing all of it " +
             "when a unit removes other religions (Inquisitors, Great Prophets)"),

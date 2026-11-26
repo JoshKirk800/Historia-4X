@@ -47,7 +47,7 @@ class ResourceRulesTests {
     /** The objects of a TestGame's ruleset are those of the cached ruleset (its clone is shallow): what a test sets on Horses must not stay for the other tests */
     @After
     fun restoreHorses() {
-        game.ruleset.tileResources["Horses"]!!.obsoleteBy = null
+        game.ruleset.tileResources["Horses"]!!.obsoleteBy = "Rocketry" // what the Brave New World ruleset ships (TradeContentTests); null would leave it gone for the classes after this one
     }
 
     //region obsolete resources

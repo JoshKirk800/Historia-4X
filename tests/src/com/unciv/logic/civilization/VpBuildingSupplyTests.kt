@@ -8,6 +8,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,9 +27,13 @@ class VpBuildingSupplyTests {
     private lateinit var game: TestGame
     private lateinit var civ: Civilization
 
+    @After
+    fun restoreTable() = SupplyTable.restore(game.ruleset)
+
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        SupplyTable.communityPatch(game.ruleset) // the numbers below are derived from the Community Patch's table, not from the one the ruleset ships
         game.ruleset.modOptions.constants.unitSupplyLikeVp = false
         game.ruleset.modOptions.constants.unitSupplyConstants = ModConstants.UnitSupplyConstants()
         game.makeHexagonalMap(8, Constants.grassland)

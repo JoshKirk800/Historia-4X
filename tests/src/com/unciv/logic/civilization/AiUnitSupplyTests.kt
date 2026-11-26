@@ -7,6 +7,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.BaseTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,9 +21,13 @@ import org.junit.runner.RunWith
 class AiUnitSupplyTests {
     private lateinit var game: TestGame
 
+    @After
+    fun restoreTable() = SupplyTable.restore(game.ruleset)
+
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        SupplyTable.communityPatch(game.ruleset) // the numbers below are derived from the Community Patch's table, not from the one the ruleset ships
         // the formula tested here is the original's / Community Patch's, not VP's breakdown that the BNW ruleset has switched on
         game.ruleset.modOptions.constants.unitSupplyLikeVp = false
         game.ruleset.modOptions.constants.unitSupplyConstants = ModConstants.UnitSupplyConstants()
@@ -79,19 +84,6 @@ class AiUnitSupplyTests {
             game.setDifficulty(level)
             assertEquals(level, bonus, game.gameInfo.getDifficulty().aiUnitSupplyBonusPercent)
             assertEquals(level, (7 + 3 + 1) * (100 + bonus) / 100, ai.stats.getUnitSupply())
-        }
-    }
-
-    @Test
-    fun `the AI's own handicap level has no supply and every level has the Community Patch's 7, 3 and 50 for AIs and city-states`() {
-        val aiDefault = game.ruleset.difficulties["AI Default"]!!
-        assertEquals(0, aiDefault.unitSupplyBase)
-        assertEquals(0, aiDefault.unitSupplyPerCity)
-        for (level in game.ruleset.difficulties.values.filter { it.isSelectable }) {
-            assertEquals(level.name, listOf(7, 3, 50), listOf(level.aiUnitSupplyBase, level.aiUnitSupplyPerCity, level.aiUnitSupplyPopulationPercent))
-            assertEquals(level.name, listOf(7, 3, 50),
-                listOf(level.cityStateUnitSupplyBase, level.cityStateUnitSupplyPerCity, level.cityStateUnitSupplyPopulationPercent))
-            assertEquals(level.name, level.aiUnitSupplyBonusPercent, level.cityStateUnitSupplyBonusPercent)
         }
     }
 

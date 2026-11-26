@@ -322,7 +322,7 @@ class MonopolyManager : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  CvCity::IsBuildingResourceMonopolyValid without the corporation part (V:CvCity.cpp:9914-9990): every resource of [Building.requiredMonopolies] must be a
+     *  CvCity::IsBuildingResourceMonopolyValid without the corporation part (V:CvCity.cpp:9914-9986): every resource of [Building.requiredMonopolies] must be a
      *  global monopoly that is not banned, and one of [Building.requiredMonopolyAnyOf], skipping banned luxuries. As in the original, a list whose every resource
      *  is banned asks for nothing (the counter of the resources not held only counts those not banned)
      */

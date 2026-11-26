@@ -6,8 +6,8 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- *  When a city-state can give quests under [ModConstants.cityStateQuestsLikeVp]: CvMinorCivAI::GetFirstPossibleTurnForPersonalQuests and `ForGlobalQuests` (V:CvMinorCivAI.cpp:6226-6242),
- *  DoTestSeedGlobalQuestCountdown and `DoTestSeedQuestCountdownForPlayer` (7566-7660). V: is `ref/vp-5.4.8/CvGameCoreDLL_Expansion2/`.
+ *  When a city-state can give quests under [ModConstants.cityStateQuestsLikeVp]: CvMinorCivAI::GetFirstPossibleTurnForPersonalQuests and `ForGlobalQuests` (V:CvMinorCivAI.cpp:6237-6252),
+ *  DoTestSeedGlobalQuestCountdown (7566-7608) and `DoTestSeedQuestCountdownForPlayer` (7626-7668). V: is `ref/vp-5.4.8/CvGameCoreDLL_Expansion2/`.
  */
 object CityStateQuestSchedule {
     /**

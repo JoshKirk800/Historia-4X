@@ -454,7 +454,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         val currentName = currentConstructionName() // Once, this is one step
         val currentConstruction = getConstruction(currentName)
         if (currentConstruction is PerpetualConstruction.Project) {
-            // A League project: the production, with what was stored, is the contribution of the civilization (CvCity::doProcess, CvCity.cpp:13081-13099)
+            // A League project: the production, with what was stored, is the contribution of the civilization (modelled on a Process: CvCity::doProcess adds the city's production to the stockpile, V:CvCity.cpp:31995-32007)
             city.civ.gameInfo.league?.addContribution(city.civ, currentName, cityStats.production.roundToInt() + productionOverflow)
             productionOverflow = 0
         } else if (currentConstruction !is PerpetualConstruction) {
@@ -985,7 +985,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
             fireBuyingYields(construction, stat, constructionCost)
         }
 
-        // CvCity::Purchase (V:CvCity.cpp:31100, 31121-31135): a bought unit sets the cooldowns of its kind
+        // CvCity::PurchaseUnit (V:CvCity.cpp:31100, 31121-31135): a bought unit sets the cooldowns of its kind
         if (construction is BaseUnit) PurchaseRules.afterPurchase(city, construction, stat)
 
         if (queuePosition >= 0) removeFromQueue(queuePosition, automatic)

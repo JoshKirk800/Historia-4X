@@ -376,7 +376,7 @@ class City : IsPartOfGameInfoSerialization, INamed {
 
     /**
      *  The points of the city toward each great person this turn. With [com.unciv.models.ModConstants.cityNeedsLikeVp] a puppet makes none
-     *  (CvPlayer::doTurn's great person points skip `MOD_BALANCE_PUPPET_CHANGES && IsPuppet()`, V:CvPlayer.cpp:28505-28509).
+     *  (CvPlayer::doInstantGreatPersonProgress's great person points skip `MOD_BALANCE_PUPPET_CHANGES && IsPuppet()`, V:CvPlayer.cpp:28505-28509).
      */
     @Readonly
     fun getGreatPersonPoints(): Counter<String> =

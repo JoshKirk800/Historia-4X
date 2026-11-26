@@ -198,7 +198,7 @@ class EspionageManager : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  The spy points that make a spy (CvGame::initSpyThreshold, V:CvGame.cpp:10722-10767): `100 x ratio / (city-states + multiplier x majors)` of all the players the game
+     *  The spy points that make a spy (CvGame::initSpyThreshold, V:CvGame.cpp:10722-10751): `100 x ratio / (city-states + multiplier x majors)` of all the players the game
      *  started with, at least one of each, between the minimum and the maximum of [com.unciv.models.ModConstants.espionage]. Civilizations that were defeated stay in the list.
      */
     @Readonly

@@ -100,7 +100,7 @@ class CityEspionageManager {
         return effects + focus.getMatchingUniques(uniqueType).filter { !it.isTimedTriggerable }
     }
 
-    /** A turn of the city has passed: the effects of the missions that ran their turns end, and with them the missions (CvCity::DoTurn, V:CvCity.cpp:3264-3293) */
+    /** A turn of the city has passed: the effects of the missions that ran their turns end, and with them the missions (CvCity::DoEvents, V:CvCity.cpp:3264-3293) */
     fun endTurn() {
         if (city.missionEffects.isNotEmpty()) city.missionEffects.endTurn()
         if (city.activeMissions.isNotEmpty()) {

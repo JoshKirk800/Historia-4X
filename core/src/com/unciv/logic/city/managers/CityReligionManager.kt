@@ -77,7 +77,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         return best?.let { city.civ.gameInfo.religions[it] }
     }
 
-    /** CvCityReligions::GetSecondaryReligionPantheonBelief (CvReligionClasses.cpp:2808): with [UniqueType.SecondaryReligionPantheon]
+    /** CvCityReligions::GetSecondaryReligionPantheonBelief (V:CvReligionClasses.cpp:4541-4569): with [UniqueType.SecondaryReligionPantheon]
      *  the first Pantheon belief of the second most popular religion works in the city like one of the majority religion */
     @Readonly
     fun getSecondaryPantheonBelief(): Belief? {
@@ -124,7 +124,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         getSecondaryPantheonBelief()?.uniqueMap?.forEachUnique(filter, op)
     }
 
-    /** CvCityReligions::GetNumReligionsWithFollowers (CvReligionClasses.cpp:2585): the major religions with at least one follower in the city */
+    /** CvCityReligions::GetNumReligionsWithFollowers (V:CvReligionClasses.cpp:4245-4260): the major religions with at least one follower in the city */
     @Readonly
     fun getNumberOfMajorReligionsWithFollowers(): Int =
         followers.count { it.value > 0 && city.civ.gameInfo.religions[it.key]?.isMajorReligion() == true }
@@ -150,7 +150,9 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
 
     /** The pressure of a Spread Religion action that leaves the other religions in place: as [addPressure], and the religion with
      *  [UniqueType.ErodesOtherReligionPressure] takes that share of the added amount away from each other major religion
-     *  (CvCityReligions::AddReligiousPressure, CvReligionClasses.cpp:3119; pantheons and atheism are not eroded) */
+     *  (after CvCityReligions::AddMissionarySpread, V:CvReligionClasses.cpp:4813-4821, which passes the belief's erosion to
+     *  CvCityReligions::ErodeOtherReligiousPressure, V:CvReligionClasses.cpp:4932-4969). NOT the same arithmetic: the original takes that percentage of each
+     *  other religion's existing pressure, this takes it of the added amount, at most the pressure there is; and here pantheons are left alone, there only atheism) */
     fun addPressureFromSpreading(religionName: String, amount: Int) {
         if (!city.civ.gameInfo.isReligionEnabled()) return // No religion, no pressures
         var erosionPercent = 0
@@ -168,7 +170,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
     }
 
     /** Removes the pressure of all religions but [religion] and atheism. A religion with [UniqueType.ReligionPressureRetention] keeps
-     *  that share of its pressure (CvCityReligions::RemoveOtherReligions, CvReligionClasses.cpp:3381, and AddProphetSpread, 3051) */
+     *  that share of its pressure (CvCityReligions::RemoveOtherReligions, V:CvReligionClasses.cpp:5246-5259, and AddProphetSpread, 4825-4830) */
     fun removeAllPressuresExceptFor(religion: String) {
         val pressureFromThisReligion = pressures[religion]
         // Atheism is never removed
@@ -385,7 +387,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
     }
 
     /** The religion that [sender] spreads to this city naturally every turn and how much pressure that is, if any
-     *  (CvGameReligions::GetAdjacentCityReligiousPressure, CvReligionClasses.cpp:1662): the sender must be close enough, or be connected by a trade route
+     *  (CvGameReligions::GetAdjacentCityReligiousPressure, V:CvReligionClasses.cpp:2801-2950): the sender must be close enough, or be connected by a trade route
      *  in either direction; a city that is both makes the pressure only once */
     @Readonly
     private fun getPressureFrom(sender: City, tradeConnections: Map<City, Boolean>): Pair<String, Int>? {

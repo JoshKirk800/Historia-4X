@@ -16,7 +16,7 @@ import yairm210.purity.annotations.Readonly
  *  What Vox Populi does (CvPlayer::doInstantYield, V:CvPlayer.cpp:27347-27560 and 28138-28245): every gain adds `+N [yield icon]` to the yield string of its city and
  *  the cities' strings make one text per call: "Birth of a Citizen: ...", "Constructing a Building: ...". The events that happen again and again in a turn
  *  (`INSTANT_YIELD_TYPE_BIRTH`, `..._WLTKD_START`, the refund, unit gift and Baktun end events) do not notify at once: the text of each call is added to the text of its
- *  event type and CvPlayer::doTurn (V:CvPlayer.cpp:10531-10547) gives one notification "Empire-Wide Bonus Yields" for each type that has one. Some events (combat experience,
+ *  event type and CvPlayer::doTurnPostDiplomacy (V:CvPlayer.cpp:10531-10547) gives one notification "Empire-Wide Bonus Yields" for each type that has one. Some events (combat experience,
  *  healing, city damage, scrapping) have none. The names of the sources are not told by Vox Populi (its text shows the event and the city only): here they are.
  *
  *  Not saved, and only filled for human civilizations (the others have no notifications). An [InstantYields.fire] hands its gains out and has [flush] give the notification

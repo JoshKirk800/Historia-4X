@@ -63,7 +63,7 @@ sealed class PerpetualConstruction(override var name: String, val description: S
     }
 
     /**
-     * The city production target of a League project (a Process in the original, CvCity::doProcess, CvCity.cpp:13081-13099): nothing is built,
+     * The city production target of a League project (modelled on a Process of the original: CvCity::doProcess adds the city's production to the stockpile, V:CvCity.cpp:31995-32007): nothing is built,
      * the production of the city goes to the contribution of its civilization to the project, see [com.unciv.logic.league.League.addContribution].
      * The name is that of the resolution that starts the project. Buildable while the project is running and the civilization is a major member.
      */

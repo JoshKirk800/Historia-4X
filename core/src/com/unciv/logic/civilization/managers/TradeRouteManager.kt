@@ -156,7 +156,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * What CvPlayerTrade::GetTradeRouteRange starts the percentage it multiplies the range with from (V:CvTradeClasses.cpp:5381-5388): the world's `TradeRouteDistanceMod`, which the
+     * What CvPlayerTrade::GetTradeRouteRange starts the percentage it multiplies the range with from (V:CvTradeClasses.cpp:5288-5359, its last statement): the world's `TradeRouteDistanceMod`, which the
      * other percentages add to, by the number of tiles of the map (owner decision O8, until the world sizes have rule tables): the entry of
      * [com.unciv.models.ModConstants.worldTradeRouteDistance] with the most tiles that the map has at least. 100 without [com.unciv.models.ModConstants.tradeRouteModelLikeVp] or an entry.
      */
@@ -566,7 +566,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * CvPlayer::HasGlobalMonopoly, which the resource diversity of a route asks (V:CvTradeClasses.cpp:3010): whether [Civilization] has a
+     * CvPlayer::HasGlobalMonopoly, which the resource diversity of a route asks (V:CvTradeClasses.cpp:2997): whether [Civilization] has a
      * global monopoly of the resource ([MonopolyManager], slice T2).
      */
     @Transient
@@ -655,7 +655,7 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     }
 
     /**
-     * CvCity::GetLongestPotentialTradeRoute (V:CvTradeClasses.cpp:5221-5285): the cost of the longest path [origin] could send an international route along in the domain, over the
+     * CvCity::GetLongestPotentialTradeRoute, which CvPlayerTrade::UpdateFurthestPossibleTradeRoute sets (V:CvTradeClasses.cpp:5221-5285): the cost of the longest path [origin] could send an international route along in the domain, over the
      * cities it can start a route to that were free when the turn started, 0 if there is none. Worked out when asked and kept for the turn.
      * A departure: the original works it out for every city when the turn starts, and does not ask it again until the next.
      */

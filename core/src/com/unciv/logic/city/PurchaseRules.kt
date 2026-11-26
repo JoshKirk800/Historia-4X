@@ -125,7 +125,7 @@ object PurchaseRules {
     }
 
     /**
-     *  Whether the city may invest in [building] now (CvCity::IsCanPurchase and CvCity::GetPurchaseCost, V:CvCity.cpp:12225-12232, 30757-30766): not when it is invested in,
+     *  Whether the city may invest in [building] now (CvCity::GetPurchaseCost, V:CvCity.cpp:12225-12232, and CvCity::IsCanPurchase, 30757-30766): not when it is invested in,
      *  and not when the city finishes it next turn anyway. The turns left are those of the production the city makes now, not of what it makes building [building]
      *  (the source asks `getProductionTurnsLeft(building, 0)`), and what the city has put into it counts only if it is at the front of the queue or not in it.
      */
@@ -191,7 +191,7 @@ object PurchaseRules {
     }
 
     /**
-     *  Sets the cooldowns of [city] after it bought [unit] with [stat] (CvCity::Purchase: V:CvCity.cpp:31100 for gold, 31121-31135 for faith): gold sets the counter of the
+     *  Sets the cooldowns of [city] after it bought [unit] with [stat] (CvCity::PurchaseUnit: V:CvCity.cpp:31100 for gold, 31121-31135 for faith): gold sets the counter of the
      *  unit's kind to its cooldown less the city's reduction (so the reduction counts twice against it, in this function and in [isOnCooldown], as in the source), faith
      *  adds the global cooldown to the civilization's counter and the local one to the city's, both times the game speed's production cost modifier.
      */

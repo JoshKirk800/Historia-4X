@@ -72,7 +72,7 @@ object CityStateInfluence {
     }
 
     /**
-     *  CvMinorCivAI::GetFriendshipFromUnitGift (V:CvMinorCivAI.cpp:15500-15545): a military unit is worth [ModConstants.CityStateInfluenceConstants.unitGift], doubled in a proxy
+     *  CvMinorCivAI::GetFriendshipFromUnitGift (V:CvMinorCivAI.cpp:15459-15500): a military unit is worth [ModConstants.CityStateInfluenceConstants.unitGift], doubled in a proxy
      *  war, plus the policy's [policyExtra]; without a proxy war 1 less for each military unit the city-state already has, at most half of the base (7). A great person is worth what
      *  the trait of its giver says, which no trait of Vox Populi does.
      */

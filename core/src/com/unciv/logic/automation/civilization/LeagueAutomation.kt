@@ -42,7 +42,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * World Congress proposals, votes and vote commitments (CvLeagueAI, Vox Populi CvVotingClasses.cpp:10196-14450). No teams or vassals.
+ * World Congress proposals, votes and vote commitments (CvLeagueAI, V:CvVotingClasses.cpp:10196-14477). No teams or vassals.
  */
 object LeagueAutomation {
     /** CvLeagueAI::DoVotes and DoProposals stop after this many loops (SDK:CvVotingClasses.cpp:7449-7466 and 7473-7486) */

@@ -8,7 +8,7 @@ import yairm210.purity.annotations.Readonly
 
 /**
  *  What the resource screens tell about monopolies (slice T9 of `phaseE/vp-trade-plan.md`; the state is [com.unciv.logic.civilization.managers.MonopolyManager]'s,
- *  CvPlayer::CheckForMonopoly, V:CvPlayer.cpp:38870-39400): the share of the copies on the map a civilization owns, whether it holds the global or the strategic monopoly, who
+ *  CvPlayer::CheckForMonopoly, V:CvPlayer.cpp:39114-39337): the share of the copies on the map a civilization owns, whether it holds the global or the strategic monopoly, who
  *  has the greatest share (CvGame::GetGreatestPlayerResourceMonopolyValue), and what the monopoly gives, read from the resource's own monopoly uniques. As plain data, so that no
  *  screen builds it itself and tests need no GL context. Everything is empty for a ruleset with no monopoly resource, so nothing is shown that was not shown before.
  *

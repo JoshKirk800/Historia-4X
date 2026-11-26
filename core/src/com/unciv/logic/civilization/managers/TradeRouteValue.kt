@@ -46,7 +46,7 @@ object TradeRouteValue {
 
     /**
      * The numbers of the two ends of [route], none for a route whose cities are gone.
-     * [hasGlobalMonopoly] is CvPlayer::HasGlobalMonopoly as the route value asks it (V:CvTradeClasses.cpp:3010); the monopolies are slice T2 of `phaseE/vp-trade-plan.md`
+     * [hasGlobalMonopoly] is CvPlayer::HasGlobalMonopoly as the route value asks it (V:CvTradeClasses.cpp:2997); the monopolies are slice T2 of `phaseE/vp-trade-plan.md`
      * (`Civilization.monopolies`), so until that is merged the default says that nobody has one, and when it is the manager hands `owner.monopolies.hasGlobalMonopoly(resource)` over.
      */
     @Readonly
@@ -266,7 +266,7 @@ object TradeRouteValue {
     //endregion
     //region Science, culture, policies
 
-    /** CvGameTrade::GetTechDifference: the technologies of [other] that [civ] lacks, 1 for the ally of a city-state and 0 for its other friends (V:CvTradeClasses.cpp:1909-1950) */
+    /** CvGameTrade::GetTechDifference: the technologies of [other] that [civ] lacks, 1 for the ally of a city-state and 0 for its other friends (V:CvTradeClasses.cpp:1909-1940) */
     @Readonly
     fun techDifference(civ: Civilization, other: Civilization): Int {
         if (civ.isCityState || civ.isBarbarian || other.isBarbarian) return 0

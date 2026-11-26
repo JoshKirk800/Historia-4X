@@ -4,6 +4,7 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.ModConstants
+import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
 
@@ -93,6 +94,7 @@ object DiplomaticMission {
      *     remembering what each had (V:12101-12115: updating inside the loop could change the city-state's ally in between and make it declare war on the wrong civilization).
      *  3. Ours rises, with the update of the ally (V:12165).
      *  4. The others' ally status is updated from what each had before (V:12170-12179, `DoFriendshipChangeEffects`; this port has no stored friend status, `relationshipLevel` is derived).
+     *  5. The unit's uniques with [UniqueType.TriggerUponDiplomaticMission] fire: the Great Diplomat's spy points (`CreateSpies(GetExtraSpies())`, V:12206-12210).
      *  Departures: a defeated civilization is skipped; the original's count of the times a civilization lowered another's influence (`NumTimesTheyLoweredOurInfluence`) is not kept, as nothing in
      *  this port reads it (the diplomacy AI of Vox Populi does: V:CvDiplomacyAI.cpp:12941, 12981, 13111, 19056)
      */
@@ -116,6 +118,9 @@ object DiplomaticMission {
 
         for ((other, before) in lowered)
             cityState.cityStateFunctions.updateAllyCivForCityState(other, before)
+
+        for (unique in unit.getTriggeredUniques(UniqueType.TriggerUponDiplomaticMission))
+            UniqueTriggerActivation.triggerUnique(unique, unit)
         return influence
     }
 }

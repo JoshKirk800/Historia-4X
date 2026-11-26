@@ -251,6 +251,11 @@ class ModConstants {
      *  per unit over the supply (at most -70%), no growth penalty, and the unique is not read. */
     var unitSupplyLikeVp = false
 
+    /** VP 5.4.8 CvCity::processBuilding (CitySupplyFlat, CitySupplyModifier), CvCity::getCitySupplyFlat/getCitySupplyModifier, read by CvPlayer::GetNumUnitsSuppliedByCities and
+     *  GetNumUnitsSuppliedByPopulation. true (and [unitSupplyLikeVp]): the uniques `[amount] Unit Supply in this city` and `[amount]% Unit Supply from the citizens of this city`
+     *  of a city's buildings add to what that city gives. false: they are not read. Staged with the Vox Populi difficulty table and the building rows (decision D26): the three flip together. */
+    var unitSupplyBuildingsLikeVp = false
+
     /**
      *  The GlobalDefines of VP's unit supply, read only with [unitSupplyLikeVp] (can only be modded all-or-nothing, a data class so the Json serializer can omit it when default). The
      *  defaults are the numbers of the original / Community Patch (nothing reduces the supply, 10% production per unit over it); `DEF-VP` is `(2) Vox Populi/Database Changes/DefineChanges.sql:160-195`.

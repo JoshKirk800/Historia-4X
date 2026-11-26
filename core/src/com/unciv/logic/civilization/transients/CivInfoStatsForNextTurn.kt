@@ -300,14 +300,33 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         return max(supply, 0)
     }
 
+    /** CvCity::getCitySupplyFlat: the sum of the [UniqueType.UnitSupplyInCity] uniques of the city's buildings; 0 without `unitSupplyBuildingsLikeVp` */
+    @Readonly
+    internal fun getCitySupplyFlat(city: City): Int {
+        if (!civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyBuildingsLikeVp) return 0
+        var flat = 0
+        city.cityConstructions.builtBuildingUniqueMap.forEachMatchingUnique(UniqueType.UnitSupplyInCity, city.state) { flat += it.params[0].toInt() }
+        return flat
+    }
+
+    /** CvCity::getCitySupplyModifier: the sum of the [UniqueType.UnitSupplyPercentFromCitizens] uniques of the city's buildings; 0 without `unitSupplyBuildingsLikeVp` */
+    @Readonly
+    internal fun getCitySupplyModifier(city: City): Int {
+        if (!civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyBuildingsLikeVp) return 0
+        var percent = 0
+        city.cityConstructions.builtBuildingUniqueMap.forEachMatchingUnique(UniqueType.UnitSupplyPercentFromCitizens, city.state) { percent += it.params[0].toInt() }
+        return percent
+    }
+
     /**
-     *  CvPlayer::GetNumUnitsSuppliedByCities: each city gives its supply per city (puppets their share of it), the sum is divided by the
-     *  technology divisor of [ModConstants.UnitSupplyConstants.citiesTechReductionMultiplier]. At least 0.
+     *  CvPlayer::GetNumUnitsSuppliedByCities: each city gives its supply per city and the flat supply of its buildings ([getCitySupplyFlat]), both times its share
+     *  (puppets their share of it), the sum is divided by 100, then by the technology divisor of
+     *  [ModConstants.UnitSupplyConstants.citiesTechReductionMultiplier]. At least 0.
      */
     @Readonly
     private fun getVpUnitSupplyFromCities(ignoreReduction: Boolean): Int {
         val perCity = getUnitSupplyPerCity()
-        var supply = civInfo.cities.sumOf { perCity * getCitySupplyPercent(it) } / 100
+        var supply = civInfo.cities.sumOf { (perCity + getCitySupplyFlat(it)) * getCitySupplyPercent(it) } / 100
         if (!ignoreReduction)
             supply = supply * 100 / getUnitSupplyTechDivisorPercent(civInfo.gameInfo.ruleset.modOptions.constants.unitSupplyConstants.citiesTechReductionMultiplier)
         return max(supply, 0)
@@ -328,8 +347,8 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
             isAiMajor() -> chosen.aiUnitSupplyPopulationPercent
             else -> (constants.unitSupplyPerPopulation * 100).roundToInt()
         }
-        // hundredths of a unit
-        var supply = civInfo.cities.sumOf { it.population.population * getCitySupplyPercent(it) * percent / 100 }
+        // hundredths of a unit; each city's percent is the civilization's plus that of its buildings (CvCity::getCitySupplyModifier)
+        var supply = civInfo.cities.sumOf { it.population.population * getCitySupplyPercent(it) * (percent + getCitySupplyModifier(it)) / 100 }
         civInfo.forEachMatchingUnique(UniqueType.UnitSupplyPerPop) { unique ->
             val amount = unique.params[0].toInt()
             val perPopulation = unique.params[1].toInt()
@@ -347,8 +366,9 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
      *  (100 + [ModConstants.UnitSupplyConstants.empireSizePenaltyPerCity] per city but the puppets), times (100 + the bonus percent of the difficulty) / 100.
      *  Barbarians have no limit. Gross values are those before the technology reductions ([includeGross] false leaves them 0).
      *
-     *  Not in it, for lack of the state: the supply of expended Great People (CvPlayer::GetUnitSupplyFromExpendedGreatPeople), a city's own supply
-     *  flat and percent from buildings (CvCity::getCitySupplyFlat, getCitySupplyModifier), the player and trait supply and puppet-share changes,
+     *  A city's own supply flat and percent from its buildings (CvCity::getCitySupplyFlat, getCitySupplyModifier) are in with `unitSupplyBuildingsLikeVp`.
+     *  Not in it, for lack of the state: the supply of expended Great People (CvPlayer::GetUnitSupplyFromExpendedGreatPeople), the player-wide
+     *  building supply (CitySupplyFlatGlobal, CitySupplyModifierGlobal), the player and trait supply and puppet-share changes,
      *  the era columns of the difficulty and the start era's base supply, the city-state trait and personality modifiers (all 0 in Vox Populi), the cities not yet
      *  decided on (CvCity::IsIgnoreCityForHappiness) and the war weariness reduction (CvPlayer::GetSupplyReductionFromWarWeariness: [CivNeeds.warWeariness] is 0).
      */

@@ -1,9 +1,11 @@
 package com.unciv.dev
 
+import com.unciv.logic.civilization.SupplyTable
 import com.unciv.logic.map.HexCoord
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -17,9 +19,13 @@ class SupplyRowsTests {
     private lateinit var game: TestGame
     private lateinit var file: File
 
+    @After
+    fun restoreTable() = SupplyTable.restore(game.ruleset)
+
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        SupplyTable.communityPatch(game.ruleset) // the supply of 9 and the penalties below are derived from the Community Patch's table, not from the one the ruleset ships
         game.makeHexagonalMap(8)
         file = File.createTempFile("decision-log", ".tsv").also { it.deleteOnExit() }
     }

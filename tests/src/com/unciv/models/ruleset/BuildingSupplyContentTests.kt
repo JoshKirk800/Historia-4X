@@ -5,14 +5,14 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
  *  The unit supply of the Brave New World ruleset's buildings (`phaseE/m6-supply-deep.md` section 9): Vox Populi 5.4.8's `Buildings.CitySupplyFlat`, `CitySupplyModifier`,
  *  `CitySupplyModifierGlobal` and `CitySupplyFlatGlobal` (`ref/db/vp.sqlite`; CvCity::processBuilding V:CvCity.cpp:13656-13657, CvPlayer::processBuilding V:CvPlayer.cpp:16086-16087)
- *  as the uniques of `unitSupplyBuildingsLikeVp`. The rows are data only: no ruleset sets the switch, so no game reads them until the content flip of the supply plan.
+ *  as the uniques of `unitSupplyBuildingsLikeVp`, which the ruleset sets since the content flip of the supply plan, with Vox Populi's `HandicapInfos` table.
  *
  *  The six VP buildings with a supply column that the ruleset does not have (Qila, Ostrog, Penitentiary, Fornix, Piazza San Marco, Arsenale di Venezia) are not rows here.
  */
@@ -60,7 +60,27 @@ class BuildingSupplyContentTests {
     }
 
     @Test
-    fun `the ruleset does not play the supply of buildings yet`() {
-        assertFalse(ruleset.modOptions.constants.unitSupplyBuildingsLikeVp)
+    fun `the ruleset plays the supply of the buildings and a human's 20 percent of the citizens`() {
+        assertTrue(ruleset.modOptions.constants.unitSupplyLikeVp)
+        assertTrue(ruleset.modOptions.constants.unitSupplyBuildingsLikeVp)
+        assertEquals(0.2, ruleset.modOptions.constants.unitSupplyPerPopulation, 0.0)
+    }
+
+    @Test
+    fun `the difficulties have Vox Populi's unit supply table`() {
+        // HandicapInfos.UnitSupplyBase of the player, AIUnitSupplyBase and CityStateUnitSupplyBase, from Settler to Deity (ref/db/vp.sqlite); the per city column is 0, the percent
+        // of the citizens 20 and the bonus 0 on every level, for the player, the AI and the city-states
+        val levels = listOf("Settler", "Chieftain", "Warlord", "Prince", "King", "Emperor", "Immortal", "Deity")
+        val own = listOf(17, 16, 15, 15, 15, 14, 14, 13)
+        val ai = listOf(15, 15, 15, 15, 15, 17, 18, 18)
+        for ((i, name) in levels.withIndex()) {
+            val level = ruleset.difficulties[name]!!
+            assertEquals(name, listOf(own[i], 0), listOf(level.unitSupplyBase, level.unitSupplyPerCity))
+            assertEquals(name, listOf(ai[i], 0, 20, 0), listOf(level.aiUnitSupplyBase, level.aiUnitSupplyPerCity, level.aiUnitSupplyPopulationPercent, level.aiUnitSupplyBonusPercent))
+            assertEquals(name, listOf(ai[i], 0, 20, 0),
+                listOf(level.cityStateUnitSupplyBase, level.cityStateUnitSupplyPerCity, level.cityStateUnitSupplyPopulationPercent, level.cityStateUnitSupplyBonusPercent))
+        }
+        val aiDefault = ruleset.difficulties["AI Default"]!!
+        assertEquals(listOf(0, 0), listOf(aiDefault.unitSupplyBase, aiDefault.unitSupplyPerCity))
     }
 }

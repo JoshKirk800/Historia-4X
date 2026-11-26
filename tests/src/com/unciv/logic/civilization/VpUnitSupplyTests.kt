@@ -12,6 +12,7 @@ import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,9 +29,13 @@ class VpUnitSupplyTests {
     private lateinit var civ: Civilization
     private lateinit var freeTiles: Iterator<Tile>
 
+    @After
+    fun restoreTable() = SupplyTable.restore(game.ruleset)
+
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        SupplyTable.communityPatch(game.ruleset) // the numbers below are derived from the Community Patch's table, not from the one the ruleset ships
         // the BNW ruleset has the switch on and VP's constants since the M4 activation; each test starts from the original's formula and
         // switches on (setSwitch) and sets the constants it tests
         game.ruleset.modOptions.constants.unitSupplyLikeVp = false

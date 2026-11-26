@@ -315,8 +315,9 @@
     {
         // Vox Populi 5.4.8 (ReformationChanges.sql:1-7) sets this belief's erosion to 0 and gives it +10% strength in their lands, +5% more against another religion,
         // and +2 gold and +2 culture from Barracks, Armories and Military Academies. The strength has its uniques since P5 S1 ("...in territory friendly to the enemy...",
-        // read with the ModConstants `religiousCombatLikeVp`, ReligiousCombat.kt), the building yields follow in S2; the row stays empty until the religion flip, so for now
-        // the belief has no effect at all
+        // read with the ModConstants `religiousCombatLikeVp`, ReligiousCombat.kt); the building yields are "[+2 Gold, +2 Culture] from every [Barracks] <in [in cities
+        // following this religion] cities>" and so on (P5 S2: the cities whose majority is the religion, CvCity::UpdateReligion). The row stays empty until the religion
+        // flip, so for now the belief has no effect at all
         "name": "Evangelism",
         "type": "Reformation",
         "uniques": []

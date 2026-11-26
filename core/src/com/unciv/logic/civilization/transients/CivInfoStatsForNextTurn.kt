@@ -347,8 +347,10 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
             isAiMajor() -> chosen.aiUnitSupplyPopulationPercent
             else -> (constants.unitSupplyPerPopulation * 100).roundToInt()
         }
+        // CvPlayer::GetExtraSupplyPerPopulation: the player-wide percent of the buildings (CitySupplyModifierGlobal), with the building switch
+        val playerPercent = percent + if (constants.unitSupplyBuildingsLikeVp) civInfo.getMatchingUniques(UniqueType.UnitSupplyPercentFromAllCitizens).sumOf { it.params[0].toInt() } else 0
         // hundredths of a unit; each city's percent is the civilization's plus that of its buildings (CvCity::getCitySupplyModifier)
-        var supply = civInfo.cities.sumOf { it.population.population * getCitySupplyPercent(it) * (percent + getCitySupplyModifier(it)) / 100 }
+        var supply = civInfo.cities.sumOf { it.population.population * getCitySupplyPercent(it) * (playerPercent + getCitySupplyModifier(it)) / 100 }
         civInfo.forEachMatchingUnique(UniqueType.UnitSupplyPerPop) { unique ->
             val amount = unique.params[0].toInt()
             val perPopulation = unique.params[1].toInt()

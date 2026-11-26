@@ -50,20 +50,124 @@ class ReligionPolicyTests {
     }
 
     @Test
-    fun `Evangelism erodes other pressure and Unity retains pressure after a prophet spread`() {
+    fun `Unity of the Prophets retains pressure after a prophet spread`() {
         val civ = game.addCiv()
         val other = game.addCiv()
         val city = game.addCity(other, game.getTile(0, 0), initialPopulation = 5)
-        val evangelical = game.addReligion(civ)
+        val spreader = game.addReligion(civ)
         val retained = game.addReligion(other)
-        evangelical.addBeliefs(listOf(game.ruleset.beliefs["Church Property"]!!, game.ruleset.beliefs["Evangelism"]!!))
+        spreader.addBeliefs(listOf(game.ruleset.beliefs["Church Property"]!!))
         retained.addBeliefs(listOf(game.ruleset.beliefs["Tithe"]!!, game.ruleset.beliefs["Unity of the Prophets"]!!))
         city.religion.addPressure(retained.name, 1000)
-        city.religion.addPressureFromSpreading(evangelical.name, 400)
-        assertEquals(600, city.religion.getPressures()[retained.name])
-        city.religion.removeAllPressuresExceptFor(evangelical.name)
-        assertEquals(300, city.religion.getPressures()[retained.name])
+        city.religion.removeAllPressuresExceptFor(spreader.name)
+        assertEquals(500, city.religion.getPressures()[retained.name]) // Unity of the Prophets keeps 50 percent
     }
+
+    //region Erosion of other pressure (CvCityReligions::AddMissionarySpread and ErodeOtherReligiousPressure, V:CvReligionClasses.cpp:4813-4821, 4932-4969)
+    /** A city with [others] religions and a religion whose founder beliefs erode [percents] (one belief each) of the other pressure */
+    private class ErosionSetup(val city: com.unciv.logic.city.City, val spreader: com.unciv.models.Religion, val others: List<com.unciv.models.Religion>)
+
+    private fun erosionSetup(vararg percents: Int, otherCount: Int = 1): ErosionSetup {
+        val civ = game.addCiv()
+        val owner = game.addCiv()
+        val city = game.addCity(owner, game.getTile(0, 0), initialPopulation = 5)
+        val spreader = game.addReligion(civ)
+        val beliefs = percents.map { game.createBelief(BeliefType.Founder, "Spreading religion erodes [$it]% of the pressure of the other religions in the city") }
+        spreader.addBeliefs(beliefs)
+        val others = List(otherCount) { game.addReligion(owner).also { religion -> religion.addBeliefs(listOf(game.createBelief(BeliefType.Founder))) } }
+        return ErosionSetup(city, spreader, others)
+    }
+
+    @Test
+    fun `the erosion takes its percentage of the pressure there is and the spread is added after it`() {
+        val s = erosionSetup(50)
+        s.city.religion.addPressure(s.others[0].name, 1000)
+        s.city.religion.addPressureFromSpreading(s.spreader.name, 400)
+        assertEquals(500, s.city.religion.getPressures()[s.others[0].name])
+        assertEquals(400, s.city.religion.getPressures()[s.spreader.name])
+    }
+
+    @Test
+    fun `the erosion does not touch the pressure of the spreading religion itself`() {
+        val s = erosionSetup(100)
+        s.city.religion.addPressure(s.spreader.name, 200)
+        s.city.religion.addPressureFromSpreading(s.spreader.name, 400)
+        assertEquals(600, s.city.religion.getPressures()[s.spreader.name])
+    }
+
+    @Test
+    fun `the share is taken in whole numbers, rounding down`() {
+        val s = erosionSetup(50)
+        s.city.religion.addPressure(s.others[0].name, 7)
+        s.city.religion.addPressureFromSpreading(s.spreader.name, 0)
+        assertEquals(4, s.city.religion.getPressures()[s.others[0].name]) // 7 - 50 * 7 / 100 = 7 - 3
+    }
+
+    @Test
+    fun `beliefs add up but the erosion is capped at all of the pressure`() {
+        val s = erosionSetup(60, 90)
+        s.city.religion.addPressure(s.others[0].name, 1000)
+        s.city.religion.addPressureFromSpreading(s.spreader.name, 0)
+        assertEquals(0, s.city.religion.getPressures()[s.others[0].name])
+    }
+
+    @Test
+    fun `a pantheon is eroded too but the citizens of no religion are not`() {
+        val s = erosionSetup(100)
+        val pantheon = game.addReligion(s.city.civ)
+        pantheon.addBeliefs(listOf(game.createBelief(BeliefType.Pantheon)))
+        assertTrue(pantheon.isPantheon())
+        s.city.religion.addPressure(pantheon.name, 1000)
+        s.city.religion.addPressure(com.unciv.Constants.noReligionName, 500)
+        val atheismBefore = s.city.religion.getPressures()[com.unciv.Constants.noReligionName]
+        assertTrue(atheismBefore >= 500)
+        s.city.religion.addPressureFromSpreading(s.spreader.name, 0)
+        assertEquals(0, s.city.religion.getPressures()[pantheon.name])
+        assertEquals(atheismBefore, s.city.religion.getPressures()[com.unciv.Constants.noReligionName])
+    }
+
+    @Test
+    fun `every other religion loses its own share, not a share of what was added`() {
+        val s = erosionSetup(10, otherCount = 2)
+        s.city.religion.addPressure(s.others[0].name, 1000)
+        s.city.religion.addPressure(s.others[1].name, 200)
+        s.city.religion.addPressureFromSpreading(s.spreader.name, 5000)
+        assertEquals(900, s.city.religion.getPressures()[s.others[0].name])
+        assertEquals(180, s.city.religion.getPressures()[s.others[1].name])
+    }
+
+    @Test
+    fun `without the unique the spread only adds`() {
+        val s = erosionSetup()
+        s.city.religion.addPressure(s.others[0].name, 1000)
+        s.city.religion.addPressureFromSpreading(s.spreader.name, 400)
+        assertEquals(1000, s.city.religion.getPressures()[s.others[0].name])
+        assertEquals(400, s.city.religion.getPressures()[s.spreader.name])
+    }
+
+    @Test
+    fun `in a game without religion a spread changes no pressure`() {
+        // The unique map of the mod options is built when it is first asked, so the option is added to a fresh game before anything is
+        game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        game.makeHexagonalMap(5)
+        game.ruleset.modOptions.uniques.add("Disable religion")
+        val s = erosionSetup(50)
+        assertFalse(game.gameInfo.isReligionEnabled())
+        s.city.religion.addPressure(s.others[0].name, 1000) // returns early too: nothing is added
+        assertEquals(0, s.city.religion.getPressures()[s.others[0].name])
+        s.city.religion.addPressureFromSpreading(s.spreader.name, 400)
+        assertEquals(0, s.city.religion.getPressures()[s.others[0].name])
+        assertEquals(0, s.city.religion.getPressures()[s.spreader.name])
+    }
+
+    @Test
+    fun `the live Evangelism has no erosion and no belief of the ruleset erodes`() {
+        val withErosion = game.ruleset.beliefs.values.filter { belief ->
+            belief.uniqueObjects.any { it.type == com.unciv.models.ruleset.unique.UniqueType.ErodesOtherReligionPressure } }
+        assertEquals(emptyList<String>(), withErosion.map { it.name })
+        assertTrue(game.ruleset.beliefs["Evangelism"]!!.uniques.isEmpty())
+    }
+    //endregion
 
     @Test
     fun `Sacred Sites grants tourism in a foreign city following the founder religion`() {

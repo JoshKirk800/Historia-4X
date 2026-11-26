@@ -1423,6 +1423,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Units in cities cost no Maintenance"
 	Applicable to: Global
 
+??? example  "[amount]% Unit Supply from the citizens of all cities"
+	Percent points added to the share of the citizens of every city of the civilization that count as supply, next to the difficulty's population percent (the original's `CitySupplyModifierGlobal`, which the player keeps as ExtraSupplyPerPopulation). Several add up. Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`
+
+	Example: "[3]% Unit Supply from the citizens of all cities"
+
+	Applicable to: Global
+
 ??? example  "Enables embarkation for land units"
 	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
 
@@ -2884,6 +2891,20 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Added to the mission of a unit whose origin city has the building (`Buildings.DiplomatInfluenceBoost`, CvCity::GetDiplomatInfluenceBoost; the Wat 10). Only with the ModConstants `diplomaticMissionsLikeVp`
 
 	Example: "[3] Influence from diplomatic missions of units from this city"
+
+	Applicable to: Building
+
+??? example  "[amount] Unit Supply in this city"
+	The city gives that many more units of supply, as if the difficulty's supply per city were that much higher in this city alone: it is divided by the technology divisor of the cities' supply and by the empire size divisor with the rest, and a puppet gives its share of it (the original's `CitySupplyFlat`). Several add up. Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`
+
+	Example: "[3] Unit Supply in this city"
+
+	Applicable to: Building
+
+??? example  "[amount]% Unit Supply from the citizens of this city"
+	Percent points added to the share of this city's citizens that count as supply, next to the difficulty's population percent: with 20% from the difficulty and +10 here the city's citizens give 30% of their number (the original's `CitySupplyModifier`). Several add up. Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`
+
+	Example: "[3]% Unit Supply from the citizens of this city"
 
 	Applicable to: Building
 

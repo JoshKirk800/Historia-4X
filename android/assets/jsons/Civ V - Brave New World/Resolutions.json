@@ -116,5 +116,26 @@
             "Free [Great Scientist] appears <upon reaching contribution tier [2] of a World Congress project>",
             "Gain a free [International Space Station Complex] [in capital] <upon reaching contribution tier [3] of a World Congress project>"
         ]
+    },
+    {
+        // The two City-State resolutions of Vox Populi (NewResolutions.xml RESOLUTION_OPEN_DOOR and RESOLUTION_SPHERE_OF_INFLUENCE: YES_OR_NO vote, proposer chooses a City-State, no
+        // other value; the texts are TXT_KEY_RESOLUTION_OPEN_DOOR_HELP and TXT_KEY_RESOLUTION_SOI_HELP). Their effects and rules only work with the ModConstants leagueSessionRulesLikeVp.
+        // The two conflict uniques are the proposal rules of CvLeague::CanProposeEnact (V:CvVotingClasses.cpp:3025-3096), not columns of the rows
+        "name": "Open Door",
+        "proposerDecision": "CityState",
+        "requiredTechAnyMember": "Economics",
+        "uniques": [
+            "Opens the door of the chosen City-State to every civilization",
+            "Cannot be proposed while [Sphere of Influence] is in effect or proposed for the same choice"
+        ]
+    },
+    {
+        "name": "Sphere of Influence",
+        "proposerDecision": "CityState",
+        "requiredTechAnyMember": "Steam Power",
+        "uniques": [
+            "Puts the chosen City-State in the sphere of influence of the proposer",
+            "Can only be proposed by the ally of the chosen civilization"
+        ]
     }
 ]

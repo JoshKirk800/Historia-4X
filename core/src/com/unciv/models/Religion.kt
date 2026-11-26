@@ -140,6 +140,10 @@ class Religion() : INamed, IsPartOfGameInfoSerialization {
         return beliefs.asSequence().mapNotNull { rulesetBeliefs[it] }
     }
 
+    /** The Founder, Enhancer and Reformation beliefs: the ones [founderBeliefUniqueMap] is made of */
+    @Readonly
+    fun getFounderSideBeliefs(): Sequence<Belief> = mapToExistingBeliefs(founderBeliefs)
+
     @Readonly
     fun getBeliefs(beliefType: BeliefType): Sequence<Belief> {
         if (beliefType == BeliefType.Any)

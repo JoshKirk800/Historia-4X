@@ -12,6 +12,8 @@ import com.unciv.models.Counter
 import com.unciv.models.Religion
 import com.unciv.models.ruleset.Belief
 import com.unciv.models.ruleset.BeliefType
+import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
@@ -566,27 +568,28 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         return true
     }
 
+    /** The cities of anyone whose majority is [ofReligion], by default the religion we founded */
     @Readonly
-    fun numberOfCitiesFollowingThisReligion(): Int {
-        if (religion == null) return 0
+    fun numberOfCitiesFollowingThisReligion(ofReligion: Religion? = religion): Int {
+        if (ofReligion == null) return 0
         return civInfo.gameInfo.getCities()
-            .count { it.religion.getMajorityReligion() == religion }
+            .count { it.religion.getMajorityReligion() == ofReligion }
     }
 
     /** As above, only the cities that match [cityFilter] (as seen by us) count: with `in foreign cities`, CvPlayerReligions::GetNumForeignCitiesFollowing */
     @Readonly
-    fun numberOfCitiesFollowingThisReligion(cityFilter: String): Int {
-        if (religion == null) return 0
+    fun numberOfCitiesFollowingThisReligion(cityFilter: String, ofReligion: Religion? = religion): Int {
+        if (ofReligion == null) return 0
         return civInfo.gameInfo.getCities()
-            .count { it.religion.getMajorityReligion() == religion && it.matchesFilter(cityFilter, civInfo) }
+            .count { it.religion.getMajorityReligion() == ofReligion && it.matchesFilter(cityFilter, civInfo) }
     }
 
     @Readonly
-    fun numberOfFollowersFollowingThisReligion(cityFilter: String): Int {
-        if (religion == null) return 0
+    fun numberOfFollowersFollowingThisReligion(cityFilter: String, ofReligion: Religion? = religion): Int {
+        if (ofReligion == null) return 0
         return civInfo.gameInfo.getCities()
             .filter { it.matchesFilter(cityFilter, civInfo) }
-            .sumOf { it.religion.getFollowersOf(religion!!.name) }
+            .sumOf { it.religion.getFollowersOf(ofReligion.name) }
     }
 
     @Readonly
@@ -597,17 +600,54 @@ class ReligionManager : IsPartOfGameInfoSerialization {
 
     /** The religion whose founder benefits apply to us, or null: the founder of a religion (not a pantheon) only has them
      *  while it still owns the holy city - CvGameReligions::IsEligibleForFounderBenefits. A holy city blocked by an
-     *  inquisitor still counts: the original looks only at who owns the holy city's tile.
+     *  inquisitor still counts. With [com.unciv.models.ModConstants.religiousBeliefValidityLikeVp] it is the [getOwnedReligion], which may be conquered,
+     *  and a blocked holy city counts for nobody.
      *
      *  The original asks for this at the effects of a belief that are tied to the player: yields per city or follower
      *  (see CivInfoStatsForNextTurn), the city-state resting point, and the strength bonus in cities following the religion
-     *  ("in cities following our religion"). What a belief does to how the religion spreads or what missionaries cost does not
-     *  depend on it, so the beliefs are not hidden from [Civilization.getMatchingUniques]. */
+     *  ("in cities following our religion"). Without the switch what a belief does to how the religion spreads or what missionaries cost does not
+     *  depend on it, so the beliefs are not hidden from [Civilization.getMatchingUniques]; with it, see [forEachBeliefUniqueMap]. */
     @Readonly
-    fun getFounderBenefitsReligion(): Religion? {
+    fun getFounderBenefitsReligion(): Religion? =
+        if (validityLikeVp()) getOwnedReligion() else getFoundedReligionWithHolyCity()
+
+    /** The religion this civilization founded, while it owns the holy city of it; not a pantheon */
+    @Readonly
+    private fun getFoundedReligionWithHolyCity(): Religion? {
         val founded = religion ?: return null
         if (!founded.isMajorReligion()) return null
-        return if (civInfo.cities.any { it.religion.religionThisIsTheHolyCityOf == founded.name }) founded else null
+        return if (ownsHolyCityOf(founded)) founded else null
+    }
+
+    // Before setTransients gives this manager its civilization: as without the switch, like [forEachBeliefUniqueMap]
+    @Readonly
+    private fun validityLikeVp() = hasCivInfo() && civInfo.gameInfo.ruleset.modOptions.constants.religiousBeliefValidityLikeVp
+
+    /** Whether [city] is the holy city of the religion named [religionName]. With [com.unciv.models.ModConstants.religiousBeliefValidityLikeVp] a holy city that an
+     *  inquisitor of another religion has stripped ([com.unciv.logic.city.managers.CityReligionManager.isBlockedHolyCity]) is not: CvCityReligions::RemoveOtherReligions
+     *  clears the holy plot of the religion (V:CvReligionClasses.cpp:5246-5253), and the holy city of a religion is that plot (CvGameReligions::SetHolyCity, 1852-1873). */
+    @Readonly
+    private fun isHolyCityOf(city: City, religionName: String): Boolean =
+        city.religion.religionThisIsTheHolyCityOf == religionName && !(city.religion.isBlockedHolyCity && validityLikeVp())
+
+    /** Whether the holy city of [religion] is one of ours */
+    @Readonly
+    fun ownsHolyCityOf(religion: Religion): Boolean = civInfo.cities.any { isHolyCityOf(it, religion.name) }
+
+    /** CvReligionBeliefs::IsBeliefValid's `bEligibleForFounderBenefits` (V:CvBeliefClasses.cpp:2155-2176): a pantheon (it has no holy city) for its founder, a religion for
+     *  the owner of its holy city, whoever founded it ("don't care about founder, ownership counts!") */
+    @Readonly
+    fun isEligibleForFounderBenefits(religion: Religion): Boolean =
+        if (religion.isPantheon()) religion.foundingCiv == civInfo else ownsHolyCityOf(religion)
+
+    /** CvPlayerReligions::GetOwnedReligion (V:CvReligionClasses.cpp:3742-3759): the state religion while we own its holy city, which
+     *  CvPlayerReligions::UpdateStateReligion (3769-3812) records when it picks the founded or a conquered religion; a pantheon is owned by nobody.
+     *  Without [com.unciv.models.ModConstants.religiousBeliefValidityLikeVp] it is the founded religion while we own its holy city. */
+    @Readonly
+    fun getOwnedReligion(): Religion? {
+        if (!validityLikeVp()) return getFoundedReligionWithHolyCity()
+        val state = getStateReligionCached() ?: return null
+        return if (state.isMajorReligion() && ownsHolyCityOf(state)) state else null
     }
 
     /** The pantheon this civilization founded, which it keeps for good even when its major religion also carries the belief
@@ -631,11 +671,9 @@ class ReligionManager : IsPartOfGameInfoSerialization {
      *  The original's forced override (SetStateReligionOverride, used only by scripts) is not modelled. */
     @Readonly
     fun getStateReligion(): Religion? {
-        getFounderBenefitsReligion()?.let { return it }
+        getFoundedReligionWithHolyCity()?.let { return it }
 
-        val owned = religionsInFoundingOrder().filter { candidate ->
-            candidate.isMajorReligion() && civInfo.cities.any { it.religion.religionThisIsTheHolyCityOf == candidate.name }
-        }
+        val owned = religionsInFoundingOrder().filter { candidate -> candidate.isMajorReligion() && ownsHolyCityOf(candidate) }
         if (owned.isNotEmpty()) {
             var best = owned.first()
             var bestFollowers = civInfo.cities.sumOf { it.religion.getFollowersOf(best.name) }
@@ -675,9 +713,9 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         stateReligionCache = null
     }
 
-    /** The holy city of [religion], whoever owns it, or null (a pantheon, or the city is gone): CvReligion::GetHolyCity */
+    /** The holy city of [religion], whoever owns it, or null (a pantheon, or the city is gone, or stripped: [isHolyCityOf]): CvReligion::GetHolyCity */
     @Readonly
-    fun getHolyCityOf(religion: Religion): City? = civInfo.gameInfo.getCities().firstOrNull { it.religion.religionThisIsTheHolyCityOf == religion.name }
+    fun getHolyCityOf(religion: Religion): City? = civInfo.gameInfo.getCities().firstOrNull { isHolyCityOf(it, religion.name) }
 
     /** Whether a belief of [stateReligion], the state religion of this civilization, counts in the way CvReligionBeliefs::IsBeliefValid (V:CvBeliefClasses.cpp:2151-2253)
      *  answers it for the readers that pass the holy city of the state religion as the city: CvUnit::healRate (the friendly heal change) and the religious combat bonuses of
@@ -685,30 +723,80 @@ class ReligionManager : IsPartOfGameInfoSerialization {
      *  ours and to follow the religion, and a Reformation belief needs the holy city to follow it; its other condition, "the holy city is ours or the religion is our state
      *  religion" (2236), holds because the reader asks only about the state religion. */
     @Readonly
-    fun isStateReligionBeliefValid(belief: Belief, stateReligion: Religion, holyCity: City? = getHolyCityOf(stateReligion)): Boolean {
-        val eligibleForFounderBenefits = if (holyCity == null) stateReligion.isPantheon() && stateReligion.foundingCiv == civInfo else holyCity.civ == civInfo
-        val pantheonInReligion = { getOwnPantheon()?.hasBelief(belief.name) == true && stateReligion.hasBelief(belief.name) }
-        val majorityHere = holyCity?.religion?.getMajorityReligion() == stateReligion
-        return when (belief.type) {
-            BeliefType.Founder, BeliefType.Enhancer -> eligibleForFounderBenefits
-            BeliefType.Follower -> holyCity == null || (majorityHere && holyCity.civ == civInfo)
-            BeliefType.Reformation -> holyCity == null || majorityHere
-            BeliefType.Pantheon -> holyCity == null || ((majorityHere || pantheonInReligion()) && holyCity.civ == civInfo)
-            else -> true
+    fun isStateReligionBeliefValid(belief: Belief, stateReligion: Religion, holyCity: City? = getHolyCityOf(stateReligion)): Boolean =
+        isBeliefValid(belief, stateReligion, holyCity, isStateReligion = true)
+
+    /** CvReligionBeliefs::IsBeliefValid (V:CvBeliefClasses.cpp:2151-2317) with this civilization as the player: whether [belief] of [religion] works for us, asked with [city]
+     *  (null where the reader passes none) and [holyCityOnly] (`bHolyCityOnly`: a founder-side or pantheon belief only in the holy city for its owner, a Reformation one only
+     *  in the capital for the others). [isStateReligion]: the caller knows that [religion] is our state religion. A reader without a player (VP passes NO_PLAYER: valid,
+     *  2153-2154) does not ask. NOT modelled: MOD_BALANCE_UNIQUE_BELIEFS_ONLY_FOR_CIV (2310-2314; no belief of the rulesets needs a civilization). */
+    @Readonly
+    fun isBeliefValid(belief: Belief, religion: Religion, city: City? = null, holyCityOnly: Boolean = false, isStateReligion: Boolean = false): Boolean {
+        val eligible = isEligibleForFounderBenefits(religion)
+        val isState = { isStateReligion || getStateReligionCached() == religion }
+        val capital = { civInfo.getCapital(firstCityIfNoCapital = false) }
+        when (belief.type) {
+            BeliefType.Founder, BeliefType.Enhancer -> {
+                if (!eligible) return false
+                if (city != null && city.civ != civInfo) return false
+                if (holyCityOnly && city != null && !isHolyCityOf(city, religion.name)) return false
+            }
+            BeliefType.Follower -> {
+                if (city != null && (city.religion.getMajorityReligion() != religion || city.civ != civInfo)) return false
+            }
+            BeliefType.Reformation -> {
+                if (city != null && city.religion.getMajorityReligion() != religion) return false
+                if (!eligible && !isState()) return false
+                if (holyCityOnly && city != null) {
+                    if (eligible && !isHolyCityOf(city, religion.name)) return false
+                    if (!eligible && capital() != city) return false
+                }
+            }
+            BeliefType.Pantheon -> {
+                if (!eligible && holyCityOnly && religion.isMajorReligion() && !isState()) return false
+                if (city != null) {
+                    val inReligion = getOwnPantheon()?.hasBelief(belief.name) == true && religion.hasBelief(belief.name) // IsPantheonBeliefInReligion
+                    if (city.religion.getMajorityReligion() != religion && !inReligion) return false
+                    if (city.civ != civInfo) return false
+                    if (holyCityOnly) {
+                        var asked = religion
+                        if (religion.isPantheon()) {
+                            if (capital() != city) return false
+                            val parent = getStateReligionCached()?.takeIf { it.isMajorReligion() }
+                            if (parent != null) asked = parent
+                        }
+                        if (asked.isMajorReligion()) {
+                            if (eligible && !isHolyCityOf(city, asked.name)) return false
+                            if (!eligible && capital() != city) return false
+                        }
+                    }
+                }
+            }
+            else -> {}
         }
+        return true
+    }
+
+    /** The uniques of [uniqueType] of the Founder, Enhancer and Reformation beliefs of [religion] that [isBeliefValid] accepts for us with [city] and [holyCityOnly] */
+    @Readonly
+    fun forEachValidFounderSideUnique(religion: Religion, uniqueType: UniqueType, gameContext: GameContext, city: City? = null, holyCityOnly: Boolean = false,
+                                      op: (Unique) -> Unit) {
+        for (belief in religion.getFounderSideBeliefs())
+            if (belief.hasUnique(uniqueType) && isBeliefValid(belief, religion, city, holyCityOnly)) belief.forEachMatchingUnique(uniqueType, gameContext, op)
     }
 
     /** Whether a Reformation belief of [religion] works for this civilization, as the Reformation branch of CvReligionBeliefs::IsBeliefValid answers it
      *  (V:CvBeliefClasses.cpp:2229-2253, without `bHolyCityOnly`): the civilization owns the holy city of the religion or has it as its state religion
      *  ([getStateReligion]), and, when [city] is asked about, the majority religion of that city is [religion]. The caller asks only if
      *  [com.unciv.models.ModConstants.reformationBeliefsLikeVp] is on. [getStateReligion] is dear (it sorts the religions and scans the cities), so the
-     *  owner of the holy city is asked first and the callers keep this off the hot paths. DEPARTURE: VP asks who owns the PLOT of the holy city
-     *  (V:CvBeliefClasses.cpp:2157-2176), here it is the owner of the holy CITY, so a holy city that no longer exists counts for nobody but the state religion.
+     *  owner of the holy city is asked first and the callers keep this off the hot paths. VP asks who owns the PLOT of the holy city
+     *  (V:CvBeliefClasses.cpp:2157-2176), which it clears when the city is destroyed or stripped, so the owner of the holy CITY is the same; a stripped holy city counts for
+     *  nobody only with [com.unciv.models.ModConstants.religiousBeliefValidityLikeVp] ([isHolyCityOf]).
      *  Not [isStateReligionBeliefValid]: that one asks with the holy city as the city and treats a religion without a holy city as valid for everybody. */
     @Readonly
     fun reformationBeliefApplies(religion: Religion, city: City? = null): Boolean {
         if (city != null && city.religion.getMajorityReligion() != religion) return false
-        if (civInfo.cities.any { it.religion.religionThisIsTheHolyCityOf == religion.name }) return true // the holy city is ours: its owner is us
+        if (ownsHolyCityOf(religion)) return true
         return getStateReligionCached() == religion
     }
 
@@ -718,12 +806,31 @@ class ReligionManager : IsPartOfGameInfoSerialization {
      *  the cities that follow the religion are the cities' own, see [com.unciv.logic.city.managers.CityReligionManager]) of EVERY religion for which
      *  [reformationBeliefApplies] holds (its own while it owns the holy city, the state religion, and any other religion whose holy city it owns, as IsBeliefValid asks it of each belief). Most games have no
      *  Reformation belief at all, and then this is as cheap as before: [reformationBeliefApplies], which asks the state religion and that is dear, is only run for
-     *  the religions that have one. */
+     *  the religions that have one.
+     *  With [com.unciv.models.ModConstants.religiousBeliefValidityLikeVp], as VP's player readers ask the state religion with its holy city (CvPlayerReligions::GetCityStateInfluenceModifier,
+     *  V:CvReligionClasses.cpp:3967-3981): the Founder and Enhancer uniques of the [getOwnedReligion] (none for a founder that lost its holy city), and with
+     *  [com.unciv.models.ModConstants.reformationBeliefsLikeVp] the civilization-wide Reformation uniques of the state religion if its holy city follows it. */
     @Readonly
     inline fun forEachBeliefUniqueMap(op: (UniqueMap) -> Unit) {
         val founded = religion
         // While a game loads, the units ask for uniques before this manager has its civilization: that is as without the switch
-        if (!hasCivInfo() || !civInfo.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp) {
+        if (!hasCivInfo()) {
+            if (founded != null) op(founded.founderBeliefUniqueMap)
+            return
+        }
+        val constants = civInfo.gameInfo.ruleset.modOptions.constants
+        if (constants.religiousBeliefValidityLikeVp) {
+            val owned = getOwnedReligion()
+            if (!constants.reformationBeliefsLikeVp) {
+                if (owned != null) op(owned.founderBeliefUniqueMap)
+                return
+            }
+            if (owned != null) op(owned.founderWithoutReformationUniqueMap)
+            val state = getStateReligionCached()
+            if (state != null && !state.reformationCivUniqueMap.isEmpty() && reformationBeliefApplies(state, getHolyCityOf(state))) op(state.reformationCivUniqueMap)
+            return
+        }
+        if (!constants.reformationBeliefsLikeVp) {
             if (founded != null) op(founded.founderBeliefUniqueMap)
             return
         }

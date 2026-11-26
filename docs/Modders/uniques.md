@@ -2354,10 +2354,10 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: FounderBelief
 
-??? example  "Spreading religion erodes [positiveAmount]% of the pressure it adds from the other religions in the city"
-	Read from the founder beliefs of the religion that is spread. Applies to units that do not remove the other religions altogether (see `Removes other religions when spreading religion`). Pantheons and the citizens of no religion are not eroded
+??? example  "Spreading religion erodes [positiveAmount]% of the pressure of the other religions in the city"
+	Read from the founder beliefs of the religion that is spread. Applies to units that do not remove the other religions altogether (see `Removes other religions when spreading religion`). As in Vox Populi (CvCityReligions::ErodeOtherReligiousPressure), the percentage (at most 100, summed over the beliefs) is taken of the pressure that each other religion has in the city before the spread adds its own, pantheons included; the citizens of no religion are not eroded
 
-	Example: "Spreading religion erodes [3]% of the pressure it adds from the other religions in the city"
+	Example: "Spreading religion erodes [3]% of the pressure of the other religions in the city"
 
 	Applicable to: FounderBelief
 

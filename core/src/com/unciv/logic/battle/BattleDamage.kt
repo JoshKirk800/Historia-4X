@@ -107,6 +107,13 @@ object BattleDamage {
                 if (unhappinessPenalty != 0) modifiers["Unhappiness"] = unhappinessPenalty
             }
 
+            // CvUnit::GetGenericMeleeStrengthModifier, GetMaxRangedCombatStrength: the religious combat bonuses of the state religion, on the defender's tile
+            if (enemy is MapUnitCombatant && civInfo.gameInfo.ruleset.modOptions.constants.religiousCombatLikeVp) {
+                val battleTile = if (combatAction == CombatAction.Attack) enemy.getTile() else combatant.getTile()
+                val religious = ReligiousCombat.getStrengthModifier(combatant.unit, enemy.getCivInfo(), battleTile, conditionalState)
+                if (religious != 0) modifiers["State religion"] = religious
+            }
+
         } else if (combatant is CityCombatant) {
             combatant.city.forEachMatchingUnique(UniqueType.StrengthForCities, conditionalState) { unique ->
                 modifiers.add(getModifierStringFromUnique(unique), unique.params[0].toInt())

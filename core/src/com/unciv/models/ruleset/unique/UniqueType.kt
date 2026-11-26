@@ -744,6 +744,9 @@ enum class UniqueType(
 
     CostIncreasesPerCity("Cost increases by [amount] per owned city", UniqueTarget.Building, UniqueTarget.Unit),
     CostIncreasesWhenBuilt("Cost increases by [amount] when built", UniqueTarget.Building, UniqueTarget.Unit),
+    CostIncreasesPerEraAfterSecond("Cost increases by [amount] for every era after the second", UniqueTarget.Unit,
+        docDescription = "Added to the base cost before any percentage, once for each era of the owner after its second (Medieval era: once; the eras counted as the original and the `lastEra` of AI.json count them), as Vox Populi's " +
+            "`Units.ProductionCostAddedPerEra` (Emissary, Envoy, Diplomat and Ambassador 150, Caravan and Cargo Ship 75)"),
     CostPercentageChange("[amount]% production cost", UniqueTarget.Building, UniqueTarget.Unit,
         docDescription = "Intended to be used with conditionals to dynamically alter construction costs. $MULTIPLICATIVE_BONUS_EXPLANATION"),
 
@@ -1743,6 +1746,9 @@ enum class UniqueType(
     TriggerUponEndingTurnInTile("upon ending a turn in a [tileFilter] tile", UniqueTarget.UnitTriggerCondition),
     TriggerUponDiscoveringTile("upon discovering a [tileFilter] tile", UniqueTarget.UnitTriggerCondition),
     TriggerUponEnteringTile("upon entering a [tileFilter] tile", UniqueTarget.UnitTriggerCondition),
+    TriggerUponDiplomaticMission("upon conducting a diplomatic mission", UniqueTarget.UnitTriggerCondition,
+        docDescription = "After the influence of the mission is given, before the unit is used up, as Vox Populi's `CvUnit::trade` creates the unit's spies (`Units.ExtraSpies`: " +
+            "`Gain [n] Spy Points <upon conducting a diplomatic mission>`). Only with the ModConstants `diplomaticMissionsLikeVp`, which offers the mission"),
 
     //endregion
 

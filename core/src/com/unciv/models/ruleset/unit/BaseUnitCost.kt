@@ -16,6 +16,12 @@ class BaseUnitCost(val baseUnit: BaseUnit) {
         var productionCost = baseUnit.cost.toFloat()
 
         val stateForConditionals = city?.state ?: civInfo.state
+        // GetGenericUnitProductionCost (V:CvGameCoreUtils.cpp:1296-1304, V: is ref/vp-5.4.8/CvGameCoreDLL_Expansion2/): the owner's era number in the original's count less one, when above 0
+        val erasAfterSecond = civInfo.getAiEraNumber() - 1
+        if (erasAfterSecond > 0)
+            for (unique in baseUnit.getMatchingUniques(UniqueType.CostIncreasesPerEraAfterSecond, stateForConditionals))
+                productionCost += erasAfterSecond * unique.params[0].toInt()
+
         for (unique in baseUnit.getMatchingUniques(UniqueType.CostIncreasesPerCity, stateForConditionals))
             productionCost += civInfo.cities.size * unique.params[0].toInt()
 

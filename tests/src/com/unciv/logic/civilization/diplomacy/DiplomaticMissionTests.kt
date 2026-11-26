@@ -380,6 +380,34 @@ class DiplomaticMissionTests {
         assertEquals(50, DiplomaticMission.influenceOf(unit, cityState))   // 40 x 125 / 100
     }
 
+    // ---- the spies of the mission (CvUnit::trade, V:CvUnit.cpp:12206-12210) ----
+
+    private val spies = "Gain [50] Spy Points <upon conducting a diplomatic mission>"
+
+    private fun setUpSpies() {
+        setUpGame()
+        game.gameInfo.gameParameters.espionageEnabled = true
+        game.ruleset.modOptions.constants.spyPointsLikeVp = true
+    }
+
+    @Test
+    fun `the mission gives the unit's spy points`() {
+        setUpSpies()
+        mission(diplomat(can, gives.format(40), spies)).single().action!!.invoke()
+        assertEquals(50, us.espionageManager.spyPoints)
+        mission(diplomat(can, gives.format(40), spies)).single().action!!.invoke()
+        assertEquals("the second one makes a spy of 100 points", 1, us.espionageManager.spyList.size)
+    }
+
+    @Test
+    fun `a unit used up otherwise and a mission of a unit without the unique give no spy points`() {
+        setUpSpies()
+        diplomat(can, gives.format(40), spies).consume()
+        assertEquals("used up by another action", 0, us.espionageManager.spyPoints)
+        mission(diplomat(can, gives.format(40))).single().action!!.invoke()
+        assertEquals(0, us.espionageManager.spyPoints)
+    }
+
     @Test
     fun `changing the influence without the ally update returns the old one, rises and stops at the lowest`() {
         setUpThree()

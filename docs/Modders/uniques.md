@@ -3422,6 +3422,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Building, Unit
 
+??? example  "Cost increases by [amount] for every era after the second"
+	Added to the base cost before any percentage, once for each era of the owner after its second (Medieval era: once; the eras counted as the original and the `lastEra` of AI.json count them), as Vox Populi's `Units.ProductionCostAddedPerEra` (Emissary, Envoy, Diplomat and Ambassador 150, Caravan and Cargo Ship 75)
+
+	Example: "Cost increases by [3] for every era after the second"
+
+	Applicable to: Unit
+
 ??? example  "[amount]% production cost"
 	Intended to be used with conditionals to dynamically alter construction costs. Multiple bonuses stack multiplicatively: +50% + +50% = x1.5 * x1.5 = +125%
 
@@ -6085,6 +6092,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "&lt;upon entering a [tileFilter] tile&gt;"
 	Example: "&lt;upon entering a [Farm] tile&gt;"
+
+	Applicable to: UnitTriggerCondition
+
+??? example  "&lt;upon conducting a diplomatic mission&gt;"
+	After the influence of the mission is given, before the unit is used up, as Vox Populi's `CvUnit::trade` creates the unit's spies (`Units.ExtraSpies`: `Gain [n] Spy Points <upon conducting a diplomatic mission>`). Only with the ModConstants `diplomaticMissionsLikeVp`, which offers the mission
 
 	Applicable to: UnitTriggerCondition
 

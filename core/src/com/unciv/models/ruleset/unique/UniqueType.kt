@@ -471,6 +471,16 @@ enum class UniqueType(
     NoUnitSupply("Does not use unit supply", UniqueTarget.Unit,
         docDescription = "The unit does not count against the civilization's unit supply, whether the unit type or one of its promotions has it (CvUnit::isNoSupply). " +
             "Conditionals are not evaluated. Only read with the ModConstants switch `unitSupplyLikeVp`."),
+    /** VP 5.4.8 Buildings.CitySupplyFlat, CvCity::processBuilding (V:CvCity.cpp:13657), CvCity::getCitySupplyFlat (V:CvCity.cpp:19060-19064), read at V:CvPlayer.cpp:17152 */
+    UnitSupplyInCity("[amount] Unit Supply in this city", UniqueTarget.Building,
+        docDescription = "The city gives that many more units of supply, as if the difficulty's supply per city were that much higher in this city alone: it is divided by the technology " +
+            "divisor of the cities' supply and by the empire size divisor with the rest, and a puppet gives its share of it (the original's `CitySupplyFlat`). Several add up. " +
+            "Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`"),
+    /** VP 5.4.8 Buildings.CitySupplyModifier, CvCity::processBuilding (V:CvCity.cpp:13656), CvCity::getCitySupplyModifier (V:CvCity.cpp:19047-19051), read at V:CvPlayer.cpp:17206 */
+    UnitSupplyPercentFromCitizens("[amount]% Unit Supply from the citizens of this city", UniqueTarget.Building,
+        docDescription = "Percent points added to the share of this city's citizens that count as supply, next to the difficulty's population percent: with 20% from the difficulty and " +
+            "+10 here the city's citizens give 30% of their number (the original's `CitySupplyModifier`). Several add up. " +
+            "Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`"),
 
     // Units entering Tiles
     // ToDo: make per unit and use unit filters? "Enables embarkation <for [land] units>"

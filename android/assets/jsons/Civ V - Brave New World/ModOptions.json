@@ -227,6 +227,11 @@
             "baseTechReductionPerEra": 100, "citiesTechReductionMultiplier": 100, "populationTechReductionMultiplier": 100, "empireSizePenaltyPerCity": 5,
             "productionPenaltyPerUnit": 5, "maxProductionPenalty": 70, "growthPenaltyPerUnit": 5, "maxGrowthPenalty": 70
         },
+        // Content flip of the M6 supply (owner decision D26): the buildings' CitySupplyFlat / CitySupplyModifier (CvCity::processBuilding V:CvCity.cpp:13656-13657) and a human's
+        // population percent of HandicapInfos.UnitSupplyPopulationPercent, 20 on every difficulty (CvPlayer::GetNumUnitsSuppliedByPopulation V:CvPlayer.cpp:17199); the base, per city,
+        // AI and city-state columns of Difficulties.json are the same table
+        "unitSupplyBuildingsLikeVp": true,
+        "unitSupplyPerPopulation": 0.2,
         // The promotion and unit columns of Vox Populi: ExtraFlankPower, IgnoreTerrainCostIn / HalfMove / ExtraMove, GainsXPFromScouting (BALANCE_SCOUT_XP_*: 12 and 10, the defaults),
         // XPFromPillaging, LostOnGifting, MinorCivGift / NoMinorCivGift
         "flankPowerLikeVp": true,

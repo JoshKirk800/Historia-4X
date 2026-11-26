@@ -393,6 +393,77 @@ class EspionageAutomationTests {
         ai.automateSpies()
         assertTrue(spy.getCityOrNull() != city)
     }
+
+    // CvEspionageAI::EvaluateMinorCivSpies also flags a spy in a city-state at war with its owner (V:CvEspionageClasses.cpp:10460-10472); BuildMinorCityList already leaves such a
+    // city-state off its list (9951-9955), so the flagged spy is pulled out. The engine had no other place that does it. Behind leagueSessionRulesLikeVp, like the proposal test.
+    @Test
+    fun `a spy leaves a city-state that we went to war with, with the switch on`() {
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        val (spy, city) = spyInCityStateWithOneCityOfOurs()
+        ai.automateSpies()
+        assertSame("at peace it stays", city, spy.getCityOrNull())
+        a.getDiplomacyManager(city.civ)!!.declareWar()
+        assertTrue(a.isAtWarWith(city.civ))
+        ai.automateSpies()
+        assertTrue("at war it leaves", spy.getCityOrNull() != city)
+    }
+
+    @Test
+    fun `without the switch a spy stays in a city-state at war`() {
+        val (spy, city) = spyInCityStateWithOneCityOfOurs()
+        a.getDiplomacyManager(city.civ)!!.declareWar()
+        ai.automateSpies()
+        assertSame(city, spy.getCityOrNull())
+    }
+
+    @Test
+    fun `a war with a major civilization or with another city-state does not move a spy out of a city-state at peace`() {
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        val (spy, city) = spyInCityStateWithOneCityOfOurs()
+        val other = cityStateAllied(null, -8)
+        a.getDiplomacyManager(b)!!.declareWar()
+        a.getDiplomacyManager(other.civ)!!.declareWar()
+        ai.automateSpies()
+        assertSame(city, spy.getCityOrNull())
+    }
+
+    @Test
+    fun `a war between the city-state and another civilization is no war of ours, the spy stays`() {
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        val (spy, city) = spyInCityStateWithOneCityOfOurs()
+        b.diplomacyFunctions.makeCivilizationsMeet(city.civ)
+        b.getDiplomacyManager(city.civ)!!.declareWar()
+        assertTrue(city.civ.isAtWar())
+        assertFalse(a.isAtWarWith(city.civ))
+        ai.automateSpies()
+        assertSame(city, spy.getCityOrNull())
+    }
+
+    @Test
+    fun `a spy in a city-state at war leaves even though the city-state would hold a city-state slot at peace`() {
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        a.ai.setGrandStrategyAndPursuit(null)
+        game.addCity(a, game.tileMap[0, -3])
+        val city = cityStateAllied(null, -5)
+        val spies = addSpies(3)
+        setUpIn(spies[0], city)
+        assertEquals("three spies leave one for the city-states", 1, ai.findTargetSpyNumbers().cityState)
+        a.getDiplomacyManager(city.civ)!!.declareWar()
+        ai.automateSpies()
+        assertTrue("the war empties the slot: the city-state is off the list", spies[0].getCityOrNull() != city)
+    }
+
+    @Test
+    fun `peace after the war brings no flag, a spy stays`() {
+        game.ruleset.modOptions.constants.leagueSessionRulesLikeVp = true
+        val (spy, city) = spyInCityStateWithOneCityOfOurs()
+        val dip = a.getDiplomacyManager(city.civ)!!
+        dip.declareWar()
+        dip.makePeace()
+        assertFalse(a.isAtWarWith(city.civ))
+        ai.automateSpies()
+        assertSame(city, spy.getCityOrNull())
+    }
     // endregion
 
     // region city-state plan

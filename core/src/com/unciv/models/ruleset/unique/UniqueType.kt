@@ -15,6 +15,8 @@ private val numberRegex = Regex("\\d+$") // Any number of trailing digits
 
 private const val ADDITIVE_BONUS_EXPLANATION = "Multiple bonuses stack additively: +50% + +50% = +100%"
 private const val MULTIPLICATIVE_BONUS_EXPLANATION = "Multiple bonuses stack multiplicatively: +50% + +50% = x1.5 * x1.5 = +125%"
+private const val RELIGIOUS_STRENGTH_EXPLANATION = "Read from the beliefs of the state religion of the unit's owner that apply with its holy city (CvUnit::GetGenericMeleeStrengthModifier, " +
+    "V:CvUnit.cpp:16471-16507), for a land unit fighting a unit of a major civilization; the battle tile is the defender's. Only with the ModConstants `religiousCombatLikeVp`."
 private const val NUCLEAR_EXCLUSION_EXPLANATION = "Does not apply to units destroyed by nuclear explosions, which do not count as combat defeats."
 private val CHOOSE_MUSIC_DOCSTRING get() = (
     """Parameters are unchecked, strings not matching existing tracks or flags are ignored.
@@ -841,6 +843,14 @@ enum class UniqueType(
         docDescription = ADDITIVE_BONUS_EXPLANATION),
     StrengthAmount("[relativeAmount] Strength", UniqueTarget.Unit, UniqueTarget.Global),
     StrengthNearCapital("[relativeAmount]% Strength decreasing with distance from the capital", UniqueTarget.Unit, UniqueTarget.Global),
+    ReligiousStrengthOwnLands("[relativeAmount]% Strength for land units in territory friendly to us against units of major civilizations", UniqueTarget.FounderBelief, UniqueTarget.FollowerBelief,
+        docDescription = RELIGIOUS_STRENGTH_EXPLANATION + " Vox Populi's `Beliefs.CombatBonusOwnLands`: the battle tile is ours or opens its borders to us"),
+    ReligiousStrengthOwnLandsOtherReligion("[relativeAmount]% Strength for land units in territory friendly to us against units of major civilizations with another state religion", UniqueTarget.FounderBelief, UniqueTarget.FollowerBelief,
+        docDescription = RELIGIOUS_STRENGTH_EXPLANATION + " Vox Populi's `Beliefs.CombatBonusVersusOtherReligionOwnLands`: as the one without the other religion, but only when the other civilization's state religion is not ours (or it has none)"),
+    ReligiousStrengthTheirLands("[relativeAmount]% Strength for land units in territory friendly to the enemy against units of major civilizations", UniqueTarget.FounderBelief, UniqueTarget.FollowerBelief,
+        docDescription = RELIGIOUS_STRENGTH_EXPLANATION + " Vox Populi's `Beliefs.CombatBonusTheirLands`: the battle tile is the other civilization's or opens its borders to it"),
+    ReligiousStrengthTheirLandsOtherReligion("[relativeAmount]% Strength for land units in territory friendly to the enemy against units of major civilizations with another state religion", UniqueTarget.FounderBelief, UniqueTarget.FollowerBelief,
+        docDescription = RELIGIOUS_STRENGTH_EXPLANATION + " Vox Populi's `Beliefs.CombatBonusVersusOtherReligionTheirLands`: as the one without the other religion, but only when the other civilization's state religion is not ours (or it has none)"),
     FlankAttackBonus("[relativeAmount]% to Flank Attack bonuses", UniqueTarget.Unit, UniqueTarget.Global,
         docDescription = MULTIPLICATIVE_BONUS_EXPLANATION),
     StrengthForAdjacentEnemies("[relativeAmount]% Strength for enemy [mapUnitFilter] units in adjacent [tileFilter] tiles", UniqueTarget.Unit),

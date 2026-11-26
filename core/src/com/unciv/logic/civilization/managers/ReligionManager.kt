@@ -675,18 +675,24 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         stateReligionCache = null
     }
 
-    /** Whether the belief counts for [religion] in the way CvReligionBeliefs::IsBeliefValid answers it when CvUnit::healRate asks for the friendly heal change
-     *  (with the holy city as city, so beliefs that act through cities need that city to be ours and to follow the religion). */
+    /** The holy city of [religion], whoever owns it, or null (a pantheon, or the city is gone): CvReligion::GetHolyCity */
     @Readonly
-    private fun isBeliefValidForHealing(belief: Belief, religion: Religion): Boolean {
-        val holyCity = civInfo.gameInfo.getCities().firstOrNull { it.religion.religionThisIsTheHolyCityOf == religion.name }
-        val eligibleForFounderBenefits = if (holyCity == null) religion.isPantheon() && religion.foundingCiv == civInfo else holyCity.civ == civInfo
-        val pantheonInReligion = { getOwnPantheon()?.hasBelief(belief.name) == true && religion.hasBelief(belief.name) }
-        val majorityHere = holyCity?.religion?.getMajorityReligion() == religion
+    fun getHolyCityOf(religion: Religion): City? = civInfo.gameInfo.getCities().firstOrNull { it.religion.religionThisIsTheHolyCityOf == religion.name }
+
+    /** Whether a belief of [stateReligion], the state religion of this civilization, counts in the way CvReligionBeliefs::IsBeliefValid (V:CvBeliefClasses.cpp:2151-2253)
+     *  answers it for the readers that pass the holy city of the state religion as the city: CvUnit::healRate (the friendly heal change) and the religious combat bonuses of
+     *  CvUnit::GetGenericMeleeStrengthModifier and GetMaxRangedCombatStrength ([com.unciv.logic.battle.ReligiousCombat]). So beliefs that act through cities need that city to be
+     *  ours and to follow the religion, and a Reformation belief needs the holy city to follow it; its other condition, "the holy city is ours or the religion is our state
+     *  religion" (2236), holds because the reader asks only about the state religion. */
+    @Readonly
+    fun isStateReligionBeliefValid(belief: Belief, stateReligion: Religion, holyCity: City? = getHolyCityOf(stateReligion)): Boolean {
+        val eligibleForFounderBenefits = if (holyCity == null) stateReligion.isPantheon() && stateReligion.foundingCiv == civInfo else holyCity.civ == civInfo
+        val pantheonInReligion = { getOwnPantheon()?.hasBelief(belief.name) == true && stateReligion.hasBelief(belief.name) }
+        val majorityHere = holyCity?.religion?.getMajorityReligion() == stateReligion
         return when (belief.type) {
             BeliefType.Founder, BeliefType.Enhancer -> eligibleForFounderBenefits
             BeliefType.Follower -> holyCity == null || (majorityHere && holyCity.civ == civInfo)
-            BeliefType.Reformation -> (holyCity == null || majorityHere) && (eligibleForFounderBenefits || getStateReligion() == religion)
+            BeliefType.Reformation -> holyCity == null || majorityHere
             BeliefType.Pantheon -> holyCity == null || ((majorityHere || pantheonInReligion()) && holyCity.civ == civInfo)
             else -> true
         }
@@ -698,7 +704,7 @@ class ReligionManager : IsPartOfGameInfoSerialization {
      *  [com.unciv.models.ModConstants.reformationBeliefsLikeVp] is on. [getStateReligion] is dear (it sorts the religions and scans the cities), so the
      *  owner of the holy city is asked first and the callers keep this off the hot paths. DEPARTURE: VP asks who owns the PLOT of the holy city
      *  (V:CvBeliefClasses.cpp:2157-2176), here it is the owner of the holy CITY, so a holy city that no longer exists counts for nobody but the state religion.
-     *  Not [isBeliefValidForHealing]: that one asks with the holy city as the city and treats a religion without a holy city as valid for everybody. */
+     *  Not [isStateReligionBeliefValid]: that one asks with the holy city as the city and treats a religion without a holy city as valid for everybody. */
     @Readonly
     fun reformationBeliefApplies(religion: Religion, city: City? = null): Boolean {
         if (city != null && city.religion.getMajorityReligion() != religion) return false
@@ -750,7 +756,7 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         if (stateReligion != null) {
             secondary = civInfo.getCapital(firstCityIfNoCapital = false)?.religion?.getSecondaryPantheonBelief()
             for (belief in stateReligion.getAllBeliefsOrdered())
-                if (isBeliefValidForHealing(belief, stateReligion)) total += healingOfBelief(belief, unit)
+                if (isStateReligionBeliefValid(belief, stateReligion)) total += healingOfBelief(belief, unit)
             if (secondary != null) total += healingOfBelief(secondary, unit)
         }
 

@@ -314,9 +314,9 @@
     },
     {
         // Vox Populi 5.4.8 (ReformationChanges.sql:1-7) sets this belief's erosion to 0 and gives it +10% strength in their lands, +5% more against another religion,
-        // and +2 gold and +2 culture from Barracks, Armories and Military Academies; NONE of that is built: VP's "their lands" is CvPlot::IsFriendlyTerritory(other owner)
-        // (V:CvPlot.cpp:4943, their own land or land that grants them open borders) while the engine's `Enemy Land` is a tile whose owner we are at war with, and no condition
-        // tests the other unit's state religion; so for now the belief has no effect at all
+        // and +2 gold and +2 culture from Barracks, Armories and Military Academies. The strength has its uniques since P5 S1 ("...in territory friendly to the enemy...",
+        // read with the ModConstants `religiousCombatLikeVp`, ReligiousCombat.kt), the building yields follow in S2; the row stays empty until the religion flip, so for now
+        // the belief has no effect at all
         "name": "Evangelism",
         "type": "Reformation",
         "uniques": []

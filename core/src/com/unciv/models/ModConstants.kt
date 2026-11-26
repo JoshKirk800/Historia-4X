@@ -215,6 +215,11 @@ class ModConstants {
      *  NOT modelled: `bHolyCityOnly` (2240-2252, a call-site argument that limits the belief to the holy city, or for the others to the capital); some callers pass it, for
      *  instance `CvCity::canConstruct` (V:CvCity.cpp:8915, with the OWNED religion). Which Reformation readers pass it was not checked. */
     var reformationBeliefsLikeVp = false
+    /** VP 5.4.8 CvUnit::GetGenericMeleeStrengthModifier (V:CvUnit.cpp:16471-16507) and CvUnit::GetMaxRangedCombatStrength (V:CvUnit.cpp:17336-17372): a land unit fighting a unit of
+     *  a major civilization gets the four religious combat bonuses of its owner's state religion (Defender of the Faith, Evangelism) by the territory of the battle tile and
+     *  the state religion of the other side ([com.unciv.logic.battle.ReligiousCombat]). Off: the uniques of [com.unciv.models.ruleset.unique.UniqueType.ReligiousStrengthOwnLands]
+     *  and its three siblings do nothing. */
+    var religiousCombatLikeVp = false
     var cityUnitHeal = 25
     var friendlyUnitHeal = 20
     var neutralUnitHeal = 10

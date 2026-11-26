@@ -1326,8 +1326,9 @@ class LeagueEvaluator(private val civ: Civilization, private val league: League)
 
     /**
      * Open Door (V:CvVotingClasses.cpp:13271-13336) for the chosen City-State: see [LeagueCityStateScoring.openDoor]. Its inputs: our influence and the friends
-     * threshold (the constant 30: VP scales it with the number of its cities and the era under MOD_BALANCE_CITY_STATE_SCALE, V:CvMinorCivAI.cpp:11511-11539, which
-     * the engine does not have), our approach to it ([com.unciv.logic.automation.strategy.CivAi.minorCivApproaches], neutral before the first evaluation), its
+     * threshold (the constant 30, which is also VP's: `GetFriendsThreshold` scales it by the City-State's cities and the era only under MOD_BALANCE_CITY_STATE_SCALE,
+     * V:CvMinorCivAI.cpp:11511-11539, an option that Vox Populi 5.4.8 leaves at 0 and whose era factors are 6 and 10 percent, so it is not built), our approach to it
+     * ([com.unciv.logic.automation.strategy.CivAi.minorCivApproaches], neutral before the first evaluation), its
      * proximity to us (VP reads `GetProximityToPlayer` of the City-State and sets both directions together, V:CvPlayer.cpp:37354-37355; the engine's proximity is
      * symmetric too, `CivInfoTransientCache.updateProximity`, so ours to it is the same), the resources it has that we lack, the influence of its ally when that
      * is another civilization, and the raw target value (average when none was evaluated).

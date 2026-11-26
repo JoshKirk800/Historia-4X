@@ -493,14 +493,19 @@ class EspionageAutomation(private val civInfo: Civilization) {
 
     /**
      *  CvEspionageAI::EvaluateMinorCivSpies (V:CvEspionageClasses.cpp:10423-10512): a spy in a city-state flags itself to be reassigned when the city-state has an Open Door in force
-     *  (10433), has a permanent ally (10447) or has an enactment of either on the table (10489-10509). NOT built: the flag for a war (V:10461) and for a teammate's ally
-     *  (10475, no teams here); not looked for elsewhere in the engine, only that this file does not set a war flag for a spy that is already in a city-state.
+     *  (10433), has a permanent ally (10447), is at war with us (10460-10472) or has an enactment of either on the table (10489-10509). The war flag is only set with
+     *  `leagueSessionRulesLikeVp` (the gate of the proposal test, OFF): nothing else in the engine moves a spy out of a city-state that we went to war with (the spy keeps its post,
+     *  `endTurn` only recalls diplomats, `performMissions` only looks at spies gathering intel, and a major's `isReconsideredEveryTurn` ignores city-states), while
+     *  [buildMinorCityList] already leaves out a city-state at war (V:9951-9955), so a flagged spy is never in the top of that list and leaves. NOT built: the flag for a teammate's ally
+     *  (10474-10487; the engine has no teams).
      */
     private fun evaluateMinorCivSpies() {
+        val likeVp = gameInfo.ruleset.modOptions.constants.leagueSessionRulesLikeVp
         for (spy in espionage.spyList) {
             if (!spy.isAlive()) continue
             val cityState = spy.getCityOrNull()?.civ?.takeIf { it.isCityState } ?: continue
-            if (cityState.noAlly || cityState.permanentAllyCiv != null || hasDoorOrSphereProposal(cityState)) spy.evaluateReassignment = true
+            if (cityState.noAlly || cityState.permanentAllyCiv != null || hasDoorOrSphereProposal(cityState) || (likeVp && civInfo.isAtWarWith(cityState)))
+                spy.evaluateReassignment = true
         }
     }
 

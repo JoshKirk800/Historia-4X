@@ -32,10 +32,12 @@ class ResourceRulesTests {
     private lateinit var a: Civilization
     private lateinit var b: Civilization
     private lateinit var city: City
+    private var horsesObsoleteBy: String? = null
 
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        horsesObsoleteBy = game.ruleset.tileResources["Horses"]!!.obsoleteBy
         game.makeHexagonalMap(5)
         a = game.addCiv()
         b = game.addCiv()
@@ -44,10 +46,11 @@ class ResourceRulesTests {
         game.addCity(b, game.getTile(HexCoord(4, 0)))
     }
 
-    /** The objects of a TestGame's ruleset are those of the cached ruleset (its clone is shallow): what a test sets on Horses must not stay for the other tests */
+    /** The objects of a TestGame's ruleset are those of the cached ruleset (its clone is shallow): what a test sets on Horses must not stay for the other tests, so what
+     *  it was in [setUp] comes back (it is Rocketry in the ruleset; a `null` here made `TradeContentTests` fail whenever it ran after this class) */
     @After
     fun restoreHorses() {
-        game.ruleset.tileResources["Horses"]!!.obsoleteBy = null
+        game.ruleset.tileResources["Horses"]!!.obsoleteBy = horsesObsoleteBy
     }
 
     //region obsolete resources

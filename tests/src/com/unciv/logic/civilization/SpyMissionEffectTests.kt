@@ -35,10 +35,12 @@ class SpyMissionEffectTests {
     private lateinit var bCity: City
     private lateinit var spy: Spy
     private val missions = ArrayList<String>()
+    private var productionCostModifier = 1f
 
     @Before
     fun setUp() {
         game = TestGame(baseRuleset = BaseRuleset.Civ_V_BNW)
+        productionCostModifier = game.gameInfo.speed.productionCostModifier
         game.gameInfo.gameParameters.espionageEnabled = true
         game.makeHexagonalMap(8)
         game.gameInfo.turns = 10
@@ -56,9 +58,12 @@ class SpyMissionEffectTests {
         assertEquals(SpyAction.GatheringIntel, spy.action)
     }
 
+    /** The speed of a TestGame is the ruleset's cached one, and a test that sets its production cost modifier left it so for every class that ran after (an upgrade cost
+     *  of 45 where 65 was expected in `UnitPurchaseContentTests`): what it was in [setUp] comes back */
     @After
     fun tearDown() {
         for (name in missions) game.ruleset.spyMissions.remove(name)
+        game.gameInfo.speed.productionCostModifier = productionCostModifier
     }
 
     private fun mission(name: String, duration: Int = 0, group: Int = 0, vararg uniques: String): SpyMission {

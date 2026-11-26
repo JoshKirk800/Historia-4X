@@ -21,11 +21,12 @@ class ResolutionRulesetTests {
     private val vanilla = RulesetCache[BaseRuleset.Civ_V_Vanilla.fullName]!!
 
     @Test
-    fun `Brave New World has the eighteen resolutions including the projects`() {
+    fun `Brave New World has the twenty resolutions including the projects and the two City-State ones of Vox Populi`() {
         assertEquals(
             listOf("World Leader", "Choose Host", "Embargo City-States", "Embargo", "Ban Luxury", "Standing Army Tax", "Scholars In Residence",
                 "Cultural Heritage Sites", "Natural Heritage Sites", "Nuclear Non-Proliferation", "World Religion", "World Ideology",
-                "Arts Funding", "Sciences Funding", "Historical Landmarks", "World's Fair", "International Games", "International Space Station"),
+                "Arts Funding", "Sciences Funding", "Historical Landmarks", "World's Fair", "International Games", "International Space Station",
+                "Open Door", "Sphere of Influence"),
             bnw.resolutions.keys.toList()
         )
         assertEquals(listOf("World's Fair", "International Games", "International Space Station"), bnw.resolutions.values.filter { it.isProject }.map { it.name })

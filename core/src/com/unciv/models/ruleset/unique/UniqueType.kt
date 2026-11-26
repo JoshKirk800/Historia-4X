@@ -382,6 +382,11 @@ enum class UniqueType(
         docDescription = "Percent points added to the share of this city's citizens that count as supply, next to the difficulty's population percent: with 20% from the difficulty and " +
             "+10 here the city's citizens give 30% of their number (the original's `CitySupplyModifier`). Several add up. " +
             "Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`"),
+    /** VP 5.4.8 Buildings.CitySupplyModifierGlobal, CvPlayer::processBuilding (V:CvPlayer.cpp:16086, ChangeExtraSupplyPerPopulation), read at V:CvPlayer.cpp:17199 */
+    UnitSupplyPercentFromAllCitizens("[amount]% Unit Supply from the citizens of all cities", UniqueTarget.Global,
+        docDescription = "Percent points added to the share of the citizens of every city of the civilization that count as supply, next to the difficulty's population percent " +
+            "(the original's `CitySupplyModifierGlobal`, which the player keeps as ExtraSupplyPerPopulation). Several add up. " +
+            "Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`"),
 
     // Units entering Tiles
     // ToDo: make per unit and use unit filters? "Enables embarkation <for [land] units>"

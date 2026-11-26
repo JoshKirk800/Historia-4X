@@ -135,6 +135,42 @@ class VpBuildingSupplyTests {
     }
 
     @Test
+    fun `a building's player-wide percent applies to every city and adds to a city's own`() {
+        val cities = cities(9, 9, 9)
+        vpSupply()
+        cities[2].give("[25]% Unit Supply from the citizens of all cities")
+        // every city 9 x 100 x (50 + 25) / 100 = 675: 2025 / 100 = 20. On its own city only: 450 + 450 + 675 = 1575 -> 15; ignored: 13
+        assertEquals(20, breakdown("getPopulationNet"))
+        cities[1].give("[25]% Unit Supply from the citizens of this city")
+        // the second city 9 x 100 x (50 + 25 + 25) / 100 = 900: 675 + 900 + 675 = 2250 / 100 = 22
+        assertEquals(22, breakdown("getPopulationNet"))
+        cities[0].give("[25]% Unit Supply from the citizens of all cities")
+        // two player-wide buildings add, wherever they stand: 9 x 100 x (50 + 50) / 100 = 900 each, the second city 9 x 100 x 125 / 100 = 1125: 2925 / 100 = 29
+        assertEquals(29, breakdown("getPopulationNet"))
+        assertEquals("the cities' part is not touched", 6, breakdown("getCitiesNet"))
+    }
+
+    @Test
+    fun `a puppet's share scales the player-wide percent too`() {
+        val cities = cities(8, 6, 6)
+        vpSupply()
+        setConstants(populationTech = 100)
+        knowTechs(40)
+        cities[1].isPuppet = true
+        cities[0].give("[50]% Unit Supply from the citizens of all cities")
+        // divisor 140. 8 x 100 x 100 / 100 = 800, the puppet 6 x 30 x 100 / 100 = 180, 6 x 100 x 100 / 100 = 600: 1580 x 100 / 140 = 1128, / 100 = 11.
+        // The puppet at full share: 800 + 600 + 600 = 2000 x 100 / 140 = 1428 -> 14; the percent ignored: 790 x 100 / 140 = 564 -> 5
+        assertEquals(11, breakdown("getPopulationNet"))
+    }
+
+    @Test
+    fun `without the building switch the player-wide percent is not read`() {
+        cities(9, 9, 9)[0].give("[25]% Unit Supply from the citizens of all cities")
+        vpSupply(buildings = false)
+        assertEquals(13, breakdown("getPopulationNet"))
+    }
+
+    @Test
     fun `without the building switch the uniques are not read`() {
         val cities = cities(4, 4, 4)
         vpSupply(buildings = false)

@@ -1281,6 +1281,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Units in cities cost no Maintenance"
 	Applicable to: Global
 
+??? example  "[amount]% Unit Supply from the citizens of all cities"
+	Percent points added to the share of the citizens of every city of the civilization that count as supply, next to the difficulty's population percent (the original's `CitySupplyModifierGlobal`, which the player keeps as ExtraSupplyPerPopulation). Several add up. Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`
+
+	Example: "[3]% Unit Supply from the citizens of all cities"
+
+	Applicable to: Global
+
 ??? example  "Enables embarkation for land units"
 	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
 

@@ -1623,6 +1623,46 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, Unit
 
+??? example  "[relativeAmount]% City ranged strike strength"
+	Example: "[+20]% City ranged strike strength"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% City ranged strike strength with a garrison"
+	Example: "[+20]% City ranged strike strength with a garrison"
+
+	Applicable to: Global
+
+??? example  "[amount] city strength per stationed air unit"
+	Example: "[3] city strength per stationed air unit"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% allied city-state defense"
+	Example: "[+20]% allied city-state defense"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% city strike strength per previous attack on target"
+	Example: "[+20]% city strike strength per previous attack on target"
+
+	Applicable to: Global
+
+??? example  "Cities take [amount] less damage from attacks"
+	Example: "Cities take [3] less damage from attacks"
+
+	Applicable to: Global
+
+??? example  "[relativeAmount]% damage taken"
+	Example: "[+20]% damage taken"
+
+	Applicable to: Global, Unit
+
+??? example  "[amount]% less damage from cities"
+	Example: "[3]% less damage from cities"
+
+	Applicable to: Global, Unit
+
 ??? example  "Ranged attacks may be performed over obstacles"
 	Applicable to: Global, Unit
 
@@ -1630,6 +1670,14 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, Unit
 
 ??? example  "No defensive terrain penalty"
+	Applicable to: Global, Unit
+
+??? example  "[relativeAmount]% Strength for enemy [mapUnitFilter] units within [amount] tiles"
+	Example: "[+20]% Strength for enemy [Wounded] units within [3] tiles"
+
+	Applicable to: Global, Unit
+
+??? example  "Stronger when damaged"
 	Applicable to: Global, Unit
 
 ??? example  "No damage penalty for wounded units"
@@ -1716,6 +1764,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, Unit
 
 ??? example  "Ignores Zone of Control"
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Global, Unit
+
+??? example  "Cannot enter [tileFilter] tiles"
+	Example: "Cannot enter [Farm] tiles"
+
 	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
 
 	Applicable to: Global, Unit
@@ -2445,6 +2500,20 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Building
 
+??? example  "[amount] Unit Supply in this city"
+	The city gives that many more units of supply, as if the difficulty's supply per city were that much higher in this city alone: it is divided by the technology divisor of the cities' supply and by the empire size divisor with the rest, and a puppet gives its share of it (the original's `CitySupplyFlat`). Several add up. Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`
+
+	Example: "[3] Unit Supply in this city"
+
+	Applicable to: Building
+
+??? example  "[amount]% Unit Supply from the citizens of this city"
+	Percent points added to the share of this city's citizens that count as supply, next to the difficulty's population percent: with 20% from the difficulty and +10 here the city's citizens give 30% of their number (the original's `CitySupplyModifier`). Several add up. Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`
+
+	Example: "[3]% Unit Supply from the citizens of this city"
+
+	Applicable to: Building
+
 ??? example  "Consumes [amount] [resource]"
 	Example: "Consumes [3] [Iron]"
 
@@ -2598,6 +2667,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Never destroyed when the city is captured"
 	Applicable to: Building
 
+??? example  "Has a [nonNegativeAmount]% chance of surviving when the city is captured"
+	The chance, rolled once per building when a city is conquered, that this building is not destroyed (Buildings.ConquestProb). 0 destroys it, 100 keeps it. Buildings with `Destroyed when the city is captured` or `Never destroyed when the city is captured`, wonders and the capital's buildings are not rolled. Conditionals are not evaluated. Only read with the ModConstants switch `conquestLikeVp`; without a unique the chance is `conquestConstants.buildingSurvivalPercent`.
+
+	Example: "Has a [3]% chance of surviving when the city is captured"
+
+	Applicable to: Building
+
 ??? example  "[relativeAmount]% Gold given to enemy if city is captured"
 	Example: "[+20]% Gold given to enemy if city is captured"
 
@@ -2640,10 +2716,22 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Building
 
+??? example  "[amount] city strength per [amount] world wonders"
+	Example: "[3] city strength per [3] world wonders"
+
+	Applicable to: Building
+
 ??? example  "Can carry [amount] extra [mapUnitFilter] units"
 	For buildings, supports using `Air` for `mapUnitFilter` to increase city air unit capacity.
 
 	Example: "Can carry [3] extra [Wounded] units"
+
+	Applicable to: Building, Unit
+
+??? example  "[amount] air defense"
+	The damage this unit (the sum over its own uniques and promotions) or this city (the sum over its buildings) does to an air unit that attacks it, before the attacker's interception damage reduction and a random addition. Only read with the ModConstants switch `airDefenseLikeVp`.
+
+	Example: "[3] air defense"
 
 	Applicable to: Building, Unit
 
@@ -2753,6 +2841,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Uses unit supply"
 	Marks a non-military unit as one that counts against the civilization's unit supply, as the original's MilitarySupport does for the Caravan, the Cargo Ship and the Work Boat. Units with a combat strength use supply without it; the other civilians never do.
+
+	Applicable to: Unit
+
+??? example  "Does not use unit supply"
+	The unit does not count against the civilization's unit supply, whether the unit type or one of its promotions has it (CvUnit::isNoSupply). Conditionals are not evaluated. Only read with the ModConstants switch `unitSupplyLikeVp`.
 
 	Applicable to: Unit
 
@@ -2988,6 +3081,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, Unit
 
+??? example  "[amount] maximum hit points"
+	Added to the unit's 100 maximum hit points; conditionals are not evaluated (the sum is kept with the unit's uniques). Only read with the ModConstants switch `unitMaxHitPointsLikeVp`; the lost health stays the same when the maximum changes (CvUnit::changeMaxHitPointsChange leaves the damage as it is).
+
+	Example: "[3] maximum hit points"
+
+	Applicable to: Unit
+
 ??? example  "Before engaging in combat performs an extra ranged attack with [amount]% of melee combat strength"
 	Example: "Before engaging in combat performs an extra ranged attack with [3]% of melee combat strength"
 
@@ -3024,6 +3124,24 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Self-destructs when attacking"
 	Applicable to: Unit
 
+??? example  "Attacks bypass garrison damage absorption"
+	Applicable to: Unit
+
+??? example  "[relativeAmount]% defense for this and adjacent cities"
+	Example: "[+20]% defense for this and adjacent cities"
+
+	Applicable to: Unit
+
+??? example  "[relativeAmount]% damage taken"
+	Example: "[+20]% damage taken"
+
+	Applicable to: Global, Unit
+
+??? example  "[amount]% less damage from cities"
+	Example: "[3]% less damage from cities"
+
+	Applicable to: Global, Unit
+
 ??? example  "Eliminates combat penalty for attacking across a coast"
 	Applicable to: Unit
 
@@ -3052,10 +3170,28 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "No defensive terrain penalty"
 	Applicable to: Global, Unit
 
+??? example  "Is a mounted unit"
+	Applicable to: Unit
+
+??? example  "[relativeAmount]% Strength for enemy [mapUnitFilter] units within [amount] tiles"
+	Example: "[+20]% Strength for enemy [Wounded] units within [3] tiles"
+
+	Applicable to: Global, Unit
+
+??? example  "Stronger when damaged"
+	Applicable to: Global, Unit
+
 ??? example  "No damage penalty for wounded units"
 	Applicable to: Global, Unit
 
 ??? example  "Uncapturable"
+	Applicable to: Unit
+
+??? example  "Becomes [baseUnitFilter] when captured"
+	The unit name the unit becomes for the capturer (the default unit of the capture class; the capturer's own unique replacement is looked up through `getEquivalentUnit`). Only read with the ModConstants switch `captureClassLikeVp`; with barbarians involved the unit stays as it is (CvUnit::getCaptureDefinition).
+
+	Example: "Becomes [Melee] when captured"
+
 	Applicable to: Unit
 
 ??? example  "Withdraws before melee combat"
@@ -3066,6 +3202,62 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Unable to pillage tiles"
 	Applicable to: Global, Unit
+
+??? example  "[amount] extra flanking power"
+	Each flank-supporting unit counts as 1 plus the sum of its `extra flanking power` (VP CvUnit::GetFlankPower), so the flanking bonus of the unit it surrounds is 10% x that sum. Only read with the ModConstants switch `flankPowerLikeVp`.
+
+	Example: "[3] extra flanking power"
+
+	Applicable to: Unit
+
+??? example  "Ignores terrain cost in [tileFilter] tiles"
+	Entering a matching tile costs 1 movement instead of the terrain's cost (the river crossing still takes the whole turn), before the unit's half-movement and extra movement cost uniques apply. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`.
+
+	Example: "Ignores terrain cost in [Farm] tiles"
+
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Unit
+
+??? example  "Half movement in [tileFilter] tiles"
+	The mirror of `Double movement in`: the cost of entering a matching tile is doubled unless the unit also has double movement there. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`.
+
+	Example: "Half movement in [Farm] tiles"
+
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Unit
+
+??? example  "[amount] extra movement cost in [tileFilter] tiles"
+	Entering a matching tile costs this much more, after the unit's other movement cost modifiers. Only the most specific matching kind counts, in VP's order: a Mountain, a Hill, the base terrain, a terrain feature. Only read with the ModConstants switch `terrainMovementPromotionsLikeVp`.
+
+	Example: "[3] extra movement cost in [Farm] tiles"
+
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Unit
+
+??? example  "Gains XP from scouting"
+	Each tile the unit newly reveals to its civilization is worth 1 point, a visible resource scoutXpRandomValue / 4, ancient ruins scoutXpRandomValue / 3 and a natural wonder scoutXpRandomValue (ModConstants, 12 as in VP), and every `scoutXpDenominator` points are 1 experience point, scaled by the game speed. City-states and barbarians do not earn it. Only read with the ModConstants switch `scoutingXpLikeVp`.
+
+	Applicable to: Unit
+
+??? example  "[amount] XP when pillaging"
+	Experience for pillaging an improvement (not a road), scaled by the game speed; barbarians get none. Also makes the AI pillage (CvUnit::shouldPillage). Only read with the ModConstants switch `pillageXpLikeVp`.
+
+	Example: "[3] XP when pillaging"
+
+	Applicable to: Unit
+
+??? example  "Can be gifted by city-states"
+	A militaristic city-state may be given this unit as its unique unit whoever it belongs to, even when no civilization of the game could build it, and is somewhat more likely to be; no civilization but the barbarians can build it. Only read with the ModConstants switch `cityStateGiftUnitFlagsLikeVp`.
+
+	Applicable to: Unit
+
+??? example  "Cannot be gifted by city-states"
+	A city-state never gives this unit, neither as its unique unit nor as the military unit it gives its patron. Only read with the ModConstants switch `cityStateGiftUnitFlagsLikeVp`.
+
+	Applicable to: Unit
 
 ??? example  "Destroys [cityFilter] cities instead of capturing"
 	The unit will destroy [cityFilter] cities instead of capturing them, also allows non-melee units to destroy cities.Capital cities (including city states) are immune to this effect.
@@ -3122,6 +3314,26 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Unit
 
+??? example  "Units on this tile heal [amount] HP when healing"
+	Example: "Units on this tile heal [3] HP when healing"
+
+	Applicable to: Unit
+
+??? example  "[amount] HP healing for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles"
+	Example: "[3] HP healing for [Wounded] units on [Farm] tiles within [3] tiles"
+
+	Applicable to: Unit
+
+??? example  "[amount] HP healing in neutral territory for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles"
+	Example: "[3] HP healing in neutral territory for [Wounded] units on [Farm] tiles within [3] tiles"
+
+	Applicable to: Unit
+
+??? example  "[amount] HP healing in enemy territory for [mapUnitFilter] units on [tileFilter] tiles within [amount] tiles"
+	Example: "[3] HP healing in enemy territory for [Wounded] units on [Farm] tiles within [3] tiles"
+
+	Applicable to: Unit
+
 ??? example  "No Sight"
 	Applicable to: Unit
 
@@ -3144,6 +3356,27 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "Cannot be carried by [mapUnitFilter] units"
 	Example: "Cannot be carried by [Wounded] units"
+
+	Applicable to: Unit
+
+??? example  "Counts [amount] against the air unit capacity"
+	Only read with the ModConstants switch `airBasingLikeVp`, for air units standing in a city untransported; an air unit without it counts 1. A carrier's cargo slots are counted by units and ignore it.
+
+	Example: "Counts [3] against the air unit capacity"
+
+	Applicable to: Unit
+
+??? example  "[amount] air defense"
+	The damage this unit (the sum over its own uniques and promotions) or this city (the sum over its buildings) does to an air unit that attacks it, before the attacker's interception damage reduction and a random addition. Only read with the ModConstants switch `airDefenseLikeVp`.
+
+	Example: "[3] air defense"
+
+	Applicable to: Building, Unit
+
+??? example  "[amount]% chance to evade interception"
+	An air attacker with it rolls this chance (summed, at most 100) before the interceptor rolls its own, and is not intercepted if it succeeds. Only read with the ModConstants switch `airInterceptionLikeVp`.
+
+	Example: "[3]% chance to evade interception"
 
 	Applicable to: Unit
 
@@ -3320,6 +3553,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 ??? example  "Cannot enter ocean tiles"
 	Applicable to: Unit
 
+??? example  "Cannot enter [tileFilter] tiles"
+	Example: "Cannot enter [Farm] tiles"
+
+	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
+
+	Applicable to: Global, Unit
+
 ??? example  "May enter foreign tiles without open borders"
 	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
 
@@ -3432,6 +3672,29 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "May choose the reward when entering Ancient Ruins"
 	Applicable to: Unit, Promotion
+
+??? example  "Requires [promotion] promotion"
+	Example: "Requires [Shock I] promotion"
+
+	Applicable to: Promotion
+
+??? example  "Requires at least [amount] attack range"
+	Example: "Requires at least [3] attack range"
+
+	Applicable to: Promotion
+
+??? example  "Requires at most [amount] attack range"
+	Example: "Requires at most [3] attack range"
+
+	Applicable to: Promotion
+
+??? example  "Only for mounted units"
+	Applicable to: Promotion
+
+??? example  "Lost when the unit is gifted"
+	A unit that is gifted to another civilization loses this promotion, and gets it back only if its unit type gives it for free. Only read with the ModConstants switch `giftPromotionLossLikeVp`.
+
+	Applicable to: Promotion
 
 ??? example  "Not shown on world screen"
 	This unique is automatically hidden from users.
@@ -4853,6 +5116,26 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Conditional
 
 ??? example  "&lt;when defending&gt;"
+	Applicable to: Conditional
+
+??? example  "&lt;when making a ranged attack&gt;"
+	True while a unit that has a ranged strength attacks (a unit, a city, or an interception by an air unit). Not true for a city's own strike or while defending.
+
+	Applicable to: Conditional
+
+??? example  "&lt;vs fully healed units&gt;"
+	True while a unit attacks a unit that has all its hit points. Never true against a city or while defending.
+
+	Applicable to: Conditional
+
+??? example  "&lt;vs units above half health&gt;"
+	True while a unit attacks a unit whose lost hit points are below half of its maximum (rounded down for a melee attacker, up for a ranged one). Never true against a city or while defending.
+
+	Applicable to: Conditional
+
+??? example  "&lt;vs units at or below half health&gt;"
+	True while a unit attacks a unit that is not above half health (see `vs units above half health`). Never true against a city or while defending.
+
 	Applicable to: Conditional
 
 ??? example  "&lt;when fighting in [tileFilter] tiles&gt;"

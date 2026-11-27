@@ -242,4 +242,129 @@ class PublicOpinionTests {
         updateOpinion()
         assertFalse("dissidents", milestone.hasBeenCompletedBy(me))
     }
+
+    private fun likeVp() {
+        game.ruleset.modOptions.constants.publicOpinionLikeVp = true
+        game.setSpeed("Standard")
+    }
+
+    /** The influence of [from] on us grew this turn more than our culture did */
+    private fun rising(from: Civilization) {
+        me.culture.rememberLastTurn() // our 100 culture
+        from.culture.lastTurnInfluence.clear()
+    }
+
+    /** The influence of [from] on us grew this turn less than our culture did */
+    private fun falling(from: Civilization) {
+        me.culture.rememberLastTurn()
+        from.culture.lastTurnInfluence.add(me.civID, 1000)
+    }
+
+    @Test
+    fun `with Vox Populi an influence from Popular on is raised by the trends, and below Popular is as it is or nothing for a choice`() {
+        likeVp()
+        influence(autocracyCiv, me, InfluenceLevel.Popular)
+        rising(autocracyCiv)
+        influence(freedomCiv, me, InfluenceLevel.Popular)
+        falling(freedomCiv)
+        influence(orderCiv, me, InfluenceLevel.Familiar)
+        rising(orderCiv)
+        val opinion = me.culture.publicOpinion
+        var pressure = opinion.getPressureOnUs().first
+        assertEquals("Popular rising, ours on them static and raised by 1", 3 - 1, pressure["Autocracy"])
+        assertEquals("Popular falling, raised by 2", 5 - 1, pressure["Freedom"])
+        assertEquals("Familiar is not raised", 2, pressure["Order"])
+        pressure = opinion.getPressureOnUs(hypothetical = true).first
+        assertEquals(0, pressure["Order"])
+        assertEquals(4, pressure["Freedom"])
+    }
+
+    @Test
+    fun `with Vox Populi an ideology few follow, and one just chosen, press for themselves`() {
+        likeVp()
+        game.gameInfo.turns = 5
+        adopt(me, "Freedom")
+        val opinion = me.culture.publicOpinion
+        assertEquals(5, opinion.turnIdeologyAdopted)
+        // 4 civilizations follow an ideology, 2 Freedom: (4 - 2 + 1) / 3 ideologies, and 30 turns on Standard speed less those since, in tens rounded up
+        assertEquals(1 + 3, updateOpinion().pressure["Freedom"])
+        game.gameInfo.turns = 20
+        assertEquals(1 + 2, updateOpinion().pressure["Freedom"])
+        game.gameInfo.turns = 35
+        assertEquals(1, updateOpinion().pressure["Freedom"])
+        assertEquals(PublicOpinionType.Content, opinion.type)
+
+        // after a change the turns count from it, from the next opinion on
+        me.policies.switchIdeology(game.ruleset.policyBranches["Autocracy"]!!)
+        assertEquals(5, opinion.turnIdeologyAdopted)
+        assertEquals(1, opinion.pressure["Autocracy"])
+        assertEquals(1 + 3, updateOpinion().pressure["Autocracy"])
+    }
+
+    @Test
+    fun `with Vox Populi the first of the strongest others is preferred, and the unhappiness grows with the dissatisfaction`() {
+        likeVp()
+        adopt(me, "Freedom")
+        game.gameInfo.turns = 40
+        // 25 inhabitants in 1 city, 1 pressure for Freedom that few follow
+        influence(autocracyCiv, me, InfluenceLevel.Dominant) // 5 + 1 static, less our 0 + 1
+        var opinion = updateOpinion()
+        assertEquals(4, opinion.dissatisfaction)
+        assertEquals(PublicOpinionType.CivilResistance, opinion.type)
+        assertEquals("1.8 per city, 1 per 6 inhabitants", 4, opinion.unhappiness)
+        assertEquals("Autocracy", opinion.preferredIdeology)
+        assertEquals(autocracyCiv.civID, opinion.biggestInfluence)
+
+        influence(orderCiv, me, InfluenceLevel.Dominant)
+        opinion = updateOpinion()
+        assertEquals(9, opinion.dissatisfaction)
+        assertEquals("tied: Autocracy comes before Order in the ruleset", "Autocracy", opinion.preferredIdeology)
+        assertEquals("2.8 per city, 1 per inhabitant", 25, opinion.unhappiness)
+    }
+
+    @Test
+    fun `with Vox Populi the biggest influence goes by the levels as they are, not raised by the trends`() {
+        likeVp()
+        val secondAutocracy = game.addCiv()
+        game.addCity(secondAutocracy, game.tileMap[-6, 0], replacePalace = true)
+        me.diplomacyFunctions.makeCivilizationsMeet(secondAutocracy)
+        secondAutocracy.totalCultureForContests = 100
+        adopt(secondAutocracy, "Autocracy")
+        adopt(me, "Freedom")
+        game.gameInfo.turns = 40
+        influence(autocracyCiv, me, InfluenceLevel.Popular)
+        rising(autocracyCiv) // 3 - 1 with the trends
+        influence(secondAutocracy, me, InfluenceLevel.Popular)
+        falling(secondAutocracy) // 5 - 1 with the trends
+        val opinion = updateOpinion()
+        assertEquals("Autocracy", opinion.preferredIdeology)
+        assertEquals("3 over 0 for both: the first", autocracyCiv.civID, opinion.biggestInfluence)
+    }
+
+    @Test
+    fun `with Vox Populi the unhappiness of another ideology leaves out who is below Popular and the time since the adoption`() {
+        likeVp()
+        me.cities.first().population.setPopulation(36)
+        adopt(me, "Freedom") // the turn of the adoption: 3 for Freedom in the opinion itself
+        influence(orderCiv, me, InfluenceLevel.Popular) // 4 - 1
+        influence(freedomCiv, me, InfluenceLevel.Familiar) // left out
+        val autocracy = game.ruleset.policyBranches["Autocracy"]!!
+        // 3 for Order less 1 for Autocracy that only 1 of 4 follow: 1.4 per city, 1 per 8 inhabitants
+        assertEquals(4, me.culture.publicOpinion.hypotheticalUnhappiness(autocracy))
+        assertEquals(0, me.culture.publicOpinion.hypotheticalUnhappiness(game.ruleset.policyBranches["Order"]!!))
+    }
+
+    @Test
+    fun `with Vox Populi many small cities are counted by the city`() {
+        likeVp()
+        adopt(me, "Freedom")
+        game.gameInfo.turns = 40
+        me.cities.first().population.setPopulation(3)
+        game.addCity(me, game.tileMap[3, 0]).population.setPopulation(3)
+        game.addCity(me, game.tileMap[-3, 0]).population.setPopulation(3)
+        influence(autocracyCiv, me, InfluenceLevel.Dominant)
+        val opinion = updateOpinion()
+        assertEquals(4, opinion.dissatisfaction)
+        assertEquals("1.8 for each of 3 cities", 5, opinion.unhappiness)
+    }
 }

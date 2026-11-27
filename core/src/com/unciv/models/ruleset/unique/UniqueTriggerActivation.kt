@@ -590,6 +590,19 @@ object UniqueTriggerActivation {
                 }
             }
 
+            UniqueType.OneTimeGainTourismOfTriggeringAmount -> {
+                val percent = unique.params[0].toIntOrNull() ?: return null
+                // CvPlayer::doInstantYield's `amount x percent / 100` in whole numbers
+                val amount = (triggeringAmount.toLong() * percent / 100).toInt()
+                if (amount <= 0 || civInfo.culture.getOtherMajorCivs().none { civInfo.culture.canInfluence(it) }) return null
+                return {
+                    civInfo.culture.addInfluenceOnAllKnownCivs(amount)
+                    civInfo.culture.addInstantYieldTotal(true, amount)
+                    if (notification != null) civInfo.addNotification(notification, NotificationCategory.Diplomacy, "StatIcons/Culture")
+                    true
+                }
+            }
+
             UniqueType.OneTimeGainTourismTowardsEventCityOwner -> {
                 val target = tile?.getCity()?.civ ?: return null
                 if (!civInfo.culture.canInfluence(target)) return null

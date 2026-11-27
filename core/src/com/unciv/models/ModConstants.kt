@@ -1350,6 +1350,9 @@ class ModConstants {
      *  order, the theming bonuses of a building from the highest, the works other civilizations offer swapped in while theming, the AI's works arranged
      *  right after each new one and by City-States, the Optimize buttons for humans; theming percentages added up and truncated once */
     var greatWorkThemingLikeVp = false
+    /** Vox Populi's golden age conversion (CvPlayer::changeGoldenAgeTurns, Trait_GAPToYield): each golden age started or extended carries the golden age
+     *  points the next one needs, while there is a capital, as the triggering amount of `upon entering a Golden Age` */
+    var goldenAgeConversionLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

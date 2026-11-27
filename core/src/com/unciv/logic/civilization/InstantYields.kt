@@ -285,7 +285,7 @@ object InstantYields {
     @Readonly
     fun isGain(unique: Unique) = when (unique.type) {
         UniqueType.OneTimeGainStat, UniqueType.OneTimeGainStatRange, UniqueType.OneTimeGainStatOfTriggeringAmount,
-        UniqueType.OneTimeGainGoldenAgePoints, UniqueType.OneTimeGainTourism, UniqueType.OneTimeGainPopulation -> true
+        UniqueType.OneTimeGainGoldenAgePoints, UniqueType.OneTimeGainTourism, UniqueType.OneTimeGainTourismOfTriggeringAmount, UniqueType.OneTimeGainPopulation -> true
         else -> false
     }
 

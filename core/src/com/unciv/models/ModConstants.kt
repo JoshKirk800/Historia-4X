@@ -1349,6 +1349,8 @@ class ModConstants {
     /** Vox Populi's archaeology choices (CvPlayerCulture::DoArchaeologyChoice): a Landmark in a City-State's land raises the resting influence, a culture
      *  boost in our lands also goes to the city's borders, the record of the site goes but under a Landmark; `SarcophagusSitesNearNewCities` works */
     var archaeologyChoicesLikeVp = false
+    /** Vox Populi's celebrations of new Great Works (CvUnit::createGreatWork and the others that create one): `GreatWorkWltkdTurns` works */
+    var greatWorkWltkdLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

@@ -13,6 +13,7 @@ import com.unciv.logic.city.managers.CityPopulationManager
 import com.unciv.logic.city.managers.CityReligionManager
 import com.unciv.logic.city.managers.SpyFleeReason
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.transients.CapitalConnectionsFinder.CapitalConnectionMedium
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.pathingmap.PathingMap
@@ -548,6 +549,14 @@ class City : IsPartOfGameInfoSerialization, INamed {
 
     fun removeFlag(flag: CityFlags) {
         flagsCountdown.remove(flag.name)
+    }
+
+    /** [turns] more of We Love The King Day, which starts if there is none (CvCity::ChangeWeLoveTheKingDayCounter, V:CvCity.cpp:22001-22014): any of it
+     *  fires `upon We Love The King Day starting` */
+    fun extendWeLoveTheKingDay(turns: Int) {
+        val current = if (hasFlag(CityFlags.WeLoveTheKing)) getFlag(CityFlags.WeLoveTheKing) else 0
+        setFlag(CityFlags.WeLoveTheKing, current + turns)
+        InstantYields.fire(UniqueType.TriggerUponWltkdStart, civ, this, 0, GameContext(this), "due to [$name] celebrating We Love The King Day")
     }
 
     fun resetWLTKD() {

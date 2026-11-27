@@ -669,6 +669,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "Each new Great Work gives all cities [positiveAmount] turns of We Love The King Day"
+	With the ModConstants `greatWorkWltkdLikeVp`: a work created by a Great Person, a building or a dig adds these turns, times the game speed's production cost, to the We Love The King Day of every city, which starts it where there is none (the original's `GreatWorkWLTKD` of traits, with `CITY_RESOURCE_WLTKD_TURNS` / 3 = 6)
+
+	Example: "Each new Great Work gives all cities [3] turns of We Love The King Day"
+
+	Applicable to: Global
+
 ??? example  "Domestic trade routes give tourism for completed trade routes"
 	With the ModConstants `historicEventDispatchLikeVp`, a domestic trade route that ends gives the tourism of `[positiveAmount] turns of yields as tourism for completed land trade routes` (or sea) as well, a third of it towards each civilization met (the original's `InternalTRTourism` of policies)
 

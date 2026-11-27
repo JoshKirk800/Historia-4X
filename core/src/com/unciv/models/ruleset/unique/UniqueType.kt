@@ -102,6 +102,10 @@ enum class UniqueType(
         docDescription = "With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for a city " +
             "adopting the religion of our holy city for the first time while it is our state religion, divided by 15; it counts as a historic event when " +
             "the tourism is positive (the original's `ReligionSpreadTourism` of traits)"),
+    ArchaeologicalDigTourismTurns("[positiveAmount] turns of yields as tourism for archaeological digs", UniqueTarget.Global,
+        docDescription = "With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for what " +
+            "to do with the finds of a dig chosen, divided by 10; it counts as a historic event when the turns are positive (the original's " +
+            "`ArchaeologicalDigTourism` of policies)"),
     DomesticTradeRouteTourism("Domestic trade routes give tourism for completed trade routes", UniqueTarget.Global,
         docDescription = "With the ModConstants `historicEventDispatchLikeVp`, a domestic trade route that ends gives the tourism of " +
             "`[positiveAmount] turns of yields as tourism for completed land trade routes` (or sea) as well, a third of it towards each civilization met " +

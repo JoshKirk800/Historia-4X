@@ -74,6 +74,9 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
     /** What an archaeologist can find on this tile, kept from the things that happened here until the archaeological sites appear */
     var archaeologyRecord: ArchaeologyRecord? = null
 
+    /** The City-State a Landmark here raises the resting influence with, for its builder (CvPlot::GetLandmarkCreditMinor), see [ArchaeologyFunctions.getLandmarkRestingInfluence] */
+    var landmarkCreditCityState: String? = null
+
     internal class ImprovementQueueEntry(
         val improvement: String, turnsToImprovement: Int
     ) : IsPartOfGameInfoSerialization {
@@ -272,6 +275,7 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
         toReturn.improvement = improvement
         toReturn.improvementBuilder = improvementBuilder
         toReturn.archaeologyRecord = archaeologyRecord?.clone()
+        toReturn.landmarkCreditCityState = landmarkCreditCityState
         @LocalState val cloneImprovementQueue = toReturn.improvementQueue
         cloneImprovementQueue.addAll(improvementQueue.map { it.clone() })
         toReturn.improvementIsPillaged = improvementIsPillaged
@@ -939,6 +943,9 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
             }
             roadOwner = city.civ.civID // only when taking control, otherwise last owner
             roadOwnerObject = city.civ
+            // CvPlot::setOwner: the builder of a Landmark taking it from the City-State loses the credit
+            if (landmarkCreditCityState != null && owningCity?.civ?.civID == landmarkCreditCityState && city.civ.civID == improvementBuilder)
+                landmarkCreditCityState = null
         } else if (roadStatus != RoadStatus.None && owningCity != null) {
             // Razing City! Remove owner
             roadOwner = ""
@@ -1131,7 +1138,10 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
     }
 
     fun setImprovementBasic(tileImprovement: TileImprovement?) {
-        if (improvement != tileImprovement?.name) improvementBuilder = ""
+        if (improvement != tileImprovement?.name) {
+            improvementBuilder = ""
+            landmarkCreditCityState = null // CvPlot::setImprovementType
+        }
         if (tileImprovement == null) {
             this.tileImprovement = null
             improvement = null
@@ -1142,7 +1152,10 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
     }
 
     fun setImprovementBasic(improvementName: String) {
-        if (improvement != improvementName) improvementBuilder = ""
+        if (improvement != improvementName) {
+            improvementBuilder = ""
+            landmarkCreditCityState = null // CvPlot::setImprovementType
+        }
         val tileImprovement = ruleset.tileImprovements[improvementName]
         this.tileImprovement = tileImprovement
         improvement = tileImprovement?.name

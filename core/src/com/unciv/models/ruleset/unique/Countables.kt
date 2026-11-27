@@ -169,6 +169,10 @@ enum class Countables(
         override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
             UniqueParameterType.BaseUnitFilter.getTranslatedErrorSeverity(parameterText, ruleset)
     },
+    HistoricEvents("Historic events", shortDocumentation = "The historic events the civilization has had (Vox Populi's CvPlayer::GetNumHistoricEvents): " +
+        "Great People born, new eras, world wonders built; 0 without the ModConstants `historicEventsLikeVp`") {
+        override fun eval(parameterText: String, gameContext: GameContext) = gameContext.civInfo?.culture?.historicEvents
+    },
 
     FilteredCities("[cityFilter] Cities") {
         override fun eval(parameterText: String, gameContext: GameContext): Int? {

@@ -2,6 +2,7 @@ package com.unciv.logic.civilization.managers
 
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.HistoricEvent
 import com.unciv.logic.civilization.MapUnitAction
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.transients.CivInfoTransientCache
@@ -74,6 +75,8 @@ class UnitManager(val civInfo: Civilization) {
             civInfo.gameInfo.getAliveCityStates().forEach {
                 it.questManager.handleIndividualQuests() // Maybe there's an "acquire great person" quest active
             }
+            // CvUnit::initWithNameOffset: a Great Person made, not captured or converted, is a historic event (V:CvUnit.cpp:1166-1193)
+            civInfo.culture.onHistoricEvent(HistoricEvent.GreatPerson)
         }
 
         if (placedUnit.hasUnique(UniqueType.ReligiousUnit) && civInfo.gameInfo.isReligionEnabled()) {

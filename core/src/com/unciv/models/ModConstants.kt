@@ -1330,6 +1330,10 @@ class ModConstants {
     /** Vox Populi's Long Count yields: the end of a b'ak'tun fires `upon the end of a b'ak'tun` (CvPlayerTraits::IsEndOfMayaLongCount, V:CvTraitClasses.cpp:6993-7018),
      *  and each Great Person chosen for it is counted (CvPlayerTraits::SetUnitBaktun, V:CvTraitClasses.cpp:7325-7369), for `Long Count choices of [baseUnitFilter]` */
     var longCountYieldsLikeVp = false
+    /** Vox Populi's historic events (CvPlayer::GetHistoricEventTourism, V:CvPlayer.cpp:31252-31420): a Great Person born, a new era and a world wonder built give
+     *  tourism from the culture and tourism of the last turns that `[positiveAmount] turns of yields as tourism for historic events` say, and are counted for
+     *  the countable `Historic events` (CvPlayer::ChangeNumHistoricEvents) */
+    var historicEventsLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

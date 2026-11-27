@@ -2,7 +2,9 @@ package com.unciv.logic.civilization.managers
 
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
+import com.unciv.logic.civilization.Accomplishment
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.HistoricEvent
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.models.Counter
 import com.unciv.models.ModConstants
@@ -100,6 +102,19 @@ class CultureManager : IsPartOfGameInfoSerialization {
     var instantCultureHistory = InstantHistory()
         private set
 
+    /** With [ModConstants.historicEventsLikeVp]: the historic events the civilization has had (CvPlayer::m_iNumHistoricEvent), the culture and tourism of each of the
+     *  last [YIELD_HISTORY_TURNS] turns (CvPlayer::m_vviYieldHistory), and all the culture and tourism of instant yields (CvPlayer::m_viInstantYieldsTotal) */
+    var historicEvents = 0
+        private set
+    var cultureHistory = ArrayList<Int>()
+        private set
+    var tourismHistory = ArrayList<Int>()
+        private set
+    var instantCultureTotal = 0
+        private set
+    var instantTourismTotal = 0
+        private set
+
     /** The notifications about the progress towards a culture victory come once each */
     var reportedTwoCivsAway = false
         private set
@@ -137,6 +152,11 @@ class CultureManager : IsPartOfGameInfoSerialization {
         toReturn.lastTurnCulturePerTurnTimes100 = lastTurnCulturePerTurnTimes100
         toReturn.instantTourismHistory = instantTourismHistory.clone()
         toReturn.instantCultureHistory = instantCultureHistory.clone()
+        toReturn.historicEvents = historicEvents
+        toReturn.cultureHistory = ArrayList(cultureHistory)
+        toReturn.tourismHistory = ArrayList(tourismHistory)
+        toReturn.instantCultureTotal = instantCultureTotal
+        toReturn.instantTourismTotal = instantTourismTotal
         toReturn.reportedTwoCivsAway = reportedTwoCivsAway
         toReturn.reportedOneCivAway = reportedOneCivAway
         toReturn.numCivsInfluentialLastTurn = numCivsInfluentialLastTurn
@@ -626,9 +646,70 @@ class CultureManager : IsPartOfGameInfoSerialization {
     }
     //endregion
 
+    //region Historic events
+    /** CvPlayer::updateYieldPerTurnHistory (V:CvPlayer.cpp:42593-42603): the culture and tourism of the turn, of which the last [YIELD_HISTORY_TURNS] are kept */
+    fun recordYieldHistory() {
+        if (!civ.gameInfo.ruleset.modOptions.constants.historicEventsLikeVp) return
+        cultureHistory.add(civ.stats.statsForNextTurn.culture.toInt())
+        tourismHistory.add(getTourism())
+        while (cultureHistory.size > YIELD_HISTORY_TURNS) cultureHistory.removeAt(0)
+        while (tourismHistory.size > YIELD_HISTORY_TURNS) tourismHistory.removeAt(0)
+    }
+
+    /** Culture or tourism that instant yields gave, for [getYieldPerTurnHistory] (CvPlayer::doInstantYield adds to m_viInstantYieldsTotal, V:CvPlayer.cpp:27345) */
+    fun addInstantYieldTotal(isTourism: Boolean, amount: Int) {
+        if (!civ.gameInfo.ruleset.modOptions.constants.historicEventsLikeVp) return
+        if (isTourism) instantTourismTotal += amount else instantCultureTotal += amount
+    }
+
+    /**
+     *  CvPlayer::getYieldPerTurnHistory (V:CvPlayer.cpp:42520-42560): the culture or tourism of [turns] turns, at most the turns played. The last
+     *  [YIELD_HISTORY_TURNS] turns are added up and scaled to [turns] (divided by [YIELD_HISTORY_TURNS] even when fewer have been kept), then the instant
+     *  yields of the whole game on average over the turns played (plus one) are added for each of the [turns].
+     */
+    @Readonly
+    fun getYieldPerTurnHistory(isTourism: Boolean, turns: Int): Int {
+        val elapsed = civ.gameInfo.turns
+        val window = min(turns, elapsed)
+        if (window <= 0) return 0
+        val history = if (isTourism) tourismHistory else cultureHistory
+        val sum = history.sum() // never more than YIELD_HISTORY_TURNS are kept
+        val instantTotal = if (isTourism) instantTourismTotal else instantCultureTotal
+        return (window.toLong() * sum / YIELD_HISTORY_TURNS + window.toLong() * instantTotal / (elapsed + 1)).toInt()
+    }
+
+    /**
+     *  CvPlayer::GetHistoricEventTourism (V:CvPlayer.cpp:31252-31420): the turns that the uniques give for the kind of [event] say how many turns of culture (a fifth)
+     *  and tourism ([getYieldPerTurnHistory]) make it, divided by the [HistoricEvent.divisor]; 0 without such turns
+     */
+    @Readonly
+    fun getHistoricEventTourism(event: HistoricEvent): Int {
+        val turns = civ.getMatchingUniques(UniqueType.HistoricEventTourismTurns).sumOf { it.params[0].toInt() }
+        if (turns <= 0) return 0
+        return (getYieldPerTurnHistory(false, turns) / 5 + getYieldPerTurnHistory(true, turns)) / event.divisor
+    }
+
+    /**
+     *  A historic event of a major civilization with [ModConstants.historicEventsLikeVp]: its tourism ([getHistoricEventTourism]) goes to every civilization met with
+     *  the modifiers towards each (CvPlayerCulture::AddTourismAllKnownCivsWithModifiers, V:CvCultureClasses.cpp:4835-4851), and it is counted, an accomplishment
+     *  as well (CvPlayer::ChangeNumHistoricEvents, V:CvPlayer.cpp:31117-31127)
+     */
+    fun onHistoricEvent(event: HistoricEvent) {
+        if (!civ.gameInfo.ruleset.modOptions.constants.historicEventsLikeVp || !civ.isMajorCiv) return
+        val tourism = getHistoricEventTourism(event)
+        historicEvents++
+        civ.completeAccomplishment(Accomplishment.HistoricEvent)
+        if (tourism <= 0) return
+        for (other in getOtherMajorCivs()) addInfluence(other, getInstantInfluenceOn(other, tourism))
+        civ.addNotification("Our [${event.label}] made [$tourism] tourism", NotificationCategory.Diplomacy, "StatIcons/Culture")
+    }
+    //endregion
+
     companion object {
         /** What [getTurnsToInfluential] returns when it will not come to that */
         const val NEVER = 999
+        /** The turns of culture and tourism kept for [getYieldPerTurnHistory] (VP's HISTORY_NUM_TURNS_TO_AVERAGE) */
+        const val YIELD_HISTORY_TURNS = 10
         /** The key of the culture in [instantCultureHistory] */
         const val INSTANT_CULTURE = "Culture"
     }

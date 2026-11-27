@@ -531,6 +531,9 @@ class TechManager : IsPartOfGameInfoSerialization {
 
         // The unfiltered version
         InstantYields.fire(UniqueType.TriggerUponEnteringEraUnfiltered, civInfo, null, 0, civInfo.state, "due to entering the [${currentEra.name}]")
+
+        // CvTeam::setHasTech: a new era of each player of the team, not with the starting techs, is a historic event (V:CvTeam.cpp:6742-6768)
+        if (showNotification) civInfo.culture.onHistoricEvent(HistoricEvent.EraChange)
     }
 
     /** Recomputes [era] from the researched technologies; [addTechnology] does it itself, for techs given in bulk (the barbarians') */

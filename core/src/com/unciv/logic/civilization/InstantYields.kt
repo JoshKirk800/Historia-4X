@@ -322,6 +322,7 @@ object InstantYields {
                 // the recent culture that the influence trend reads (CvPlayer::doInstantYield calls changeInstantYieldValue, V:CvPlayer.cpp:27414-27418)
                 if (civ.gameInfo.ruleset.modOptions.constants.influenceTrendLikeVp)
                     civ.culture.instantCultureHistory.add(civ.gameInfo.turns, CultureManager.INSTANT_CULTURE, amount)
+                civ.culture.addInstantYieldTotal(false, amount)
             }
             else -> civ.addStat(stat, amount)
         }

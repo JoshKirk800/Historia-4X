@@ -9,6 +9,7 @@ import com.unciv.logic.automation.Automation
 import com.unciv.logic.automation.city.ConstructionAutomation
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.CivilopediaAction
+import com.unciv.logic.civilization.HistoricEvent
 import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.LocationAction
 import com.unciv.logic.civilization.MapUnitAction
@@ -693,6 +694,8 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         if (construction is Building && construction.isWonder) {
             city.civ.popupAlerts.add(PopupAlert(AlertType.WonderBuilt, construction.name))
             DiplomacyEvents.onWonderConstructed(city.civ)
+            // CvCity::processBuilding: a world wonder built, not given, is a historic event (V:CvCity.cpp:13312-13319)
+            city.civ.culture.onHistoricEvent(HistoricEvent.WorldWonder)
             for (civ in city.civ.gameInfo.civilizations) {
                 if (civ.hasExplored(city.getCenterTile()))
                     civ.addNotification("[${construction.name}] has been built in [${city.name}]",

@@ -1,11 +1,13 @@
 package com.unciv.logic.civilization
 
+import com.unciv.json.json
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityFlags
 import com.unciv.logic.city.GreatWorkSlot
 import com.unciv.logic.civilization.managers.CultureManager
 import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.InfluenceTrend
+import com.unciv.logic.civilization.managers.InstantHistory
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActions
 import com.unciv.models.UnitActionType
@@ -347,6 +349,103 @@ class TourismTests {
         civB.totalCultureForContests = 1000
         civA.culture.addInfluence(civB, 100)
         assertEquals(CultureManager.NEVER, civA.culture.getTurnsToInfluential(civB))
+    }
+
+    @Test
+    fun `the recent average of instant gains counts the last thirty turns that had one and this one`() {
+        val history = InstantHistory()
+        history.add(1, "a", 31)
+        history.add(1, "a", 31)
+        assertEquals(2, history.recentAverage("a", 1))
+        assertEquals("turn 1 still in the window of turn 31", 2, history.recentAverage("a", 31))
+        assertEquals("out of the window of turn 32", 0, history.recentAverage("a", 32))
+        for (turn in 2..31) history.add(turn, "a", 31)
+        assertEquals("the entry of turn 1 is dropped once there are thirty", 30, history.recentAverage("a", 31))
+        val loaded = json().fromJson(InstantHistory::class.java, json().toJson(history))
+        assertEquals("a saved game keeps it", 30, loaded.recentAverage("a", 31))
+    }
+
+    /** Vox Populi's trend on: civB has made 1000 culture by now and the turn before, civA has [influence] on it, all of it this turn */
+    private fun trendLikeVp(influence: Int) {
+        game.ruleset.modOptions.constants.influenceTrendLikeVp = true
+        civB.totalCultureForContests = 1000
+        civB.culture.rememberLastTurn()
+        civB.culture.rememberLastTurn()
+        civA.culture.addInfluence(civB, influence)
+        civA.culture.rememberLastTurn()
+        civA.culture.endTurn()
+    }
+
+    @Test
+    fun `like Vox Populi the recent changes of influence make the trend rise`() {
+        trendLikeVp(100) // 100 * 100 / 1000 before; now the average 100 / 31 = 3 per turn more
+        assertEquals(InfluenceTrend.Rising, civA.culture.getInfluenceTrend(civB))
+        civB.stats.statsForNextTurn.culture = 100f
+        assertEquals("the culture of the other this turn", InfluenceTrend.Falling, civA.culture.getInfluenceTrend(civB))
+    }
+
+    @Test
+    fun `like Vox Populi the recent instant culture of the other counts against the trend`() {
+        trendLikeVp(100)
+        civB.culture.instantCultureHistory.add(game.gameInfo.turns, CultureManager.INSTANT_CULTURE, 3100) // 100 per turn
+        assertEquals(InfluenceTrend.Falling, civA.culture.getInfluenceTrend(civB))
+    }
+
+    @Test
+    fun `like Vox Populi the culture per turn of last turn is added in hundredths to the lifetime culture of last turn`() {
+        trendLikeVp(100)
+        civB.totalCultureForContests = 1010
+        civB.culture.rememberLastTurn() // 10 culture last turn
+        civB.stats.statsForNextTurn.culture = 460f
+        // before 100 * 100 / (1010 + 1000) = 4.98, now (10000 + 300) / (1010 + 460) = 7.01
+        assertEquals(InfluenceTrend.Rising, civA.culture.getInfluenceTrend(civB))
+    }
+
+    @Test
+    fun `like Vox Populi a change of the trend of a tenth or less is static`() {
+        trendLikeVp(31)
+        civB.stats.statsForNextTurn.culture = 10f // 3100 / 1000 before, 3200 / 1010 now
+        assertEquals(InfluenceTrend.Static, civA.culture.getInfluenceTrend(civB))
+    }
+
+    @Test
+    fun `like Vox Populi what the turn added to influence is part of the trend before`() {
+        game.ruleset.modOptions.constants.influenceTrendLikeVp = true
+        tenTourismWithOutput(10)
+        civB.totalCultureForContests = 1000
+        civB.culture.rememberLastTurn()
+        civB.culture.rememberLastTurn()
+        civA.culture.rememberLastTurn()
+        civA.culture.endTurn()
+        // before (0 + 10) * 100 / 1000; now (10 + 10) * 100 / (1000 + 1000)
+        civB.stats.statsForNextTurn.culture = 1000f
+        assertEquals(InfluenceTrend.Static, civA.culture.getInfluenceTrend(civB))
+    }
+
+    @Test
+    fun `like Vox Populi turns to influential divide what is missing by the recent tourism, rounded up`() {
+        trendLikeVp(101)
+        // (100000 - 10100) / (100 * 100 / 31 cut to 3) = 299.67
+        assertEquals(300, civA.culture.getTurnsToInfluential(civB))
+    }
+
+    @Test
+    fun `like Vox Populi a concert tour is recorded once more for the owner of the tile`() {
+        galleryWith(10) // 20 tourism
+        game.ruleset.modOptions.constants.influenceTrendLikeVp = true
+        val foreign = civB.cities.first().getCenterTile().neighbors.first()
+        game.addTileToCity(civB.cities.first(), foreign)
+        tourAction(musician(civB.cities.first(), foreign))!!.invoke()
+        assertEquals("200 of influence and the strength 200, over 31 turns", 12,
+            civA.culture.instantTourismHistory.recentAverage(civB.civID, game.gameInfo.turns))
+    }
+
+    @Test
+    fun `like Vox Populi instant culture is recorded for the trend`() {
+        game.ruleset.modOptions.constants.influenceTrendLikeVp = true
+        val unique = game.createPolicy("Gain [62] [Culture]").uniqueObjects.single()
+        assertTrue(com.unciv.models.ruleset.unique.UniqueTriggerActivation.triggerUnique(unique, civB))
+        assertEquals(2, civB.culture.instantCultureHistory.recentAverage(CultureManager.INSTANT_CULTURE, game.gameInfo.turns))
     }
 
     @Test

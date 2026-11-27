@@ -662,6 +662,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "[positiveAmount] turns of yields as tourism for archaeological digs"
+	With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for what to do with the finds of a dig chosen, divided by 10; it counts as a historic event when the turns are positive (the original's `ArchaeologicalDigTourism` of policies)
+
+	Example: "[3] turns of yields as tourism for archaeological digs"
+
+	Applicable to: Global
+
 ??? example  "Domestic trade routes give tourism for completed trade routes"
 	With the ModConstants `historicEventDispatchLikeVp`, a domestic trade route that ends gives the tourism of `[positiveAmount] turns of yields as tourism for completed land trade routes` (or sea) as well, a third of it towards each civilization met (the original's `InternalTRTourism` of policies)
 

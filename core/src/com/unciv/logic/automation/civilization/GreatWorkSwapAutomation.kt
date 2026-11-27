@@ -228,7 +228,7 @@ object GreatWorkSwapAutomation {
                 if (bonus.requiresOwner && art.creatorCiv != owner) continue
                 if (bonus.requiresAnyButOwner && art.creatorCiv == owner) continue
                 if (bonus.sameEra && art.era != artifactEras[0]) continue
-                if (bonus.uniqueEras && art.era in artifactEras) continue
+                if ((bonus.uniqueEras || bonus.consecutiveEras) && art.era in artifactEras) continue
 
                 chosen = ArrayList(artifactsChosen)
                 val players = ArrayList(artifactPlayers)
@@ -401,7 +401,8 @@ object GreatWorkSwapAutomation {
     /** CultureHelpers::IsValidForThemingBonus: whether a work can join a set with [eras] and [players] seen so far */
     private fun isValidForThemingBonus(bonus: ThemingBonus, era: String, eras: List<String>, player: String, players: List<String>, owner: String): Boolean {
         if (bonus.sameEra && era != eras[0]) return false
-        if (bonus.uniqueEras && era in eras) return false
+        // IsUniqueEras is also true for ConsecutiveEras (V:CvBuildingClasses.h:55)
+        if ((bonus.uniqueEras || bonus.consecutiveEras) && era in eras) return false
         if (bonus.requiresOwner && player != owner) return false
         if (bonus.requiresAnyButOwner && player == owner) return false
         if (bonus.requiresSamePlayer && player != players[0]) return false
@@ -413,6 +414,6 @@ object GreatWorkSwapAutomation {
     private fun getThemingBonusIndex(context: Context, owner: String, building: Building, works: List<GreatWorkInstance>): Int {
         if (works.size != building.greatWorkSlotTypes.size) return -1
         val types = works.map { context.typeOf(it) ?: return -1 }
-        return building.themingBonuses.indexOfFirst { it.isSatisfiedBy(works, types, owner) }
+        return building.themingBonuses.indexOfFirst { it.isSatisfiedBy(works, types, owner, context.ruleset) }
     }
 }

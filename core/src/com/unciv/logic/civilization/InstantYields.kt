@@ -15,6 +15,7 @@ import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
+import com.unciv.models.translations.fillPlaceholders
 import yairm210.purity.annotations.Readonly
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -133,7 +134,7 @@ object InstantYields {
             val (unique, creditedTo) = gathered[index]
             // the copies of one unique that its `<for every>` modifiers made follow each other
             var copies = 1
-            if (cutTotal && unique.type == UniqueType.OneTimeGainStat && unique.isModifiedByGameSpeed())
+            if (cutTotal && unique.type in joinedByCutTotal && unique.isModifiedByGameSpeed())
                 while (index + copies < gathered.size && gathered[index + copies].first === unique && gathered[index + copies].second == creditedTo) copies++
             val tile = context.tile ?: creditedTo?.getCenterTileOrNull() ?: context.unit?.takeIf { it.hasTile() }?.currentTile
             UniqueTriggerActivation.triggerUnique(if (copies == 1) unique else totalOf(unique, copies, civ), civ, creditedTo, context.unit, tile,
@@ -255,13 +256,18 @@ object InstantYields {
         fire(UniqueType.TriggerUponRiggingElection, winner, triggerNotificationText = "due to winning a rigged election")
     }
 
+    /** The uniques whose copies [totalOf] joins: their first parameter is the amount; the tourism is changed by the speed as Culture is */
+    private val joinedByCutTotal = setOf(UniqueType.OneTimeGainStat, UniqueType.OneTimeGainTourismTowardsEventCityOwner)
+
     /**
-     *  The `Gain [amount] [stat] <(modified by game speed)>` [unique] that [fire] triggers [copies] times, as one gain under ModConstants `instantYieldsCutTotalLikeVp`:
-     *  CvPlayer::doInstantYield adds up a yield, changes it by the speed's percentage and cuts it once, then multiplies it by the era (V:CvPlayer.cpp:27162-27184).
-     *  So the amount times the copies but those of `<for every [Era scaler]>` is changed by [scaleBySpeed], then multiplied by the `Era scaler`.
+     *  The `Gain [amount] [stat] <(modified by game speed)>` [unique] (or `[amount] Tourism towards the owner of the city of the event`) that [fire] triggers [copies] times,
+     *  as one gain under ModConstants `instantYieldsCutTotalLikeVp`: CvPlayer::doInstantYield adds up a yield, changes it by the speed's percentage and cuts it once,
+     *  then multiplies it by the era (V:CvPlayer.cpp:27162-27184). So the amount times the copies but those of `<for every [Era scaler]>` is changed by [scaleBySpeed],
+     *  then multiplied by the `Era scaler`.
      */
     private fun totalOf(unique: Unique, copies: Int, civ: Civilization): Unique {
-        val stat = Stat.safeValueOf(unique.params[1]) ?: return unique
+        val type = unique.type ?: return unique
+        val stat = if (type == UniqueType.OneTimeGainTourismTowardsEventCityOwner) Stat.Culture else Stat.safeValueOf(unique.params[1]) ?: return unique
         val eraModifiers = unique.getModifiers(UniqueType.ForEveryCountable).count { it.params[0] == Countables.EraScaler.text }
         var era = 1
         if (eraModifiers > 0) {
@@ -270,7 +276,8 @@ object InstantYields {
         }
         val total = scaleBySpeed(unique, stat, unique.params[0].toInt() * (copies / era), civ.gameInfo) * era
         val modifiers = unique.modifiers.filter { it.type != UniqueType.ModifiedByGameSpeed }.joinToString("") { " <${it.text}>" }
-        return Unique("Gain [$total] [${unique.params[1]}]$modifiers", unique.sourceObjectType, unique.sourceObjectName)
+        val text = type.text.fillPlaceholders(total.toString(), *unique.params.drop(1).toTypedArray())
+        return Unique(text + modifiers, unique.sourceObjectType, unique.sourceObjectName)
     }
 
     /** Whether [unique] is one of the effects that Vox Populi's `processBuilding` hands out only the first time a building is built in a city (V:CvCity.cpp:14830-14853) */

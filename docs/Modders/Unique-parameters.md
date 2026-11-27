@@ -148,6 +148,8 @@ cityFilters allow us to choose the range of cities affected by this unique:
 - `in City-State cities`
 - `in cities following this religion` - Should only be used in pantheon/follower uniques for religions
 - `in cities following our religion`
+- `in cities following our state religion` - the majority religion is a major religion and the owner's state religion
+- `in cities following our own pantheon or religion` - the majority religion is the owner's: the state religion while it owns its holy city, else the religion it founded while it owns its holy city, or any pantheon while the owner founded one
 - `in all cities in which the majority religion is a major religion`
 - `in all cities in which the majority religion is an enhanced religion`
 - [civFilter]

@@ -82,6 +82,10 @@ enum class UniqueType(
     TourismTowardsPercent("[relativeAmount]% Tourism towards civilizations with [tourismRelation]", UniqueTarget.Global,
         docDescription = "Added to the modifier of the tourism of this civilization towards another, which the original reads from the capital. " +
             "For `Common Enemies` the amount is given for every other civilization that both are at war with"),
+    HistoricEventTourismTurns("[positiveAmount] turns of yields as tourism for historic events", UniqueTarget.Global,
+        docDescription = "With the ModConstants `historicEventsLikeVp`, the amounts of all such uniques are added up (the original's `EventTourism` of buildings and policies). " +
+            "A Great Person born, a new era or a world wonder built then gives tourism towards every civilization met: a fifth of the culture plus the tourism of that many " +
+            "turns (the last 10 turns scaled to them, plus instant yields on average), divided by 15 for a Great Person, 10 for an era, 5 for a wonder (`GetHistoricEventTourism`)"),
     StatsPerEraSinceDig("[stats] for every era since the site of this improvement was formed", UniqueTarget.Improvement,
         docDescription = "Counts the eras the civilization has gone through since the era of what happened on this tile, see archaeology. Nothing if it is the same era or the tile has no history"),
     StatsFromGreatWorks("[stats] from each Great Work", UniqueTarget.Global,

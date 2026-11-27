@@ -19,6 +19,7 @@ enum class Accomplishment(val label: String) {
     EnhancerBelief("Enhancer belief"),
     ReformationBelief("Reformation belief"),
     EliminatedCivilization("Eliminated civilization"),
+    HistoricEvent("Historic event"),
     ;
 
     companion object {

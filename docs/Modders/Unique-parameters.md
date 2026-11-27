@@ -426,6 +426,8 @@ Allowed values:
     - Example: `Only available <when number of [Completed [Ancient policy branch] accomplishments] is more than [0]>`
 -   `Long Count choices of [baseUnitFilter]` - How often the civilization chose a matching Great Person for the Long Count (Vox Populi's LONGCOUNT accomplishments, CvPlayerTraits::SetUnitBaktun); 0 without the ModConstants `longCountYieldsLikeVp`
     - Example: `Only available <when number of [Long Count choices of [Melee]] is more than [0]>`
+-   `Historic events` - The historic events the civilization has had (Vox Populi's CvPlayer::GetNumHistoricEvents): Great People born, new eras, world wonders built; 0 without the ModConstants `historicEventsLikeVp`
+    - Example: `Only available <when number of [Historic events] is more than [0]>`
 -   `[cityFilter] Cities`
     - Example: `Only available <when number of [[in all cities] Cities] is more than [0]>`
 -   `[mapUnitFilter] Units`

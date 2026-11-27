@@ -584,6 +584,7 @@ object UniqueTriggerActivation {
                 if (civInfo.culture.getOtherMajorCivs().none { civInfo.culture.canInfluence(it) }) return null
                 return {
                     civInfo.culture.addInfluenceOnAllKnownCivs(unique.params[0].toInt())
+                    civInfo.culture.addInstantYieldTotal(true, unique.params[0].toInt())
                     if (notification != null) civInfo.addNotification(notification, NotificationCategory.Diplomacy, "StatIcons/Culture")
                     true
                 }
@@ -597,6 +598,7 @@ object UniqueTriggerActivation {
                 if (influence <= 0) return null
                 return {
                     civInfo.culture.addInfluence(target, influence)
+                    civInfo.culture.addInstantYieldTotal(true, amount)
                     if (notification != null) civInfo.addNotification(notification, NotificationCategory.Diplomacy, "StatIcons/Culture")
                     true
                 }

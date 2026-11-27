@@ -620,6 +620,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "[positiveAmount] turns of yields as tourism for historic events"
+	With the ModConstants `historicEventsLikeVp`, the amounts of all such uniques are added up (the original's `EventTourism` of buildings and policies). A Great Person born, a new era or a world wonder built then gives tourism towards every civilization met: a fifth of the culture plus the tourism of that many turns (the last 10 turns scaled to them, plus instant yields on average), divided by 15 for a Great Person, 10 for an era, 5 for a wonder (`GetHistoricEventTourism`)
+
+	Example: "[3] turns of yields as tourism for historic events"
+
+	Applicable to: Global
+
 ??? example  "[stats] from each Great Work"
 	Added to the culture a city gets from each of its Great Works (see `greatWorkBaseCulture` in ModConstants), in every city of the civilization
 
@@ -6321,7 +6328,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Triggerable, Terrain, Speed, ModOptions, MetaModifier
 
 
-*[accomplishment]: One of `Ancient policy branch`, `Medieval policy branch`, `Industrial policy branch`, `Ideology`, `Pantheon belief`, `Founder belief`, `Follower belief`, `Enhancer belief`, `Reformation belief`, `Eliminated civilization`.
+*[accomplishment]: One of `Ancient policy branch`, `Medieval policy branch`, `Industrial policy branch`, `Ideology`, `Pantheon belief`, `Founder belief`, `Follower belief`, `Enhancer belief`, `Reformation belief`, `Eliminated civilization`, `Historic event`.
 *[amount]: This indicates a whole number, possibly with a + or - sign, such as `2`, `+13`, or `-3`.
 *[baseTerrain]: The name of any terrain that is a base terrain according to the json file.
 *[belief]: The name of any belief.

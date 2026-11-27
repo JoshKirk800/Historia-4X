@@ -550,6 +550,8 @@ class TurnManager(val civInfo: Civilization) {
             else nextTurnStats.culture.toInt() * 100L
         )
         if (makesTourism) civInfo.culture.endTurn()
+        // CvPlayer::doTurnPostDiplomacy calls updateYieldPerTurnHistory (V:CvPlayer.cpp:10530)
+        if (makesTourism) civInfo.culture.recordYieldHistory()
 
         if (civInfo.isCityState) {
             civInfo.questManager.endTurn()

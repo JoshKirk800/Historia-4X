@@ -21,5 +21,9 @@ data class UnitSupplyBreakdown(
     val empireSizeDivisorPercent: Int = 100,
     val afterEmpireSize: Int = 0,
     val difficultyModifierPercent: Int = 100,
+    /** The supply before the war weariness reduction (iBeforeWarWeariness) */
+    val beforeWarWeariness: Int = 0,
+    /** The percent of the supply that the war weariness takes (iWarWearinessPct): 0 unless `unitSupplyWarWearinessLikeVp` */
+    val warWearinessPercent: Int = 0,
     val total: Int = 0,
 )

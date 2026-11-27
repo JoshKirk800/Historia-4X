@@ -2,6 +2,7 @@ package com.unciv.logic.civilization.transients
 
 import com.unciv.Constants
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.diplomacy.WarDamageAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.CivNeeds
 import com.unciv.logic.civilization.Civilization
@@ -372,11 +373,12 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
      *
      *  A city's own supply flat and percent from its buildings (CvCity::getCitySupplyFlat, getCitySupplyModifier) are in with `unitSupplyBuildingsLikeVp`.
      *  The supply of expended Great People (CvPlayer::GetUnitSupplyFromExpendedGreatPeople, [Civilization.unitSupplyFromExpendedGreatPeople]) is in with
-     *  `unitSupplyExpendedGreatPeopleLikeVp`, before the empire size divisor.
+     *  `unitSupplyExpendedGreatPeopleLikeVp`, before the empire size divisor. A major's war weariness reduction (CvPlayer::GetSupplyReductionFromWarWeariness,
+     *  [getSupplyReductionFromWarWeariness]) takes its percent off the total with `unitSupplyWarWearinessLikeVp`.
      *  Not in it, for lack of the state: the player-wide
      *  building supply (CitySupplyFlatGlobal, CitySupplyModifierGlobal), the player and trait supply and puppet-share changes,
-     *  the era columns of the difficulty and the start era's base supply, the city-state trait and personality modifiers (all 0 in Vox Populi), the cities not yet
-     *  decided on (CvCity::IsIgnoreCityForHappiness) and the war weariness reduction (CvPlayer::GetSupplyReductionFromWarWeariness: [CivNeeds.warWeariness] is 0).
+     *  the era columns of the difficulty and the start era's base supply, the city-state trait and personality modifiers (all 0 in Vox Populi) and the cities not yet
+     *  decided on (CvCity::IsIgnoreCityForHappiness).
      */
     @Readonly
     fun getUnitSupplyBreakdown(includeGross: Boolean = true): UnitSupplyBreakdown {
@@ -398,6 +400,9 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
             else -> 0
         }
         val modifier = 100 + bonusPercent
+        // CvPlayer::GetUnitSupplyBreakdown (V:CvPlayer.cpp:17089-17099): the supply before the weariness, then a major's reduction, each step cut
+        val beforeWarWeariness = max(0, afterEmpireSize * modifier / 100)
+        val warWearinessPercent = if (constants.unitSupplyWarWearinessLikeVp && civInfo.isMajorCiv) getSupplyReductionFromWarWeariness() else 0
         return UnitSupplyBreakdown(
             techProgressPercent = getUnitSupplyTechProgress(),
             citiesTechDivisorPercent = getUnitSupplyTechDivisorPercent(constants.unitSupplyConstants.citiesTechReductionMultiplier),
@@ -414,9 +419,20 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
             empireSizeDivisorPercent = empireSizeDivisor,
             afterEmpireSize = afterEmpireSize,
             difficultyModifierPercent = modifier,
-            total = max(0, afterEmpireSize * modifier / 100)
+            beforeWarWeariness = beforeWarWeariness,
+            warWearinessPercent = warWearinessPercent,
+            total = max(0, beforeWarWeariness * (100 - warWearinessPercent) / 100)
         )
     }
+
+    /**
+     *  CvPlayer::GetSupplyReductionFromWarWeariness (V:CvPlayer.cpp:37101-37104): the highest war weariness percent of the civilization
+     *  ([WarDamageAi.highestWarWearinessPercent]) times [ModConstants.WarWearinessConstants.supplyReductionPercent] (0 to 100) / 100.
+     */
+    @Readonly
+    private fun getSupplyReductionFromWarWeariness(): Int =
+        WarDamageAi.highestWarWearinessPercent(civInfo) *
+            civInfo.gameInfo.ruleset.modOptions.constants.warWeariness.supplyReductionPercent.coerceIn(0, 100) / 100
 
     // endregion
 

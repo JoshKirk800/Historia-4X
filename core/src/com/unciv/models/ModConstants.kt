@@ -328,6 +328,11 @@ class ModConstants {
     var warWearinessLikeVp = false
     var warWeariness = WarWearinessConstants()
 
+    /** VP 5.4.8 CvPlayer::GetSupplyReductionFromWarWeariness, read in GetUnitSupplyBreakdown (V:CvPlayer.cpp:17089-17099, 37101-37104). true (with [unitSupplyLikeVp] and [warWearinessLikeVp]): a major
+     *  civilization's unit supply loses [WarWearinessConstants.supplyReductionPercent] percent of its highest war weariness percent ([WarDamageAi.highestWarWearinessPercent]), after
+     *  the difficulty's modifier. false: the supply is not reduced. Staged: one of the consumers of the war weariness percent, each its own switch */
+    var unitSupplyWarWearinessLikeVp = false
+
     /** The defines of the war weariness (DEF-VP `(2) Vox Populi/Database Changes/DefineChanges.sql`; the same in `ref/db/vp.sqlite` `Defines`) */
     data class WarWearinessConstants(
         /** `WAR_WEARINESS_MINIMUM_TURNS`: a war must be this many turns old before it adds weariness */

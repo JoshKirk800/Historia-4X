@@ -876,6 +876,9 @@ class CityStats(val city: City) {
                 val happinessGrowth = city.cityStats.needs.growthModifier()
                 if (happinessGrowth != 0) newFinalStatList.add("Happiness", Stats(food = happinessGrowth / 100f * totalFood))
             }
+            // CvCity::getGrowthMods: GetGrowthFromTourism (V:CvCity.cpp:16007-16012), the influence on the owners of our trade partners
+            val tourismGrowth = city.civ.tradeRoutes.getInfluenceGrowthPercent(city)
+            if (tourismGrowth != 0) newFinalStatList.add("[Tourism] ([Growth])", Stats(food = tourismGrowth / 100f * totalFood))
             // CvCity::getGrowthMods: the growth lost for each unit out of supply (calculateUnitGrowthMaintenanceMod), with unitSupplyLikeVp
             val supplyGrowth = city.civ.stats.getUnitSupplyGrowthPenalty()
             if (supplyGrowth != 0) newFinalStatList.add("[Unit Supply] ([Growth])", Stats(food = supplyGrowth / 100f * totalFood))

@@ -5837,6 +5837,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: TriggerCondition
 
+??? example  "&lt;upon a city adopting our religion for the first time&gt;"
+	A city of any civilization whose majority becomes a religion, not a pantheon, that it never had before. For the owner of the religion's holy city, in the holy city, if the religion is its state religion
+
+	Applicable to: TriggerCondition
+
 ??? example  "&lt;upon declaring war on [civFilter] Civilizations&gt;"
 	Example: "&lt;upon declaring war on [City-States] Civilizations&gt;"
 

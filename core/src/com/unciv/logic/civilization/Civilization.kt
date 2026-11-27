@@ -292,9 +292,22 @@ class Civilization : IsPartOfGameInfoSerialization {
     /** CvPlayer::m_iUprisingCounter, used with uprisingCounterLikeCivV: the turns of very high unhappiness until rebels spawn, 0 = not seeded yet */
     var uprisingCounter = 0
 
-    /** All the culture the civilization has made in the whole game, which is what its influence on others is measured against. Counted in [PolicyManager.addCulture] */
+    /** All the culture the civilization has made in the whole game, which is what its influence on others is measured against. Counted in [PolicyManager.addCultureTimes100] */
     var totalCultureForContests = 0
+    /** With `ModConstants.cultureHundredthsLikeVp`: the hundredths of [totalCultureForContests] below a whole one (CvPlayer::m_iJONSCultureEverGeneratedTimes100) */
+    var totalCultureRemainder = 0
     var totalFaithForContests = 0
+
+    /** [totalCultureForContests] in hundredths */
+    @Readonly
+    fun getLifetimeCultureTimes100(): Long = totalCultureForContests * 100L + totalCultureRemainder
+
+    /** Counts [hundredths] more culture made in the whole game (CvPlayer::setJONSCultureTimes100 counts every increase, V:CvPlayer.cpp:18183-18198) */
+    fun addLifetimeCultureTimes100(hundredths: Long) {
+        val total = totalCultureRemainder + hundredths
+        totalCultureForContests += (total / 100).toInt()
+        totalCultureRemainder = (total % 100).toInt()
+    }
 
     /**
      * The title for the Civilization's leader.
@@ -423,6 +436,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.killedBy = killedBy
         toReturn.uprisingCounter = uprisingCounter
         toReturn.totalCultureForContests = totalCultureForContests
+        toReturn.totalCultureRemainder = totalCultureRemainder
         toReturn.totalFaithForContests = totalFaithForContests
         toReturn.attacksSinceTurnStart = attacksSinceTurnStart.copy()
         toReturn.hasMovedAutomatedUnits = hasMovedAutomatedUnits

@@ -8,6 +8,7 @@ import com.unciv.logic.civilization.managers.CultureManager
 import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.InfluenceTrend
 import com.unciv.logic.civilization.managers.InstantHistory
+import com.unciv.logic.civilization.managers.TurnManager
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActions
 import com.unciv.models.UnitActionType
@@ -505,6 +506,73 @@ class TourismTests {
         civB.stats.statsForNextTurn.culture = 0.91f
         // (100000 - 10150) / (101 / 31 cut to 3, times 100, less 91) = 429.9
         assertEquals(430, civA.culture.getTurnsToInfluential(civB))
+    }
+
+    @Test
+    fun `like Vox Populi the culture of the turn keeps its hundredths`() {
+        game.ruleset.modOptions.constants.cultureHundredthsLikeVp = true
+        addBuilding("[+1 Culture] [in this city]", "[+33]% [Culture] [in this city]")
+        cityA.cityStats.update()
+        civA.updateStatsForNextTurn()
+        val hundredths = (civA.stats.statsForNextTurn.culture * 100).toLong()
+        assertTrue("the turn makes a part of a culture: $hundredths", hundredths % 100 != 0L)
+        TurnManager(civA).endTurn()
+        assertEquals(hundredths % 100, civA.policies.cultureRemainder.toLong())
+        assertEquals(hundredths, civA.getLifetimeCultureTimes100())
+        val copy = game.gameInfo.clone().getCivilization(civA.civName)
+        assertEquals("a copy keeps the stored hundredths", hundredths % 100, copy.policies.cultureRemainder.toLong())
+        assertEquals("a copy keeps the lifetime hundredths", hundredths, copy.getLifetimeCultureTimes100())
+    }
+
+    @Test
+    fun `a culture and a half twice is three and a loss takes from the next whole one`() {
+        civA.policies.addCultureTimes100(150)
+        civA.policies.addCultureTimes100(150)
+        assertEquals(3, civA.policies.storedCulture)
+        assertEquals(0, civA.policies.cultureRemainder)
+        assertEquals(300L, civA.getLifetimeCultureTimes100())
+        civA.policies.addCultureTimes100(-50)
+        assertEquals(2, civA.policies.storedCulture)
+        assertEquals(50, civA.policies.cultureRemainder)
+        assertEquals("a loss is not taken from the culture of the whole game", 300L, civA.getLifetimeCultureTimes100())
+    }
+
+    @Test
+    fun `the level reads the hundredths of the culture of the whole game`() {
+        civB.totalCultureForContests = 9
+        civB.totalCultureRemainder = 50
+        civA.culture.addInfluence(civB, 1)
+        // 1 of 9.5 is 10%, of 9 it would be 11%
+        assertEquals(10, civA.culture.getInfluencePercent(civB))
+    }
+
+    @Test
+    fun `last turn's culture per turn counts the hundredths of the culture of the whole game`() {
+        civB.culture.rememberLastTurn()
+        civB.policies.addCultureTimes100(150)
+        civB.culture.rememberLastTurn()
+        assertEquals(150L, civB.culture.lastTurnCulturePerTurnTimes100)
+        assertEquals("a copy keeps last turn's hundredths", 50,
+            game.gameInfo.clone().getCivilization(civB.civName).culture.lastTurnLifetimeCultureRemainder)
+        civB.policies.addCultureTimes100(150)
+        civB.culture.rememberLastTurn()
+        assertEquals(150L, civB.culture.lastTurnCulturePerTurnTimes100)
+    }
+
+    @Test
+    fun `like Vox Populi turns to influential count the hundredths of the culture of the whole game`() {
+        game.ruleset.modOptions.constants.tourismPrecisionLikeVp = true
+        game.ruleset.modOptions.constants.influenceTrendLikeVp = true
+        civB.totalCultureForContests = 1000
+        civB.totalCultureRemainder = 50
+        civB.culture.rememberLastTurn()
+        civB.culture.rememberLastTurn()
+        civA.culture.addInfluenceTimes100(civB, 10150)
+        civA.culture.rememberLastTurn()
+        civA.culture.endTurn()
+        civB.stats.statsForNextTurn.culture = 0.91f
+        // (100050 - 10150) / 209 = 430.1, where 1000 whole would be 429.9
+        assertEquals(431, civA.culture.getTurnsToInfluential(civB))
     }
 
     @Test

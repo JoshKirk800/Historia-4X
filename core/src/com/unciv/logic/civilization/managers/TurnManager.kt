@@ -544,7 +544,11 @@ class TurnManager(val civInfo: Civilization) {
 
         val makesTourism = civInfo.isMajorCiv && !civInfo.isSpectator
         if (makesTourism) civInfo.culture.rememberLastTurn() // before the culture of this turn is added
-        civInfo.policies.endTurn(nextTurnStats.culture.toInt())
+        // CvPlayer::doTurnPostDiplomacy adds GetTotalJONSCulturePerTurnTimes100 (V:CvPlayer.cpp:10450-10459); without cultureHundredthsLikeVp a whole number
+        civInfo.policies.endTurn(
+            if (civInfo.gameInfo.ruleset.modOptions.constants.cultureHundredthsLikeVp) (nextTurnStats.culture * 100).toLong()
+            else nextTurnStats.culture.toInt() * 100L
+        )
         if (makesTourism) civInfo.culture.endTurn()
 
         if (civInfo.isCityState) {

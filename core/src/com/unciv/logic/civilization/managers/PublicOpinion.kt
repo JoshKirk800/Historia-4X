@@ -6,6 +6,8 @@ import com.unciv.models.Counter
 import com.unciv.models.ruleset.PolicyBranch
 import yairm210.purity.annotations.Readonly
 import yairm210.purity.annotations.ReturnsNewInstance
+import kotlin.math.ceil
+import kotlin.math.roundToInt
 
 /** How unhappy the people are about the ideology of their civilization (CvCultureClasses.h PublicOpinionTypes), worse with the pressure of the other ideologies */
 enum class PublicOpinionType(val label: String, val unhappinessPerCity: Int, val populationPerUnhappiness: Int) {
@@ -64,6 +66,9 @@ class PublicOpinion : IsPartOfGameInfoSerialization {
 
     var turnIdeologySwitch = -1
 
+    /** The turn the first ideology was chosen, -1 before (CvPlayerCulture::m_iTurnIdeologyAdopted, set in CvPlayerPolicies::SetPolicyBranchUnlocked) */
+    var turnIdeologyAdopted = -1
+
     @Transient
     lateinit var civ: Civilization
         private set
@@ -79,6 +84,7 @@ class PublicOpinion : IsPartOfGameInfoSerialization {
         toReturn.pressureByCiv = LinkedHashMap(pressureByCiv.mapValues { it.value.clone() })
         toReturn.dissatisfaction = dissatisfaction
         toReturn.turnIdeologySwitch = turnIdeologySwitch
+        toReturn.turnIdeologyAdopted = turnIdeologyAdopted
         return toReturn
     }
 
@@ -96,16 +102,29 @@ class PublicOpinion : IsPartOfGameInfoSerialization {
         pressureByCiv = LinkedHashMap()
     }
 
-    /** The pressure on each ideology: how much more the influence level of the civilizations that follow it is over us than ours over them, added up, and the same by civilization */
-    fun getPressureOnUs(): Pair<Counter<String>, Map<String, Counter<String>>> {
+    /**
+     * The pressure on each ideology: how much more the influence level of the civilizations that follow it is over us than ours over them, added up, and the same by civilization.
+     *
+     * With [com.unciv.models.ModConstants.publicOpinionLikeVp] (CvPlayerCulture::DoPublicOpinion, V:CvCultureClasses.cpp:4955-4976): when their level on us is
+     * Popular or more, each level is raised by its trend, by nothing when rising, 1 when static and 2 when falling, and a level below Unknown counts as Unknown.
+     * For the [hypothetical] opinion (ComputeHypotheticalPublicOpinionUnhappiness, V:CvCultureClasses.cpp:5287-5298) a civilization below Popular presses for nothing.
+     */
+    fun getPressureOnUs(hypothetical: Boolean = false): Pair<Counter<String>, Map<String, Counter<String>>> {
+        val likeVp = civ.gameInfo.ruleset.modOptions.constants.publicOpinionLikeVp
         val total = Counter<String>()
         val byCiv = LinkedHashMap<String, Counter<String>>()
         for (other in civ.gameInfo.civilizations) {
             if (other == civ || !other.isMajorCiv || other.isDefeated()) continue
             val ideology = other.getIdeology() ?: continue
-            val theirs = other.culture.getInfluenceLevel(civ)?.ordinal ?: -1
-            val ours = civ.culture.getInfluenceLevel(other)?.ordinal ?: -1
-            val dominance = theirs - ours
+            var theirs = other.culture.getInfluenceLevel(civ)?.ordinal ?: -1
+            var ours = civ.culture.getInfluenceLevel(other)?.ordinal ?: -1
+            if (likeVp) {
+                if (theirs > InfluenceLevel.Familiar.ordinal) {
+                    theirs += trendRaise(other.culture.getInfluenceTrend(civ))
+                    ours += trendRaise(civ.culture.getInfluenceTrend(other))
+                } else if (hypothetical) continue
+            }
+            val dominance = if (likeVp) maxOf(0, theirs) - maxOf(0, ours) else theirs - ours
             if (dominance <= 0) continue
             total.add(ideology.name, dominance)
             byCiv.getOrPut(ideology.name) { Counter() }.add(other.civID, dominance)
@@ -143,6 +162,10 @@ class PublicOpinion : IsPartOfGameInfoSerialization {
         val constants = civ.gameInfo.ruleset.modOptions.constants
 
         val (total, byCiv) = getPressureOnUs()
+        if (constants.publicOpinionLikeVp) {
+            total.add(own.name, fewFollowersPressure(own))
+            total.add(own.name, recentAdoptionPressure())
+        }
         pressure = total
         pressureByCiv = LinkedHashMap(byCiv)
 
@@ -154,11 +177,88 @@ class PublicOpinion : IsPartOfGameInfoSerialization {
         }
 
         type = PublicOpinionType.forDissatisfaction(dissatisfaction, constants.publicOpinionCivilResistance, constants.publicOpinionRevolutionaryWave)
+        if (constants.publicOpinionLikeVp) {
+            val preferred = choosePreferredLikeVp(own, total)
+            preferredIdeology = preferred.name
+            biggestInfluence = biggestInfluenceLikeVp(preferred)
+            unhappiness = unhappinessLikeVp(dissatisfaction)
+            return
+        }
         val preferred = choosePreferred(own, total)
         preferredIdeology = preferred.name
         biggestInfluence = byCiv[preferred.name]?.entries?.maxByOrNull { it.value }?.key // the first of equals, the order of the civilizations
 
         unhappiness = unhappinessOf(type)
+    }
+
+    /** Rising 0, static 1, falling 2: `level -= trend - 1` of DoPublicOpinion in Vox Populi (V:CvCultureClasses.cpp:4971-4972); no trend counts as static */
+    @Readonly
+    private fun trendRaise(trend: InfluenceTrend?) = when (trend) {
+        InfluenceTrend.Rising -> 0
+        InfluenceTrend.Falling -> 2
+        else -> 1
+    }
+
+    /**
+     * The pressure of DoPublicOpinion in Vox Populi for an ideology [branch] that few follow (V:CvCultureClasses.cpp:5029-5038): the civilizations that follow any ideology less those that follow
+     * [branch], plus 1, divided by the number of ideologies. GetNumCivsFollowingAnyIdeology and GetNumCivsFollowingIdeology count every major civilization, alive or not
+     */
+    @Readonly
+    private fun fewFollowersPressure(branch: PolicyBranch): Int {
+        val ideologies = civ.gameInfo.ruleset.policyBranches.values.count { it.isIdeology }
+        val majors = civ.gameInfo.civilizations.filter { it.isMajorCiv }
+        val followingAny = majors.count { it.getIdeology() != null }
+        val followingBranch = majors.count { it.getIdeology() == branch }
+        return (followingAny - followingBranch + 1) / ideologies
+    }
+
+    /**
+     * The pressure of DoPublicOpinion in Vox Populi for an ideology just chosen (V:CvCultureClasses.cpp:5052-5068): the turns since the first ideology was chosen, or since the last change,
+     * taken from 30 times the speed's unit cost percent, in tens rounded up, nothing when that is not more than 0
+     */
+    @Readonly
+    private fun recentAdoptionPressure(): Int {
+        val since = civ.gameInfo.turns - (if (turnIdeologySwitch == -1) turnIdeologyAdopted else turnIdeologySwitch)
+        val turnLag = 30 * (civ.gameInfo.speed.productionCostModifier * 100).roundToInt() / 100
+        return maxOf(0, ceil((turnLag - since) / 10.0).toInt())
+    }
+
+    /** The preferred ideology of DoPublicOpinion in Vox Populi (V:CvCultureClasses.cpp:5087-5107): of the others, the first in the order of the ruleset that presses most */
+    @Readonly
+    private fun choosePreferredLikeVp(own: PolicyBranch, pressure: Counter<String>): PolicyBranch {
+        val others = civ.gameInfo.ruleset.policyBranches.values.filter { it.isIdeology && it != own }
+        return others.first { branch -> others.none { pressure[it.name] > pressure[branch.name] } }
+    }
+
+    /**
+     * The biggest influence of DoPublicOpinion in Vox Populi (V:CvCultureClasses.cpp:5136-5153): of the living majors that follow [preferred], the first whose level on us is the most above ours,
+     * the levels as they are (no trends, unmet is below Unknown); never the World Congress
+     */
+    @Readonly
+    private fun biggestInfluenceLikeVp(preferred: PolicyBranch): String? {
+        var greatest = 0
+        var biggest: String? = null
+        for (other in civ.gameInfo.civilizations) {
+            if (other == civ || !other.isMajorCiv || other.isDefeated() || other.getIdeology() != preferred) continue
+            val dominance = (other.culture.getInfluenceLevel(civ)?.ordinal ?: -1) - (civ.culture.getInfluenceLevel(other)?.ordinal ?: -1)
+            if (dominance > greatest) {
+                greatest = dominance
+                biggest = other.civID
+            }
+        }
+        return biggest
+    }
+
+    /**
+     * CvPlayerCulture::ComputePublicOpinionUnhappiness of Vox Populi (V:CvCultureClasses.cpp:5480-5494): per city 1 + 0.2 for each point of [dissatisfaction] (1 to 10),
+     * or 1 for every 10 - [dissatisfaction] citizens (1 to 100), whichever is more, in floating point and cut to a whole number
+     */
+    @Readonly
+    private fun unhappinessLikeVp(dissatisfaction: Int): Int {
+        if (dissatisfaction == 0) return 0
+        val perCity = (1f + dissatisfaction * 0.2f).coerceIn(1f, 10f)
+        val citizensPerUnhappiness = (10f + dissatisfaction * -1f).coerceIn(1f, 100f)
+        return maxOf(civ.cities.size * perCity, civ.cities.sumOf { it.population.population } / citizensPerUnhappiness).toInt()
     }
 
     /** CvPlayerCulture::ComputePublicOpinionUnhappiness: per city, or per so many citizens, whichever is more */
@@ -173,11 +273,14 @@ class PublicOpinion : IsPartOfGameInfoSerialization {
      * by the pressure on us now (the ideology AI weighs it before choosing one).
      */
     fun hypotheticalUnhappiness(ideology: PolicyBranch): Int {
-        val (total, _) = getPressureOnUs()
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        val (total, _) = getPressureOnUs(hypothetical = true)
+        // ComputeHypotheticalPublicOpinionUnhappiness in Vox Populi (V:CvCultureClasses.cpp:5305-5317): the pressure of few followers for the ideology, none for a recent adoption
+        if (constants.publicOpinionLikeVp) total.add(ideology.name, fewFollowersPressure(ideology))
         val againstIt = civ.gameInfo.ruleset.policyBranches.values.filter { it.isIdeology && it != ideology }.sumOf { total[it.name] }
         val hypotheticalDissatisfaction = againstIt - total[ideology.name]
         if (hypotheticalDissatisfaction <= 0) return 0
-        val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (constants.publicOpinionLikeVp) return unhappinessLikeVp(hypotheticalDissatisfaction)
         return unhappinessOf(PublicOpinionType.forDissatisfaction(hypotheticalDissatisfaction,
             constants.publicOpinionCivilResistance, constants.publicOpinionRevolutionaryWave))
     }

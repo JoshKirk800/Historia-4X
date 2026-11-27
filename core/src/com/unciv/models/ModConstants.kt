@@ -333,12 +333,19 @@ class ModConstants {
      *  the difficulty's modifier. false: the supply is not reduced. Staged: one of the consumers of the war weariness percent, each its own switch */
     var unitSupplyWarWearinessLikeVp = false
 
+    /** VP 5.4.8 CvPlayer::GetUnitCostIncreaseFromWarWeariness, read in CvCity::GetPurchaseCost and GetFaithPurchaseCost (V:CvPlayer.cpp:37106-37109, CvCity.cpp:11874-11883, 12175-12184). true (with
+     *  [warWearinessLikeVp]): the gold and faith price of a combat unit (strength, ranged strength or a nuclear weapon) rises by [WarWearinessConstants.unitCostPercent] percent of its owner's highest
+     *  war weariness percent ([WarDamageAi.highestWarWearinessPercent]). false: the price does not change. Staged like [unitSupplyWarWearinessLikeVp]: its own switch, no ruleset row flips it */
+    var unitCostWarWearinessLikeVp = false
+
     /** The defines of the war weariness (DEF-VP `(2) Vox Populi/Database Changes/DefineChanges.sql`; the same in `ref/db/vp.sqlite` `Defines`) */
     data class WarWearinessConstants(
         /** `WAR_WEARINESS_MINIMUM_TURNS`: a war must be this many turns old before it adds weariness */
         val minimumTurns: Int = 10,
         /** `UNIT_SUPPLY_WAR_WEARINESS_PERCENT_REDUCTION`: percent of the weariness percent that a major's unit supply loses (range 0-100) */
         val supplyReductionPercent: Int = 34,
+        /** `UNIT_COST_WAR_WEARINESS_PERCENT_INCREASE`: percent of the weariness percent that the gold and faith price of a combat unit rises by (0 or more) */
+        val unitCostPercent: Int = 75,
     )
 
     /**

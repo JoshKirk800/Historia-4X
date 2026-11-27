@@ -535,6 +535,9 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
     /** Has a MapUnit implementation that does not ignore conditionals, which should be usually used */
     @Readonly private fun isNuclearWeapon() = hasUnique(UniqueType.NuclearWeapon, GameContext.IgnoreConditionals)
 
+    /** The `bCombat` of CvCity::GetPurchaseCost and GetFaithPurchaseCost (V:CvCity.cpp:11871, 12172): strength, ranged strength or a nuclear weapon */
+    @Readonly fun isCombatForVp() = strength > 0 || rangedStrength > 0 || isNuclearWeapon()
+
     /** Returns resource requirements from both uniques and requiredResource field */
     override fun getResourceRequirementsPerTurn(state: GameContext?): Counter<String> {
         val resourceRequirements = Counter<String>()

@@ -539,6 +539,47 @@ enum class Countables(
             return city.population.population - city.population.getNumberOfSpecialists()
         }
     },
+    MajorityFollowersInCity("Followers of the majority religion in this city", shortDocumentation = "The followers the majority religion of the city has in it") {
+        override val documentationStrings = listOf(
+            "The original's `Belief_YieldPerXFollowersLocal`: a follower belief adds the yield once for every so many followers of the majority religion of the city, " +
+                "rounded down (`CvReligionBeliefs::GetLocalFollowerYield`, V:CvBeliefClasses.cpp:4878-4900): `[+1 Food] [in cities following this religion] <for every [2] [Followers of the majority religion in this city]>`. 0 without a majority."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val city = gameContext.city ?: return null
+            val majority = city.religion.getMajorityReligionName() ?: return 0
+            return city.religion.getFollowersOf(majority)
+        }
+    },
+    MajorityFollowersInOwnerCities("Followers of the majority religion of this city in its owner's cities",
+        shortDocumentation = "The followers the majority religion of the city has in all cities of the city's owner") {
+        override val documentationStrings = listOf(
+            "The original's `Belief_YieldPerXFollowers`: a pantheon adds a hundredth of the yield for every hundredth of the amount of followers it has in the owner's cities " +
+                "(`CvCity::UpdateSpecialReligionYields`, V:CvCity.cpp:22427-22431, `CvGameReligions::GetNumFollowers` with the owner), " +
+                "a fractional stat: `[+0.2 Gold] [in cities following this religion] <for every [Followers of the majority religion of this city in its owner's cities]>`. 0 without a majority."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val city = gameContext.city ?: return null
+            val majority = city.religion.getMajorityReligionName() ?: return 0
+            return city.civ.cities.sumOf { it.religion.getFollowersOf(majority) }
+        }
+    },
+    PantheonFoundersUpTo("Civilizations that founded a pantheon or religion up to [positiveAmount]",
+        shortDocumentation = "The major civilizations, defeated ones included, that founded a pantheon or a religion, at most the amount") {
+        override val documentationStrings = listOf(
+            "The original's `CvGameReligions::GetNumPantheonsCreated` (V:CvReligionClasses.cpp:2031-2049) counts each major civilization once that founded a pantheon or a religion; " +
+                "`Belief_YieldFromKnownPantheons` adds the yield for each, at most 8 (`CvCity::UpdateSpecialReligionYields`, V:CvCity.cpp:22352-22364): " +
+                "`[+0.5 Food] [in cities following this religion] <for every [Civilizations that founded a pantheon or religion up to [8]]>`."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val cap = parameterText.getPlaceholderParameters()[0].toIntOrNull() ?: return null
+            val gameInfo = gameContext.gameInfo ?: return null
+            return gameInfo.religions.values.map { it.foundingCivName }.distinct()
+                .count { gameInfo.getCivilization(it).isMajorCiv }.coerceAtMost(cap)
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.PositiveNumber.getTranslatedErrorSeverity(parameterText, ruleset)
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
+    },
     GoldenAgesUpTo("Golden Ages up to [positiveAmount]", shortDocumentation = "The number of Golden Ages the civilization has had, at most the amount") {
         override val documentationStrings = listOf(
             "The original's `YieldCap` of `Trait_ResourceYieldChangesFromGoldenAge`: the yield of the tile is the yield times the golden ages had, at most the cap (`CvPlot::calculateYield`, " +

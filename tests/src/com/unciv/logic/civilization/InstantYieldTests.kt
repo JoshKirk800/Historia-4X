@@ -351,6 +351,31 @@ class InstantYieldTests {
             events().first().second))
     }
 
+    /** Growth by 3 citizens in the capital: the triggering amount 3 */
+    private val growthByThree = { InstantYields.fire(UniqueType.TriggerUponPopulationGrowth, civ, capital, 3, GameContext(capital)) }
+
+    @Test
+    fun `with instantYieldsCutTotalLikeVp the multiplied amount is cut once, then multiplied by the era`() {
+        useInstantYieldPercent(0.75f)
+        game.ruleset.modOptions.constants.instantYieldsCutTotalLikeVp = true
+        setEra(2)
+
+        // 2 x 3 x 75 / 100 = 4, cut off once, not 1 for each of the 3
+        assertEquals(4, goldFrom("Gain [2] [Gold] <upon population growth> <in this city> <(modified by game speed)> <for every [Triggering amount]>", growthByThree))
+        // the era comes after the cut: 4 x 2
+        assertEquals(8, goldFrom("Gain [2] [Gold] <upon population growth> <in this city> <(modified by game speed)> <for every [Triggering amount]> <for every [Era scaler]>",
+            growthByThree))
+        // without the speed modifier there is nothing to cut
+        assertEquals(6, goldFrom("Gain [2] [Gold] <upon population growth> <in this city> <for every [Triggering amount]>", growthByThree))
+    }
+
+    @Test
+    fun `without instantYieldsCutTotalLikeVp each copy is cut by itself`() {
+        useInstantYieldPercent(0.75f)
+
+        assertEquals(3, goldFrom("Gain [2] [Gold] <upon population growth> <in this city> <(modified by game speed)> <for every [Triggering amount]>", growthByThree))
+    }
+
     @Test
     fun `an event's yield is not multiplied by the era unless its unique says so`() {
         setEra(2)

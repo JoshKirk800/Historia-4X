@@ -75,6 +75,8 @@ enum class UniqueType(
         docDescription = "As `[relativeAmount]% Tourism [cityFilter]`, but a civilization with the building does not get this part of the tourism"),
     GreatWorksTourismPercent("[relativeAmount]% Tourism from Great Works [cityFilter]", UniqueTarget.Global,
         docDescription = "The tourism that the Great Works of the city make, which is `greatWorkBaseTourism` in ModConstants for each, is increased by the sum of these. Theming bonuses are not included"),
+    TourismFromGreatWorks("[amount] Tourism from each Great Work [cityFilter]", UniqueTarget.Global,
+        docDescription = "Added to `greatWorkBaseTourism` of ModConstants for each Great Work of the matching cities, before the `% Tourism from Great Works`"),
     LandmarksTourismPercent("[positiveAmount]% of the Culture from wonders, natural wonders and improved tiles becomes Tourism [cityFilter]", UniqueTarget.Global,
         docDescription = "Counts the culture of the world wonders of the city, and of its worked natural wonder and improved tiles"),
     TourismTowardsPercent("[relativeAmount]% Tourism towards civilizations with [tourismRelation]", UniqueTarget.Global,

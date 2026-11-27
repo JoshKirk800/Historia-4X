@@ -21,6 +21,7 @@ import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -727,6 +728,36 @@ class TourismTests {
         own.setOwningCity(cityA)
         assertNull(tourAction(musician(null, own)))
         assertNull(tourAction(musician(null, game.tileMap[0, -6])))
+    }
+
+    @Test
+    fun `like Vox Populi there is no concert tour where we are Influential, up to Popular there is`() {
+        game.ruleset.modOptions.constants.concertTourLimitsLikeVp = true
+        val foreign = civB.cities.first().getCenterTile().neighbors.first()
+        val unit = musician(civB.cities.first(), foreign)
+        civB.totalCultureForContests = 1000
+        civA.culture.addInfluence(civB, 999)
+        assertEquals(InfluenceLevel.Popular, civA.culture.getInfluenceLevel(civB))
+        assertNotNull(tourAction(unit))
+
+        civA.culture.addInfluence(civB, 1)
+        assertNull(tourAction(unit))
+        assertTrue(unit in civA.units.getCivUnits())
+
+        game.ruleset.modOptions.constants.concertTourLimitsLikeVp = false
+        assertNotNull(tourAction(unit))
+    }
+
+    @Test
+    fun `like Vox Populi there is no concert tour in the lands of an enemy`() {
+        game.ruleset.modOptions.constants.concertTourLimitsLikeVp = true
+        val foreign = civB.cities.first().getCenterTile().neighbors.first()
+        val unit = musician(civB.cities.first(), foreign)
+        civA.getDiplomacyManager(civB)!!.declareWar()
+        assertNull(tourAction(unit))
+
+        game.ruleset.modOptions.constants.concertTourLimitsLikeVp = false
+        assertNotNull(tourAction(unit))
     }
 
     /** A third civilization we have met that is less happy than us, and a unique of ours that gives 20% more tourism towards such */

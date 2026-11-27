@@ -26,6 +26,8 @@ enum class HistoricEvent(val label: String, val divisor: Int, val turns: UniqueT
     TradeCityState("trade route to a City-State", 5, UniqueType.CityStateTradeRouteTourismTurns, Counted.WithTurns),
     /** A city adopted the religion for the first time (CvCityReligions::CityConvertsReligion, V:CvReligionClasses.cpp:5653-5659) */
     ReligionSpread("religion spread", 15, UniqueType.ReligionSpreadTourismTurns, Counted.WithTourism),
+    /** What to do with a dig chosen (CvPlayerCulture::DoArchaeologyChoice, V:CvCultureClasses.cpp:3105-3109), see [com.unciv.logic.map.tile.ArchaeologyFunctions.execute] */
+    Dig("archaeological dig", 10, UniqueType.ArchaeologicalDigTourismTurns, Counted.WithTurns),
     ;
 
     /** When an event counts: always, when its [turns] are positive, or when the tourism it makes is */

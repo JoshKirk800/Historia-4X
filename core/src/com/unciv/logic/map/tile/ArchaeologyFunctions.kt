@@ -8,6 +8,7 @@ import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.logic.city.GreatWorkFunctions
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.HistoricEvent
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.ruleset.ArtifactClasses
@@ -290,7 +291,9 @@ object ArchaeologyFunctions {
         when (choice) {
             ArchaeologyChoice.Landmark -> {
                 tile.setImprovement(constants.landmarkImprovement, civ, unit)
-                if (owner?.isCityState == true)
+                if (owner?.isCityState == true && constants.archaeologyChoicesLikeVp)
+                    addLandmarkInfluence(civ, owner, tile)
+                else if (owner?.isCityState == true)
                     owner.getDiplomacyManager(civ)?.addInfluence(constants.landmarkInfluenceWithCityStates.toFloat())
                 else if (owner != null && owner != civ && owner.isMajorCiv && owner.isAI())
                     // CvPlayerCulture: ChangeNumLandmarksBuiltForMe (the opinion is CvDiplomacyAI::GetLandmarksBuiltForMeScore)
@@ -307,14 +310,52 @@ object ArchaeologyFunctions {
                 tile.removeImprovement()
             }
             ArchaeologyChoice.CultureBoost -> {
-                civ.policies.addCulture(civ.policies.getCultureFromGreatWriter())
+                val culture = civ.policies.getCultureFromGreatWriter()
+                civ.policies.addCulture(culture)
+                // CvPlayerCulture::DoArchaeologyChoice: in our own lands the city whose tile it is gets it towards its borders as well
+                if (constants.archaeologyChoicesLikeVp && owner == civ) tile.getCity()?.let { it.expansion.cultureStored += culture }
                 tile.removeImprovement()
                 recordForeignExtraction(civ, owner)
             }
         }
         unit?.destroy()
+        // CvPlayerCulture::DoArchaeologyChoice (V:CvCultureClasses.cpp:3105-3138): the dig is a historic event, and the record goes but under a Landmark,
+        // whose yields depend on it
+        if (constants.historicEventDispatchLikeVp) civ.culture.onHistoricEvent(HistoricEvent.Dig)
+        if (constants.archaeologyChoicesLikeVp && choice != ArchaeologyChoice.Landmark) tile.archaeologyRecord = null
         return true
     }
+
+    /**
+     *  A Landmark built in the land of [cityState] (CvPlayerCulture::DoArchaeologyChoice, V:CvCultureClasses.cpp:2875-2902): the tile gives [civ] resting influence
+     *  ([getLandmarkRestingInfluence]); the influence rises to the new resting point if it was below, and then by `landmarkInfluenceWithCityStates` times the era
+     */
+    private fun addLandmarkInfluence(civ: Civilization, cityState: Civilization, tile: Tile) {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        tile.landmarkCreditCityState = cityState.civID
+        val diplomacy = cityState.getDiplomacyManager(civ) ?: return
+        val extra = (constants.landmarkInfluenceWithCityStates * maxOf(civ.getEraNumber(), 1)).toFloat()
+        val restingPoint = diplomacy.getCityStateInfluenceRestingPoint()
+        if (constants.landmarkRestingInfluencePerEra > 0 && restingPoint > diplomacy.influence) diplomacy.setInfluence(restingPoint + extra)
+        else diplomacy.addInfluence(extra)
+    }
+
+    /**
+     *  The resting influence [cityState] has with [major] for the Landmarks [major] built in its land while it owned it and still owns
+     *  (CvMinorCivAI::GetFriendshipAnchorWithMajor, V:CvMinorCivAI.cpp:10709-10737): `landmarkRestingInfluencePerEra` times the era of [major] for each
+     */
+    @Readonly
+    fun getLandmarkRestingInfluence(cityState: Civilization, major: Civilization): Int {
+        val constants = cityState.gameInfo.ruleset.modOptions.constants
+        if (!constants.archaeologyChoicesLikeVp || constants.landmarkRestingInfluencePerEra <= 0) return 0
+        val landmarks = cityState.cities.sumOf { city ->
+            city.getTiles().count {
+                it.improvement == constants.landmarkImprovement && it.improvementBuilder == major.civID && it.landmarkCreditCityState == cityState.civID
+            }
+        }
+        return landmarks * maxOf(major.getEraNumber(), 1) * constants.landmarkRestingInfluencePerEra
+    }
+
     /** CvPlayerCulture::DoArchaeologyChoice: artifacts, writings and culture boosts all cost 10
      *  negative archaeology points on another major civilization's land; a Landmark does not. */
     private fun recordForeignExtraction(civ: Civilization, owner: Civilization?) {

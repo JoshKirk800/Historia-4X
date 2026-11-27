@@ -13,6 +13,7 @@ import com.unciv.logic.automation.diplomacy.DiplomacyEvents
 import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.PromiseAi
 import com.unciv.logic.automation.diplomacy.WarFace
+import com.unciv.logic.map.tile.ArchaeologyFunctions
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.logic.trade.Trade
 import com.unciv.logic.trade.TradeLogic
@@ -525,6 +526,8 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
                 if (founderReligionName != null && founderReligionName == civInfo.getCapital()!!.religion.getMajorityReligionName())
                     restingPoint += unique.params[0].toInt()
             }
+
+        restingPoint += ArchaeologyFunctions.getLandmarkRestingInfluence(civInfo, otherCiv)
 
         if (vp) {
             // CvMinorCivAI::GetFriendshipAnchorWithMajor (V:CvMinorCivAI.cpp:10679-10704)

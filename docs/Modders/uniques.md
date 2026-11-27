@@ -5893,6 +5893,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: TriggerCondition
 
+??? example  "&lt;upon winning a war&gt;"
+	With the ModConstants `warVictoryLikeVp` (the original's DoWarVictoryBonuses): a peace deal with a war score of at least 25 that the other side surrenders, a peace with a third civilization (not a City-State) brokered with such a score, every major civilization at war with a major one that is eliminated, the major civilization that eliminates a City-State
+
+	Applicable to: TriggerCondition
+
 ??? example  "&lt;upon declaring friendship&gt;"
 	Applicable to: TriggerCondition
 
@@ -6328,7 +6333,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Triggerable, Terrain, Speed, ModOptions, MetaModifier
 
 
-*[accomplishment]: One of `Ancient policy branch`, `Medieval policy branch`, `Industrial policy branch`, `Ideology`, `Pantheon belief`, `Founder belief`, `Follower belief`, `Enhancer belief`, `Reformation belief`, `Eliminated civilization`, `Historic event`.
+*[accomplishment]: One of `Ancient policy branch`, `Medieval policy branch`, `Industrial policy branch`, `Ideology`, `Pantheon belief`, `Founder belief`, `Follower belief`, `Enhancer belief`, `Reformation belief`, `Eliminated civilization`, `Historic event`, `War won`.
 *[amount]: This indicates a whole number, possibly with a + or - sign, such as `2`, `+13`, or `-3`.
 *[baseTerrain]: The name of any terrain that is a base terrain according to the json file.
 *[belief]: The name of any belief.

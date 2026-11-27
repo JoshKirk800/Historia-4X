@@ -73,4 +73,18 @@ class PolicyCountRequirementTests {
         repeat(2) { withPolicy.policies.adopt(game.createPolicyInBranch(), true) }
         assertFalse("2 of 2", rejectedFor())
     }
+
+    @Test
+    fun `Prophecy lowers by one the policies of a wonder that needs a technology, not of one that needs none`() {
+        val prophecy = game.addCiv("Wonders that need a technology need 1 fewer adopted Policy")
+        game.addCity(prophecy, game.getTile(HexCoord(4, 0)))
+        val prophecyCity = prophecy.getCapital()!!
+        val withTech = game.createBuilding("Requires [2] adopted Policies").apply { requiredTech = "Pottery" }
+        val withoutTech = game.createBuilding("Requires [2] adopted Policies")
+        fun rejectedFor(building: Building) = building.getRejectionReasons(prophecyCity.cityConstructions).any { it.type == RejectionReasonType.RequiresPolicyCount }
+        prophecy.policies.adopt(game.createPolicyInBranch(), true)
+
+        assertFalse("1 of 2 - 1", rejectedFor(withTech))
+        assertTrue("1 of 2", rejectedFor(withoutTech))
+    }
 }

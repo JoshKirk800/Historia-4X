@@ -181,6 +181,13 @@ class CityGreatWorks : IsPartOfGameInfoSerialization {
     @Readonly
     fun getThemingBonus(building: Building, works: List<GreatWorkInstance>): Int {
         val entry = getThemingBonusEntry(building, works) ?: return 0
+        if (city.civ.gameInfo.ruleset.modOptions.constants.greatWorkThemingLikeVp) {
+            // Vox Populi adds up the percentages and truncates once (CvCityCulture::GetThemingBonusMultiplierTimes10000, V:CvCultureClasses.cpp:6170-6176)
+            var percent = 100
+            for (unique in city.getMatchingUniques(UniqueType.ThemingBonusPercent))
+                if (city.matchesFilter(unique.params[1])) percent += unique.params[0].toInt()
+            return entry.bonus * percent / 100
+        }
         var bonus = entry.bonus
         for (unique in city.getMatchingUniques(UniqueType.ThemingBonusPercent)) {
             if (!city.matchesFilter(unique.params[1])) continue

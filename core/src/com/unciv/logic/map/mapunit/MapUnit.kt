@@ -1260,11 +1260,23 @@ class MapUnit : IsPartOfGameInfoSerialization {
 
     /** Destroys the unit and gives stats if its a great person */
     fun consume() {
+        grantSupplyWhenExpended()
         civ.forEachTriggeredUnique(UniqueType.TriggerUponExpendingUnit, triggerFilter = { matchesFilter(it.params[0]) }) { unique ->
             UniqueTriggerActivation.triggerUnique(unique, this,
                 triggerNotificationText = "due to expending our [${this.name}]")
         }
         destroy()
+    }
+
+    /**
+     *  CvPlayer::DoGreatPersonExpended (V:CvPlayer.cpp:28895-28899): the sum of the unit's [UniqueType.UnitSupplyWhenExpended] (VP: SupplyCapBoost + MilitaryCapChange) is added to
+     *  the civilization's supply for good, if positive. Only with ModConstants `unitSupplyLikeVp` and `unitSupplyExpendedGreatPeopleLikeVp`.
+     */
+    private fun grantSupplyWhenExpended() {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (!constants.unitSupplyLikeVp || !constants.unitSupplyExpendedGreatPeopleLikeVp) return
+        val supply = baseUnit.supplyWhenExpended
+        if (supply > 0) civ.unitSupplyFromExpendedGreatPeople += supply
     }
 
     fun removeFromTile() {

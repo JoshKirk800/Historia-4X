@@ -3436,6 +3436,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Unit
 
+??? example  "Grants [amount] Unit Supply when expended"
+	Expending this unit (consuming it: a Citadel, a Great Person's action) adds that many units to the civilization's supply for good, as the original's `MilitaryCapChange` of a Great General's free promotion does. Several add up. Conditionals are not evaluated. Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyExpendedGreatPeopleLikeVp`
+
+	Example: "Grants [3] Unit Supply when expended"
+
+	Applicable to: Unit
+
 ??? example  "Consumes [amount] [resource]"
 	Example: "Consumes [3] [Iron]"
 

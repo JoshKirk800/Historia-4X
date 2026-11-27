@@ -237,6 +237,9 @@
         "unitSupplyPerPopulation": 0.2,
         // CvCity::canTrain V:CvCity.cpp:8696-8703: an AI city trains and buys no combat unit that uses supply while GetNumUnitsToSupply() >= GetNumUnitsSupplied() (paired 10-seed study: phaseE/m6-supply-deep.md section 13)
         "unitSupplyAiAtLimitLikeVp": true,
+        // CvPlayer::DoGreatPersonExpended V:CvPlayer.cpp:28895-28899, read at :16995-16997: expending a Great General, Great Admiral or Khan adds 1 supply for good (MILITARY_TRADITION,
+        // MilitaryCapChange 1). OFF: the AI expends almost no Great General (4 Citadels in 10 games to turn 300), so a study cannot show it; a human can.
+        "unitSupplyExpendedGreatPeopleLikeVp": false,
         // The promotion and unit columns of Vox Populi: ExtraFlankPower, IgnoreTerrainCostIn / HalfMove / ExtraMove, GainsXPFromScouting (BALANCE_SCOUT_XP_*: 12 and 10, the defaults),
         // XPFromPillaging, LostOnGifting, MinorCivGift / NoMinorCivGift
         "flankPowerLikeVp": true,

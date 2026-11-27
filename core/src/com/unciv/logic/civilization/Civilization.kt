@@ -292,6 +292,11 @@ class Civilization : IsPartOfGameInfoSerialization {
     /** CvPlayer::m_iUprisingCounter, used with uprisingCounterLikeCivV: the turns of very high unhappiness until rebels spawn, 0 = not seeded yet */
     var uprisingCounter = 0
 
+    /** CvPlayer::m_iUnitSupplyFromExpendedGP: the supply this civilization has gained for good by expending units with `Grants [amount] Unit Supply when expended`
+     *  ([MapUnit.consume]), added to the supply in [com.unciv.logic.civilization.transients.CivInfoStatsForNextTurn.getUnitSupplyBreakdown]; only with
+     *  [com.unciv.models.ModConstants.unitSupplyExpendedGreatPeopleLikeVp] */
+    var unitSupplyFromExpendedGreatPeople = 0
+
     /** All the culture the civilization has made in the whole game, which is what its influence on others is measured against. Counted in [PolicyManager.addCultureTimes100] */
     var totalCultureForContests = 0
     /** With `ModConstants.cultureHundredthsLikeVp`: the hundredths of [totalCultureForContests] below a whole one (CvPlayer::m_iJONSCultureEverGeneratedTimes100) */

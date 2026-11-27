@@ -1358,6 +1358,10 @@ class ModConstants {
     /** Vox Populi's growth from influence (CvCity::UpdateGrowthFromTourism): a city grows 5% faster for each level of our influence over the owner of
      *  each major civilization's city its international trade routes go to */
     var influenceTradeGrowthLikeVp = false
+    /** Vox Populi's public opinion (CvPlayerCulture::DoPublicOpinion, ComputePublicOpinionUnhappiness): influence counts from Popular on, raised by the trends;
+     *  an ideology few follow and one just chosen get pressure of their own; the first of the strongest others is preferred; the unhappiness grows with
+     *  the dissatisfaction itself. Its limits of the types are 4 and 7 in [publicOpinionCivilResistance] and [publicOpinionRevolutionaryWave] */
+    var publicOpinionLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

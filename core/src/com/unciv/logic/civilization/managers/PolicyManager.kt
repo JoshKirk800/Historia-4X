@@ -304,6 +304,8 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         // CvPlayerPolicies::SetPolicyBranchUnlocked (V:CvPolicyClasses.cpp:5380-5391): the first ideology ever chosen
         if (policy is PolicyBranch && policy.isIdeology && civInfo.accomplishments[Accomplishment.Ideology.name] == 0)
             civInfo.completeAccomplishment(Accomplishment.Ideology)
+        if (policy is PolicyBranch && policy.isIdeology && civInfo.culture.publicOpinion.turnIdeologyAdopted == -1)
+            civInfo.culture.publicOpinion.turnIdeologyAdopted = civInfo.gameInfo.turns
 
         if (!branchCompletion) {
             val branch = policy.branch
@@ -406,8 +408,10 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         numberOfAdoptedPolicies += freeTenets - freeBefore
 
         civInfo.addFlag(CivFlags.Anarchy.name, constants.ideologyAnarchyTurns)
-        civInfo.culture.publicOpinion.turnIdeologySwitch = civInfo.gameInfo.turns
+        // CvPlayerPolicies::DoSwitchIdeologies (V:CvPolicyClasses.cpp:5620-5621) works out the opinion before the turn of the change is set, so that the
+        // pressure for an ideology just chosen (publicOpinionLikeVp) only comes the next turn
         civInfo.culture.publicOpinion.update()
+        civInfo.culture.publicOpinion.turnIdeologySwitch = civInfo.gameInfo.turns
         for (city in civInfo.cities) city.cityStats.update()
         shouldOpenPolicyPicker = freeTenets > 0
         for (otherCiv in civInfo.gameInfo.civilizations.filter { it.isMajorCiv && !it.isDefeated() && it != civInfo })

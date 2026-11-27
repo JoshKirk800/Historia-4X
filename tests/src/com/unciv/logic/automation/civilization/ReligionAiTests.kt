@@ -20,6 +20,8 @@ import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.testing.GdxTestRunner
+import com.unciv.models.stats.Stat
+import com.unciv.models.stats.Stats
 import com.unciv.testing.TestGame
 import com.unciv.view.GameView
 import org.junit.Assert.assertEquals
@@ -716,6 +718,234 @@ class ReligionAiTests {
         assertTrue("a pact partner with a religion", TheftAi.isBadTheftTarget(civ, founder, TheftType.Conversion))
         holy.religion.religionThisIsTheHolyCityOf = null
         assertTrue("CvPlayerReligions::OwnsReligion", !TheftAi.isBadTheftTarget(civ, founder, TheftType.Conversion))
+    }
+    //endregion
+
+    //region DoFaithPurchases like Vox Populi
+
+    private fun count(civ: Civilization, unit: String) = civ.units.getCivUnits().count { it.name == unit }
+
+    /** Unciv buys no civilian in a city whose center holds one, so the bought units walk out between purchases */
+    private fun leaveCapital(civ: Civilization) {
+        for ((index, unit) in civ.getCapital()!!.getCenterTile().getUnits().toList().withIndex()) {
+            unit.removeFromTile()
+            unit.putInTile(tile(-2, -2 - civ.units.getCivUnits().count() - index))
+        }
+    }
+
+    @Test
+    fun `with Vox Populi an enhanced religion buys two inquisitors before a missionary for a heretic city of ours, and saves when it cannot pay`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv()
+        religion.addBelief(game.ruleset.beliefs.values.first { it.type == BeliefType.Enhancer })
+        val heretics = foundReligion(game.addCiv())
+        val city = game.addCity(civ, tile(3, 0))
+        follow(city, heretics)
+        val inquisitor = ReligionAutomation.inquisitorUnit(civ)!!.name
+        val missionary = ReligionAutomation.missionaryUnit(civ)!!.name
+
+        assertTrue(!ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        leaveCapital(civ)
+        assertTrue(!ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        leaveCapital(civ)
+        assertEquals(2, count(civ, inquisitor))
+        assertEquals(0, count(civ, missionary))
+        assertTrue(!ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        leaveCapital(civ)
+        assertEquals(2, count(civ, inquisitor))
+        assertEquals(1, count(civ, missionary))
+        assertTrue(civ.units.getCivUnits().all { it.religion == religion.name })
+
+        civ.religionManager.storedFaith = 0
+        assertTrue("saving for the next one", ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        assertEquals(1, count(civ, missionary))
+    }
+
+    @Test
+    fun `with Vox Populi too many missionaries make us buy the Great Prophet that enhances our religion`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv("May buy [Great Prophet] units with [Faith] [in all cities]")
+        setState(civ, ReligionState.Religion)
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 0)
+        val prophet = civ.religionManager.getGreatProphetEquivalent()!!.name
+        val limit = game.ruleset.ai.define(AiDefine.RELIGION_MAX_MISSIONARIES) + ReligionAutomation.spreadScore(civ, religion)
+        repeat(limit - 1) {
+            game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(0, 2 + it)).religion = religion.name
+        }
+        val heretics = foundReligion(game.addCiv())
+        game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(-2, -2)).religion = heretics.name
+        assertTrue("no prophet comes soon at no faith a turn", !ReligionAutomation.isProphetGainRateAcceptable(civ))
+        assertTrue(!ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        assertEquals(0, count(civ, prophet))
+
+        game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(0, 1)).religion = religion.name
+        civ.religionManager.storedFaith = 0
+        assertTrue("saving for the prophet", ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        civ.religionManager.storedFaith = 100_000
+        assertTrue(!ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        assertEquals(1, count(civ, prophet))
+    }
+
+    @Test
+    fun `with Vox Populi a prophet is soon enough under 20 turns while two cities follow us, else under 30`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv()
+        val cost = civ.religionManager.faithForNextGreatProphet()
+        civ.stats.statsForNextTurn = Stats(faith = cost / 20f)
+        assertTrue(!ReligionAutomation.isProphetGainRateAcceptable(civ))
+        civ.stats.statsForNextTurn = Stats(faith = cost / 19f)
+        assertTrue(ReligionAutomation.isProphetGainRateAcceptable(civ))
+
+        civ.stats.statsForNextTurn = Stats(faith = cost / 29f)
+        assertTrue(!ReligionAutomation.isProphetGainRateAcceptable(civ))
+        follow(game.addCity(civ, tile(3, 0)), religion)
+        follow(game.addCity(civ, tile(-3, 0)), religion)
+        civ.stats.statsForNextTurn = Stats(faith = cost / 29f) // adding a city updates the stats
+        assertTrue("three cities follow us", ReligionAutomation.isProphetGainRateAcceptable(civ))
+        civ.stats.statsForNextTurn = Stats(faith = cost / 30f)
+        assertTrue(!ReligionAutomation.isProphetGainRateAcceptable(civ))
+    }
+
+    @Test
+    fun `with Vox Populi a prophet is soon enough under 25 turns for a religion with a faith building`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv()
+        religion.addBelief("Pagodas") // before the first read of the religion's lazy faith buildings
+        follow(game.addCity(civ, tile(3, 0)), religion)
+        follow(game.addCity(civ, tile(-3, 0)), religion)
+        val cost = civ.religionManager.faithForNextGreatProphet()
+        civ.stats.statsForNextTurn = Stats(faith = cost / 25f)
+        assertTrue("25 turns with a faith building", !ReligionAutomation.isProphetGainRateAcceptable(civ))
+        civ.stats.statsForNextTurn = Stats(faith = cost / 24f)
+        assertTrue(ReligionAutomation.isProphetGainRateAcceptable(civ))
+    }
+
+    @Test
+    fun `with Vox Populi the spread score counts the yields of spreading, conversion and following cities`() {
+        val (civ, religion) = foundedCiv()
+        assertEquals(0, ReligionAutomation.spreadScore(civ, religion))
+        religion.addBelief(game.createBelief(BeliefType.Founder, "Gain [10] [Gold] <upon spreading a religion to a city>").name)
+        religion.addBelief(game.createBelief(BeliefType.Founder, "Gain [10] [Science] <upon spreading a religion to a city of another civilization>").name)
+        religion.addBelief(game.createBelief(BeliefType.Follower, "Gain [1] [Faith] <upon a city adopting our religion for the first time>").name)
+        assertEquals(3, ReligionAutomation.spreadScore(civ, religion))
+        religion.addBelief(game.createBelief(BeliefType.Follower, "[+1 Gold, +2 Culture] [in cities following this religion]").name)
+        assertEquals(5, ReligionAutomation.spreadScore(civ, religion))
+        religion.addBelief(game.createBelief(BeliefType.Follower,
+            "[+0.25 Faith] [in cities following this religion] <for every [Followers of the majority religion of this city in its owner's cities]>").name)
+        religion.addBelief(game.createBelief(BeliefType.Follower,
+            "[+1 Faith] [in cities following this religion] <for every [Followers of the majority religion in this city]>").name)
+        assertEquals("not for the local followers", 6, ReligionAutomation.spreadScore(civ, religion))
+    }
+
+    @Test
+    fun `with Vox Populi a conversion target is near, not at war, of a civilization without a religion or not mostly of another one`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv()
+        val pagan = game.addCiv()
+        val paganCity = cityWith(pagan, 0, 4, 4)
+        civ.diplomacyFunctions.makeCivilizationsMeet(pagan)
+        assertTrue(ReligionAutomation.haveNearbyConversionTargetLikeVp(civ, religion, canIncludeReligionStarter = false, heathensOnly = true))
+
+        val heretics = foundReligion(game.addCiv())
+        paganCity.religion.addPressure(heretics.name, 5000)
+        assertTrue("mostly heretics", !ReligionAutomation.haveNearbyConversionTargetLikeVp(civ, religion, canIncludeReligionStarter = true, heathensOnly = true))
+        assertTrue(ReligionAutomation.haveNearbyConversionTargetLikeVp(civ, religion, canIncludeReligionStarter = true, heathensOnly = false))
+        assertTrue("its owner spreads its state religion",
+            !ReligionAutomation.haveNearbyConversionTargetLikeVp(civ, religion, canIncludeReligionStarter = false, heathensOnly = false))
+
+        civ.getDiplomacyManager(pagan)!!.declareWar()
+        assertTrue("at war", !ReligionAutomation.haveNearbyConversionTargetLikeVp(civ, religion, canIncludeReligionStarter = true, heathensOnly = false))
+    }
+
+    @Test
+    fun `with Vox Populi a foreign religion we spread at home gets one missionary at most`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        noMoreReligionsToFound()
+        val civ = game.addCiv()
+        val liked = religionWithFollowerBelief(game.addCiv())
+        liked.addBelief(game.ruleset.beliefs.values.first { it.type == BeliefType.Enhancer })
+        cityWith(civ, 0, 0, 3, liked.name to 5000)
+        cityWith(civ, 3, 0, 3)
+        cityWith(civ, -3, 3, 3)
+        civ.religionManager.storedFaith = 100_000
+        val missionary = ReligionAutomation.missionaryUnit(civ)!!.name
+        assertEquals(liked, ReligionAutomation.religionToSpread(civ, considerForeign = true))
+
+        assertTrue(!ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        assertEquals(1, count(civ, missionary))
+        leaveCapital(civ)
+        assertTrue(!ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        assertEquals(1, count(civ, missionary))
+        assertEquals("no inquisitors for a religion we do not own", 0, count(civ, ReligionAutomation.inquisitorUnit(civ)!!.name))
+    }
+
+    @Test
+    fun `with Vox Populi a religious civilization whose cities all follow it buys missionaries for foreign targets by its religion flavor`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv()
+        religion.addBelief(game.ruleset.beliefs.values.first { it.type == BeliefType.Enhancer })
+        val pagan = game.addCiv()
+        cityWith(pagan, 0, 4, 4)
+        civ.diplomacyFunctions.makeCivilizationsMeet(pagan)
+        val missionary = ReligionAutomation.missionaryUnit(civ)!!.name
+
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 4)
+        assertTrue(!ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        assertEquals(0, count(civ, missionary))
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 5)
+        assertTrue("bought, not saving", !ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        assertEquals("5 with an easy target", 1, count(civ, missionary))
+        leaveCapital(civ)
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 10)
+        assertTrue("the faith stays put at 10", ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        assertEquals(2, count(civ, missionary))
+    }
+
+    @Test
+    fun `with Vox Populi a city where most are of no religion is a target for heathens`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv()
+        val heretics = foundReligion(game.addCiv())
+        val pagan = game.addCiv()
+        val city = cityWith(pagan, 0, 4, 4, heretics.name to 1000, atheism = 3000)
+        civ.diplomacyFunctions.makeCivilizationsMeet(pagan)
+        assertEquals(1, city.religion.getNumberOfFollowers()[heretics.name])
+        assertTrue(ReligionAutomation.haveNearbyConversionTargetLikeVp(civ, religion, canIncludeReligionStarter = true, heathensOnly = true))
+    }
+
+    @Test
+    fun `with Vox Populi an Industrial civilization saves for a Great Person that its faith reaches in fewer turns than 23 - religion flavor`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val civ = game.addCiv("May buy [Great Scientist] units with [Faith] [in all cities]")
+        val capital = game.addCity(civ, tile(0, 0))
+        civ.tech.era = game.ruleset.eras["Industrial era"]!!
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 0)
+        val scientist = ReligionAutomation.getDesiredFaithGreatPerson(civ)!!
+        val cost = scientist.getStatBuyCost(capital, Stat.Faith)!!
+        civ.religionManager.storedFaith = cost - 220
+        civ.stats.statsForNextTurn = Stats(faith = 10f)
+        assertTrue("22 turns", ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        civ.religionManager.storedFaith = cost - 230
+        assertTrue("23 turns", !ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 10)
+        civ.religionManager.storedFaith = cost - 130
+        assertTrue("13 turns are no less than 13", !ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        civ.religionManager.storedFaith = cost - 120
+        assertTrue("12 turns", ReligionAutomation.doFaithPurchasesLikeVp(civ))
+
+        civ.religionManager.storedFaith = cost
+        assertTrue(!ReligionAutomation.doFaithPurchasesLikeVp(civ))
+        assertEquals(1, count(civ, scientist.name))
+    }
+
+    @Test
+    fun `with Vox Populi the turn's faith goes through DoFaithPurchases`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv()
+        religion.addBelief(game.ruleset.beliefs.values.first { it.type == BeliefType.Enhancer })
+        follow(game.addCity(civ, tile(3, 0)), foundReligion(game.addCiv()))
+        ReligionAutomation.spendFaithOnReligion(civ)
+        assertEquals(1, count(civ, ReligionAutomation.inquisitorUnit(civ)!!.name))
     }
     //endregion
 }

@@ -54,7 +54,12 @@ object TheftAi {
         if (other.isCityState) return type == TheftType.CultureBomb && isBadCultureBombOnCityState(civ, other, human)
 
         // Exception for religious conversion: Not a bad target if they haven't created a religion and haven't asked us to stop.
-        if (type == TheftType.Conversion && ReligionAutomation.religionToSpread(other) == null && !askedNotToConvert(civ, other)) return false
+        // With Vox Populi's religion AI, CvDiplomacyAI::IsBadTheftTarget (V:CvDiplomacyAI.cpp:49908) asks whether they own one: founded or conquered
+        if (type == TheftType.Conversion && !askedNotToConvert(civ, other)) {
+            val hasReligion = if (ReligionAutomation.religionAiLikeVp(civ)) other.religionManager.getOwnedReligion() != null
+                else ReligionAutomation.foundedReligion(other) != null
+            if (!hasReligion) return false
+        }
 
         // If any of the below conditions are true, never steal from this player
         if (OpinionAi.isDoFAccepted(civ, other)) return true

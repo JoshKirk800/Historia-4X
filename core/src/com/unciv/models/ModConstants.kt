@@ -1363,7 +1363,8 @@ class ModConstants {
      *  the dissatisfaction itself. Its limits of the types are 4 and 7 in [publicOpinionCivilResistance] and [publicOpinionRevolutionaryWave] */
     var publicOpinionLikeVp = false
     /** Vox Populi's religion and culture AI (CvReligionAI, CvHomelandAI): missionaries and inquisitors pick their cities by VP's scores
-     *  (CvReligionAI::ChooseMissionaryTargetCity, ChooseInquisitorTargetCity), one unit per city a turn, avoiding cities in danger */
+     *  (CvReligionAI::ChooseMissionaryTargetCity, ChooseInquisitorTargetCity), one unit per city a turn, avoiding cities in danger; the religion to
+     *  spread is the state religion, or a liked foreign one at home (CvReligionAI::GetReligionToSpread, GetFavoriteForeignReligion) */
     var religionCultureAiLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100

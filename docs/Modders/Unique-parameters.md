@@ -434,6 +434,9 @@ Allowed values:
 -   `[buildingFilter] Buildings in this city` - The number of matching buildings in the city
     - Example: `Only available <when number of [[Culture] Buildings in this city] is more than [0]>`
     - The original's per-class yields count the buildings of the class in each city (`CvCity::ChangeBaseYieldRateFromBuildings`, `Policy_BuildingClassYieldChanges`, `Building_BuildingClassYieldChanges`): `[+3] Golden Age points per turn [in all cities] <for every [[Museum] Buildings in this city]>`.
+-   `Themed [buildingFilter] Buildings in this city` - The number of matching buildings of the city whose Great Works make one of their themes
+    - Example: `Only available <when number of [Themed [Culture] Buildings in this city] is more than [0]>`
+    - The original's theme yields count them (`CvCityBuildings::GetTotalNumThemedBuildings`, `Building_ThemingYieldBonus`, `Building_YieldChangesPerLocalTheme`): `[+3 Culture] [in this city] <for every [Themed [Sistine Chapel] Buildings in this city]>`.
 -   `[buildingFilter] Buildings by [civFilter] Civilizations`
     - Example: `Only available <when number of [[Culture] Buildings by [City-States] Civilizations] is more than [0]>`
 -   `[populationFilter] in [cityFilter] Cities`

@@ -4,6 +4,7 @@ import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.CivilopediaAction
+import com.unciv.logic.civilization.HistoricEvent
 import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.PopupAlert
@@ -104,6 +105,7 @@ class GoldenAgeManager : IsPartOfGameInfoSerialization {
 
         // INSTANT_YIELD_TYPE_GOLDEN_AGE_START (V:CvPlayer.cpp:25123)
         InstantYields.fire(UniqueType.TriggerUponEnteringGoldenAge, civInfo, null, 0, civInfo.state)
+        if (civInfo.gameInfo.ruleset.modOptions.constants.historicEventDispatchLikeVp) civInfo.culture.onHistoricEvent(HistoricEvent.GoldenAge)
         //Golden Age can happen mid turn with Great Artist effects
         for (city in civInfo.cities)
             city.cityStats.update()

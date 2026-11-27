@@ -1337,6 +1337,9 @@ class ModConstants {
     /** Vox Populi's war victories (CvPlayer::DoWarVictoryBonuses, V:CvPlayer.cpp:18734-18760): the winner of a peace deal its loser surrenders, of a third-party
      *  peace or of an elimination completes `War won`, fires `upon winning a war` and has the historic event of a won war */
     var warVictoryLikeVp = false
+    /** Vox Populi's other historic events (CvPlayer::changeGoldenAgeTurns, CvPlayerTrade::MoveUnits, CvCityReligions::CityConvertsReligion): a golden age,
+     *  a trade route that ends and a city that adopts our religion first give tourism and count, with `historicEventsLikeVp` */
+    var historicEventDispatchLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

@@ -412,14 +412,19 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
 
     /** The route is over: a new trade unit is waiting in the city of origin */
     private fun expire(route: TradeRoute) {
-        removeRoute(route)
-        val origin = route.getOriginCity() ?: return
-        giveUnitBack(route, origin)
+        val origin = route.getOriginCity()
+        if (origin == null) {
+            removeRoute(route)
+            return
+        }
         val destination = route.getDestinationCity()
+        // CvPlayerTrade::MoveUnits: the route ran its course, which is an event of the cities it connected, while the route is still there (V:CvTradeClasses.cpp:2606-2731)
+        InstantYields.tradeRouteCompleted(civ, route, origin, destination)
+        if (destination != null) civ.culture.onTradeRouteEnded(route.isSea, origin, destination)
+        removeRoute(route)
+        giveUnitBack(route, origin)
         civ.addNotification("Our trade route from [${origin.name}] to [${destination?.name}] has ended, and a new [${route.unitName}] awaits in [${origin.name}]",
             origin.location, NotificationCategory.Trade, route.unitName)
-        // CvPlayerTrade::MoveUnits: the route ran its course, which is an event of the cities it connected (V:CvTradeClasses.cpp:2606-2650)
-        InstantYields.tradeRouteCompleted(civ, route, origin, destination)
     }
 
     private fun giveUnitBack(route: TradeRoute, origin: City) {

@@ -2396,6 +2396,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: FounderBelief
 
+??? example  "[positiveAmount] Happiness for each of our spies in a city"
+	Happiness of the civilization with the founder benefits of the religion, for each of its spies that is in a city, its own or another's, and neither dead nor moving
+
+	Example: "[3] Happiness for each of our spies in a city"
+
+	Applicable to: FounderBelief
+
 ??? example  "[relativeAmount] Network Points per turn for our spies in foreign cities"
 	Only with the ModConstants `espionageLikeVp`. Added to the base of every spy's Network Points a turn (Policies.EspionageNetworkPoints and the Enhancer belief's `Beliefs.EspionageNetworkPoints`: CvPlayerEspionage::CalcNetworkPointsPerTurn)
 

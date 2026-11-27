@@ -6316,6 +6316,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Triggerable, Terrain, Speed, ModOptions, MetaModifier
 
 
+*[accomplishment]: One of `Ancient policy branch`, `Medieval policy branch`, `Industrial policy branch`, `Ideology`, `Pantheon belief`, `Founder belief`, `Follower belief`, `Enhancer belief`, `Reformation belief`, `Eliminated civilization`.
 *[amount]: This indicates a whole number, possibly with a + or - sign, such as `2`, `+13`, or `-3`.
 *[baseTerrain]: The name of any terrain that is a base terrain according to the json file.
 *[belief]: The name of any belief.

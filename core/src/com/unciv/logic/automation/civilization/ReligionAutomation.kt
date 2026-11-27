@@ -1,11 +1,15 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.city.HurryChoice
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.TheftAi
 import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.CityDangerAi
+import com.unciv.logic.automation.strategy.MilitaryOperations
+import com.unciv.logic.automation.strategy.UnitAiTypes
+import com.unciv.logic.automation.strategy.UnitProductionAi
 import com.unciv.logic.automation.unit.CityDistances
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -442,9 +446,9 @@ object ReligionAutomation {
     }
 
     /**
-     *  CvReligionAI::DoTurn (V:CvReligionClasses.cpp:6121-6160), with [religionAiLikeVp]: the faith goes to [doFaithPurchasesLikeVp], else to emergency
+     *  CvReligionAI::DoTurn (V:CvReligionClasses.cpp:6121-6158), with [religionAiLikeVp]: the faith goes to [doFaithPurchasesLikeVp], else to emergency
      *  inquisitors ([doReligionDefenseInCitiesLikeVp]); if neither spent nor saved it and we need not save for founding (religions still to found while
-     *  we own none), each of our cities not in resistance or under siege may buy a building ([doFaithPurchasesInCityLikeVp]), most faith first (halved
+     *  we own none), each of our cities not in resistance or under siege may buy a building or unit ([doFaithPurchasesInCityLikeVp]), most faith first (halved
      *  for puppets, doubled for holy cities of any religion, ties in city order).
      */
     private fun doTurnLikeVp(civ: Civilization) {
@@ -462,7 +466,7 @@ object ReligionAutomation {
     }
 
     /**
-     *  CvReligionAI::DoReligionDefenseInCities (V:CvReligionClasses.cpp:7014-7068): in each of our cities of the religion we spread ([religionToSpread],
+     *  CvReligionAI::DoReligionDefenseInCities (V:CvReligionClasses.cpp:7014-7067): in each of our cities of the religion we spread ([religionToSpread],
      *  foreign ones considered) whose inquisitor price we can pay there and that no inquisitor of ours guards (CvCityReligions::IsDefendedByOurInquisitor),
      *  an inquisitor for each tile within 3 that holds a foreign Great Prophet of another religion able to reach the city or a tile next to it this turn.
      *  True once one was tried, bought or not, as the original.
@@ -496,10 +500,14 @@ object ReligionAutomation {
         }
 
     /**
-     *  CvReligionAI::DoFaithPurchasesInCities (V:CvReligionClasses.cpp:6865-6973), its first two priorities, for [city] with a majority religion:
+     *  CvReligionAI::DoFaithPurchasesInCities (V:CvReligionClasses.cpp:6865-7012) for [city] with a majority religion:
      *  1. the faith building of that religion ([faithBuildingAvailable]) if the city lacks it and can buy it now;
-     *  2. else the first of our buildings the city lacks and can buy now with Faith that adds no religious pressure (NaturalReligionSpreadStrength).
-     *  Not built: the last priority, units hurried with faith (S12b2), and the choice among several faith buildings by build sanity (the first is taken).
+     *  2. else the first of our buildings the city lacks and can buy now with Faith that adds no religious pressure (NaturalReligionSpreadStrength);
+     *  4. else, once all our cities but puppets follow that religion, with net gold above 0 and no unit out of supply, the unit [HurryChoice.choose]
+     *     picks for Faith if [UnitProductionAi.checkUnitBuildSanity] (for purchase, weight 100) is above 0 and it is the unit an operation or army
+     *     wants here, or we have at most 5 units (ships too) whose unit AI is its default one (CvPlayer::GetNumUnitsWithUnitAI).
+     *  The original has no third. Not built: the choice among several faith buildings by build sanity (the first is taken), the 5 times 10 with
+     *  the trait CanPurchaseNavalUnitsFaith (no Unciv counterpart).
      */
     private fun doFaithPurchasesInCityLikeVp(civ: Civilization, city: City) {
         val religion = city.religion.getMajorityReligion() ?: return
@@ -517,7 +525,19 @@ object ReligionAutomation {
                 return
             }
         }
+        // FOURTH PRIORITY - OTHER UNITS (V:CvReligionClasses.cpp:6955-7007)
+        if (!areAllOurCitiesConverted(civ, religion, includePuppets = false)) return
+        if (civ.stats.statsForNextTurn.gold.toInt() <= 0 || civ.stats.getUnitSupplyDeficit() > 0) return
+        val unit = HurryChoice.choose(city, unitOnly = true, faithPurchase = true)?.construction as? BaseUnit ?: return
+        if (UnitProductionAi.checkUnitBuildSanity(city, unit, 100, forOperation = false, forPurchase = true) <= 0) return
+        val wanted = unit == civ.ai.operations.nextUnitForOperationSlot(city)?.unit || unit == MilitaryOperations.unitForArmy(city)
+        val unitAi = UnitAiTypes.defaultOf(unit, civ.gameInfo.ruleset.ai)
+        if (wanted || UnitAiTypes.numUnitsWithUnitAi(civ, unitAi, includeBeingTrained = false, includeWater = true) <= MAX_FAITH_UNITS_OF_A_KIND)
+            purchase(city, unit)
     }
+
+    /** CvReligionAI::DoFaithPurchasesInCities' iPurchaseAmount (V:CvReligionClasses.cpp:6959), not times 10 for IsCanPurchaseNavalUnitsFaith (no such trait) */
+    private const val MAX_FAITH_UNITS_OF_A_KIND = 5
     //endregion
 
     //region Where to buy (CvReligionAI::Buy*, CvReligionAIHelpers)

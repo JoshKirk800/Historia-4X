@@ -269,6 +269,17 @@ object WarDamageAi {
         return if (weariness == 0) 0 else scaledWarWearinessPercent(civ, weariness)
     }
 
+    /**
+     *  CvPlayer::GetUnitCostIncreaseFromWarWeariness (V:CvPlayer.cpp:37106-37109): the highest war weariness percent of [civ] times
+     *  [ModConstants.WarWearinessConstants.unitCostPercent] (0 or more) / 100, cut. 0 without `unitCostWarWearinessLikeVp`.
+     */
+    @Readonly
+    fun unitCostIncreasePercent(civ: Civilization): Int {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (!constants.unitCostWarWearinessLikeVp) return 0
+        return highestWarWearinessPercent(civ) * maxOf(constants.warWeariness.unitCostPercent, 0) / 100
+    }
+
     @Readonly
     private fun scaledWarWearinessPercent(civ: Civilization, weariness: Int): Int {
         var percent = 100 * weariness / maxOf(civ.ai.diplomacy.cachedWarValue, 1)

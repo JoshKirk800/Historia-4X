@@ -1,5 +1,6 @@
 package com.unciv.models.ruleset.unit
 
+import com.unciv.logic.automation.diplomacy.WarDamageAi
 import com.unciv.logic.city.City
 import com.unciv.logic.city.PurchaseRules
 import com.unciv.logic.city.ResourceProductionModifiers
@@ -104,6 +105,13 @@ class BaseUnitCost(val baseUnit: BaseUnit) {
         if ((stat == Stat.Gold || stat == Stat.Faith) && city.civ.gameInfo.ruleset.modOptions.constants.cityNeedsLikeVp) {
             val surcharge = city.cityStats.needs.settlerPurchaseSurcharge(baseUnit)
             if (surcharge != 0) cost *= (100 + surcharge) / 100.0
+        }
+
+        // CvCity::GetPurchaseCost (V:CvCity.cpp:11874-11883), GetFaithPurchaseCost (12175-12184): a combat unit costs more by the war weariness (the combat test is CvCity's bCombat)
+        if ((stat == Stat.Gold || stat == Stat.Faith) && baseUnit.isCombatForVp()) {
+            val increase = WarDamageAi.unitCostIncreasePercent(city.civ)
+            // multiply first: 200 x 1.15 is 229.99999999999997 as a double and would be cut to 229, the source's 200 x 115 / 100 is 230
+            if (increase > 0) cost = cost * (100 + increase) / 100.0
         }
 
         // GOLD_PURCHASE_VISIBLE_DIVISOR

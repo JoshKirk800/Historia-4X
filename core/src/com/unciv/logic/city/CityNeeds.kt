@@ -1,6 +1,5 @@
 package com.unciv.logic.city
 
-import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stats
@@ -563,7 +562,7 @@ class CityNeeds(private val city: City) {
         if (!isActive()) return 0
         val needs = constants
         val penalty = when {
-            unit.strength > 0 || unit.rangedStrength > 0 || unit.hasUnique(UniqueType.NuclearWeapon, GameContext.IgnoreConditionals) ->
+            unit.isCombatForVp() ->
                 min(0, delta * needs.localUnhappyCombatUnitPenalty * -1)
             unit.isCityFounder() ->
                 min(0, delta * needs.localUnhappySettlerPenalty * -1) + city.civ.stats.needs.settlerPenalty

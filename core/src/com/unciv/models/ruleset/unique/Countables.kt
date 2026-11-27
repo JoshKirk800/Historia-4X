@@ -226,6 +226,22 @@ enum class Countables(
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
     },
 
+    ThemedBuildingsInCity("Themed [buildingFilter] Buildings in this city", shortDocumentation = "The number of matching buildings of the city whose Great Works make one of their themes") {
+        override val documentationStrings = listOf(
+            "The original's theme yields count them (`CvCityBuildings::GetTotalNumThemedBuildings`, `Building_ThemingYieldBonus`, `Building_YieldChangesPerLocalTheme`): " +
+                "`[+3 Culture] [in this city] <for every [Themed [Sistine Chapel] Buildings in this city]>`."
+        )
+        // CvCityBuildings::GetTotalNumThemedBuildings (V:CvBuildingClasses.cpp:6889-6904): a building counts while it has a theme index
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val city = gameContext.city ?: return null
+            val filter = parameterText.getPlaceholderParameters()[0]
+            return city.cityConstructions.getBuiltBuildings().count { it.matchesFilter(filter, gameContext) && city.greatWorks.getThemingBonusEntry(it) != null }
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.BuildingFilter.getTranslatedErrorSeverity(parameterText, ruleset)
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
+    },
+
     FilteredBuildingsByCivs("[buildingFilter] Buildings by [civFilter] Civilizations") {
         override fun eval(parameterText: String, gameContext: GameContext): Int? {
             val (buildingFilter, civFilter) = parameterText.getPlaceholderParameters()

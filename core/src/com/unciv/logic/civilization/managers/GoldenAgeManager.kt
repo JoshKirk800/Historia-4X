@@ -103,8 +103,12 @@ class GoldenAgeManager : IsPartOfGameInfoSerialization {
             NotificationCategory.General, "StatIcons/Happiness")
         civInfo.popupAlerts.add(PopupAlert(AlertType.GoldenAge, ""))
 
-        // INSTANT_YIELD_TYPE_GOLDEN_AGE_START (V:CvPlayer.cpp:25123)
-        InstantYields.fire(UniqueType.TriggerUponEnteringGoldenAge, civInfo, null, 0, civInfo.state)
+        // INSTANT_YIELD_TYPE_GOLDEN_AGE_START (V:CvPlayer.cpp:25123). With goldenAgeConversionLikeVp the trigger also carries what the INSTANT call before it passes
+        // for Trait_GAPToYield (CvPlayer::changeGoldenAgeTurns, V:CvPlayer.cpp:25114-25122): the golden age points the next golden age needs, taken before the
+        // count of golden ages goes up, and nothing without a capital
+        val amount = if (civInfo.gameInfo.ruleset.modOptions.constants.goldenAgeConversionLikeVp && civInfo.getCapital() != null)
+            happinessRequiredForNextGoldenAge() else 0
+        InstantYields.fire(UniqueType.TriggerUponEnteringGoldenAge, civInfo, null, amount, civInfo.state)
         if (civInfo.gameInfo.ruleset.modOptions.constants.historicEventDispatchLikeVp) civInfo.culture.onHistoricEvent(HistoricEvent.GoldenAge)
         //Golden Age can happen mid turn with Great Artist effects
         for (city in civInfo.cities)

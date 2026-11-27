@@ -1579,6 +1579,10 @@ enum class UniqueType(
     OneTimeGainTourism("[positiveAmount] Tourism towards all civilizations we have met", UniqueTarget.Triggerable,
         docDescription = "Added to the influence of this civilization on each of them, not changed by modifiers. With the ModConstants `instantTourismLikeVp`, " +
             "times the speed's culture cost modifier and the tourism modifier towards each, cut to a whole number (the original's `AddTourismAllKnownCivsWithModifiers`)"),
+    OneTimeGainTourismOfTriggeringAmount("Gain [relativeAmount]% of the triggering amount as Tourism towards all civilizations we have met", UniqueTarget.Triggerable,
+        docDescription = "For triggers that carry an amount (see `Gain [relativeAmount]% of the triggering amount as [stat]`): the amount times the percentage, " +
+            "cut off at the whole number, then handled as `[positiveAmount] Tourism towards all civilizations we have met` is. " +
+            "Does nothing for a trigger without an amount (the original's `Trait_GAPToYield` tourism, CvPlayer::doInstantYield V:CvPlayer.cpp:27261-27282)"),
     OneTimeGainTourismTowardsEventCityOwner("[positiveAmount] Tourism towards the owner of the city of the event", UniqueTarget.Triggerable,
         docDescription = "Added to the influence on the major civilization that owns the city of the triggering event (the original's `ChangeInfluenceOn`, " +
             "V:CvCultureClasses.cpp:3699-3735): times the speed's culture cost modifier and the tourism modifier towards that civilization, cut to a whole number. " +

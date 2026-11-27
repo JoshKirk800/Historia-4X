@@ -88,6 +88,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Triggerable
 
+??? example  "Gain [relativeAmount]% of the triggering amount as Tourism towards all civilizations we have met"
+	For triggers that carry an amount (see `Gain [relativeAmount]% of the triggering amount as [stat]`): the amount times the percentage, cut off at the whole number, then handled as `[positiveAmount] Tourism towards all civilizations we have met` is. Does nothing for a trigger without an amount (the original's `Trait_GAPToYield` tourism, CvPlayer::doInstantYield V:CvPlayer.cpp:27261-27282)
+
+	Example: "Gain [+20]% of the triggering amount as Tourism towards all civilizations we have met"
+
+	Applicable to: Triggerable
+
 ??? example  "[positiveAmount] Tourism towards the owner of the city of the event"
 	Added to the influence on the major civilization that owns the city of the triggering event (the original's `ChangeInfluenceOn`, V:CvCultureClasses.cpp:3699-3735): times the speed's culture cost modifier and the tourism modifier towards that civilization, cut to a whole number. Nothing for a city-state or a civilization we have not met. Takes `(modified by game speed)`, as the instant yields do
 

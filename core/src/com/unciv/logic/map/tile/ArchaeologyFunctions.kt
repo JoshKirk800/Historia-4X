@@ -6,6 +6,7 @@ import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.PopupAlert
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.logic.city.City
 import com.unciv.logic.city.GreatWorkFunctions
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.HistoricEvent
@@ -14,6 +15,7 @@ import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.ruleset.ArtifactClasses
 import com.unciv.models.ruleset.GreatWork
 import com.unciv.models.ruleset.GreatWorkSlotType
+import com.unciv.models.ruleset.tile.TileResource
 import yairm210.purity.annotations.Readonly
 import kotlin.random.Random
 
@@ -104,33 +106,23 @@ object ArchaeologyFunctions {
         val half = ((maxSites - minSites) / 2).coerceAtLeast(1)
         val ideal = minSites + random.nextInt(half) + random.nextInt(half)
 
-        // Older eras are more likely for a site, the era that the most advanced civilization is in is left out
-        val eras = ruleset.eras.values.sortedBy { it.eraNumber }
-        val highestEra = getMajorCivs(gameInfo).maxOfOrNull { it.getEraNumber() } ?: 0
-        val eraWeights = (0 until highestEra).map { eras[it] to highestEra - it }
-        fun drawEra(): String {
-            if (eraWeights.isEmpty()) return eras.first().name
-            var roll = random.nextInt(eraWeights.sumOf { it.second })
-            for ((era, weight) in eraWeights) {
-                if (roll < weight) return era.name
-                roll -= weight
-            }
-            return eras.first().name
-        }
-
         val writings = ruleset.greatWorks.values.filter { it.archaeologyOnly }.shuffled(random).toMutableList()
         val desiredWriting = ideal * constants.archaeologyPercentHidden / 100 * constants.archaeologyPercentHiddenWriting / 100
         var numWritings = minOf(writings.size, desiredWriting)
 
         val tiles = gameInfo.tileMap.values.toList()
-        val chosen = LinkedHashSet<Tile>()
+        // CvGame::SpawnArchaeologySitesHistorically (V:CvGame.cpp:13319-13321): sites with a sarcophagus are not counted, but others keep away from them
+        val sarcophagi = tiles.filter {
+            it.archaeologyRecord?.kind == ArtifactClasses.Sarcophagus && (it.resource == siteResource.name || it.resource == hiddenResource.name)
+        }
+        val chosen = LinkedHashSet<Tile>(sarcophagi)
         val weights = HashMap<Tile, Int>(tiles.size)
         for (tile in tiles) weights[tile] = getSiteWeight(tile, chosen, random.nextInt(10))
 
         val kinds = listOf(ArtifactClasses.AncientRuin, ArtifactClasses.AncientRuin, ArtifactClasses.RazedCity, ArtifactClasses.BarbarianCamp,
             ArtifactClasses.BarbarianCamp, ArtifactClasses.MeleeBattle, ArtifactClasses.RangedBattle)
 
-        while (chosen.size < ideal) {
+        while (chosen.size - sarcophagi.size < ideal) {
             val best = weights.maxByOrNull { it.value } ?: break
             if (best.value <= 0) break
             val tile = best.key
@@ -139,7 +131,7 @@ object ArchaeologyFunctions {
             tile.resourceAmount = 1
             chosen.add(tile)
 
-            var record = tile.archaeologyRecord ?: populateRecord(tile, gameInfo, drawEra(), kinds.random(random), random)
+            var record = tile.archaeologyRecord ?: populateRecord(tile, gameInfo, drawEra(gameInfo, random), kinds.random(random), random)
             if (hidden && numWritings > 0) {
                 record = ArchaeologyRecord(ArtifactClasses.Writing, record.era, record.civ1, record.civ2, writings.removeLast().name)
                 numWritings--
@@ -150,7 +142,60 @@ object ArchaeologyFunctions {
             weights[tile] = 0
         }
         gameInfo.archaeologyTriggered = true
-        return chosen.toList()
+        return chosen.drop(sarcophagi.size)
+    }
+
+    /** CvGame::GetWeightedArchaeologyErasList: the era of a find. Older eras are more likely, the era that the most advanced civilization is in is left out */
+    private fun drawEra(gameInfo: GameInfo, random: Random): String {
+        val eras = gameInfo.ruleset.eras.values.sortedBy { it.eraNumber }
+        val highestEra = getMajorCivs(gameInfo).maxOfOrNull { it.getEraNumber() } ?: 0
+        val eraWeights = (0 until highestEra).map { eras[it] to highestEra - it }
+        if (eraWeights.isEmpty()) return eras.first().name
+        var roll = random.nextInt(eraWeights.sumOf { it.second })
+        for ((era, weight) in eraWeights) {
+            if (roll < weight) return era.name
+            roll -= weight
+        }
+        return eras.first().name
+    }
+
+    /** CvPlot::IsEligibleForNormalDigSite: land that [siteResource] can be on, without a resource, a city, a Landmark, ruins or a great improvement */
+    @Readonly
+    private fun isEligibleForSite(tile: Tile, siteResource: TileResource): Boolean {
+        if (tile.resource != null || tile.isWater || tile.isImpassible() || tile.isNaturalWonder() || tile.isCityCenter()) return false
+        if (tile.lastTerrain.name !in siteResource.terrainsCanBeFoundOn) return false
+        val improvement = tile.tileImprovement ?: return true
+        return improvement.name != tile.tileMap.gameInfo.ruleset.modOptions.constants.landmarkImprovement && !improvement.isAncientRuinsEquivalent()
+            && !improvement.hasUnique(UniqueType.Irremovable) && !improvement.isGreatImprovement()
+    }
+
+    /**
+     * [amount] sites with a sarcophagus near [city], which was just founded (CvPlayer::SpawnResourceInVicinity with bSarcophagus,
+     * V:CvPlayer.cpp:13550-13688): on our tiles in its work range, then on our other tiles, then on the tiles in its range that no one owns;
+     * in each, tiles without a history come first. The find is of [city]'s civilization, from an era drawn as for the other sites.
+     */
+    fun spawnSarcophagi(city: City, amount: Int) {
+        val civ = city.civ
+        val gameInfo = civ.gameInfo
+        val siteResource = gameInfo.ruleset.tileResources[gameInfo.ruleset.modOptions.constants.archaeologySiteResource] ?: return
+        val random = city.state.stateBasedRandom("Sarcophagus", civ.citiesCreated)
+        val inRange = city.tilesInRange.filter { isEligibleForSite(it, siteResource) }
+        val brackets = listOf(
+            inRange.filter { it.getOwner() == civ },
+            civ.cities.flatMap { it.getTiles() }.filter { it !in city.tilesInRange && isEligibleForSite(it, siteResource) },
+            inRange.filter { it.getOwner() == null }
+        )
+        var placed = 0
+        for (bracket in brackets) {
+            val (fresh, storied) = bracket.shuffled(random).partition { it.archaeologyRecord == null }
+            for (tile in fresh + storied) {
+                if (placed >= amount) return
+                tile.tileResource = siteResource
+                tile.resourceAmount = 1
+                tile.archaeologyRecord = ArchaeologyRecord(ArtifactClasses.Sarcophagus, drawEra(gameInfo, random), civ.civName, null)
+                placed++
+            }
+        }
     }
     //endregion
 

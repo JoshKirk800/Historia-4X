@@ -1342,7 +1342,7 @@ class ModConstants {
      *  with `historicEventsLikeVp` */
     var historicEventDispatchLikeVp = false
     /** Vox Populi's archaeology choices (CvPlayerCulture::DoArchaeologyChoice): a Landmark in a City-State's land raises the resting influence, a culture
-     *  boost in our lands also goes to the city's borders, the record of the site goes but under a Landmark */
+     *  boost in our lands also goes to the city's borders, the record of the site goes but under a Landmark; `SarcophagusSitesNearNewCities` works */
     var archaeologyChoicesLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100

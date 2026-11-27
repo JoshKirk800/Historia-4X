@@ -369,6 +369,11 @@ enum class UniqueType(
     SpecificImprovementTime("[relativeAmount]% construction time for [improvementFilter] improvements", UniqueTarget.Global, UniqueTarget.Unit),
     ImprovementTimeIncrease("Can build [improvementFilter] improvements at a [relativeAmount]% rate", UniqueTarget.Global, UniqueTarget.Unit),
     UniqueLuxuriesInNewAreas("[positiveAmount] unique Luxury resources appear under the first [amount] cities founded in different foreign landmasses", UniqueTarget.Global),
+    SarcophagusSitesNearNewCities("[positiveAmount] antiquity sites with a sarcophagus appear near each of the first [positiveAmount] cities founded", UniqueTarget.Global,
+        docDescription = "With the ModConstants `archaeologyChoicesLikeVp`: sites of `archaeologySiteResource` whose finds are of the artifact class " +
+            "`Sarcophagus` and of our civilization, on our tiles in the work range of the new city first, then on our other tiles, then on tiles in its " +
+            "range that no one owns, preferring tiles without a history; they appear also after archaeology has begun and are not counted among the " +
+            "sites that appear then (the original's `Trait_FreeResourceFirstXCities` with `RESOURCE_ARTIFACTS`)"),
 
     /// Building Maintenance
     GainFreeBuildings("Gain a free [buildingName] [cityFilter]", UniqueTarget.Global, UniqueTarget.Triggerable,

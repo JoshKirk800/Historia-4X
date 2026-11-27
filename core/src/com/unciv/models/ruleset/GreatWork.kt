@@ -63,6 +63,10 @@ object ArtifactClasses {
     /** What an archaeological site that holds a writing is called. No artifact belongs to it, the work is chosen when the site is made */
     const val Writing = "Writing"
 
+    /** The sites that appear near new cities ([com.unciv.models.ruleset.unique.UniqueType.SarcophagusSitesNearNewCities], ARTIFACT_SARCOPHAGUS).
+     *  Their artifacts are their own, and nothing that happens on the tile later replaces them */
+    const val Sarcophagus = "Sarcophagus"
+
     /** Which find a tile remembers when there are several: the higher one wins (a razed city beats a ruin, a ruin a camp, a camp a battle) */
     @Readonly
     fun rank(kind: String) = when (kind) {
@@ -72,6 +76,7 @@ object ArtifactClasses {
         AncientRuin -> 4
         RazedCity -> 5
         Writing -> 6
+        Sarcophagus -> 7
         else -> 0
     }
 }

@@ -338,6 +338,11 @@ class ModConstants {
      *  war weariness percent ([WarDamageAi.highestWarWearinessPercent]). false: the price does not change. Staged like [unitSupplyWarWearinessLikeVp]: its own switch, no ruleset row flips it */
     var unitCostWarWearinessLikeVp = false
 
+    /** VP 5.4.8 CvPlayer::GetUnhappinessFromWarWeariness, added to the empire's unhappiness in CvPlayer::DoUpdateTotalUnhappiness (V:CvPlayer.cpp:37111-37114, 22189-22192). true (with [cityNeedsLikeVp]
+     *  and [warWearinessLikeVp]): a major's pool of unhappiness grows by its highest war weariness percent ([WarDamageAi.highestWarWearinessPercent]) of its citizens, times
+     *  [WarWearinessConstants.populationPercentCap] percent. false: the war weariness adds no unhappiness. Staged like [unitCostWarWearinessLikeVp]: its own switch, no ruleset row flips it */
+    var needsWarWearinessLikeVp = false
+
     /** The defines of the war weariness (DEF-VP `(2) Vox Populi/Database Changes/DefineChanges.sql`; the same in `ref/db/vp.sqlite` `Defines`) */
     data class WarWearinessConstants(
         /** `WAR_WEARINESS_MINIMUM_TURNS`: a war must be this many turns old before it adds weariness */
@@ -346,6 +351,8 @@ class ModConstants {
         val supplyReductionPercent: Int = 34,
         /** `UNIT_COST_WAR_WEARINESS_PERCENT_INCREASE`: percent of the weariness percent that the gold and faith price of a combat unit rises by (0 or more) */
         val unitCostPercent: Int = 75,
+        /** `WAR_WEARINESS_POPULATION_PERCENT_CAP`: percent of the empire's citizens that the weariness percent makes unhappy at most (0 or more) */
+        val populationPercentCap: Int = 34,
     )
 
     /**

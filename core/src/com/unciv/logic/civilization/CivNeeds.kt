@@ -1,5 +1,6 @@
 package com.unciv.logic.civilization
 
+import com.unciv.logic.automation.diplomacy.WarDamageAi
 import com.unciv.logic.city.CityNeeds
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
@@ -19,8 +20,8 @@ import kotlin.math.roundToInt
  *
  *  Departures from Vox Populi: the pool is the existing happiness breakdown of Unciv without its cities' part and without public opinion
  *  ([com.unciv.logic.civilization.transients.CivInfoStatsForNextTurn.getHappinessBreakdown]), which keeps "Transportation Upkeep" and the sources that Unciv has
- *  instead of VP's (religion, natural wonders, city-states, uniques); war weariness is a hook that is always 0 ([warWeariness], decision O2: the package of the
- *  military rules gives it its value); where the source goes by city id (ties in the distribution, who gets the remainder of the unhappiness) the order
+ *  instead of VP's (religion, natural wonders, city-states, uniques); the unhappiness from war weariness is [warWeariness], 0 without
+ *  `needsWarWearinessLikeVp`; where the source goes by city id (ties in the distribution, who gets the remainder of the unhappiness) the order
  *  of [Civilization.cities] decides.
  */
 class CivNeeds(private val civ: Civilization) {
@@ -47,10 +48,18 @@ class CivNeeds(private val civ: Civilization) {
     /** CvPlayer::GetExcessHappiness: the approval rating in percent, 100 without unhappiness, else min(200, happiness x 100 / unhappiness) / 2; the unhappy threshold (50) for an empire with no needs */
     val approval: Int get() = computedApproval ?: constants.unhappyThreshold
 
-    /** CvPlayer::GetUnhappinessFromWarWeariness: 0 until the military rules arrive (decision O2) */
+    /**
+     *  CvPlayer::GetUnhappinessFromWarWeariness (V:CvPlayer.cpp:37111-37114): the highest war weariness percent ([WarDamageAi.highestWarWearinessPercent]) x the citizens of all
+     *  the cities (CvPlayer::getTotalPopulation, kept by CvCity::setPopulation) x [com.unciv.models.ModConstants.WarWearinessConstants.populationPercentCap] (0 or more) / 10000,
+     *  one product cut once. 0 without `needsWarWearinessLikeVp`.
+     */
     @Readonly
-    @Suppress("FunctionOnlyReturningConstant")
-    fun warWeariness() = 0
+    fun warWeariness(): Int {
+        val modConstants = civ.gameInfo.ruleset.modOptions.constants
+        if (!modConstants.needsWarWearinessLikeVp) return 0
+        val citizens = civ.cities.sumOf { it.population.population }
+        return WarDamageAi.highestWarWearinessPercent(civ) * citizens * max(modConstants.warWeariness.populationPercentCap, 0) / 10000
+    }
 
     //region Thresholds and effects
 

@@ -1353,6 +1353,8 @@ class ModConstants {
     /** Vox Populi's golden age conversion (CvPlayer::changeGoldenAgeTurns, Trait_GAPToYield): each golden age started or extended carries the golden age
      *  points the next one needs, while there is a capital, as the triggering amount of `upon entering a Golden Age` */
     var goldenAgeConversionLikeVp = false
+    /** Vox Populi's limits of the concert tour (CvUnit::canBlastTourism): none in the lands of a civilization we are at war with or already Influential over */
+    var concertTourLimitsLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

@@ -9,6 +9,7 @@ import com.unciv.logic.map.tile.ArchaeologyFunctions
 import com.unciv.logic.civilization.*
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.automation.diplomacy.DiplomacyEvents
+import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.PolicyManager
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.HexCoord
@@ -665,6 +666,10 @@ object UniqueTriggerActivation {
             UniqueType.OneTimeConcertTour -> {
                 val target = tile?.getOwner() ?: return null
                 if (unit == null || target == civInfo || !civInfo.culture.canInfluence(target)) return null
+                // CvUnit::canBlastTourism (V:CvUnit.cpp:13108-13119): no tour while at war (BALANCE_NO_WARTIME_CONCERT_TOURS, on in Vox Populi)
+                // nor once we are Influential there
+                if (ruleset.modOptions.constants.concertTourLimitsLikeVp && (civInfo.isAtWarWith(target)
+                        || (civInfo.culture.getInfluenceLevel(target) ?: InfluenceLevel.Unknown) >= InfluenceLevel.Influential)) return null
                 return {
                     val speed = civInfo.gameInfo.speed
                     val modifier = speed.statCostModifiers[Stat.Culture] ?: speed.modifier

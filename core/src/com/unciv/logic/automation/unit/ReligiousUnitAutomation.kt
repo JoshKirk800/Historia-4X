@@ -16,7 +16,7 @@ object ReligiousUnitAutomation {
     /** CvHomelandAI::ExecuteMissionaryMoves: to the plot from [chooseTargetPlot] next to CvReligionAI::ChooseMissionaryTargetCity, then spread */
     fun automateMissionary(unitView: MapUnitView, cache: AutomationCache) {
         @Suppress("DEPRECATION") val unit = unitView.getUnit()
-        if (ReligionAutomation.targetsLikeVp(unit.civ)) return automateMissionaryLikeVp(unitView, unit, cache)
+        if (ReligionAutomation.religionAiLikeVp(unit.civ)) return automateMissionaryLikeVp(unitView, unit, cache)
         if (unitView.religion != unitView.civ().getReligion()?.name || unitView.religion == null) {
             // A unit of another religion would spread that one - nothing for us to do with it
             unitView.tryDisband()
@@ -30,7 +30,7 @@ object ReligiousUnitAutomation {
     /** CvHomelandAI::ExecuteInquisitorMoves: to the plot next to CvReligionAI::ChooseInquisitorTargetCity, then remove heresy */
     fun automateInquisitor(unitView: MapUnitView, cache: AutomationCache) {
         @Suppress("DEPRECATION") val unit = unitView.getUnit()
-        if (ReligionAutomation.targetsLikeVp(unit.civ)) {
+        if (ReligionAutomation.religionAiLikeVp(unit.civ)) {
             // VP keeps an inquisitor of any religion: it guards and cleanses for its own (CvHomelandAI::ExecuteInquisitorMoves)
             unit.religion?.let { automateInquisitorLikeVp(unitView, unit, it, cache) }
             return
@@ -58,7 +58,7 @@ object ReligiousUnitAutomation {
             moveAndAct(unitView, unit, target, UnitActionType.SpreadReligion)
             return
         }
-        if (unit.religion != ReligionAutomation.religionToSpread(unit.civ)?.name) unitView.tryDisband()
+        if (unit.religion != ReligionAutomation.religionToSpread(unit.civ, considerForeign = true)?.name) unitView.tryDisband()
     }
 
     /**
@@ -99,7 +99,7 @@ object ReligiousUnitAutomation {
         @Suppress("DEPRECATION") val unit = unitView.getUnit()
         val civ = unit.civ
         val religionManager = civ.religionManager
-        val religion = ReligionAutomation.religionToSpread(civ)
+        val religion = ReligionAutomation.foundedReligion(civ)
         val directive = when {
             religion != null && religionManager.religionState == ReligionState.EnhancedReligion ->
                 if (ReligionAutomation.chooseProphetConversionCity(civ, false) != null) ProphetDirective.SpreadReligion

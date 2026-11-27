@@ -693,7 +693,7 @@ class ReligionManager : IsPartOfGameInfoSerialization {
 
     /** The religions in the order the original keeps them in CvGameReligions::m_CurrentReligions (order of founding), for ties. */
     @Readonly
-    private fun religionsInFoundingOrder(): List<Religion> =
+    fun religionsInFoundingOrder(): List<Religion> =
         civInfo.gameInfo.religions.values.sortedWith(compareBy<Religion>({ it.foundingTurn }, { it.name }))
 
     /** What the civilization's state religion is, as CvPlayerReligions::UpdateStateReligion settles it (Vox Populi, MOD_BALANCE_VP):

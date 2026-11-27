@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.TheftAi
 import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.automation.strategy.AiOperationLogic
@@ -33,9 +34,62 @@ object ReligionAutomation {
 
     //region Inputs the original reads
 
-    /** CvReligionAI::GetReligionToSpread: the religion this civilization founded, null before it has one (a pantheon does not count) */
-    fun religionToSpread(civ: Civilization): Religion? =
+    /** Vox Populi's religion AI (ModConstants.religionCultureAiLikeVp) */
+    fun religionAiLikeVp(civ: Civilization): Boolean = civ.gameInfo.ruleset.modOptions.constants.religionCultureAiLikeVp
+
+    /**
+     *  CvReligionAI::GetReligionToSpread: the [foundedReligion]; with [religionAiLikeVp] VP's (V:CvReligionClasses.cpp:6720-6763): none for a
+     *  City-State, else the state religion if it is a founded one, else with [considerForeign] the [favoriteForeignReligion] for spreading at home.
+     *  VP works it out once a turn, so whichever caller asks first decides whether foreign religions count for that turn; here each caller's
+     *  [considerForeign] counts, as the callers mean it.
+     */
+    fun religionToSpread(civ: Civilization, considerForeign: Boolean = false): Religion? {
+        if (!religionAiLikeVp(civ)) return foundedReligion(civ)
+        if (!civ.isMajorCiv) return null
+        civ.religionManager.getStateReligionCached()?.takeIf { it.isMajorReligion() }?.let { return it }
+        return if (considerForeign) favoriteForeignReligion(civ, forInternalSpread = true) else null
+    }
+
+    /** The religion this civilization founded, null before it has one (a pantheon does not count): the older CvReligionAI::GetReligionToSpread,
+     *  which the code not yet ported from Vox Populi reads */
+    fun foundedReligion(civ: Civilization): Religion? =
         civ.religionManager.religion?.takeIf { civ.religionManager.religionState >= ReligionState.Religion }
+
+    /**
+     *  CvReligionAI::GetFavoriteForeignReligion (V:CvReligionClasses.cpp:6767-6858), once no more religions can be founded: of the founded
+     *  religions of others, the one whose beliefs (no Founder or Enhancer beliefs, [BeliefScoring.scoreBelief]) we like best, × our opinion of its
+     *  founder (Ally 150%, Friend 130%, Favorable 115%, Neutral 100%, Competitor 50%, else 20%), among those that are the majority in one of our
+     *  cities, as only there can we buy their missionaries. [forInternalSpread]: none if that one scores below 2/3 of the best of all.
+     */
+    fun favoriteForeignReligion(civ: Civilization, forInternalSpread: Boolean): Religion? {
+        if (civ.religionManager.remainingFoundableReligions() > 0) return null
+        val context = BeliefScoringContext(civ)
+        var bestOverall = 0
+        var bestValidScore = 0
+        var bestValid: Religion? = null
+        for (religion in civ.religionManager.religionsInFoundingOrder()) {
+            if (!religion.isMajorReligion() || religion.foundingCiv == civ) continue
+            var score = 0
+            for (belief in religion.getAllBeliefsOrdered())
+                if (belief.type != BeliefType.Founder && belief.type != BeliefType.Enhancer) score += BeliefScoring.scoreBelief(belief, context)
+            score = score * when (civ.ai.diplomacy.opinionOf(religion.foundingCiv)) {
+                MajorCivOpinion.Ally -> 150
+                MajorCivOpinion.Friend -> 130
+                MajorCivOpinion.Favorable -> 115
+                MajorCivOpinion.Neutral -> 100
+                MajorCivOpinion.Competitor -> 50
+                else -> 20
+            } / 100
+            if (score > bestOverall) bestOverall = score
+            if (score > bestValidScore && civ.cities.any { majorityReligionName(it) == religion.name }) {
+                bestValidScore = score
+                bestValid = religion
+            }
+        }
+        // a bird in the hand is worth two in the bush, but not three
+        if (forInternalSpread && bestValidScore * 3 < bestOverall * 2) return null
+        return bestValid
+    }
 
     /** The original's UNIT_MISSIONARY, as this civilization's unit: the first unit that can spread religion and is not a Great Person */
     fun missionaryUnit(civ: Civilization): BaseUnit? =
@@ -109,7 +163,7 @@ object ReligionAutomation {
             FaithPurchase.MissionaryForCivsWithoutReligion, FaithPurchase.MissionaryForReligionFounders ->
                 buyReligiousUnit(civ, missionaryUnit(civ))
             FaithPurchase.FaithBuilding -> {
-                val religion = religionToSpread(civ) ?: return
+                val religion = foundedReligion(civ) ?: return
                 val building = faithBuildingAvailable(civ, religion) ?: return
                 buyFaithBuilding(civ, religion, building)
             }
@@ -121,7 +175,7 @@ object ReligionAutomation {
     /** CvReligionAI::DoFaithPurchases: which purchase this turn's faith is saved for */
     fun chooseFaithPurchase(civ: Civilization): FaithPurchase {
         val religionManager = civ.religionManager
-        val religion = religionToSpread(civ)
+        val religion = foundedReligion(civ)
         if (religion == null || religionManager.religionState != ReligionState.EnhancedReligion) {
             if (religion != null || religionManager.remainingFoundableReligions() > 0) return FaithPurchase.Save
             if (findAnyAvailableFaithBuilding(civ) != null) return FaithPurchase.LockedOutFaithBuilding
@@ -222,7 +276,7 @@ object ReligionAutomation {
     /** CvReligionAI::BuyMissionary / BuyInquisitor */
     private fun buyReligiousUnit(civ: Civilization, unit: BaseUnit?) {
         if (unit == null || !capitalCanAfford(civ, unit)) return
-        val city = bestCityForFaithUnit(civ, unit, religionToSpread(civ)) ?: return
+        val city = bestCityForFaithUnit(civ, unit, foundedReligion(civ)) ?: return
         purchase(city, unit)
     }
 
@@ -385,7 +439,7 @@ object ReligionAutomation {
      */
     fun chooseProphetConversionCity(civ: Civilization, onlyBetterThanEnhancingReligion: Boolean): City? =
         timeThis("AI.ChooseProphetConversionCity") {
-            val religion = religionToSpread(civ) ?: return@timeThis null
+            val religion = foundedReligion(civ) ?: return@timeThis null
             val holyCity = civ.gameInfo.getCities().firstOrNull { it.religion.religionThisIsTheHolyCityOf == religion.name }
                 ?: return@timeThis null
             val holyTile = holyCity.getCenterTile()
@@ -407,7 +461,7 @@ object ReligionAutomation {
 
             for (other in civ.gameInfo.civilizations) {
                 if (other == civ || !other.isAlive() || other.isBarbarian || other.isSpectator) continue
-                val ownersReligion = religionToSpread(other)
+                val ownersReligion = foundedReligion(other)
                 for (city in other.cities) {
                     if (city.religion.isProtectedByInquisitor(religion.name)) continue
                     val majority = city.religion.getMajorityReligion()
@@ -444,7 +498,7 @@ object ReligionAutomation {
         if (shouldBecomeNewMajority(city, religion.name, UnitActionsReligion.getPressureAddedFromSpread(unit))) score *= 2
         val owner = city.civ
         if (owner.isMajorCiv && TheftAi.isBadTheftTarget(civ, owner, TheftType.Conversion)) return 0
-        val ownersReligion = religionToSpread(owner)
+        val ownersReligion = foundedReligion(owner)
         if (owner == civ) score *= 5
         else if (ownersReligion == null) score *= 3
         score -= unit.getTile().aerialDistanceTo(city.getCenterTile())
@@ -468,7 +522,7 @@ object ReligionAutomation {
 
     /** CvReligionAI::ChooseMissionaryTargetCity: the best-scoring city of any player not defended against our religion */
     fun chooseMissionaryTargetCity(civ: Civilization, unit: MapUnit): City? = timeThis("AI.ChooseMissionaryTarget") {
-        val religion = religionToSpread(civ) ?: return@timeThis null
+        val religion = foundedReligion(civ) ?: return@timeThis null
         var bestScore = 0
         var best: City? = null
         for (other in civ.gameInfo.civilizations) {
@@ -487,7 +541,7 @@ object ReligionAutomation {
 
     /** CvReligionAI::ChooseInquisitorTargetCity / ScoreCityForInquisitor: our city not of our religion, scoring 100 − distance */
     internal fun chooseInquisitorTargetCity(civ: Civilization, unit: MapUnit): City? = timeThis("AI.ChooseInquisitorTarget") {
-        val religion = religionToSpread(civ) ?: return@timeThis null
+        val religion = foundedReligion(civ) ?: return@timeThis null
         var bestScore = 0
         var best: City? = null
         for (city in civ.cities) {
@@ -503,8 +557,6 @@ object ReligionAutomation {
     //endregion
 
     //region Targets of religious units like Vox Populi (religionCultureAiLikeVp)
-
-    fun targetsLikeVp(civ: Civilization): Boolean = civ.gameInfo.ruleset.modOptions.constants.religionCultureAiLikeVp
 
     /** CvReligionAI::ChooseMissionaryTargetCity: no target for a city further than this from our nearest city by path */
     private const val MISSIONARY_MAX_CITY_PATH_LENGTH = 37
@@ -646,15 +698,17 @@ object ReligionAutomation {
      *  CvReligionAI::ChooseMissionaryTargetCity (V:CvReligionClasses.cpp:6367-6431) before its path check: the cities with a positive
      *  [scoreCityForMissionaryLikeVp], best first, for a [unit] of the religion we spread; skipping a city whose danger to the unit is above a quarter of
      *  its health ([com.unciv.logic.automation.unit.PlotDanger]), one being razed, one [taken] by another missionary this turn and one more than 37
-     *  steps from our nearest city ([CityDistances.cityDistancePathLength]). The caller takes the first it can reach.
+     *  steps from our nearest city ([CityDistances.cityDistancePathLength]). A religion we spread but do not own
+     *  ([com.unciv.logic.civilization.managers.ReligionManager.getOwnedReligion]) is spread only in our own cities. The caller takes the first it can reach.
      */
     fun missionaryTargetsLikeVp(civ: Civilization, unit: MapUnit, taken: Map<City, MapUnit>): List<City> {
-        val religion = religionToSpread(civ) ?: return emptyList()
+        val religion = religionToSpread(civ, considerForeign = true) ?: return emptyList()
         if (unit.religion != religion.name) return emptyList()
+        val ownedOnly = religion != civ.religionManager.getOwnedReligion()
         val danger = civ.ai.plotDanger
         val targets = ArrayList<Pair<City, Int>>()
         for (other in civ.gameInfo.civilizations) {
-            if (!other.isAlive()) continue
+            if (!other.isAlive() || ownedOnly && other != civ) continue
             for (city in other.cities) {
                 if (danger.get(unit, city.getCenterTile()) > unit.health / 4 || city.isBeingRazed) continue
                 val holder = taken[city]
@@ -678,7 +732,8 @@ object ReligionAutomation {
      */
     fun inquisitorTargetsLikeVp(civ: Civilization, unit: MapUnit, taken: Map<City, MapUnit>): InquisitorTargets {
         val religion = unit.religion?.let { civ.gameInfo.religions[it] }
-        if (religionToSpread(civ) == null || religion == null || !religion.isMajorReligion()) return InquisitorTargets(emptyList(), emptyList())
+        if (religionToSpread(civ, considerForeign = true) == null || religion == null || !religion.isMajorReligion())
+            return InquisitorTargets(emptyList(), emptyList())
         val danger = civ.ai.plotDanger
         val unfriendly = AiOperationLogic.unfriendlyMajors(civ)
         val offensive = ArrayList<Pair<City, Int>>()

@@ -1,11 +1,15 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.civilization.ReligionAutomation.FaithPurchase
+import com.unciv.logic.automation.diplomacy.MajorCivOpinion
+import com.unciv.logic.automation.diplomacy.TheftAi
+import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.automation.strategy.GrandStrategyAi
 import com.unciv.logic.automation.unit.ReligiousUnitAutomation
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.managers.ReligionManager
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.mapunit.MapUnit
@@ -604,6 +608,114 @@ class ReligionAiTests {
         assertTrue(foreignMissionary !in units)
         assertTrue(foreignInquisitor in units)
         assertEquals(foreignInquisitor, cache.inquisitorTargets[ours])
+    }
+    //endregion
+
+    //region Religion to spread like Vox Populi
+
+    /** A religion with a Follower belief, whose score is the same for every religion that has it */
+    private fun religionWithFollowerBelief(founder: Civilization): Religion {
+        val religion = foundReligion(founder)
+        religion.addBelief(game.ruleset.beliefs.values.first { it.type == BeliefType.Follower })
+        return religion
+    }
+
+    private fun noMoreReligionsToFound() {
+        game.ruleset.modOptions.constants.religionLimitBase = 0
+        game.ruleset.modOptions.constants.religionLimitMultiplier = 0f
+    }
+
+    @Test
+    fun `with Vox Populi the religion to spread is the state religion, and none for a City-State or a founder without one`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv()
+        assertEquals(religion, ReligionAutomation.religionToSpread(civ))
+
+        val cityState = game.addCiv(cityStateType = "Cultured")
+        cityWith(cityState, 3, 0, 1, religion.name to 5000)
+        assertEquals(religion, cityState.religionManager.getStateReligion())
+        assertEquals(null, ReligionAutomation.religionToSpread(cityState, considerForeign = true))
+
+        // a founder whose holy city is gone and whose cities follow nothing has no state religion
+        val founder = game.addCiv()
+        val lost = religionWithFollowerBelief(founder)
+        cityWith(founder, -3, 3, 1)
+        assertEquals(lost, ReligionAutomation.foundedReligion(founder))
+        assertEquals(null, ReligionAutomation.religionToSpread(founder))
+    }
+
+    @Test
+    fun `with Vox Populi a civilization without a state religion spreads the foreign one it likes best that it can buy missionaries of`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val civ = game.addCiv()
+        val friend = game.addCiv()
+        val liked = religionWithFollowerBelief(friend)
+        val rival = game.addCiv()
+        val other = religionWithFollowerBelief(rival)
+        civ.ai.diplomacy.memoryOf(friend).opinion = MajorCivOpinion.Friend
+        civ.ai.diplomacy.memoryOf(rival).opinion = MajorCivOpinion.Favorable
+        // one city each: neither is the majority of our cities, so there is no state religion
+        val likedCity = cityWith(civ, 0, 0, 1, liked.name to 5000)
+        cityWith(civ, 3, 0, 1, other.name to 5000)
+        assertEquals(null, civ.religionManager.getStateReligion())
+        game.ruleset.modOptions.constants.religionLimitBase = 4
+        assertTrue(civ.religionManager.remainingFoundableReligions() > 0)
+        assertEquals("not while religions can still be founded", null, ReligionAutomation.religionToSpread(civ, considerForeign = true))
+
+        noMoreReligionsToFound()
+        assertEquals("130% for a friend over 115%", liked, ReligionAutomation.religionToSpread(civ, considerForeign = true))
+        assertEquals("only when the caller considers foreign religions", null, ReligionAutomation.religionToSpread(civ))
+
+        // the liked one is no longer bought here; the other, of a competitor (50%), is under 2/3 of it
+        likedCity.religion.addPressure(other.name, 50_000)
+        civ.ai.diplomacy.memoryOf(rival).opinion = MajorCivOpinion.Competitor
+        assertEquals(null, ReligionAutomation.favoriteForeignReligion(civ, forInternalSpread = true))
+        assertEquals(other, ReligionAutomation.favoriteForeignReligion(civ, forInternalSpread = false))
+    }
+
+    @Test
+    fun `with Vox Populi the founder beliefs of a foreign religion are worth nothing to us`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        noMoreReligionsToFound()
+        val civ = game.addCiv()
+        val founderOnly = foundReligion(game.addCiv())
+        cityWith(civ, 0, 0, 1, founderOnly.name to 5000)
+        assertEquals(null, ReligionAutomation.favoriteForeignReligion(civ, forInternalSpread = false))
+    }
+
+    @Test
+    fun `with Vox Populi a missionary of a religion we do not own spreads it only in our own cities`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        noMoreReligionsToFound()
+        val civ = game.addCiv()
+        val friend = game.addCiv()
+        val liked = religionWithFollowerBelief(friend)
+        cityWith(civ, 0, 0, 1, liked.name to 5000)
+        val pagan = cityWith(civ, 3, 0, 1)
+        cityWith(civ, -3, 3, 1)
+        val foreignPagan = cityWith(game.addCiv(), 0, -4, 1)
+        val missionary = game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(0, 1))
+        missionary.religion = liked.name
+        assertEquals(liked, ReligionAutomation.religionToSpread(civ, considerForeign = true))
+        val targets = ReligionAutomation.missionaryTargetsLikeVp(civ, missionary, emptyMap())
+        assertTrue(pagan in targets)
+        assertTrue(foreignPagan !in targets)
+    }
+
+    @Test
+    fun `with Vox Populi a founder that lost its holy city owns no religion, so converting it is never a bad theft`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val civ = game.addCiv()
+        game.addCity(civ, tile(-3, 0))
+        val founder = game.addCiv()
+        val religion = religionWithFollowerBelief(founder)
+        val holy = game.addCity(founder, tile(3, 0))
+        holy.religion.religionThisIsTheHolyCityOf = religion.name
+        civ.diplomacyFunctions.makeCivilizationsMeet(founder)
+        civ.getDiplomacyManager(founder)!!.diplomaticStatus = DiplomaticStatus.DefensivePact
+        assertTrue("a pact partner with a religion", TheftAi.isBadTheftTarget(civ, founder, TheftType.Conversion))
+        holy.religion.religionThisIsTheHolyCityOf = null
+        assertTrue("CvPlayerReligions::OwnsReligion", !TheftAi.isBadTheftTarget(civ, founder, TheftType.Conversion))
     }
     //endregion
 }

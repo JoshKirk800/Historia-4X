@@ -667,6 +667,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "Each historic event gives the capital [positiveAmount]% of the points needed for a random Great Person"
+	With the ModConstants `historicEventsLikeVp`, each historic event that counts gives the capital that percent of the points it needs for the Great Person of one specialist, chosen at random; one whose Great Works have a free slot is twice as likely (the original's `EventGP` of traits)
+
+	Example: "Each historic event gives the capital [3]% of the points needed for a random Great Person"
+
+	Applicable to: Global
+
 ??? example  "[stats] from each Great Work"
 	Added to the culture a city gets from each of its Great Works (see `greatWorkBaseCulture` in ModConstants), in every city of the civilization
 

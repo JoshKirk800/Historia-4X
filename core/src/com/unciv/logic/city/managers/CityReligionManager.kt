@@ -3,6 +3,7 @@ package com.unciv.logic.city.managers
 import com.unciv.Constants
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
+import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.models.Counter
@@ -170,11 +171,17 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
     /** The pressure of a Spread Religion action that leaves the other religions in place (CvCityReligions::AddMissionarySpread, V:CvReligionClasses.cpp:4813-4821):
      *  first the religion with [UniqueType.ErodesOtherReligionPressure] takes that percentage (at most 100) of the pressure that each other religion HAS in the city
      *  away, then the pressure is added as with [addPressure]. The erosion is CvCityReligions::ErodeOtherReligiousPressure (V:CvReligionClasses.cpp:4932-4969) with
-     *  retention off and atheism left alone: pantheons are eroded too, a religion without pressure is skipped, and the share is `percent * pressure / 100` in whole numbers */
-    fun addPressureFromSpreading(religionName: String, amount: Int) {
+     *  retention off and atheism left alone: pantheons are eroded too, a religion without pressure is skipped, and the share is `percent * pressure / 100` in whole numbers.
+     *  VP asks the erosion of the belief for the player responsible ([spreader], the owner of the missionary, 4817); with
+     *  [com.unciv.models.ModConstants.religiousBeliefValidityLikeVp] a belief counts only if [com.unciv.logic.civilization.managers.ReligionManager.isBeliefValid] accepts it
+     *  for the spreader, without a city. Without a spreader every belief counts, as VP's IsBeliefValid does for NO_PLAYER (V:CvBeliefClasses.cpp:2153-2154). */
+    fun addPressureFromSpreading(religionName: String, amount: Int, spreader: Civilization? = null) {
         if (!city.civ.gameInfo.isReligionEnabled()) return // No religion, no pressures
         var erosionPercent = 0
-        city.civ.gameInfo.religions[religionName]?.founderBeliefUniqueMap
+        val spreadReligion = city.civ.gameInfo.religions[religionName]
+        if (spreadReligion != null && spreader != null && city.civ.gameInfo.ruleset.modOptions.constants.religiousBeliefValidityLikeVp)
+            spreader.religionManager.forEachValidFounderSideUnique(spreadReligion, UniqueType.ErodesOtherReligionPressure, city.state) { erosionPercent += it.params[0].toInt() }
+        else spreadReligion?.founderBeliefUniqueMap
             ?.forEachMatchingUnique(UniqueType.ErodesOtherReligionPressure, city.state) { erosionPercent += it.params[0].toInt() }
         if (erosionPercent > 0) {
             val reductionPercent = minOf(100, erosionPercent)
@@ -201,7 +208,11 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
             // CvCityReligions::ErodeOtherReligiousPressure, which RemoveOtherReligions and AddProphetSpread call, asks GetInquisitorPressureRetention(the OWNER OF THE CITY)
             // (V:CvReligionClasses.cpp:4957; SimulateErodeOtherReligiousPressure, the same for the preview, 4999): with the switch a
             // Reformation belief of the religion that is kept only counts if the owner of this city owns its holy city or has it as the state religion
-            if (!city.civ.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp)
+            // With religiousBeliefValidityLikeVp every founder-side belief is asked for the owner of the city without a city: a Founder or Enhancer belief only if that
+            // owner owns the holy city of the religion
+            if (city.civ.gameInfo.ruleset.modOptions.constants.religiousBeliefValidityLikeVp)
+                city.civ.religionManager.forEachValidFounderSideUnique(other, UniqueType.ReligionPressureRetention, city.state) { retention += it.params[0].toInt() }
+            else if (!city.civ.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp)
                 other.founderBeliefUniqueMap.forEachMatchingUnique(UniqueType.ReligionPressureRetention, city.state) { retention += it.params[0].toInt() }
             else {
                 other.founderWithoutReformationUniqueMap.forEachMatchingUnique(UniqueType.ReligionPressureRetention, city.state) { retention += it.params[0].toInt() }

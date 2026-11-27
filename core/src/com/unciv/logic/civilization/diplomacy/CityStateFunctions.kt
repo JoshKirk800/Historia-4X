@@ -16,6 +16,7 @@ import com.unciv.models.ruleset.nation.Nation
 import com.unciv.models.ruleset.tile.ResourceSupplyList
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
+import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
@@ -401,7 +402,14 @@ class CityStateFunctions(val civInfo: Civilization) {
         val gameProgressApproximate = min(civInfo.gameInfo.turns / (400f * speed.modifier), 1f)
         influenceGained *= 1 - (2/3f) * gameProgressApproximate
         influenceGained *= speed.goldGiftModifier
+        // CvMinorCivAI::GetFriendshipFromGoldGift adds the religious modifier only if IsSameReligionAsMajor (V:CvMinorCivAI.cpp:15573-15574): with
+        // religiousBeliefValidityLikeVp a belief's bonus needs our capital to follow the donor's owned religion
+        val beliefsCount = !civInfo.gameInfo.ruleset.modOptions.constants.religiousBeliefValidityLikeVp || run {
+            val owned = donorCiv.religionManager.getOwnedReligion()
+            owned != null && civInfo.getCapital()?.religion?.getMajorityReligion() == owned
+        }
         donorCiv.forEachMatchingUnique(UniqueType.CityStateGoldGiftsProvideMoreInfluence) { unique ->
+            if (!beliefsCount && unique.sourceObjectType == UniqueTarget.FounderBelief) return@forEachMatchingUnique
             influenceGained *= 1f + unique.params[0].toFloat() / 100f
         }
 

@@ -212,9 +212,26 @@ class ModConstants {
     /** VP 5.4.8 CvReligionBeliefs::IsBeliefValid, the Reformation branch (V:CvBeliefClasses.cpp:2229-2253): a Reformation belief works for the civilization that owns the holy city
      *  of the religion or has it as its state religion ([com.unciv.logic.civilization.managers.ReligionManager.getStateReligion]), and in a city only if the majority religion
      *  of that city is that religion. Without it, as before, every Reformation belief works for the founder of the religion only, and in all of its cities.
-     *  NOT modelled: `bHolyCityOnly` (2240-2252, a call-site argument that limits the belief to the holy city, or for the others to the capital); some callers pass it, for
-     *  instance `CvCity::canConstruct` (V:CvCity.cpp:8915, with the OWNED religion). Which Reformation readers pass it was not checked. */
+     *  `bHolyCityOnly` and who owns the holy city are [religiousBeliefValidityLikeVp]'s. */
     var reformationBeliefsLikeVp = false
+    /** VP 5.4.8 CvReligionBeliefs::IsBeliefValid as a whole (V:CvBeliefClasses.cpp:2151-2317,
+     *  [com.unciv.logic.civilization.managers.ReligionManager.isBeliefValid]) and the religion each reader asks it of:
+     *  - who owns a religion: the owner of its holy city, and a holy city that an inquisitor of another religion has stripped is nobody's
+     *    (CvCityReligions::RemoveOtherReligions clears the holy plot, V:CvReligionClasses.cpp:5246-5253);
+     *  - the founder-side beliefs that civilization-wide lookups read are those of the OWNED religion
+     *    (CvPlayerReligions::GetOwnedReligion, V:CvReligionClasses.cpp:3742-3759): the state religion while we own its holy city, conquered or founded.
+     *    A founder that lost its holy city has no Founder or Enhancer belief any more. A Reformation belief is that of the state religion,
+     *    asked with its holy city, so the holy city must follow it;
+     *  - the global yields of the founder benefits ask with the holy city and `bHolyCityOnly` (CvPlayer::GetHappinessFromReligion, V:CvPlayer.cpp:21844-21935);
+     *  - Heathen Conversion and the score read the owned religion (CvUnit::setXY V:CvUnit.cpp:20859-20866, CvPlayer::GetScoreFromReligion V:CvPlayer.cpp:11348-11363);
+     *  - the influence a gift of gold gets from beliefs needs the city-state's capital to follow the donor's owned religion
+     *    (CvMinorCivAI::IsSameReligionAsMajor, V:CvMinorCivAI.cpp:16599-16612);
+     *  - the erosion of a missionary is valid for the missionary's owner, and the retention of an inquisition for the owner of the city
+     *    (CvCityReligions::AddMissionarySpread V:CvReligionClasses.cpp:4813-4821, ErodeOtherReligiousPressure 4957).
+     *  DEPARTURE: an inquisitor of the religion itself gives a stripped holy city back, as before; VP never gives it back.
+     *  Off: the founded religion, the holy city of a religion counts while it is blocked, and the founder keeps its Founder and Enhancer beliefs. Independent of
+     *  [reformationBeliefsLikeVp], which says who reads the Reformation beliefs at all. */
+    var religiousBeliefValidityLikeVp = false
     /** VP 5.4.8 CvUnit::GetGenericMeleeStrengthModifier (V:CvUnit.cpp:16471-16507) and CvUnit::GetMaxRangedCombatStrength (V:CvUnit.cpp:17336-17372): a land unit fighting a unit of
      *  a major civilization gets the four religious combat bonuses of its owner's state religion (Defender of the Faith, Evangelism) by the territory of the battle tile and
      *  the state religion of the other side ([com.unciv.logic.battle.ReligiousCombat]). Off: the uniques of [com.unciv.models.ruleset.unique.UniqueType.ReligiousStrengthOwnLands]

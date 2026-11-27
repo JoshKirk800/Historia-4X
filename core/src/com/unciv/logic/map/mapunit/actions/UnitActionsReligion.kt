@@ -111,7 +111,7 @@ object UnitActionsReligion {
                     city.religion.addPressure(unit.religion!!, getPressureAddedFromSpread(unit))
                     city.religion.removeAllPressuresExceptFor(unit.religion!!)
                 } else // only a spreader that leaves the other religions in place erodes them, with Evangelism
-                    city.religion.addPressureFromSpreading(unit.religion!!, getPressureAddedFromSpread(unit))
+                    city.religion.addPressureFromSpreading(unit.religion!!, getPressureAddedFromSpread(unit), unit.civ)
                 
                 val newReligion = city.religion.getMajorityReligion()
                 if (previousReligion != newReligion && newReligion != null && city.civ != unit.civ) {
@@ -165,6 +165,8 @@ object UnitActionsReligion {
                         holyCityReligion.foundingCiv.addNotification("An [${unit.baseUnit.name}] has restored [${city.name}] as the Holy City of your religion [${holyCityReligion.getReligionDisplayName()}]!", NotificationCategory.Religion)
                         city.religion.isBlockedHolyCity = false
                     }
+                    // with religiousBeliefValidityLikeVp a stripped holy city is nobody's: the owner's state religion reads it
+                    city.civ.religionManager.invalidateStateReligion()
                 }
                 UnitActionModifiers.activateSideEffects(unit, newStyleUnique)
             }.takeIf { UnitActionModifiers.canActivateSideEffects(unit, newStyleUnique)}

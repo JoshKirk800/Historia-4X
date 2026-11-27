@@ -14,7 +14,17 @@ object BarbarianConversion {
     /** Whether [unit] belongs to a civilization whose religion converts Barbarians next to units like it */
     @Readonly
     private fun convertsBarbarians(unit: MapUnit): Boolean {
-        val religion = unit.civ.religionManager.religion ?: return false
+        val religionManager = unit.civ.religionManager
+        if (unit.civ.gameInfo.ruleset.modOptions.constants.religiousBeliefValidityLikeVp) {
+            // CvUnit::setXY (V:CvUnit.cpp:20859-20866): the OWNED religion, each belief asked with its holy city
+            val owned = religionManager.getOwnedReligion() ?: return false
+            var converts = false
+            religionManager.forEachValidFounderSideUnique(owned, UniqueType.ConvertAdjacentBarbarians, unit.cache.state, religionManager.getHolyCityOf(owned)) {
+                if (unit.matchesFilter(it.params[0])) converts = true
+            }
+            return converts
+        }
+        val religion = religionManager.religion ?: return false
         if (!religion.isMajorReligion()) return false
         return religion.founderBeliefUniqueMap.getMatchingUniques(UniqueType.ConvertAdjacentBarbarians, unit.cache.state)
             .any { unit.matchesFilter(it.params[0]) }

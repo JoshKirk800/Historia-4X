@@ -1090,8 +1090,9 @@ class Civilization : IsPartOfGameInfoSerialization {
             } * modConstants.scoreFromPolicies.toDouble()
         }
         if (modConstants.scoreFromReligionBeliefs != 0 || modConstants.scoreFromReligionCities != 0) {
-            // CvPlayer::GetScoreFromReligion: the beliefs of the founded religion and the cities of any owner that follow it
-            val foundedReligion = religionManager.religion
+            // CvPlayer::GetScoreFromReligion: the beliefs of the founded religion and the cities of any owner that follow it; with religiousBeliefValidityLikeVp the
+            // OWNED religion (V:CvPlayer.cpp:11348-11363), founded or conquered, and nothing for a founder that lost its holy city
+            val foundedReligion = if (modConstants.religiousBeliefValidityLikeVp) religionManager.getOwnedReligion() else religionManager.religion
             scoreBreakdown["Religion"] =
                 if (gameInfo.isReligionEnabled() && foundedReligion != null && foundedReligion.isMajorReligion()) {
                     val beliefs = foundedReligion.getAllBeliefsOrdered().count()

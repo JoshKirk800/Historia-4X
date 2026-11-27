@@ -12,6 +12,7 @@ import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
@@ -568,33 +569,31 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
     @Readonly
     private fun getGlobalStatsFromUniques():StatMap {
         val statMap = StatMap()
-        val founderReligion = civInfo.religionManager.getFounderBenefitsReligion()
+        val religionManager = civInfo.religionManager
+        val founderReligion = religionManager.getFounderBenefitsReligion()
         if (founderReligion != null) {
-            founderReligion.founderBeliefUniqueMap.forEachMatchingUnique(
-                UniqueType.StatsFromGlobalCitiesFollowingReligion, civInfo.state
-            ) { unique ->
-                statMap.add(
-                    "Religion",
-                    unique.stats * civInfo.religionManager.numberOfCitiesFollowingThisReligion()
-                )
+            // CvPlayer::GetHappinessFromReligion (V:CvPlayer.cpp:21844-21935) asks each belief with the holy city and bHolyCityOnly (21858-21892): with the switch a
+            // Reformation belief counts only while the holy city follows the religion
+            val validityLikeVp = civInfo.gameInfo.ruleset.modOptions.constants.religiousBeliefValidityLikeVp
+            val holyCity = if (validityLikeVp) religionManager.getHolyCityOf(founderReligion) else null
+            val forEachUnique = { type: UniqueType, op: (Unique) -> Unit ->
+                if (validityLikeVp) religionManager.forEachValidFounderSideUnique(founderReligion, type, civInfo.state, holyCity, holyCityOnly = true, op)
+                else founderReligion.founderBeliefUniqueMap.forEachMatchingUnique(type, civInfo.state, op)
+            }
+            forEachUnique(UniqueType.StatsFromGlobalCitiesFollowingReligion) { unique ->
+                statMap.add("Religion", unique.stats * religionManager.numberOfCitiesFollowingThisReligion(founderReligion))
             }
 
-            founderReligion.founderBeliefUniqueMap.forEachMatchingUnique(
-                UniqueType.StatsFromGlobalFollowers, civInfo.state
-            ) { unique ->
+            forEachUnique(UniqueType.StatsFromGlobalFollowers) { unique ->
                 statMap.add(
                     "Religion",
-                    unique.stats * civInfo.religionManager.numberOfFollowersFollowingThisReligion(
-                        unique.params[2]
-                    ).toFloat() / unique.params[1].toFloat()
+                    unique.stats * religionManager.numberOfFollowersFollowingThisReligion(unique.params[2], founderReligion).toFloat() / unique.params[1].toFloat()
                 )
             }
 
             // Whole multiples only: (int)(cities * 0.5) for Ceremonial Burial in CvPlayer::GetHappinessFromReligion (CvPlayer.cpp:10927)
-            founderReligion.founderBeliefUniqueMap.forEachMatchingUnique(
-                UniqueType.StatsFromGlobalCitiesFollowingReligionPer, civInfo.state
-            ) { unique ->
-                val cities = civInfo.religionManager.numberOfCitiesFollowingThisReligion(unique.params[2])
+            forEachUnique(UniqueType.StatsFromGlobalCitiesFollowingReligionPer) { unique ->
+                val cities = religionManager.numberOfCitiesFollowingThisReligion(unique.params[2], founderReligion)
                 statMap.add("Religion", unique.stats * (cities / unique.params[1].toInt()))
             }
         }

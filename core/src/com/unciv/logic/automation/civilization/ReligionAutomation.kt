@@ -33,6 +33,7 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
+import com.unciv.models.translations.removeConditionals
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -1034,6 +1035,90 @@ object ReligionAutomation {
         }
         return InquisitorTargets(bestFirstLikeVp(offensive), bestFirstLikeVp(defensive))
     }
+
+    /** CvUnitReligion::IsFullStrength for a Great Prophet: it has used none of its spreads yet */
+    fun isFullStrength(unit: MapUnit): Boolean =
+        unit.getMatchingUniques(UniqueType.CanSpreadReligion).none { (unit.abilityToTimesUsed[it.text.removeConditionals()] ?: 0) > 0 }
+
+    /** CvCityReligions::GetFollowersOtherReligions with bIncludePantheons: followers of the pantheons and founded religions other than [religion] */
+    private fun followersOfOtherReligionsAndPantheons(city: City, religion: String): Int {
+        val religions = city.civ.gameInfo.religions
+        var followers = 0
+        for ((name, amount) in city.religion.getNumberOfFollowers())
+            if (name != religion && religions[name] != null) followers += amount
+        return followers
+    }
+
+    /**
+     *  CvReligionAI::ChooseProphetConversionCity (V:CvReligionClasses.cpp:6492-6717) before its path checks: the cities a Great Prophet of the religion
+     *  we spread ([religionToSpread], foreign ones not considered) would convert, best first, with their scores; those must exceed 500, or 10 for
+     *  a [unit] that has spread already ([isFullStrength]). There must be a holy city of the religion.
+     *  - our cities not of the religion: its holy city 100000; else, unless under siege or (for a [unit]) guarded by another religion's inquisitor,
+     *    (followers of other religions and pantheons + atheists) × 100 / (distance to the holy city + 1), × 3 under another founded religion;
+     *  - cities of others not at war with us, not bad conversion targets ([TheftAi.isBadTheftTarget]), at most 23
+     *    steps from our nearest city ([CityDistances.cityDistancePathLength]), not guarded against the religion and not of it, with followers of
+     *    other religions and pantheons: those × 1000 / (distance to the holy city + 7), × the majority's pressure per turn / ours when that is
+     *    smaller, ÷ 2 for the holy city of the religion the owner owns, × 2 when the majority religion's founder does not own the city, × 2 per yield
+     *    other than Happiness (no VP yield) our beliefs give per foreign city or per foreign followers ([BeliefAiProfile]), × 2 for happiness per
+     *    peaceful foreign followers.
+     *  Not built: the Prophet Fervor and foreign-spread-immune traits (none in Unciv), the unique-belief rule, the city-state follower yields (no
+     *  such belief), the instant yields of a foreign spread (none in the belief profile), the teammate checks (no teams).
+     */
+    fun prophetTargetsLikeVp(civ: Civilization, unit: MapUnit?): List<Pair<City, Int>> {
+        val minScore = if (unit != null && !isFullStrength(unit)) 10 else 500
+        val religion = religionToSpread(civ) ?: return emptyList()
+        val holyTile = holyCityOf(civ, religion.name)?.getCenterTile() ?: return emptyList()
+        val candidates = ArrayList<Pair<City, Int>>()
+        for (city in civ.cities) {
+            val majority = city.religion.getMajorityReligion()
+            if (majority == religion) continue
+            if (city.isHolyCityOf(religion.name)) {
+                candidates += city to 100_000
+                continue
+            }
+            if (CityDangerAi.isUnderSiege(city)) continue
+            if (unit != null && city.religion.isProtectedByInquisitor(religion.name)) continue
+            val atheists = city.population.population - city.religion.getNumberOfFollowers().values.sum()
+            val heretics = followersOfOtherReligionsAndPantheons(city, religion.name) + atheists
+            var score = heretics * 100 / (city.getCenterTile().aerialDistanceTo(holyTile) + 1)
+            if (majority != null && majority.isMajorReligion()) score *= 3
+            if (score > minScore) candidates += city to score
+        }
+
+        val profiles = religion.getAllBeliefsOrdered().map { BeliefAiProfile.of(it, civ) }.toList()
+        val yieldDoublings = Stat.entries.count { stat ->
+            stat != Stat.Happiness && profiles.any { it.yieldPerXForeignFollowers[stat] > 0 || it.yieldPerForeignCity[stat] > 0 }
+        }
+        val peacefulFollowers = profiles.any { it.happinessPerXPeacefulForeignFollowers > 0 }
+        for (other in civ.gameInfo.civilizations) {
+            if (!other.isAlive() || other == civ || other.isBarbarian || other.isSpectator || civ.isAtWarWith(other)) continue
+            if (TheftAi.isBadTheftTarget(civ, other, TheftType.Conversion)) continue
+            val ownersReligion = other.religionManager.getOwnedReligion()
+            for (city in other.cities) {
+                val center = city.getCenterTile()
+                if (CityDistances.cityDistancePathLength(civ, center) > PROPHET_MAX_CITY_PATH_LENGTH) continue
+                if (isDefendedAgainstSpread(civ, city, religion.name)) continue
+                val heretics = followersOfOtherReligionsAndPantheons(city, religion.name)
+                if (heretics == 0) continue
+                val majority = city.religion.getMajorityReligion()
+                if (majority == religion) continue
+                val perTurn = city.religion.getPressuresFromSurroundingCities()
+                val ours = max(1, perTurn[religion.name])
+                val theirs = majority?.let { perTurn[it.name] } ?: 0
+                var score = heretics * 1000 / (center.aerialDistanceTo(holyTile) + 7)
+                if (theirs < ours) score = score * theirs / ours
+                if (ownersReligion != null && city.isHolyCityOf(ownersReligion.name)) score /= 2
+                if (majority != null && majority.foundingCivName != other.civName) score *= 2
+                repeat(yieldDoublings) { score *= 2 }
+                if (peacefulFollowers) score *= 2
+                if (score > minScore) candidates += city to score
+            }
+        }
+        return candidates.asReversed().sortedByDescending { it.second }
+    }
+
+    /** CvReligionAI::ChooseProphetConversionCity's "ignore far-flung cities" (V:CvReligionClasses.cpp:6600-6602) */
+    private const val PROPHET_MAX_CITY_PATH_LENGTH = 23
     //endregion
 
     //region Belief choices (CvReligionAI::Choose*Belief, CvGameReligions::GetReligionToFound)

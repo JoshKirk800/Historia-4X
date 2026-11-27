@@ -3,11 +3,15 @@ package com.unciv.logic.automation.unit
 import com.unciv.Constants
 import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.civilization.ReligionAutomation
+import com.unciv.logic.automation.strategy.UnitAiType
+import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UnitActionType
+import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.view.MapUnitView
 
 /** The moves of religious units: CvHomelandAI::ExecuteMissionaryMoves / ExecuteInquisitorMoves / ExecuteProphetMoves with the targets of CvReligionAI */
@@ -92,7 +96,7 @@ object ReligiousUnitAutomation {
     /**
      *  CvPlayerAI::GetDirectiveProphet and CvHomelandAI::ExecuteProphetMoves. Enhanced religion: spread if CvReligionAI::ChooseProphetConversionCity
      *  finds a city, else build an improvement; founded religion: spread if a city needs it critically, else use the prophet's power (enhance);
-     *  no religion: found it, or build an improvement when locked out.
+     *  no religion: found it, or build an improvement when locked out. With [ReligionAutomation.religionAiLikeVp], [prophetDirectiveLikeVp].
      *  @return false for "build an improvement" (the Holy Site), which the caller's Great Person improvement code handles
      */
     fun automateGreatProphet(unitView: MapUnitView): Boolean {
@@ -100,7 +104,7 @@ object ReligiousUnitAutomation {
         val civ = unit.civ
         val religionManager = civ.religionManager
         val religion = ReligionAutomation.foundedReligion(civ)
-        val directive = when {
+        val directive = if (ReligionAutomation.religionAiLikeVp(civ)) prophetDirectiveLikeVp(unit) else when {
             religion != null && religionManager.religionState == ReligionState.EnhancedReligion ->
                 if (ReligionAutomation.chooseProphetConversionCity(civ, false) != null) ProphetDirective.SpreadReligion
                 else ProphetDirective.ConstructImprovement
@@ -118,12 +122,84 @@ object ReligiousUnitAutomation {
         return true
     }
 
-    /** ExecuteProphetMoves, GREAT_PEOPLE_DIRECTIVE_SPREAD_RELIGION: to CvReligionAI::ChooseProphetTargetPlot, then spread */
+    /**
+     *  ExecuteProphetMoves, GREAT_PEOPLE_DIRECTIVE_SPREAD_RELIGION (V:CvHomelandAI.cpp:5102-5141): to CvReligionAI::ChooseProphetTargetPlot, then
+     *  spread; the city is [chooseProphetConversionCityLikeVp]'s with [ReligionAutomation.religionAiLikeVp]. Without a city it stays (VP moves it to
+     *  safety, CvHomelandAI::MoveCivilianToSafety, not in Unciv).
+     */
     fun spreadReligionWithProphet(unitView: MapUnitView) {
         @Suppress("DEPRECATION") val unit = unitView.getUnit()
+        if (ReligionAutomation.religionAiLikeVp(unit.civ)) {
+            chooseProphetConversionCityLikeVp(unit)?.let { moveAndAct(unitView, unit, it.plot, UnitActionType.SpreadReligion) }
+            return
+        }
         val city = ReligionAutomation.chooseProphetConversionCity(unit.civ, false) ?: return
         val target = chooseTargetPlot(unit, city) { it.getCity() == city } ?: return
         moveAndAct(unitView, unit, target, UnitActionType.SpreadReligion)
+    }
+
+    /**
+     *  CvPlayerAI::GetDirectiveProphet (V:CvPlayerAI.cpp:1927-1975): a prophet that has spread already keeps spreading. With an enhanced religion
+     *  of ours, it builds a Holy Site while we have no more of them than our religion flavor minus our prophets, or when
+     *  [chooseProphetConversionCityLikeVp] finds no city, and spreads otherwise; with our religion not enhanced, it enhances it while our holy
+     *  city follows it, and spreads otherwise; without a religion of ours, it founds one, or builds a Holy Site when none is left to found.
+     *  Not built: the Prophet Fervor trait (none in Unciv).
+     */
+    private fun prophetDirectiveLikeVp(unit: MapUnit): ProphetDirective {
+        if (!ReligionAutomation.isFullStrength(unit)) return ProphetDirective.SpreadReligion
+        val civ = unit.civ
+        val religionManager = civ.religionManager
+        val owned = religionManager.getOwnedReligion()
+            ?: return if (religionManager.remainingFoundableReligions() <= 0) ProphetDirective.ConstructImprovement else ProphetDirective.UsePower
+        if (owned.isEnhancedReligion()) {
+            val flavor = civ.ai.personality(Flavor.Religion) - UnitAiTypes.numUnitsWithUnitAi(civ, UnitAiType.PROPHET, includeBeingTrained = false)
+            return if (holySites(unit) <= flavor || chooseProphetConversionCityLikeVp(unit) == null) ProphetDirective.ConstructImprovement
+            else ProphetDirective.SpreadReligion
+        }
+        val holyCity = civ.cities.firstOrNull { it.isHolyCityOf(owned.name) }
+        return if (holyCity?.religion?.getMajorityReligion() == owned) ProphetDirective.UsePower else ProphetDirective.SpreadReligion
+    }
+
+    /** CvPlayer::getImprovementCount for the improvement [unit] builds (the Holy Site): those on the tiles of our cities */
+    private fun holySites(unit: MapUnit): Int {
+        val improvement = unit.getMatchingUniques(UniqueType.ConstructImprovementInstantly).firstOrNull()?.params?.get(0) ?: return 0
+        return unit.civ.cities.sumOf { city -> city.getTiles().count { it.improvement == improvement } }
+    }
+
+    /** The plot next to the chosen city ([chooseTargetPlot]) and the turns to it */
+    private class ProphetTarget(val plot: Tile, val turns: Int)
+
+    /**
+     *  CvReligionAI::ChooseProphetConversionCity (V:CvReligionClasses.cpp:6492-6717), its path checks: of the two best cities of
+     *  [ReligionAutomation.prophetTargetsLikeVp] the higher score / (turns to the plot of [chooseTargetPlot] + 3), none on a tie or when neither has
+     *  a path safe for a civilian ([isPathSafeForCivilian]); a sole candidate if it has such a path.
+     *  Not built: MOVEFLAG_NO_ENEMY_TERRITORY (Unciv paths have no such flag).
+     */
+    private fun chooseProphetConversionCityLikeVp(unit: MapUnit): ProphetTarget? {
+        val candidates = ReligionAutomation.prophetTargetsLikeVp(unit.civ, unit)
+        fun reach(index: Int): ProphetTarget? {
+            val city = candidates.getOrNull(index)?.first ?: return null
+            val plot = chooseTargetPlot(unit, city) { it.getCity() == city } ?: return null
+            if (!isPathSafeForCivilian(unit, plot)) return null
+            return ProphetTarget(plot, turnsToReach(unit, plot))
+        }
+        if (candidates.size < 2) return reach(0)
+        val first = reach(0)
+        val second = reach(1)
+        val firstScore = first?.let { candidates[0].second / (it.turns + 3) } ?: 0
+        val secondScore = second?.let { candidates[1].second / (it.turns + 3) } ?: 0
+        return when {
+            firstScore > 0 && firstScore > secondScore -> first
+            secondScore > 0 && secondScore > firstScore -> second
+            else -> null
+        }
+    }
+
+    /** CvUnit::CachedPathIsSafeForCivilian (V:CvUnit.cpp:31605-31610): the plot where the first turn of the path to [tile] ends has less danger than the unit's health */
+    private fun isPathSafeForCivilian(unit: MapUnit, tile: Tile): Boolean {
+        if (tile == unit.getTile()) return true
+        val firstTurnEnd = unit.movement.getShortestPath(tile).firstOrNull() ?: return true
+        return unit.civ.ai.plotDanger.get(firstTurnEnd) < unit.health
     }
 
     /**

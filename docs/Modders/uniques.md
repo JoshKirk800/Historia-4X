@@ -88,6 +88,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Triggerable
 
+??? example  "[positiveAmount] Tourism towards the owner of the city of the event"
+	Added to the influence on the major civilization that owns the city of the triggering event (the original's `ChangeInfluenceOn`, V:CvCultureClasses.cpp:3699-3735): times the speed's culture cost modifier and the tourism modifier towards that civilization, cut to a whole number. Nothing for a city-state or a civilization we have not met. Takes `(modified by game speed)`, as the instant yields do
+
+	Example: "[3] Tourism towards the owner of the city of the event"
+
+	Applicable to: Triggerable
+
 ??? example  "Gain the [greatWork] Great Work"
 	The work is placed in a free slot of the city that triggers it, or else of the nearest city that has one. Nothing happens if there is none
 
@@ -5817,6 +5824,16 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 ??? example  "&lt;upon adopting a policy&gt;"
 	Any policy or the opening of a branch, but not the policy given for completing a branch
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon spreading a religion to a city&gt;"
+	A unit's Spread Religion action in any city, after the pressure. The Triggering amount is one more than the followers its religion won there
+
+	Applicable to: TriggerCondition
+
+??? example  "&lt;upon spreading a religion to a city of another civilization&gt;"
+	A unit's Spread Religion action in a city of another civilization, before the pressure. The Triggering amount is one more than the city's followers of other religions
 
 	Applicable to: TriggerCondition
 

@@ -584,6 +584,12 @@ class Tile : IsPartOfGameInfoSerialization, TileInterface<Tile> {
         if (improvement != null && !improvementIsPillaged && filter == "improved") return true
         if (isPillaged() && filter == "pillaged") return true
         if (filter == "worked" && isWorked()) return true
+        // a resource the civilization sees, which the unpillaged improvement makes valid: what a religion's RequiresResource asks of the tile
+        // (CvPlot::calculateReligionImprovementYield, V:CvPlot.cpp:10554-10558)
+        if (filter == "improved resource" && civInfo != null && civInfo.canSeeResource(tileResource)) {
+            val improvement = getUnpillagedTileImprovement()
+            if (improvement != null && tileResource!!.isImprovedBy(improvement)) return true
+        }
         if (getUnpillagedTileImprovement()?.matchesFilter(filter, stateThisTile, false) == true) return true
         return getUnpillagedRoadImprovement()?.matchesFilter(filter, stateThisTile, false) == true
     }

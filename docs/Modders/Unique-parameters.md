@@ -360,6 +360,7 @@ Allowed values:
 - [civFilter](#civfilter) of the civilization who owns this tile
 - `Improvement` or `improved` for tiles with any improvements
 - `unimproved` for tiles with no improvement
+- `improved resource` for tiles with a resource the civilization can see and an unpillaged improvement that improves that resource
 - `pillaged` for pillaged tiles
 - `worked` for tiles worked by a city
 

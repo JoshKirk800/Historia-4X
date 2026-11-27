@@ -39,6 +39,9 @@ class PolicyManager : IsPartOfGameInfoSerialization {
     /** Policies of ideologies (tenets) that can be adopted at no cost. Free policies can be spent on tenets as well, but these only on tenets */
     var freeTenets = 0
     var storedCulture = 0
+    /** With [ModConstants.cultureHundredthsLikeVp]: the hundredths of [storedCulture] below a whole one (CvPlayer::m_iJONSCultureTimes100) */
+    var cultureRemainder = 0
+        private set
     internal val adoptedPolicies = HashSet<String>()
     private var numberOfAdoptedPolicies = 0
 
@@ -81,6 +84,7 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         toReturn.freeTenets = freeTenets
         toReturn.shouldOpenPolicyPicker = shouldOpenPolicyPicker
         toReturn.storedCulture = storedCulture
+        toReturn.cultureRemainder = cultureRemainder
         toReturn.maxEffectiveCities = maxEffectiveCities
         toReturn.cultureOfLast8Turns = cultureOfLast8Turns.clone()
         return toReturn
@@ -110,19 +114,26 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         }
     }
 
-    fun addCulture(culture: Int) {
+    fun addCulture(culture: Int) = addCultureTimes100(culture * 100L)
+
+    /** Adds [hundredths] of culture; what is below a whole one stays in [cultureRemainder], and an increase also counts in the culture of the whole game
+     *  (CvPlayer::setJONSCultureTimes100, V:CvPlayer.cpp:18183-18204, which changeJONSCultureTimes100 calls). Only [ModConstants.cultureHundredthsLikeVp] adds what is not whole */
+    fun addCultureTimes100(hundredths: Long) {
         val couldAdoptPolicyBefore = canAdoptPolicy()
-        storedCulture += culture
-        if (culture > 0) civInfo.totalCultureForContests += culture
+        val total = cultureRemainder + hundredths
+        storedCulture += Math.floorDiv(total, 100L).toInt()
+        cultureRemainder = Math.floorMod(total, 100L).toInt()
+        if (hundredths > 0) civInfo.addLifetimeCultureTimes100(hundredths)
         if (!couldAdoptPolicyBefore && canAdoptPolicy()) {
             shouldOpenPolicyPicker = true
         }
     }
 
-    fun endTurn(culture: Int) {
+    /** The culture of the turn, in hundredths */
+    fun endTurn(cultureTimes100: Long) {
         updateMaxEffectiveCities() // before addCulture, which decides on the cost whether a policy can be adopted
-        addCulture(culture)
-        addCurrentCultureToCultureOfLast8Turns(culture)
+        addCultureTimes100(cultureTimes100)
+        addCurrentCultureToCultureOfLast8Turns((cultureTimes100 / 100).toInt())
     }
 
     // from https://forums.civfanatics.com/threads/the-number-crunching-thread.389702/

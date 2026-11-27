@@ -62,7 +62,7 @@ class PolicyCostTests {
     @Test
     fun `losing a city does not make policies cheaper`() {
         val cities = foundCities(4)
-        civ.policies.endTurn(0) // the turn change is where the highest count is recorded
+        civ.policies.endTurn(0L) // the turn change is where the highest count is recorded
         cities.last().destroyCity()
 
         assertEquals(3, civ.cities.size)

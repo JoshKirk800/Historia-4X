@@ -1321,6 +1321,9 @@ class ModConstants {
      *  GetInfluencePerTurnTimes100, V:CvCultureClasses.cpp:3778-3793): the tourism of the cities keeps the parts of their percentages up to the
      *  modifier towards each civilization, and the influence keeps what is below a whole one for the next turn, the level reading it */
     var tourismPrecisionLikeVp = false
+    /** Vox Populi's culture of the turn in hundredths (CvPlayer::doTurnPostDiplomacy, V:CvPlayer.cpp:10450-10459): the stored culture and the culture
+     *  of the whole game keep what is below a whole one for the next turn, and the influence levels read the latter */
+    var cultureHundredthsLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

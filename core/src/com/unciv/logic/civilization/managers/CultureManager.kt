@@ -83,6 +83,8 @@ class CultureManager : IsPartOfGameInfoSerialization {
         private set
     var lastTurnLifetimeCulture = 0
         private set
+    var lastTurnLifetimeCultureRemainder = 0
+        private set
 
     /** What the last turn added to the influence on each civilization in hundredths (CvPlayerCulture::m_aiLastTurnCulturalIPT, set in DoTurn), and the lifetime
      *  culture that turn made, in hundredths (CvPlayer::doTurnPostDiplomacy sets m_iLastTurnCPT, V:CvPlayer.cpp:10448), for [ModConstants.influenceTrendLikeVp] */
@@ -130,6 +132,7 @@ class CultureManager : IsPartOfGameInfoSerialization {
         toReturn.lastTurnInfluence = lastTurnInfluence.clone()
         toReturn.lastTurnInfluenceRemainder = lastTurnInfluenceRemainder.clone()
         toReturn.lastTurnLifetimeCulture = lastTurnLifetimeCulture
+        toReturn.lastTurnLifetimeCultureRemainder = lastTurnLifetimeCultureRemainder
         toReturn.lastTurnInfluenceDelta = lastTurnInfluenceDelta.clone()
         toReturn.lastTurnCulturePerTurnTimes100 = lastTurnCulturePerTurnTimes100
         toReturn.instantTourismHistory = instantTourismHistory.clone()
@@ -408,8 +411,8 @@ class CultureManager : IsPartOfGameInfoSerialization {
     /** The influence on [other] as a percentage of the culture it has made in the whole game (CvPlayerCulture::GetInfluenceLevel, V:CvCultureClasses.cpp:3796-3820) */
     @Readonly
     fun getInfluencePercent(other: Civilization): Int {
-        val lifetimeCulture = other.totalCultureForContests
-        return if (lifetimeCulture > 0) (getInfluenceTimes100(other) / lifetimeCulture).toInt() else 0
+        val lifetimeCulture = other.getLifetimeCultureTimes100()
+        return if (lifetimeCulture > 0) (getInfluenceTimes100(other) * 100 / lifetimeCulture).toInt() else 0
     }
 
     /** CvPlayerCulture::GetInfluenceLevel, null if we have not met [other] */
@@ -489,7 +492,7 @@ class CultureManager : IsPartOfGameInfoSerialization {
         val tourismPerTurn = getTourismPerTurnIncludingInstantTimes100(other)
         if (tourismPerTurn == 0L) return NEVER
         val percent = civ.gameInfo.ruleset.modOptions.constants.influencePercentInfluential
-        val needed = percent * (other.totalCultureForContests * 100L) / 100 - getInfluenceTimes100(other)
+        val needed = percent * other.getLifetimeCultureTimes100() / 100 - getInfluenceTimes100(other)
         val divisor = max(1L, tourismPerTurn - percent * getCulturePerTurnIncludingInstantTimes100(other) / 100)
         var turns = needed / divisor
         if (needed % divisor != 0L) turns++
@@ -576,8 +579,9 @@ class CultureManager : IsPartOfGameInfoSerialization {
     fun rememberLastTurn() {
         lastTurnInfluence = influence.clone()
         lastTurnInfluenceRemainder = influenceRemainder.clone()
-        lastTurnCulturePerTurnTimes100 = (civ.totalCultureForContests - lastTurnLifetimeCulture) * 100L
+        lastTurnCulturePerTurnTimes100 = civ.getLifetimeCultureTimes100() - (lastTurnLifetimeCulture * 100L + lastTurnLifetimeCultureRemainder)
         lastTurnLifetimeCulture = civ.totalCultureForContests
+        lastTurnLifetimeCultureRemainder = civ.totalCultureRemainder
     }
 
     /** Adds this turn's tourism to the influence on every civilization met, and tells how that is going (CvPlayerCulture::DoTurn) */

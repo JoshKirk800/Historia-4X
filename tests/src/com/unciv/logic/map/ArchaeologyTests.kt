@@ -339,7 +339,7 @@ class ArchaeologyTests {
         recordOn(tile, ArtifactClasses.Writing, "Classical era", work = "Rosetta Stone")
         val unit = archaeologist(tile)
         completeDig(unit, tile)
-        for (turn in 0 until 8) { game.gameInfo.turns = turn; civ.policies.endTurn(5) }
+        for (turn in 0 until 8) { game.gameInfo.turns = turn; civ.policies.endTurn(500L) }
         val expected = civ.policies.getCultureFromGreatWriter()
         val before = civ.policies.storedCulture
         assertTrue(expected > 0)

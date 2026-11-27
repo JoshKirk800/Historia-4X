@@ -9,6 +9,7 @@ import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -45,6 +46,19 @@ class ExpendedGreatPeopleSupplyTests {
             it.getUnits().none() && it.aerialDistanceTo(game.getTile(HexCoord(0, 0))) in 1..3 && it.isWater == water
         }
         game.addUnit(name, civ, tile).consume()
+    }
+
+    @Test
+    fun `the ruleset plays the supply of expended great people as shipped`() {
+        // no constant is set here: the value of ModOptions.json (flipped by the owner's go, 2026-11-27)
+        assertTrue(ruleset.modOptions.constants.unitSupplyLikeVp)
+        assertTrue(ruleset.modOptions.constants.unitSupplyExpendedGreatPeopleLikeVp)
+        game.makeHexagonalMap(4, Constants.grassland)
+        val civ = game.addCiv()
+        game.addCity(civ, game.getTile(HexCoord(0, 0)), initialPopulation = 1)
+        val tile = game.tileMap.values.first { it.getUnits().none() && it.aerialDistanceTo(game.getTile(HexCoord(0, 0))) in 1..3 }
+        game.addUnit("Great General", civ, tile).consume()
+        assertEquals(1, civ.unitSupplyFromExpendedGreatPeople)
     }
 
     @Test

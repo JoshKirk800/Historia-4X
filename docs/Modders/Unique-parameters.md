@@ -146,6 +146,7 @@ cityFilters allow us to choose the range of cities affected by this unique:
 - `in cities being razed`, `Razing`
 - `in holy cities`, `Holy`
 - `in the holy city of our religion` - the holy city of the religion the owner has the founder benefits of, while it follows that religion
+- `in the holy city of our religion following any religion` - the same holy city while it has any majority religion, a pantheon included
 - `in City-State cities`
 - `in cities following this religion` - Should only be used in pantheon/follower uniques for religions
 - `in cities following our religion`
@@ -498,6 +499,9 @@ Allowed values:
 -   `Followers of other religions than the majority religion of this city in its owner's cities` - The followers that the major religions other than the city's majority religion have in all cities of the city's owner
     - Example: `Only available <when number of [Followers of other religions than the majority religion of this city in its owner's cities] is more than [0]>`
     - The original's `Belief_YieldPerOtherReligionFollower`: the holy city adds a hundredth of the yield for every hundredth of the amount of followers that the other major religions have in the owner's cities, pantheons left out (`CvCity::UpdateSpecialReligionYields`, V:CvCity.cpp:22392-22402, `CvCityReligions::GetFollowersOtherReligions`, V:CvReligionClasses.cpp:4572-4593), a fractional stat: `[+0.2 Science] [in the holy city of our religion] <for every [Followers of other religions than the majority religion of this city in its owner's cities]>`. 0 without a majority.
+-   `Cities following our religion up to [positiveAmount]` - The cities of every civilization whose majority religion is the one we have the founder benefits of, at most the amount
+    - Example: `Only available <when number of [Cities following our religion up to [3]] is more than [0]>`
+    - The original's City of God (`Belief_YieldPerHolyCityBirth`) multiplies its yield by the cities following the religion, `CvGameReligions::GetNumCitiesFollowing`, at most the belief's `CityScalerLimiter` (`CvReligionBeliefs::GetYieldPerHolyCityBirth`, V:CvBeliefClasses.cpp:4577-4597; V:CvPlayer.cpp:25957-25960): `Gain [15] [Faith] (modified by game speed) <upon population growth> <in [in the holy city of our religion following any religion] cities> <for every [Cities following our religion up to [25]]>`. 0 without such a religion.
 -   `Civilizations that founded a pantheon or religion up to [positiveAmount]` - The major civilizations, defeated ones included, that founded a pantheon or a religion, at most the amount
     - Example: `Only available <when number of [Civilizations that founded a pantheon or religion up to [3]] is more than [0]>`
     - The original's `CvGameReligions::GetNumPantheonsCreated` (V:CvReligionClasses.cpp:2031-2049) counts each major civilization once that founded a pantheon or a religion; `Belief_YieldFromKnownPantheons` adds the yield for each, at most 8 (`CvCity::UpdateSpecialReligionYields`, V:CvCity.cpp:22352-22364): `[+0.5 Food] [in cities following this religion] <for every [Civilizations that founded a pantheon or religion up to [8]]>`.

@@ -9,6 +9,7 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileImprovement
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import yairm210.purity.annotations.LocalState
@@ -210,13 +211,15 @@ object WarDamageAi {
     private fun changeWarWeariness(civ: Civilization, other: Civilization, change: Int) =
         setWarWeariness(civ, other, warWeariness(civ, other) + change)
 
-    /** CvTraits::GetEnemyWarWearinessModifier: the percent more war weariness that [civ]'s damage causes its enemy (Vox Populi's Raze and Horses: 100). No unique carries it yet. */
+    /** CvTraits::GetEnemyWarWearinessModifier: the percent more war weariness that [civ]'s damage causes its enemy (Vox Populi's Raze and Horses: 100) */
     @Readonly
-    private fun enemyWarWearinessModifier(@Suppress("UNUSED_PARAMETER") civ: Civilization): Int = 0
+    private fun enemyWarWearinessModifier(civ: Civilization): Int =
+        civ.getMatchingUniques(UniqueType.EnemyWarWearinessModifier, GameContext.IgnoreConditionals).sumOf { it.params[0].toInt() }
 
-    /** CvPlayer::GetWarWearinessModifier + CvTraits::GetWarWearinessModifier: the percent less weariness that [civ]'s policies and trait give. No unique carries it yet. */
+    /** CvPlayer::GetWarWearinessModifier + CvTraits::GetWarWearinessModifier: the percent less weariness that [civ]'s policies and trait give (not capped here) */
     @Readonly
-    private fun warWearinessModifier(@Suppress("UNUSED_PARAMETER") civ: Civilization): Int = 0
+    private fun warWearinessModifier(civ: Civilization): Int =
+        civ.getMatchingUniques(UniqueType.WarWearinessModifier, GameContext.IgnoreConditionals).sumOf { it.params[0].toInt() }
 
     /** CvTeam::GetNumTurnsAtWar: the game turn less the turn the war began; a huge number when there is no war (the original's INT_MAX) */
     @Readonly

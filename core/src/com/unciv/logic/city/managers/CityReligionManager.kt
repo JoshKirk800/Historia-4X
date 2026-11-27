@@ -8,6 +8,7 @@ import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.models.Counter
 import com.unciv.models.Religion
+import com.unciv.models.SpyAction
 import com.unciv.models.ruleset.Belief
 import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.unique.GameContext
@@ -233,7 +234,10 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
                 if (city.civ.religionManager.reformationBeliefApplies(other))
                     other.reformationBeliefUniqueMap.forEachMatchingUnique(UniqueType.ReligionPressureRetention, city.state) { retention += it.params[0].toInt() }
             }
-            if (retention > 0) retainedPressures.add(name, pressure * retention.coerceAtMost(100) / 100)
+            if (retention <= 0) continue
+            // With religiousSpreadLikeVp the share taken away is what rounds down (V:CvReligionClasses.cpp:4958-4965), so the share kept rounds up
+            if (spreadLikeVp()) retainedPressures.add(name, pressure - max(0, 100 - retention) * pressure / 100)
+            else retainedPressures.add(name, pressure * retention.coerceAtMost(100) / 100)
         }
         clearAllPressures()
         pressures.add(religion, pressureFromThisReligion)
@@ -473,9 +477,20 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
                 val (religionName, pressure) = getPressureFrom(otherCity, tradeConnections) ?: continue
                 addPressure(religionName, pressure)
             }
-            val (religionName, times) = getSpyPressureTimes(civ) ?: continue
-            if (pressures.containsKey(religionName)) addPressure(religionName, times * pressureFromAdjacentCities)
+            // AddSpyPressure (5186-5190) adds where the religion is absent too, then DoSpyPressureErosion
+            getSpyPressureTimes(civ)?.let { (religionName, times) -> addPressure(religionName, times * pressureFromAdjacentCities) }
+            getSpyPressureTimes(civ, UniqueType.SpyReligionPressureErosion)?.let { (religionName, times) ->
+                erodeOtherReligionsBySpy(religionName, times * pressureFromAdjacentCities) }
         }
+    }
+
+    /** CvCityReligions::DoSpyPressureErosion (V:CvReligionClasses.cpp:5193-5212): each major religion but [religionName] loses [amount], down to nothing */
+    private fun erodeOtherReligionsBySpy(religionName: String, amount: Int) {
+        for ((name, pressure) in pressures.toList()) { // a copy, as the pressures change
+            if (name == religionName || pressure == 0 || city.civ.gameInfo.religions[name]?.isMajorReligion() != true) continue
+            pressures.add(name, -min(amount, pressure))
+        }
+        updateNumberOfFollowers()
     }
 
     /** For each religion whose founder has a living spy in this city: how many times the natural pressure it adds, by [UniqueType.SpyReligionPressure] */
@@ -489,9 +504,12 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         return result
     }
 
-    /** The religion that a living spy of [spyCiv] in this city spreads and how many times the natural pressure it adds, by [UniqueType.SpyReligionPressure] */
+    /** The religion that a living spy of [spyCiv] in this city spreads and how many times the natural pressure it adds by [uniqueType]
+     *  ([UniqueType.SpyReligionPressure], or the erosion of [UniqueType.SpyReligionPressureErosion]). With [com.unciv.models.ModConstants.religiousSpreadLikeVp] only the
+     *  spies of major civilizations count, and not while they travel (V:CvReligionClasses.cpp:413-414, 434) */
     @Readonly
-    private fun getSpyPressureTimes(spyCiv: Civilization): Pair<String, Int>? {
+    private fun getSpyPressureTimes(spyCiv: Civilization, uniqueType: UniqueType = UniqueType.SpyReligionPressure): Pair<String, Int>? {
+        if (spreadLikeVp() && !spyCiv.isMajorCiv) return null
         val reformationLikeVp = city.civ.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp
         // CvPlayerReligions::GetSpyPressure (V:CvReligionClasses.cpp:4017-4031): the spy pressure of the STATE religion of the civilization, asked with its holy city.
         // With the switch the state religion gets the pressure and a Reformation belief counts for any civilization it applies to; without it the religion the civilization
@@ -501,9 +519,12 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
             else spyCiv.religionManager.religion?.takeIf { it.isMajorReligion() }) ?: return null
         var times = 0
         if (reformationLikeVp) spyCiv.religionManager.forEachBeliefUniqueMap { map ->
-            map.forEachMatchingUnique(UniqueType.SpyReligionPressure, spyCiv.state) { times += it.params[0].toInt() }
-        } else religion.founderBeliefUniqueMap.forEachMatchingUnique(UniqueType.SpyReligionPressure, spyCiv.state) { times += it.params[0].toInt() }
-        return if (times > 0 && spyCiv.espionageManager.getSpiesInCity(city).any { it.isAlive() }) religion.name to times else null
+            map.forEachMatchingUnique(uniqueType, spyCiv.state) { times += it.params[0].toInt() }
+        } else religion.founderBeliefUniqueMap.forEachMatchingUnique(uniqueType, spyCiv.state) { times += it.params[0].toInt() }
+        if (times <= 0) return null
+        val spreadLikeVp = spreadLikeVp()
+        return if (spyCiv.espionageManager.getSpiesInCity(city).any { it.isAlive() && !(spreadLikeVp && it.action == SpyAction.Moving) }) religion.name to times
+            else null
     }
 
     /** The cities that a trade route of anyone links this city to, in either direction (CvGameTrade::IsCityConnectedToCity, CvTradeClasses.cpp:661),

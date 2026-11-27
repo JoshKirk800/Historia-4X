@@ -248,10 +248,14 @@ class ModConstants {
      *  - whole numbers: `total pressure / population` a follower, the rest by largest remainder; the majority needs half of all followers, atheists included,
      *    and atheists with the most followers mean none (off: half the population, rounded down, among the religions);
      *  - each pressure of a religion takes half as much from each pantheon there (CvCityReligions::AddReligiousPressure, V:CvReligionClasses.cpp:4896-4930).
+     *  Spies (V:CvReligionClasses.cpp:413-443): only those of major civilizations that are not travelling; their pressure is added where the religion is absent too
+     *  (AddSpyPressure, 5186-5190), and [com.unciv.models.ruleset.unique.UniqueType.SpyReligionPressureErosion] takes that many times the base from each other major
+     *  religion, down to nothing (DoSpyPressureErosion, 5193-5212). Removing the other religions keeps the retained share rounded up (ErodeOtherReligiousPressure,
+     *  4958-4965); a prophet adding before it removes ends as VP's AddProphetSpread (4825-4830) does, the pantheons and the removed pressure being gone either way.
      *  DEPARTURE: pressure keeps the engine's units, a tenth of the original's (6 a turn, not 60 or 65, on Standard), so the falloff rounds down in those.
      *  Not built: the base pressure modifiers (India, buildings), the religion distance and pressure policies, the friendship that the city-state spread belief needs,
      *  vassals, the conversion modifiers of the target, the traits of IsValidTarget, the trade pressure of buildings and beliefs, the order of the cities spread to
-     *  (the original's player order), the spy's erosion and pressure where the religion is absent, prophets removing the other religions in VP's order.
+     *  (the original's player order), the franchise pressure of corporations.
      *  Off: cities within 10 tiles, plus the spread distance uniques, or linked by a trade route spread the whole pressure, and the percentages multiply. */
     var religiousSpreadLikeVp = false
     /** VP 5.4.8 CvUnit::GetGenericMeleeStrengthModifier (V:CvUnit.cpp:16471-16507) and CvUnit::GetMaxRangedCombatStrength (V:CvUnit.cpp:17336-17372): a land unit fighting a unit of

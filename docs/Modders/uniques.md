@@ -5998,6 +5998,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: TriggerCondition
 
+??? example  "&lt;upon the end of a b'ak'tun&gt;"
+	When a civilization with the Long Count sees a new b'ak'tun begin, in each of its cities (`INSTANT_YIELD_TYPE_BAKTUN_END`); only with the ModConstants `longCountYieldsLikeVp`
+
+	Applicable to: TriggerCondition
+
 ??? example  "&lt;upon completing a [tradeRouteKind] trade route&gt;"
 	When a trade route of the civilization ends, in the city it started in (and in the destination city for a domestic route): `international`, `domestic` or `any` (`INSTANT_YIELD_TYPE_TR_END`, V:CvTradeClasses.cpp:2606-2650: once for each end of a domestic route, so twice for a unique that does not name a city). Not fired for a route that was plundered or cancelled
 

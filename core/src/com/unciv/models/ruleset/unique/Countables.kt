@@ -563,6 +563,21 @@ enum class Countables(
             return city.civ.cities.sumOf { it.religion.getFollowersOf(majority) }
         }
     },
+    OtherReligionFollowersInOwnerCities("Followers of other religions than the majority religion of this city in its owner's cities",
+        shortDocumentation = "The followers that the major religions other than the city's majority religion have in all cities of the city's owner") {
+        override val documentationStrings = listOf(
+            "The original's `Belief_YieldPerOtherReligionFollower`: the holy city adds a hundredth of the yield for every hundredth of the amount of followers that the other " +
+                "major religions have in the owner's cities, pantheons left out (`CvCity::UpdateSpecialReligionYields`, V:CvCity.cpp:22392-22402, " +
+                "`CvCityReligions::GetFollowersOtherReligions`, V:CvReligionClasses.cpp:4572-4593), a fractional stat: " +
+                "`[+0.2 Science] [in the holy city of our religion] <for every [Followers of other religions than the majority religion of this city in its owner's cities]>`. " +
+                "0 without a majority."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val city = gameContext.city ?: return null
+            val majority = city.religion.getMajorityReligionName() ?: return 0
+            return city.civ.cities.sumOf { it.religion.getFollowersOfOtherMajorReligionsThan(majority) }
+        }
+    },
     PantheonFoundersUpTo("Civilizations that founded a pantheon or religion up to [positiveAmount]",
         shortDocumentation = "The major civilizations, defeated ones included, that founded a pantheon or a religion, at most the amount") {
         override val documentationStrings = listOf(

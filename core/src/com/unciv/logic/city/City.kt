@@ -738,6 +738,8 @@ class City : IsPartOfGameInfoSerialization, INamed {
             "in resisting cities", "Resisting" -> isInResistance()
             "in cities being razed", "Razing" -> isBeingRazed
             "in holy cities", "Holy" -> isHolyCity()
+            // CvReligionBeliefs::IsBeliefValid with bHolyCityOnly (V:CvBeliefClasses.cpp:2199-2216) asked by CvCity::UpdateSpecialReligionYields for the majority religion
+            "in the holy city of our religion" -> civ.religionManager.isFollowingHolyCityOfOurReligion(this)
             "in City-State cities" -> civ.isCityState
             // This is only used in communication to the user indicating that only in cities with this
             // religion a unique is active. However, since religion uniques only come from the city itself,

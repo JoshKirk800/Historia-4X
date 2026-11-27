@@ -284,6 +284,7 @@ enum class UniqueParameterType(
             "in cities being razed", "Razing",
             "in holy cities", "Holy",
             "in the holy city of our religion",
+            "in the holy city of our religion following any religion",
             "in City-State cities",
             "in cities following this religion",
             "in cities following our religion",

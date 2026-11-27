@@ -578,6 +578,24 @@ enum class Countables(
             return city.civ.cities.sumOf { it.religion.getFollowersOfOtherMajorReligionsThan(majority) }
         }
     },
+    CitiesFollowingOurReligionUpTo("Cities following our religion up to [positiveAmount]",
+        shortDocumentation = "The cities of every civilization whose majority religion is the one we have the founder benefits of, at most the amount") {
+        override val documentationStrings = listOf(
+            "The original's City of God (`Belief_YieldPerHolyCityBirth`) multiplies its yield by the cities following the religion, `CvGameReligions::GetNumCitiesFollowing`, " +
+                "at most the belief's `CityScalerLimiter` (`CvReligionBeliefs::GetYieldPerHolyCityBirth`, V:CvBeliefClasses.cpp:4577-4597; V:CvPlayer.cpp:25957-25960): " +
+                "`Gain [15] [Faith] (modified by game speed) <upon population growth> <in [in the holy city of our religion following any religion] cities> " +
+                "<for every [Cities following our religion up to [25]]>`. 0 without such a religion."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val cap = parameterText.getPlaceholderParameters()[0].toIntOrNull() ?: return null
+            val religionManager = gameContext.civInfo?.religionManager ?: return null
+            val ours = religionManager.getFounderBenefitsReligion() ?: return 0
+            return religionManager.numberOfCitiesFollowingThisReligion(ours).coerceAtMost(cap)
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.PositiveNumber.getTranslatedErrorSeverity(parameterText, ruleset)
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
+    },
     PantheonFoundersUpTo("Civilizations that founded a pantheon or religion up to [positiveAmount]",
         shortDocumentation = "The major civilizations, defeated ones included, that founded a pantheon or a religion, at most the amount") {
         override val documentationStrings = listOf(

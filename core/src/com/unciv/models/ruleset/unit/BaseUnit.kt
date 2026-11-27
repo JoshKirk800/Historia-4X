@@ -316,6 +316,9 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
         if (isOutOfUnitSupplyCap(civ))
             yield(RejectionReasonType.OutOfUnitSupply.toInstance())
 
+        if (isAtUnitSupplyLimitForAi(civ))
+            yield(RejectionReasonType.AtUnitSupplyLimit.toInstance())
+
         if (!civ.isBarbarian) { // Barbarians don't need resources
             val civResources = Counter(civ.getCivResourcesByName()) + additionalResources
             for ((resource, requiredAmount) in getResourceRequirementsPerTurn(stateForConditionals)) {
@@ -570,6 +573,20 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
         val penalties = constants.unitSupplyConstants
         if (penalties.maxProductionPenalty <= 0 || penalties.productionPenaltyPerUnit <= 0) return false
         return civ.stats.getUnitSupplyDeficit() >= penalties.maxProductionPenalty / penalties.productionPenaltyPerUnit
+    }
+
+    /**
+     *  CvCity::canTrain (V:CvCity.cpp:8696-8703): `!isHuman(ISHUMAN_AI_CITY_PRODUCTION) && !isBarbarian() && !IsNoSupply() && (GetCombat() > 0 || GetRangedCombat() > 0)` and then
+     *  `bCanSupply = GetNumUnitsToSupply() < GetNumUnitsSupplied()`: no training at the limit, not just over it. Only with `unitSupplyLikeVp` and
+     *  [com.unciv.models.ModConstants.unitSupplyAiAtLimitLikeVp]. The engine has no option that lets the AI decide a human player's production, so every non-human civilization is the AI's
+     *  here (a city-state too, as in VP).
+     */
+    @Readonly
+    private fun isAtUnitSupplyLimitForAi(civ: Civilization): Boolean {
+        val constants = ruleset.modOptions.constants
+        if (!constants.unitSupplyLikeVp || !constants.unitSupplyAiAtLimitLikeVp) return false
+        if (civ.isHuman() || civ.isBarbarian || hasNoUnitSupply || (strength <= 0 && rangedStrength <= 0)) return false
+        return civ.units.getNumUnitsToSupply() >= civ.stats.getUnitSupply()
     }
 
     val isLandUnit by lazy { type.isLandUnit() }

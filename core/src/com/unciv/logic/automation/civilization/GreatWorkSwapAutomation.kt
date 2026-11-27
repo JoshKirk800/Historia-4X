@@ -31,7 +31,8 @@ import java.util.IdentityHashMap
  * Swaps between civilizations (CvGameCulture::SwapGreatWorks): both works must be the ones their owners marked as swappable. As in the DLL
  * the work wanted is looked up among the works of its creator, so only works still owned by the civilization that made them can be taken.
  * Humans have no way to mark a work in Unciv: where the DLL would take a human's marked work, the AI proposes the same one-for-one exchange
- * as a trade request instead, which the human accepting stands in for the marking.
+ * as a trade request instead, which the human accepting stands in for the marking. With `greatWorkThemingLikeVp` there are no such requests: a
+ * human offers a work by Swap & Optimize in the culture overview ([arrangeWorksForHuman]), as in Vox Populi.
  */
 object GreatWorkSwapAutomation {
 
@@ -41,8 +42,11 @@ object GreatWorkSwapAutomation {
         val slots get() = building.greatWorkSlotTypes.size
     }
 
-    /** What one call works with: the civilization, and the cities whose works were moved, whose stats are updated once at the end */
-    private class Context(val civ: Civilization) {
+    /**
+     * What one call works with: the civilization, whether a human asked for it and whether works may be swapped with other civilizations, and the
+     * cities whose works were moved, whose stats are updated once at the end
+     */
+    private class Context(val civ: Civilization, val human: Boolean, val swapWithOthers: Boolean) {
         val ruleset = civ.gameInfo.ruleset
         val likeVp = ruleset.modOptions.constants.greatWorkThemingLikeVp
         val touchedCities = LinkedHashSet<City>()
@@ -52,9 +56,22 @@ object GreatWorkSwapAutomation {
         fun isOurs(work: GreatWorkInstance) = !heldBy.containsKey(work)
     }
 
-    /** CvPlayerCulture::DoSwapGreatWorks (CvEconomicAI::DoTurn, AI players only) */
-    fun doSwapGreatWorks(civ: Civilization) {
-        val context = Context(civ)
+    /**
+     * CvPlayerCulture::DoSwapGreatWorks (CvEconomicAI::DoTurn, AI players only). With `greatWorkThemingLikeVp` also for City-States, which swap
+     * with no one, and right after each new work of the AI (V:CvUnit.cpp:9694-9697 and the same in CvCity::processBuilding and
+     * CvPlayerCulture::DoArchaeologyChoice)
+     */
+    fun doSwapGreatWorks(civ: Civilization) = arrangeWorks(Context(civ, human = false, swapWithOthers = true))
+
+    /**
+     * Vox Populi's DoSwapGreatWorksHuman (V:CvCultureClasses.cpp:1134-1246), the Optimize and Swap & Optimize buttons of the culture overview: as the
+     * AI, but any damage endangers a city other than the capital, puppets are not set apart, and only with [swapWithOthers] are the works others offer
+     * swapped in and the first of ours left offered; without, nothing of ours is offered any more
+     */
+    fun arrangeWorksForHuman(civ: Civilization, swapWithOthers: Boolean) = arrangeWorks(Context(civ, human = true, swapWithOthers))
+
+    private fun arrangeWorks(context: Context) {
+        val civ = context.civ
         val buildingOrder = HashMap<String, Int>()
         for ((index, name) in context.ruleset.buildings.keys.withIndex()) buildingOrder[name] = index
 
@@ -71,11 +88,16 @@ object GreatWorkSwapAutomation {
         for (city in civ.cities) {
             // Vox Populi (CvPlayerCulture::DoSwapGreatWorks, V:CvCultureClasses.cpp:1285-1304): a city that might fall soon gives its works but takes none;
             // the capital is never endangered, another city is when it has lost more than half its health or is razed below 3 citizens; puppets come
-            // after the other cities
+            // after the other cities. For a human (V:CvCultureClasses.cpp:1165-1182) any damage endangers a city other than the capital, and puppets are as
+            // the other cities
             val destination = !likeVp || !CityDangerAi.isInDangerOfFalling(city, true)
-            val endangered = if (!likeVp) city.health < city.getMaxHealth()
-                else !city.isCapital() && (city.getMaxHealth() - city.health > city.getMaxHealth() / 2 || city.isBeingRazed && city.population.population < 3)
-            val puppet = likeVp && city.isPuppet
+            val endangered = when {
+                !likeVp -> city.health < city.getMaxHealth()
+                city.isCapital() -> false
+                context.human -> city.health < city.getMaxHealth()
+                else -> city.getMaxHealth() - city.health > city.getMaxHealth() / 2 || city.isBeingRazed && city.population.population < 3
+            }
+            val puppet = likeVp && !context.human && city.isPuppet
             for (building in city.cityConstructions.getBuiltBuildings().sortedBy { buildingOrder[it.name] ?: Int.MAX_VALUE }) {
                 val types = building.greatWorkSlotTypes
                 if (types.isEmpty()) continue
@@ -146,8 +168,11 @@ object GreatWorkSwapAutomation {
      */
     private fun moveWorksLikeVp(context: Context, type: GreatWorkSlotType, buildings: List<EmpireBuilding>,
                                 works1: ArrayList<GreatWorkInstance>, works2: ArrayList<GreatWorkInstance>) {
+        // Nothing to move, and the works offered stay as they were; music, City-States and the human's Optimize swap with no one (V:CvCultureClasses.cpp:1397-1408)
+        if (works1.isEmpty() && works2.isEmpty()) return
         val civ = context.civ
-        if (type != GreatWorkSlotType.Music) for (other in civ.gameInfo.civilizations) {
+        val swapWithOthers = context.swapWithOthers && type != GreatWorkSlotType.Music && civ.isMajorCiv
+        if (swapWithOthers) for (other in civ.gameInfo.civilizations) {
             if (!isPlayerValid(civ, other) || civ.isAtWarWith(other)) continue
             fun offer(id: String, into: ArrayList<GreatWorkInstance>) {
                 val work = findSlotById(other, id)?.getWork() ?: return
@@ -166,13 +191,14 @@ object GreatWorkSwapAutomation {
         for (building in buildings) if (!building.endangered && building.puppet) building.themed = themeBuildingLikeVp(context, building, works1, works2)
         for (building in buildings) if (building.endangered) building.themed = themeBuildingLikeVp(context, building, works1, works2)
 
-        // The first of our works left is the one we are willing to trade (V:CvCultureClasses.cpp:1522-1594)
+        // The first of our works left is the one we are willing to trade; none when not swapping (V:CvCultureClasses.cpp:1522-1594)
         val culture = civ.culture
+        fun firstOfOurs(works: List<GreatWorkInstance>) = if (swapWithOthers) works.firstOrNull { context.isOurs(it) }?.id ?: "" else ""
         when (type) {
-            GreatWorkSlotType.Literature -> culture.swappableWriting = works1.firstOrNull { context.isOurs(it) }?.id ?: ""
+            GreatWorkSlotType.Literature -> culture.swappableWriting = firstOfOurs(works1)
             GreatWorkSlotType.ArtArtifact -> {
-                culture.swappableArt = works1.firstOrNull { context.isOurs(it) }?.id ?: ""
-                culture.swappableArtifact = works2.firstOrNull { context.isOurs(it) }?.id ?: ""
+                culture.swappableArt = firstOfOurs(works1)
+                culture.swappableArtifact = firstOfOurs(works2)
             }
             GreatWorkSlotType.Music -> {}
         }

@@ -87,6 +87,9 @@ object NextTurnAutomation {
         } else if (civView.isCityState) {
             civInfo.cityStateFunctions.getFreeTechForCityState()
             civInfo.cityStateFunctions.updateDiplomaticRelationshipForCityState()
+            // Vox Populi: CvEconomicAI::DoTurn arranges the works of City-States too, which swap with no one (V:CvEconomicAI.cpp:793-797)
+            if (civInfo.gameInfo.ruleset.modOptions.constants.greatWorkThemingLikeVp && civInfo.gameInfo.ruleset.greatWorks.isNotEmpty())
+                GreatWorkSwapAutomation.doSwapGreatWorks(civInfo)
         }
 
         timeThis("AI.chooseTechToResearch") { TechAutomation.chooseTechToResearch(civInfo) }

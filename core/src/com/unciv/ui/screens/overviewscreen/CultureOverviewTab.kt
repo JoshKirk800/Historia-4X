@@ -3,6 +3,7 @@ package com.unciv.ui.screens.overviewscreen
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.unciv.Constants
+import com.unciv.logic.automation.civilization.GreatWorkSwapAutomation
 import com.unciv.logic.city.GreatWorkFunctions
 import com.unciv.logic.city.GreatWorkSlot
 import com.unciv.logic.civilization.managers.CultureManager
@@ -14,6 +15,7 @@ import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.MilestoneType
 import com.unciv.models.ruleset.GreatWorkInstance
 import com.unciv.models.translations.tr
+import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.components.extensions.addSeparator
 import com.unciv.ui.components.extensions.isEnabled
 import com.unciv.ui.components.extensions.toLabel
@@ -51,6 +53,7 @@ class CultureOverviewTab(
             add(describeWork(chosen).toLabel(Color.GOLD)).colspan(COLUMNS).padBottom(10f).row()
         else if (canMove && works > 0)
             add("Select a Great Work, then another slot, to move it".toLabel()).colspan(COLUMNS).padBottom(10f).row()
+        if (canMove && works > 0 && gameInfo.ruleset.modOptions.constants.greatWorkThemingLikeVp) addOptimizeButtons()
 
         for (city in civ.cities.sortedBy { it.name }) {
             val buildings = city.cityConstructions.getBuiltBuildings().filter { it.greatWorkSlotTypes.isNotEmpty() }.toList()
@@ -178,6 +181,25 @@ class CultureOverviewTab(
 
     private fun describeWork(work: GreatWorkInstance): String =
         "${work.work.tr()}: ${"Attributed to [${work.creatorCiv}]".tr()}, ${"from the [${work.era.removeSuffix(" era")}] era".tr()}"
+
+    /** Vox Populi's Optimize and Swap & Optimize (CultureOverview.lua OnOptimize and OnOptimizeSwap) */
+    private fun addOptimizeButtons() {
+        val buttons = Table().apply { defaults().pad(5f) }
+        for ((label, tooltip, swap) in listOf(
+            Triple("Optimize", "Rearrange owned Great Works into potential Themes. Does not swap Great Works with other Civilizations and removes any Great Works already up for trade.", false),
+            Triple("Swap & Optimize", "Rearrange Great Works into potential Themes. Swaps Great Works with other Civilizations and may put excess Great Works up for trade (if needed).", true)
+        )) {
+            val button = label.toTextButton()
+            button.addTooltip(tooltip, 18f)
+            button.onClick {
+                GreatWorkSwapAutomation.arrangeWorksForHuman(civ, swap)
+                selected = null
+                build()
+            }
+            buttons.add(button)
+        }
+        add(buttons).colspan(COLUMNS).left().padBottom(10f).row()
+    }
 
     private fun slotClicked(slot: GreatWorkSlot) {
         val from = selected

@@ -1394,6 +1394,9 @@ class ModConstants {
     var goldenAgeConversionLikeVp = false
     /** Vox Populi's limits of the concert tour (CvUnit::canBlastTourism): none in the lands of a civilization we are at war with or already Influential over */
     var concertTourLimitsLikeVp = false
+    /** Vox Populi's growth from influence (CvCity::UpdateGrowthFromTourism): a city grows 5% faster for each level of our influence over the owner of
+     *  each major civilization's city its international trade routes go to */
+    var influenceTradeGrowthLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

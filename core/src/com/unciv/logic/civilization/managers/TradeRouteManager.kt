@@ -319,6 +319,23 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     @Readonly
     fun getNumRoutesRemaining(): Int = getNumSlots() - getSlotsUsed()
 
+    /**
+     *  CvCity::UpdateGrowthFromTourism (V:CvCity.cpp:20321-20349) with [com.unciv.models.ModConstants.influenceTradeGrowthLikeVp]: the growth percent of [city]
+     *  for each of our international routes from it to a major civilization, CvPlayerCulture::GetInfluenceTradeRouteGrowthBonus (V:CvCultureClasses.cpp:4064-4099)
+     *  of our influence level on the owner of the destination, 5, 10, 15, 20 and 25 for Exotic to Dominant (BALANCE_GROWTH_INFLUENCE_LEVEL_*)
+     */
+    @Readonly
+    fun getInfluenceGrowthPercent(city: City): Int {
+        if (!civ.gameInfo.ruleset.modOptions.constants.influenceTradeGrowthLikeVp) return 0
+        var total = 0
+        for (route in routes) {
+            if (route.kind != TradeRouteKind.International || route.origin != city.location) continue
+            val destinationCiv = route.getDestinationCity()?.civ ?: continue
+            if (destinationCiv.isMajorCiv) total += 5 * (civ.culture.getInfluenceLevel(destinationCiv)?.ordinal ?: 0)
+        }
+        return total
+    }
+
     /** Whether the connection from [origin] to [destination] was plundered in the last 30 turns (CvPlayerTrade::CheckTradeConnectionWasPlundered) */
     @Readonly
     fun wasPlunderedRecently(origin: City, destination: City): Boolean {

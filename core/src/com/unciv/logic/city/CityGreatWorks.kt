@@ -166,7 +166,7 @@ class CityGreatWorks : IsPartOfGameInfoSerialization {
         if (building.themingBonuses.isEmpty() || works.size != getSlots(building).size || works.isEmpty()) return null
         val ruleset = city.civ.gameInfo.ruleset
         val types = works.map { ruleset.greatWorks[it.work]?.type ?: return null }
-        return building.themingBonuses.firstOrNull { it.isSatisfiedBy(works, types, city.civ.civName) }
+        return building.themingBonuses.firstOrNull { it.isSatisfiedBy(works, types, city.civ.civName, ruleset) }
     }
 
     /** What the theming of [building] gives, with the multipliers of policies and so on (CvCityCulture::GetThemingBonus) */

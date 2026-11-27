@@ -112,6 +112,8 @@ class ThemingBonus {
     var sameEra = false
     /** No two works are from the same era */
     var uniqueEras = false
+    /** No two works are from the same era, and their eras follow each other with none left out (ConsecutiveEras, which VP's IsUniqueEras includes) */
+    var consecutiveEras = false
     var mustBeArt = false
     var mustBeArtifact = false
     /** As many works of art as artifacts */
@@ -129,6 +131,7 @@ class ThemingBonus {
     fun getRequirementTexts(): List<String> = buildList {
         if (sameEra) add("All from the same era")
         if (uniqueEras) add("All from different eras")
+        if (consecutiveEras) add("All from consecutive eras")
         if (mustBeArt) add("Only art")
         if (mustBeArtifact) add("Only artifacts")
         if (mustBeEqualArtArtifact) add("As much art as artifacts")
@@ -138,9 +141,10 @@ class ThemingBonus {
         if (requiresUniquePlayers) add("All attributed to different civilizations")
     }
 
-    /** Whether [works], which must be all of the works of a full building, satisfy the requirements. [owner] is the civilization the city belongs to */
+    /** Whether [works], which must be all of the works of a full building, satisfy the requirements. [owner] is the civilization the city belongs to;
+     *  [ruleset] orders the eras */
     @Readonly
-    fun isSatisfiedBy(works: List<GreatWorkInstance>, types: List<GreatWorkType>, owner: String): Boolean {
+    fun isSatisfiedBy(works: List<GreatWorkInstance>, types: List<GreatWorkType>, owner: String, ruleset: Ruleset): Boolean {
         if (works.isEmpty()) return false
         val artCount = types.count { it == GreatWorkType.Art }
         val artifactCount = types.count { it == GreatWorkType.Artifact }
@@ -150,7 +154,12 @@ class ThemingBonus {
 
         val eras = works.map { it.era }
         if (sameEra && eras.any { it != eras.first() }) return false
-        if (uniqueEras && eras.toSet().size != eras.size) return false
+        if ((uniqueEras || consecutiveEras) && eras.toSet().size != eras.size) return false
+        // CultureHelpers::GetThemingBonusIndex (V:CvCultureClasses.cpp:6432-6438): the eras span as many as there are works (one per slot)
+        if (consecutiveEras) {
+            val numbers = eras.map { ruleset.eras[it]?.eraNumber ?: return false }
+            if (numbers.max() - numbers.min() + 1 != works.size) return false
+        }
 
         val civs = works.map { it.creatorCiv }
         if (requiresOwner && civs.any { it != owner }) return false

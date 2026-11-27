@@ -84,6 +84,7 @@ The bonus is added to the culture of the city, and is changed by the uniques `[r
 | aiPriority             | Integer | 0        | The AI themes buildings in the order of the `aiPriority` of their first bonus, highest first |
 | sameEra                | Boolean | false    | All works are from the same era                                                      |
 | uniqueEras             | Boolean | false    | No two works are from the same era                                                   |
+| consecutiveEras        | Boolean | false    | No two works are from the same era, and their eras follow each other with none left out |
 | mustBeArt              | Boolean | false    | None of the works is an artifact                                                     |
 | mustBeArtifact         | Boolean | false    | None of the works is art                                                             |
 | mustBeEqualArtArtifact | Boolean | false    | There are as many works of art as artifacts                                          |

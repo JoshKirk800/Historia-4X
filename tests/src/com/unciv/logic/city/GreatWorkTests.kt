@@ -171,7 +171,17 @@ class GreatWorkTests {
     private fun satisfied(rule: ThemingBonus.() -> Unit, eras: List<String>, civs: List<Civilization>, types: List<GreatWorkType> = eras.map { GreatWorkType.Art }): Boolean {
         val bonus = ThemingBonus().apply(rule)
         val works = eras.indices.map { GreatWorkInstance("w$it", civs[it].civName, eras[it], 1) }
-        return bonus.isSatisfiedBy(works, types, civ.civName)
+        return bonus.isSatisfiedBy(works, types, civ.civName, game.ruleset)
+    }
+
+    @Test
+    fun `consecutive eras want one work of each era with none left out between them`() {
+        // CultureHelpers::GetThemingBonusIndex (V:CvCultureClasses.cpp:6427-6438)
+        val three = listOf(civ, civ, civ)
+        assertTrue(satisfied({ consecutiveEras = true }, listOf("Medieval era", "Ancient era", "Classical era"), three))
+        assertFalse("an era left out", satisfied({ consecutiveEras = true }, listOf("Ancient era", "Classical era", "Renaissance era"), three))
+        assertFalse("two of one era", satisfied({ consecutiveEras = true }, listOf("Ancient era", "Ancient era", "Medieval era"), three))
+        assertFalse("an era the ruleset does not have", satisfied({ consecutiveEras = true }, listOf("A", "Classical era", "Medieval era"), three))
     }
 
     @Test

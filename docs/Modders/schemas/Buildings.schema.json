@@ -111,6 +111,7 @@
             "aiPriority": { "type": "integer", "description": "The AI themes buildings in the order of the aiPriority of their first bonus, highest first." },
             "sameEra": { "type": "boolean", "description": "All works are from the same era." },
             "uniqueEras": { "type": "boolean", "description": "No two works are from the same era." },
+            "consecutiveEras": { "type": "boolean", "description": "No two works are from the same era, and their eras follow each other with none left out." },
             "mustBeArt": { "type": "boolean", "description": "None of the works is an artifact." },
             "mustBeArtifact": { "type": "boolean", "description": "None of the works is art." },
             "mustBeEqualArtArtifact": { "type": "boolean", "description": "There are as many works of art as artifacts." },

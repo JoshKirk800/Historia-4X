@@ -1,6 +1,7 @@
 package com.unciv.logic.civilization.managers
 
 import com.unciv.logic.IsPartOfGameInfoSerialization
+import com.unciv.logic.city.GreatWorkFunctions
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.MayaLongCountAction
 import com.unciv.logic.civilization.NotificationCategory
@@ -160,6 +161,40 @@ class GreatPersonManager : IsPartOfGameInfoSerialization {
             for ((greatPerson, points) in city.greatPersonProgress)
                 if (points > (leading[greatPerson]?.second ?: -1)) leading[greatPerson] = city.name to points
         return leading
+    }
+
+    /**
+     *  The Great People a historic event may give points toward (CvPlayer::ChangeNumHistoricEvents, V:CvPlayer.cpp:31131-31166): that of each specialist that has
+     *  Great Person points, twice when a slot for its Great Works is free somewhere ([GreatWorkFunctions.getSlotTypeOfGreatPerson])
+     */
+    @Readonly
+    fun getHistoricEventGreatPeople(): List<String> {
+        val ruleset = civInfo.gameInfo.ruleset
+        val candidates = ArrayList<String>()
+        for (specialist in ruleset.specialists.values) {
+            val greatPerson = specialist.greatPersonPoints.keys.firstOrNull() ?: continue
+            candidates.add(greatPerson)
+            val slotType = GreatWorkFunctions.getSlotTypeOfGreatPerson(ruleset, greatPerson) ?: continue
+            if (civInfo.cities.any { it.greatWorks.getFreeSlot(slotType) != null }) candidates.add(greatPerson)
+        }
+        return candidates
+    }
+
+    /**
+     *  A historic event that counted, with [UniqueType.HistoricEventGreatPersonPoints] (CvPlayer::ChangeNumHistoricEvents, V:CvPlayer.cpp:31127-31184, the original's
+     *  `EventGP`): the capital gets that percent of the points it needs for one of [getHistoricEventGreatPeople], chosen at random
+     */
+    fun onHistoricEvent() {
+        val percent = civInfo.getMatchingUniques(UniqueType.HistoricEventGreatPersonPoints).sumOf { it.params[0].toInt() }
+        val capital = civInfo.getCapital() ?: return
+        if (percent <= 0) return
+        val candidates = getHistoricEventGreatPeople()
+        if (candidates.isEmpty()) return
+        val greatPerson = candidates[civInfo.state.stateBasedRandom("HistoricEventGreatPerson", civInfo.culture.historicEvents).nextInt(candidates.size)]
+        val points = getPointsRequiredForGreatPerson(greatPerson) * percent / 100
+        capital.greatPersonProgress.add(greatPerson, points)
+        civInfo.addNotification("Our historic event gave [$points] points toward a [$greatPerson] in [${capital.name}]",
+            capital.location, NotificationCategory.General, greatPerson)
     }
 
     /** Add [amount] points for [name] to the capital's progress, or the first city's without a capital (used in dev console) */

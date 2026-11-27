@@ -7,6 +7,8 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.GreatWork
 import com.unciv.models.ruleset.GreatWorkInstance
 import com.unciv.models.ruleset.GreatWorkSlotType
+import com.unciv.models.ruleset.Ruleset
+import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
 
 /** What Great Works need from more than one city: finding places for them, moving them, creating them */
@@ -104,6 +106,19 @@ object GreatWorkFunctions {
         slot.city.greatWorks.place(instance, slot)
         slot.city.cityStats.update()
         return instance
+    }
+
+    /**
+     *  The slots for the works of the Great Person [unitName]: those of a work whose creator is in a name group the unit gets its name from, if the unit
+     *  creates Great Works (the original's writers, artists and musicians, CvPlayer::ChangeNumHistoricEvents)
+     */
+    @Readonly
+    fun getSlotTypeOfGreatPerson(ruleset: Ruleset, unitName: String): GreatWorkSlotType? {
+        val unit = ruleset.units[unitName] ?: return null
+        if (unit.uniqueObjects.none { it.type == UniqueType.OneTimeCreateGreatWork }) return null
+        val groups = unit.uniqueObjects.filter { it.type == UniqueType.OneTimeUnitGetsName }.map { it.params[1] }.toSet()
+        val names = ruleset.unitNameGroups.values.filter { it.name in groups }.flatMap { it.unitNames }.toSet()
+        return ruleset.greatWorks.values.firstOrNull { it.creator in names }?.getSlotType()
     }
 
     /** The work a Great Person unit creates: the one that goes with the unit's name */

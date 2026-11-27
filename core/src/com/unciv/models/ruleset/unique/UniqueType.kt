@@ -106,6 +106,9 @@ enum class UniqueType(
         docDescription = "With the ModConstants `historicEventDispatchLikeVp`, a domestic trade route that ends gives the tourism of " +
             "`[positiveAmount] turns of yields as tourism for completed land trade routes` (or sea) as well, a third of it towards each civilization met " +
             "(the original's `InternalTRTourism` of policies)"),
+    HistoricEventGreatPersonPoints("Each historic event gives the capital [positiveAmount]% of the points needed for a random Great Person", UniqueTarget.Global,
+        docDescription = "With the ModConstants `historicEventsLikeVp`, each historic event that counts gives the capital that percent of the points it needs " +
+            "for the Great Person of one specialist, chosen at random; one whose Great Works have a free slot is twice as likely (the original's `EventGP` of traits)"),
     StatsPerEraSinceDig("[stats] for every era since the site of this improvement was formed", UniqueTarget.Improvement,
         docDescription = "Counts the eras the civilization has gone through since the era of what happened on this tile, see archaeology. Nothing if it is the same era or the tile has no history"),
     StatsFromGreatWorks("[stats] from each Great Work", UniqueTarget.Global,

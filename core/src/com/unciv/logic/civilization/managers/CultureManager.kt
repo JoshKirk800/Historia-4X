@@ -714,6 +714,7 @@ class CultureManager : IsPartOfGameInfoSerialization {
         if (!counts) return
         historicEvents++
         civ.completeAccomplishment(Accomplishment.HistoricEvent)
+        civ.greatPeople.onHistoricEvent()
         if (tourism <= 0) return
         if (destination == null)
             for (other in getOtherMajorCivs()) addInfluence(other, getInstantInfluenceOn(other, tourism))

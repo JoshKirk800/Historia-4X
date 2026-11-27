@@ -679,29 +679,63 @@ class CultureManager : IsPartOfGameInfoSerialization {
     }
 
     /**
-     *  CvPlayer::GetHistoricEventTourism (V:CvPlayer.cpp:31252-31420): the turns that the uniques give for the kind of [event] say how many turns of culture (a fifth)
-     *  and tourism ([getYieldPerTurnHistory]) make it, divided by the [HistoricEvent.divisor]; 0 without such turns
+     *  The turns that the [HistoricEvent.turns] uniques give for [event]: those of the civilization, or those that apply in [city] (CvCity::GetLandTourismBonus)
      */
     @Readonly
-    fun getHistoricEventTourism(event: HistoricEvent): Int {
-        val turns = civ.getMatchingUniques(UniqueType.HistoricEventTourismTurns).sumOf { it.params[0].toInt() }
+    fun getHistoricEventTurns(event: HistoricEvent, city: City? = null): Int =
+        (city?.getMatchingUniques(event.turns) ?: civ.getMatchingUniques(event.turns)).sumOf { it.params[0].toInt() }
+
+    /**
+     *  CvPlayer::GetHistoricEventTourism (V:CvPlayer.cpp:31252-31420): the turns that the uniques give for the kind of [event] ([getHistoricEventTurns]) say how many
+     *  turns of culture (a fifth) and tourism ([getYieldPerTurnHistory]) make it, divided by the [HistoricEvent.divisor]; 0 without such turns
+     */
+    @Readonly
+    fun getHistoricEventTourism(event: HistoricEvent, city: City? = null): Int {
+        val turns = getHistoricEventTurns(event, city)
         if (turns <= 0) return 0
         return (getYieldPerTurnHistory(false, turns) / 5 + getYieldPerTurnHistory(true, turns)) / event.divisor
     }
 
     /**
-     *  A historic event of a major civilization with [ModConstants.historicEventsLikeVp]: its tourism ([getHistoricEventTourism]) goes to every civilization met with
-     *  the modifiers towards each (CvPlayerCulture::AddTourismAllKnownCivsWithModifiers, V:CvCultureClasses.cpp:4835-4851), and it is counted, an accomplishment
-     *  as well (CvPlayer::ChangeNumHistoricEvents, V:CvPlayer.cpp:31117-31127)
+     *  A historic event of a major civilization with [ModConstants.historicEventsLikeVp]: when it counts ([HistoricEvent.counted]) it is counted, an accomplishment
+     *  as well (CvPlayer::ChangeNumHistoricEvents, V:CvPlayer.cpp:31117-31127), and its tourism ([getHistoricEventTourism], with the turns of [city]) goes to every
+     *  civilization met with the modifiers towards each (CvPlayerCulture::AddTourismAllKnownCivsWithModifiers, V:CvCultureClasses.cpp:4835-4851).
+     *  The end of a trade route to [destination] gives it all of it instead, and a third to each other civilization [destination] has met
+     *  (CvPlayerCulture::AddTourismAllKnownCivsOtherCivWithModifiers, V:CvCultureClasses.cpp:4854-4874); a domestic route has us as [destination]
      */
-    fun onHistoricEvent(event: HistoricEvent) {
+    fun onHistoricEvent(event: HistoricEvent, city: City? = null, destination: Civilization? = null) {
         if (!civ.gameInfo.ruleset.modOptions.constants.historicEventsLikeVp || !civ.isMajorCiv) return
-        val tourism = getHistoricEventTourism(event)
+        val tourism = getHistoricEventTourism(event, city)
+        val counts = when (event.counted) {
+            HistoricEvent.Counted.Always -> true
+            HistoricEvent.Counted.WithTurns -> getHistoricEventTurns(event, city) > 0
+            HistoricEvent.Counted.WithTourism -> tourism > 0
+        }
+        if (!counts) return
         historicEvents++
         civ.completeAccomplishment(Accomplishment.HistoricEvent)
         if (tourism <= 0) return
-        for (other in getOtherMajorCivs()) addInfluence(other, getInstantInfluenceOn(other, tourism))
+        if (destination == null)
+            for (other in getOtherMajorCivs()) addInfluence(other, getInstantInfluenceOn(other, tourism))
+        else {
+            if (destination != civ) addInfluence(destination, getInstantInfluenceOn(destination, tourism))
+            for (other in getOtherMajorCivs())
+                if (other != destination && destination.knows(other)) addInfluence(other, getInstantInfluenceOn(other, tourism / 3))
+        }
         civ.addNotification("Our [${event.label}] made [$tourism] tourism", NotificationCategory.Diplomacy, "StatIcons/Culture")
+    }
+
+    /**
+     *  CvPlayerTrade::MoveUnits (V:CvTradeClasses.cpp:2615-2696) with [ModConstants.historicEventDispatchLikeVp]: a trade route from [origin] to [destination] ended.
+     *  A route to a major civilization, or a domestic one with [UniqueType.DomesticTradeRouteTourism], is a land or sea trade route event with the turns of [origin];
+     *  a route to a City-State the event of trade with City-States
+     */
+    fun onTradeRouteEnded(isSea: Boolean, origin: City, destination: City) {
+        if (!civ.gameInfo.ruleset.modOptions.constants.historicEventDispatchLikeVp) return
+        val target = destination.civ
+        if (target == civ && !civ.hasUnique(UniqueType.DomesticTradeRouteTourism)) return
+        if (target.isCityState) onHistoricEvent(HistoricEvent.TradeCityState)
+        else onHistoricEvent(if (isSea) HistoricEvent.TradeSea else HistoricEvent.TradeLand, origin, target)
     }
     //endregion
 

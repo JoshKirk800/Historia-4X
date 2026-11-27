@@ -86,6 +86,26 @@ enum class UniqueType(
         docDescription = "With the ModConstants `historicEventsLikeVp`, the amounts of all such uniques are added up (the original's `EventTourism` of buildings and policies). " +
             "A Great Person born, a new era or a world wonder built then gives tourism towards every civilization met: a fifth of the culture plus the tourism of that many " +
             "turns (the last 10 turns scaled to them, plus instant yields on average), divided by 15 for a Great Person, 10 for an era, 5 for a wonder (`GetHistoricEventTourism`)"),
+    GoldenAgeTourismTurns("[positiveAmount] turns of yields as tourism for golden ages", UniqueTarget.Global,
+        docDescription = "With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for a golden age " +
+            "that starts or becomes longer, divided by 5; it counts as a historic event when the turns are positive (the original's `GoldenAgeTourism` of policies)"),
+    LandTradeRouteTourismTurns("[positiveAmount] turns of yields as tourism for completed land trade routes", UniqueTarget.Global,
+        docDescription = "With the ModConstants `historicEventDispatchLikeVp`, the uniques of the city a land trade route to a major civilization started in " +
+            "(`<in this city>` for those of a building alone) give tourism when the route ends: a fifteenth of the yields of that many turns towards the civilization " +
+            "of its destination, a third of that towards those it has met; it counts as a historic event when the tourism is positive (the original's `FinishLandTRTourism`)"),
+    SeaTradeRouteTourismTurns("[positiveAmount] turns of yields as tourism for completed sea trade routes", UniqueTarget.Global,
+        docDescription = "As `[positiveAmount] turns of yields as tourism for completed land trade routes` for sea trade routes (the original's `FinishSeaTRTourism`)"),
+    CityStateTradeRouteTourismTurns("[positiveAmount] turns of yields as tourism for completed trade routes to City-States", UniqueTarget.Global,
+        docDescription = "With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for a trade route " +
+            "to a City-State that ends, divided by 5; it counts as a historic event when the turns are positive (the original's `EventTourismCS` of policies)"),
+    ReligionSpreadTourismTurns("[positiveAmount] turns of yields as tourism for religion spread", UniqueTarget.Global,
+        docDescription = "With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for a city " +
+            "adopting the religion of our holy city for the first time while it is our state religion, divided by 15; it counts as a historic event when " +
+            "the tourism is positive (the original's `ReligionSpreadTourism` of traits)"),
+    DomesticTradeRouteTourism("Domestic trade routes give tourism for completed trade routes", UniqueTarget.Global,
+        docDescription = "With the ModConstants `historicEventDispatchLikeVp`, a domestic trade route that ends gives the tourism of " +
+            "`[positiveAmount] turns of yields as tourism for completed land trade routes` (or sea) as well, a third of it towards each civilization met " +
+            "(the original's `InternalTRTourism` of policies)"),
     StatsPerEraSinceDig("[stats] for every era since the site of this improvement was formed", UniqueTarget.Improvement,
         docDescription = "Counts the eras the civilization has gone through since the era of what happened on this tile, see archaeology. Nothing if it is the same era or the tile has no history"),
     StatsFromGreatWorks("[stats] from each Great Work", UniqueTarget.Global,

@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.HistoricEvent
 import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
@@ -298,6 +299,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         if (controller.religionManager.getStateReligion()?.name != newMajorityReligion) return
         InstantYields.fire(UniqueType.TriggerUponCityAdoptingOurReligion, controller, holyCity,
             triggerNotificationText = "due to [${city.name}] adopting our religion")
+        if (city.civ.gameInfo.ruleset.modOptions.constants.historicEventDispatchLikeVp) controller.culture.onHistoricEvent(HistoricEvent.ReligionSpread)
     }
 
     private fun updateNumberOfFollowers(checkForReligionAdoption: Boolean = true) {

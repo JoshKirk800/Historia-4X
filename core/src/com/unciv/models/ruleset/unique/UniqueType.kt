@@ -135,7 +135,8 @@ enum class UniqueType(
         docDescription = "The first stat of a matching city, as the sources add it up before any percentage bonus, times the percentage, is added to the second stat after the percentage bonuses " +
             "(the original's `Building_YieldFromYieldPercent`, CvCity::UpdateCityYieldFromYield, GetTotalYieldFromYieldTimes100). It is not itself changed or fed back"),
     ThemingBonusPercent("[relativeAmount]% Theming bonuses [cityFilter]", UniqueTarget.Global,
-        docDescription = "Every such unique multiplies the theming bonuses of the matching cities by 100% plus its amount, one after the other"),
+        docDescription = "Every such unique multiplies the theming bonuses of the matching cities by 100% plus its amount, one after the other; with the " +
+            "ModConstants `greatWorkThemingLikeVp` the amounts are added up and the bonus is truncated once"),
     UnitGoldMaintenancePercent("[relativeAmount]% unit gold maintenance", UniqueTarget.Global,
         docDescription = "Percentage points that are added up over all such uniques and applied to the total gold maintenance of the units of the civilization, after the exponent and before the handicap of the difficulty"),
     TechKnownByAnyCivResearchSpeed("[relativeAmount]% research of technologies known by any civilization", UniqueTarget.Global,

@@ -11,6 +11,7 @@ import com.unciv.models.ruleset.ThemingBonus
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -221,4 +222,159 @@ class GreatWorkSwapAutomationTests {
         GreatWorkSwapAutomation.doSwapGreatWorks(civ)
         assertTrue(other.cities.first().greatWorks.getWorks().any { it === wanted })
     }
+
+    //region Vox Populi
+    private fun likeVp() {
+        game.ruleset.modOptions.constants.greatWorkThemingLikeVp = true
+    }
+
+    /** A building with two art slots and [bonuses], in their order */
+    private fun gallery(name: String, vararg bonuses: ThemingBonus): Building = Building().apply {
+        this.name = name
+        ruleset = game.ruleset
+        uniques.add("Has [2] [Art/Artifact] Great Work slots")
+        themingBonuses.addAll(bonuses)
+        game.ruleset.buildings[name] = this
+    }
+
+    @Test
+    fun `like Vox Populi a city that might fall takes no works but gives its own`() {
+        likeVp()
+        val museum = building("Museum")
+        val hermitage = building("Hermitage")
+        city.cityConstructions.addBuilding(hermitage)
+        secondCity.cityConstructions.addBuilding(museum)
+        val a = art("Ancient era", civ)
+        val b = art("Ancient era", civ)
+        put(secondCity, museum, 0, a)
+        put(secondCity, museum, 1, b)
+        // Lost a little, and as much last turn as it has left (CvCity::isInDangerOfFalling): not endangered, but it might fall
+        secondCity.health -= 10
+        secondCity.damageTakenLastTurn = secondCity.health
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        // The pair would theme the Museum where it is; it goes into the Hermitage of the capital instead
+        assertEquals(listOf(a, b, null), worksIn(city, hermitage))
+        assertEquals(listOf(null, null), worksIn(secondCity, museum))
+    }
+
+    @Test
+    fun `like Vox Populi the capital is never endangered`() {
+        likeVp()
+        val museum = building("Museum")
+        city.cityConstructions.addBuilding(museum)
+        secondCity.cityConstructions.addBuilding(museum)
+        city.health = 20
+        val a = art("Ancient era", civ)
+        val b = art("Ancient era", civ)
+        put(city, museum, 0, a)
+        put(city, museum, 1, b)
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        assertEquals(listOf(a, b), worksIn(city, museum))
+        assertEquals(listOf(null, null), worksIn(secondCity, museum))
+    }
+
+    @Test
+    fun `like Vox Populi another city is endangered past half its health or razed below 3 citizens`() {
+        likeVp()
+        val museum = building("Museum")
+        val thirdCity = game.addCity(civ, game.tileMap[0, -5])
+        secondCity.cityConstructions.addBuilding(museum)
+        thirdCity.cityConstructions.addBuilding(museum)
+        val a = art("Ancient era", civ)
+        val b = art("Ancient era", civ)
+        put(thirdCity, museum, 0, a)
+        put(thirdCity, museum, 1, b)
+        val inSecond = { worksIn(secondCity, museum) == listOf(a, b) }
+
+        val max = secondCity.health // a new city has all its health
+        secondCity.health = max / 2 - 1 // lost more than half: the Museum of the third city is themed first, in place
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+        assertFalse(inSecond())
+
+        secondCity.health = max / 2 // lost half: not endangered, and first in empire order
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+        assertTrue(inSecond())
+
+        secondCity.greatWorks.takeAll(museum)
+        put(thirdCity, museum, 0, a)
+        put(thirdCity, museum, 1, b)
+        secondCity.health = max
+        secondCity.isBeingRazed = true
+        secondCity.population.setPopulation(2)
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+        assertFalse(inSecond())
+
+        secondCity.population.setPopulation(3)
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+        assertTrue(inSecond())
+    }
+
+    @Test
+    fun `like Vox Populi puppets are themed and filled after the other cities`() {
+        likeVp()
+        val museum = building("Museum")
+        val thirdCity = game.addCity(civ, game.tileMap[0, -5])
+        secondCity.cityConstructions.addBuilding(museum)
+        thirdCity.cityConstructions.addBuilding(museum)
+        secondCity.isPuppet = true
+        val a = art("Ancient era", civ)
+        val b = art("Ancient era", civ)
+        put(secondCity, museum, 0, a)
+        put(secondCity, museum, 1, b)
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+        assertEquals(listOf(a, b), worksIn(thirdCity, museum))
+
+        // One work alone themes nothing and fills the city before the puppet
+        thirdCity.greatWorks.takeAll(museum)
+        put(secondCity, museum, 1, a)
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+        assertEquals(listOf(a, null), worksIn(thirdCity, museum))
+    }
+
+    @Test
+    fun `like Vox Populi the theming bonuses of a building are tried from the highest`() {
+        val gallery = gallery("Gallery",
+            bonus("Our art", 1, 1) { mustBeArt = true; requiresOwner = true },
+            bonus("Their art", 3, 1) { mustBeArt = true; requiresAnyButOwner = true })
+        val hermitage = building("Hermitage")
+        city.cityConstructions.addBuilding(gallery)
+        secondCity.cityConstructions.addBuilding(hermitage)
+        val ours = listOf(art("Ancient era", civ), art("Ancient era", civ))
+        val theirs = listOf(art("Ancient era", other), art("Ancient era", other))
+        put(city, gallery, 0, ours[0])
+        put(city, gallery, 1, ours[1])
+        put(secondCity, hermitage, 0, theirs[0])
+        put(secondCity, hermitage, 1, theirs[1])
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+        assertEquals(ours, worksIn(city, gallery))
+
+        likeVp()
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+        assertEquals(theirs, worksIn(city, gallery))
+        assertEquals(3, city.greatWorks.getThemingBonus(gallery))
+    }
+
+    @Test
+    fun `like Vox Populi theming percentages are added up and truncated once`() {
+        val gallery = gallery("Gallery", bonus("Any art", 1, 1) { mustBeArt = true })
+        val patron = game.addCiv("[+50]% Theming bonuses [in all cities]", "[+50]% Theming bonuses [in all cities]",
+            "[+100]% Theming bonuses [in puppeted cities]")
+        val patronCity = game.addCity(patron, game.tileMap[5, 5])
+        patronCity.cityConstructions.addBuilding(gallery)
+        put(patronCity, gallery, 0, art("Ancient era", patron))
+        put(patronCity, gallery, 1, art("Ancient era", patron))
+
+        // One after the other: 1 x 150% = 1, and again 1
+        assertEquals(1, patronCity.greatWorks.getThemingBonus(gallery))
+        likeVp()
+        // 1 x (100 + 50 + 50)% = 2; the puppets' percentage is not for this city
+        assertEquals(2, patronCity.greatWorks.getThemingBonus(gallery))
+    }
+    //endregion
 }

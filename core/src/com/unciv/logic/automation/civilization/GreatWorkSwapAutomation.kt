@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.city.City
 import com.unciv.logic.city.GreatWorkFunctions
 import com.unciv.logic.city.GreatWorkSlot
@@ -22,6 +23,8 @@ import com.unciv.models.ruleset.ThemingBonus
  * per kind of slot (writing, art and artifacts, music), the buildings in the order of the AI priority of their first theming bonus are
  * themed with whole matching sets of works, undamaged cities first; then those still one work short try to swap with another civilization;
  * then the first work left of each kind is marked as the one to swap; then the leftovers fill the unthemed buildings.
+ * With the ModConstants `greatWorkThemingLikeVp`, Vox Populi's choice of buildings and their order: no works into a city that might fall,
+ * undamaged puppets between the other undamaged cities and the endangered ones, and the theming bonuses of a building from the highest.
  *
  * Swaps between civilizations (CvGameCulture::SwapGreatWorks): both works must be the ones their owners marked as swappable. As in the DLL
  * the work wanted is looked up among the works of its creator, so only works still owned by the civilization that made them can be taken.
@@ -31,7 +34,7 @@ import com.unciv.models.ruleset.ThemingBonus
 object GreatWorkSwapAutomation {
 
     /** CvGreatWorkBuildingInMyEmpire */
-    private class EmpireBuilding(val city: City, val building: Building, val endangered: Boolean) {
+    private class EmpireBuilding(val city: City, val building: Building, val endangered: Boolean, val puppet: Boolean) {
         var themed = false
         val slots get() = building.greatWorkSlotTypes.size
     }
@@ -58,16 +61,25 @@ object GreatWorkSwapAutomation {
         val music = ArrayList<GreatWorkInstance>()
 
         // Cities in order, their buildings in the order of the ruleset (the DLL loops over building classes), slots in order
+        val likeVp = context.ruleset.modOptions.constants.greatWorkThemingLikeVp
         for (city in civ.cities) {
-            val endangered = city.health < city.getMaxHealth()
+            // Vox Populi (CvPlayerCulture::DoSwapGreatWorks, V:CvCultureClasses.cpp:1285-1304): a city that might fall soon gives its works but takes none;
+            // the capital is never endangered, another city is when it has lost more than half its health or is razed below 3 citizens; puppets come
+            // after the other cities
+            val destination = !likeVp || !CityDangerAi.isInDangerOfFalling(city, true)
+            val endangered = if (!likeVp) city.health < city.getMaxHealth()
+                else !city.isCapital() && (city.getMaxHealth() - city.health > city.getMaxHealth() / 2 || city.isBeingRazed && city.population.population < 3)
+            val puppet = likeVp && city.isPuppet
             for (building in city.cityConstructions.getBuiltBuildings().sortedBy { buildingOrder[it.name] ?: Int.MAX_VALUE }) {
                 val types = building.greatWorkSlotTypes
                 if (types.isEmpty()) continue
-                val entry = EmpireBuilding(city, building, endangered)
-                when (types[0]) {
-                    GreatWorkSlotType.Literature -> writingBuildings.add(entry)
-                    GreatWorkSlotType.ArtArtifact -> artBuildings.add(entry)
-                    GreatWorkSlotType.Music -> musicBuildings.add(entry)
+                if (destination) {
+                    val entry = EmpireBuilding(city, building, endangered, puppet)
+                    when (types[0]) {
+                        GreatWorkSlotType.Literature -> writingBuildings.add(entry)
+                        GreatWorkSlotType.ArtArtifact -> artBuildings.add(entry)
+                        GreatWorkSlotType.Music -> musicBuildings.add(entry)
+                    }
                 }
                 for (slot in city.greatWorks.getSlots(building)) {
                     val work = slot.getWork() ?: continue
@@ -94,7 +106,10 @@ object GreatWorkSwapAutomation {
         // SortThemingBonus: by the AI priority of the first theming bonus, buildings without one last
         val buildings = unsorted.sortedByDescending { it.building.themingBonuses.firstOrNull()?.aiPriority ?: Int.MIN_VALUE }
 
-        for (building in buildings) if (!building.endangered)
+        // Undamaged cities, then (Vox Populi, V:CvCultureClasses.cpp:1476-1518) undamaged puppets, then endangered cities
+        for (building in buildings) if (!building.endangered && !building.puppet)
+            building.themed = themeBuilding(context, building, works1, works2, considerOtherPlayers = false)
+        for (building in buildings) if (!building.endangered && building.puppet)
             building.themed = themeBuilding(context, building, works1, works2, considerOtherPlayers = false)
         for (building in buildings) if (building.endangered)
             building.themed = themeBuilding(context, building, works1, works2, considerOtherPlayers = false)
@@ -113,7 +128,10 @@ object GreatWorkSwapAutomation {
             GreatWorkSlotType.Music -> {}
         }
 
-        for (building in buildings) if (!building.endangered && !building.themed) fillBuilding(context, building, works1, works2)
+        // The same order for the leftovers (CvPlayerCulture::MoveSingleWorks, V:CvCultureClasses.cpp:2105-2180; all Vox Populi's slot buildings
+        // yield culture, so its split by the focused yield changes nothing)
+        for (building in buildings) if (!building.endangered && !building.puppet && !building.themed) fillBuilding(context, building, works1, works2)
+        for (building in buildings) if (!building.endangered && building.puppet && !building.themed) fillBuilding(context, building, works1, works2)
         for (building in buildings) if (building.endangered && !building.themed) fillBuilding(context, building, works1, works2)
     }
 
@@ -125,7 +143,11 @@ object GreatWorkSwapAutomation {
         if (numSlots < 2) return false
         val owner = context.civ.civName
 
-        for ((bonusIndex, bonus) in building.themingBonuses.withIndex()) {
+        // Vox Populi tries the bonuses from the highest, those of one value in order (V:CvCultureClasses.cpp:1648-1657)
+        val bonuses = if (context.ruleset.modOptions.constants.greatWorkThemingLikeVp)
+            building.themingBonuses.withIndex().sortedByDescending { it.value.bonus }
+        else building.themingBonuses.withIndex().toList()
+        for ((bonusIndex, bonus) in bonuses) {
             val worksToConsider: List<GreatWorkInstance> = when {
                 bonus.mustBeArt -> ArrayList(works1)
                 bonus.mustBeArtifact -> ArrayList(works2)

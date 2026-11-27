@@ -12,6 +12,7 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.MapType
 import com.unciv.logic.map.mapunit.MapUnit
+import com.unciv.logic.map.mapunit.actions.UnitActionModifiers
 import com.unciv.logic.map.mapunit.actions.UnitActionsReligion
 import com.unciv.models.Counter
 import com.unciv.models.Religion
@@ -20,7 +21,10 @@ import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.INonPerpetualConstruction
 import com.unciv.models.ruleset.PurchaseReason
+import com.unciv.models.ruleset.QuestName
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.unique.Countables
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
@@ -154,6 +158,10 @@ object ReligionAutomation {
     /** CvReligionAI::DoTurn → DoFaithPurchases */
     fun spendFaithOnReligion(civ: Civilization) {
         if (civ.cities.isEmpty()) return
+        if (religionAiLikeVp(civ)) {
+            doFaithPurchasesLikeVp(civ)
+            return
+        }
         when (chooseFaithPurchase(civ)) {
             FaithPurchase.Save -> {}
             FaithPurchase.LockedOutFaithBuilding, FaithPurchase.OtherFaithBuilding -> buyAnyAvailableFaithBuilding(civ)
@@ -204,9 +212,9 @@ object ReligionAutomation {
         }
     }
 
-    /** CvReligionAI::AreAllOurCitiesConverted */
-    private fun areAllOurCitiesConverted(civ: Civilization, religion: Religion, includePuppets: Boolean): Boolean =
-        civ.cities.none { majorityReligionName(it) != religion.name && (includePuppets || !it.isPuppet) }
+    /** CvReligionAI::AreAllOurCitiesConverted (to no religion: none of them has a majority) */
+    private fun areAllOurCitiesConverted(civ: Civilization, religion: Religion?, includePuppets: Boolean): Boolean =
+        civ.cities.none { majorityReligionName(it) != religion?.name && (includePuppets || !it.isPuppet) }
 
     /** CvReligionAI::AreAllOurCitiesHaveFaithBuilding: every city following [religion] has [building] */
     private fun areAllOurCitiesWithFaithBuilding(civ: Civilization, religion: Religion, building: Building, includePuppets: Boolean): Boolean =
@@ -255,6 +263,185 @@ object ReligionAutomation {
     }
     //endregion
 
+    //region Faith purchases like Vox Populi (CvReligionAI::DoFaithPurchases)
+
+    /** The city filter of a belief's yields in the cities that follow its religion (Belief_YieldPerFollowingCity, Belief_YieldPerXFollowers) */
+    private const val FOLLOWING_CITIES = "in cities following this religion"
+
+    /** The city filter of a unit bought only where an enhanced religion leads: the original's RequiresEnhancedReligion */
+    private const val ENHANCED_RELIGION_CITIES = "in all cities in which the majority religion is an enhanced religion"
+
+    /**
+     *  CvReligionAI::DoFaithPurchases (V:CvReligionClasses.cpp:7134-7374), with [religionAiLikeVp]; true when the faith is spent or saved for, so that
+     *  nothing else may be bought with it. The religion we own ([com.unciv.logic.civilization.managers.ReligionManager.getOwnedReligion]) and the one we
+     *  spread ([religionToSpread], foreign ones considered) decide, in order:
+     *  1. a Great Prophet to enhance our religion, bought or saved for, when we have too many missionaries, or all our core cities follow the religion we
+     *     spread, a prophet comes soon enough ([isProphetGainRateAcceptable]) and there is no easy target (or spreading earns us nothing, [spreadScore]);
+     *  2. from the Industrial era on, the desired Great Person ([getDesiredFaithGreatPerson]), bought or saved for when it is less than
+     *     max(13, 23 - religion flavor) turns of faith away;
+     *  then only with a city whose majority is the religion we spread:
+     *  3. a missionary or an inquisitor ([buyMissionaryOrInquisitorLikeVp]), bought or saved for, while one of our cities (puppets too) follows another;
+     *  4. with all core cities converted to our own religion, missionaries for foreign cities: always saved for with a religion flavor of 10 or more and
+     *     any target near; else saved for with a flavor of 7 or more (5 with easy targets) and a target that did not found a religion.
+     *  Missionaries count while they can spread our religion or the one we spread; at most RELIGION_MAX_MISSIONARIES plus [spreadScore], or 1 for a
+     *  religion we do not own (0 when all our cities follow it). Not built: the trait that forbids training missionaries (India) and the unique-belief
+     *  rule for a civilization without natural spread, which only applies without BALANCE_UNIQUE_BELIEFS_ONLY_FOR_CIV. Unlike VP, Unciv buys no
+     *  civilian in a city whose center already holds one, so such a purchase fails and the faith is saved.
+     */
+    fun doFaithPurchasesLikeVp(civ: Civilization): Boolean {
+        val religionManager = civ.religionManager
+        val owned = religionManager.getOwnedReligion()
+        val spread = religionToSpread(civ, considerForeign = true)
+        val prophet = religionManager.getGreatProphetEquivalent()
+        val allConvertedCore = areAllOurCitiesConverted(civ, spread, includePuppets = false)
+        val allConvertedWithPuppets = areAllOurCitiesConverted(civ, spread, includePuppets = true)
+        val missionaries = civ.units.getCivUnits().count {
+            it.religion != null && (it.religion == owned?.name || it.religion == spread?.name)
+                && UnitActionModifiers.getUsableUnitActionUniques(it, UniqueType.CanSpreadReligion).any()
+        }
+        val flavorReligion = civ.ai.personality(Flavor.Religion)
+        val desireToSpread = if (owned != null) spreadScore(civ, owned) else 0
+        val maxMissionaries = when {
+            owned == null || spread != owned -> if (allConvertedWithPuppets) 0 else 1
+            else -> civ.gameInfo.ruleset.ai.define(AiDefine.RELIGION_MAX_MISSIONARIES) + desireToSpread
+        }
+        val tooManyMissionaries = missionaries >= maxMissionaries
+        val haveEasyTargets = spread != null && haveNearbyConversionTargetLikeVp(civ, spread, canIncludeReligionStarter = true, heathensOnly = true)
+        val wantToEnhance = (!haveEasyTargets || desireToSpread < 1) && allConvertedCore && isProphetGainRateAcceptable(civ) || tooManyMissionaries
+
+        if (owned != null && !owned.isEnhancedReligion() && wantToEnhance && prophet != null && !buyGreatPersonLikeVp(civ, prophet, owned))
+            return true
+
+        if (isIndustrialOrLater(civ)) {
+            val greatPerson = getDesiredFaithGreatPerson(civ)
+            val cost = civ.getCapital()?.let { greatPerson?.getStatBuyCost(it, Stat.Faith) }
+            if (greatPerson != null && cost != null) {
+                val faithPerTurnTimes100 = (civ.stats.statsForNextTurn.faith * 100).toInt()
+                val turns = (cost * 100 - religionManager.storedFaith * 100) / max(1, faithPerTurnTimes100)
+                if (turns < max(13, 23 - flavorReligion) && !buyGreatPersonLikeVp(civ, greatPerson, if (greatPerson == prophet) owned else null))
+                    return true
+            }
+        }
+
+        if (spread == null || civ.cities.none { majorityReligionName(it) == spread.name }) return false
+
+        if (!tooManyMissionaries && !allConvertedWithPuppets && !buyMissionaryOrInquisitorLikeVp(civ, spread)) return true
+
+        if (owned != null && !tooManyMissionaries && allConvertedCore && spread == owned) {
+            if (flavorReligion >= 10 && haveNearbyConversionTargetLikeVp(civ, owned, canIncludeReligionStarter = true, heathensOnly = false)) {
+                buyReligiousUnitLikeVp(civ, missionaryUnit(civ), owned)
+                return true
+            }
+            if (flavorReligion >= 7 - (if (haveEasyTargets) 2 else 0)
+                && haveNearbyConversionTargetLikeVp(civ, owned, canIncludeReligionStarter = false, heathensOnly = false)
+                && !buyReligiousUnitLikeVp(civ, missionaryUnit(civ), owned)) return true
+        }
+        return false
+    }
+
+    /** CvReligionAI::BuyMissionaryOrInquisitor: an inquisitor while we have too few ([haveEnoughInquisitorsLikeVp]), else a missionary if there is a target */
+    private fun buyMissionaryOrInquisitorLikeVp(civ: Civilization, religion: Religion): Boolean {
+        if (!haveEnoughInquisitorsLikeVp(civ, religion)) return buyReligiousUnitLikeVp(civ, inquisitorUnit(civ), religion)
+        if (haveNearbyConversionTargetLikeVp(civ, religion, canIncludeReligionStarter = true, heathensOnly = false))
+            return buyReligiousUnitLikeVp(civ, missionaryUnit(civ), religion)
+        return false
+    }
+
+    /** CvReligionAI::BuyMissionary / BuyInquisitor: if its price in the capital fits our faith, in the [bestCityForFaithUnit] of [religion] */
+    private fun buyReligiousUnitLikeVp(civ: Civilization, unit: BaseUnit?, religion: Religion): Boolean {
+        if (unit == null || !capitalCanAfford(civ, unit)) return false
+        val city = bestCityForFaithUnit(civ, unit, religion) ?: return false
+        return purchase(city, unit)
+    }
+
+    /** CvReligionAI::BuyGreatPerson: in the [bestCityForFaithUnit], if its price there fits our faith */
+    private fun buyGreatPersonLikeVp(civ: Civilization, unit: BaseUnit, religion: Religion?): Boolean {
+        val city = bestCityForFaithUnit(civ, unit, religion) ?: return false
+        val cost = unit.getStatBuyCost(city, Stat.Faith) ?: return false
+        if (cost > civ.religionManager.storedFaith) return false
+        return purchase(city, unit)
+    }
+
+    /**
+     *  CvReligionAI::GetSpreadScore (V:CvReligionClasses.cpp:7070-7132): how much spreading [religion] earns us, one for each yield its beliefs give
+     *  on a conversion, a spread (here or abroad), per following city or per follower in the owner's cities, plus one for each City-State that asks
+     *  us to contest its faith. Not built: the City-State influence of missionaries (Belief MissionaryInfluenceCS has no Unciv form).
+     */
+    fun spreadScore(civ: Civilization, religion: Religion): Int {
+        var score = 0
+        for (belief in religion.getAllBeliefsOrdered()) for (unique in belief.uniqueObjects) {
+            if (unique.hasModifier(UniqueType.TriggerUponCityAdoptingOurReligion) || unique.hasModifier(UniqueType.TriggerUponSpreadingReligion)
+                || unique.hasModifier(UniqueType.TriggerUponSpreadingReligionAbroad)) score++
+            else if (unique.type == UniqueType.StatsPerCity && unique.params[1] == FOLLOWING_CITIES
+                && unique.getModifiers(UniqueType.ForEveryCountable).all { it.params[0] == Countables.MajorityFollowersInOwnerCities.text })
+                score += unique.stats.count { it.value > 0 }
+        }
+        for (cityState in civ.gameInfo.getAliveCityStates())
+            if (cityState.questManager.getAssignedQuestsFor(civ).any { it.questName == QuestName.ContestFaith.value }) score++
+        return score
+    }
+
+    /**
+     *  CvReligionAI::HaveNearbyConversionTarget (V:CvReligionClasses.cpp:11273-11316): a city of anyone we are not at war with, within missionary moves ×
+     *  RELIGION_MISSIONARY_RANGE_IN_TURNS of our nearest city, that a missionary of [religion] would score ([scoreCityForMissionaryLikeVp]); its owner
+     *  must not spread a religion of its own ([religionToSpread]) unless [canIncludeReligionStarter]; with [heathensOnly] a city not of [religion] needs
+     *  followers of no religion or a pantheon at least half of those not of [religion].
+     */
+    fun haveNearbyConversionTargetLikeVp(civ: Civilization, religion: Religion, canIncludeReligionStarter: Boolean, heathensOnly: Boolean): Boolean {
+        val missionary = missionaryUnit(civ) ?: return false
+        val range = missionary.movement * civ.gameInfo.ruleset.ai.define(AiDefine.RELIGION_MISSIONARY_RANGE_IN_TURNS)
+        for (other in civ.gameInfo.civilizations) {
+            if (other.isBarbarian || other.isSpectator || civ.isAtWarWith(other)) continue
+            if (!canIncludeReligionStarter && religionToSpread(other) != null) continue
+            for (city in other.cities) {
+                if (CityDistances.cityDistanceInPlots(civ, city.getCenterTile()) > range) continue
+                if (heathensOnly && majorityReligionName(city) != religion.name) {
+                    val followers = city.religion.getNumberOfFollowers()
+                    val ofMajorReligions = followers.filter { (name, _) -> civ.gameInfo.religions[name]?.isMajorReligion() == true }.values.sum()
+                    val population = city.population.population
+                    if (population - ofMajorReligions < (population - followers[religion.name]) / 2) continue
+                }
+                if (scoreCityForMissionaryLikeVp(civ, city, null, religion) > 0) return true
+            }
+        }
+        return false
+    }
+
+    /**
+     *  CvReligionAI::HaveEnoughInquisitors (V:CvReligionClasses.cpp:11336-11379): enough if we cannot have inquisitors (CanHaveInquisitors: no unit, or
+     *  one bought only in cities of an enhanced religion while [religion] is not) or do not own [religion]; else our inquisitors of [religion] must be at
+     *  least our cities an inquisitor would cleanse ([scoreCityForInquisitorOffensiveLikeVp]), plus 2 once [religion] is enhanced.
+     */
+    private fun haveEnoughInquisitorsLikeVp(civ: Civilization, religion: Religion): Boolean {
+        val inquisitor = inquisitorUnit(civ) ?: return true
+        val needsEnhanced = inquisitor.getMatchingUniques(UniqueType.CanBePurchasedWithStat, GameContext.IgnoreConditionals)
+            .any { it.params[1] == ENHANCED_RELIGION_CITIES }
+        if (needsEnhanced && !religion.isEnhancedReligion()) return true
+        if (religion != civ.religionManager.getOwnedReligion()) return true
+        val inquisitors = civ.units.getCivUnits()
+            .count { it.baseUnit.hasUnique(UniqueType.CanRemoveHeresy, GameContext.IgnoreConditionals) && it.religion == religion.name }
+        val needed = civ.cities.count { scoreCityForInquisitorOffensiveLikeVp(civ, it, null, religion) > 0 }
+        return inquisitors >= needed + if (religion.isEnhancedReligion()) 2 else 0
+    }
+
+    /**
+     *  CvReligionAI::IsProphetGainRateAcceptable (V:CvReligionClasses.cpp:11452-11483): the next Great Prophet's faith
+     *  ([com.unciv.logic.civilization.managers.ReligionManager.faithForNextGreatProphet]) comes in under 30 turns at this turn's faith; under 25 with a
+     *  religion we own whose beliefs give a faith building, under 20 while at most 2 cities follow it.
+     */
+    fun isProphetGainRateAcceptable(civ: Civilization): Boolean {
+        val faithPerTurnTimes100 = (civ.stats.statsForNextTurn.faith * 100).toInt()
+        val turns = civ.religionManager.faithForNextGreatProphet() * 100 / max(1, faithPerTurnTimes100)
+        var maxTurns = 30
+        val owned = civ.religionManager.getOwnedReligion()
+        if (owned != null) {
+            if (faithBuildingAvailable(civ, owned) != null) maxTurns = 25
+            if (civ.gameInfo.getCities().count { majorityReligionName(it) == owned.name } <= 2) maxTurns = 20
+        }
+        return turns < maxTurns
+    }
+    //endregion
+
     //region Where to buy (CvReligionAI::Buy*, CvReligionAIHelpers)
 
     private fun canPurchase(city: City, construction: INonPerpetualConstruction): Boolean {
@@ -269,9 +456,8 @@ object ReligionAutomation {
         return cost <= civ.religionManager.storedFaith
     }
 
-    private fun purchase(city: City, construction: INonPerpetualConstruction) {
+    private fun purchase(city: City, construction: INonPerpetualConstruction): Boolean =
         city.cityConstructions.purchaseConstruction(construction, -1, true, Stat.Faith)
-    }
 
     /** CvReligionAI::BuyMissionary / BuyInquisitor */
     private fun buyReligiousUnit(civ: Civilization, unit: BaseUnit?) {

@@ -511,6 +511,8 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
                 var needed = required
                 val alliesPerReduction = civ.getMatchingUniques(UniqueType.PoliciesNeededForWondersFewer, stateForConditionals).sumOf { it.params[0].toInt() }
                 if (alliesPerReduction > 0) needed -= civ.gameInfo.getAliveCityStates().count { it.allyCiv == civ } / alliesPerReduction
+                // CvReligionBeliefs::GetIgnorePolicyRequirementsAmount answers true, not the amount (V:CvBeliefClasses.cpp:4903-4916)
+                if (requiredTech != null && civ.hasUnique(UniqueType.PoliciesNeededForTechWondersOneFewer, stateForConditionals)) needed -= 1
                 if (civ.policies.getNumberOfPoliciesForRequirements() < needed)
                     yield(RejectionReasonType.RequiresPolicyCount.toInstance("Requires [$needed] adopted Policies"))
             }

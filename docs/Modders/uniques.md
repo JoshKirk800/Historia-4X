@@ -838,6 +838,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "Wonders that need a technology need 1 fewer adopted Policy"
+	Lowers by 1 the number of adopted policies that `Requires [positiveAmount] adopted Policies` asks for, for a building with a required technology; several of these still lower it by 1 (the original's `Beliefs.ReducePolicyRequirements`, CvPlayer::canConstruct, V:CvPlayer.cpp:14622-14641)
+
+	Applicable to: Global, FounderBelief
+
 ??? example  "City-State quest rewards are increased by [relativeAmount]%"
 	Adds this percentage to the modifier of the rewards of City-State quests (the original's `Policies.IncreasedQuestRewards`, CvMinorCivAI::GetQuestRewardModifier, V:CvMinorCivAI.cpp:4949-4975). Only with `cityStateQuestsLikeVp`
 
@@ -2360,6 +2365,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Example: "[+20]% [Culture] from every follower, up to [+20]%"
 
 	Applicable to: FounderBelief, FollowerBelief
+
+??? example  "Wonders that need a technology need 1 fewer adopted Policy"
+	Lowers by 1 the number of adopted policies that `Requires [positiveAmount] adopted Policies` asks for, for a building with a required technology; several of these still lower it by 1 (the original's `Beliefs.ReducePolicyRequirements`, CvPlayer::canConstruct, V:CvPlayer.cpp:14622-14641)
+
+	Applicable to: Global, FounderBelief
 
 ??? example  "[mapUnitFilter] units convert adjacent Barbarian units"
 	When such a unit of the founder of the religion moves next to a Barbarian unit, or a Barbarian unit moves next to it, the Barbarian unit (the best defender of its tile) joins the founder, with no movement left. A Barbarian camp under it is cleared, without the gold (CvBeliefHelpers::ConvertBarbarianUnit)

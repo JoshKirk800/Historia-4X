@@ -71,14 +71,20 @@ class CultureManager : IsPartOfGameInfoSerialization {
     /** Tourism towards each other civilization added up over the game, by civ id */
     var influence = Counter<String>()
         private set
+    /** With [ModConstants.tourismPrecisionLikeVp]: the hundredths of [influence] below a whole one, which the original keeps
+     *  (CvPlayerCulture::ChangeInfluenceOnTimes100 keeps m_aiCulturalInfluence in hundredths, V:CvCultureClasses.cpp:3680-3693) */
+    var influenceRemainder = Counter<String>()
+        private set
 
-    /** [influence] and the lifetime culture as they were before the last turn, to see where things are heading */
+    /** [influence], its [influenceRemainder] and the lifetime culture as they were before the last turn, to see where things are heading */
     var lastTurnInfluence = Counter<String>()
+        private set
+    var lastTurnInfluenceRemainder = Counter<String>()
         private set
     var lastTurnLifetimeCulture = 0
         private set
 
-    /** What the last turn added to the influence on each civilization (CvPlayerCulture::m_aiLastTurnCulturalIPT, set in DoTurn), and the lifetime
+    /** What the last turn added to the influence on each civilization in hundredths (CvPlayerCulture::m_aiLastTurnCulturalIPT, set in DoTurn), and the lifetime
      *  culture that turn made, in hundredths (CvPlayer::doTurnPostDiplomacy sets m_iLastTurnCPT, V:CvPlayer.cpp:10448), for [ModConstants.influenceTrendLikeVp] */
     var lastTurnInfluenceDelta = Counter<String>()
         private set
@@ -120,7 +126,9 @@ class CultureManager : IsPartOfGameInfoSerialization {
     fun clone(): CultureManager {
         val toReturn = CultureManager()
         toReturn.influence = influence.clone()
+        toReturn.influenceRemainder = influenceRemainder.clone()
         toReturn.lastTurnInfluence = lastTurnInfluence.clone()
+        toReturn.lastTurnInfluenceRemainder = lastTurnInfluenceRemainder.clone()
         toReturn.lastTurnLifetimeCulture = lastTurnLifetimeCulture
         toReturn.lastTurnInfluenceDelta = lastTurnInfluenceDelta.clone()
         toReturn.lastTurnCulturePerTurnTimes100 = lastTurnCulturePerTurnTimes100
@@ -143,9 +151,10 @@ class CultureManager : IsPartOfGameInfoSerialization {
     }
 
     //region Tourism of the cities
-    /** The tourism a city makes that does not depend on who it goes to, before the modifiers of the city (CvCityCulture::GetBaseTourismBeforeModifiers) */
+    /** The tourism a city makes that does not depend on who it goes to, before the modifiers of the city (CvCityCulture::GetBaseTourismBeforeModifiers),
+     *  in whole tourism or, with [scale] 100, in hundredths, which keeps the parts of the percentages as CvCity::getBaseYieldRateTimes100 does */
     @Readonly
-    fun getCityTourismBeforeModifiers(city: City): Int {
+    fun getCityTourismBeforeModifiers(city: City, scale: Int = 1): Int {
         if (city.isInResistance() || city.isBeingRazed) return 0
         val constants = civ.gameInfo.ruleset.modOptions.constants
         val state = city.state
@@ -155,21 +164,21 @@ class CultureManager : IsPartOfGameInfoSerialization {
         var perWork = constants.greatWorkBaseTourism
         for (unique in city.getMatchingUniques(UniqueType.TourismFromGreatWorks, state))
             if (city.matchesFilter(unique.params[1])) perWork += unique.params[0].toInt()
-        var base = city.greatWorks.getNumWorks() * perWork
+        var base = city.greatWorks.getNumWorks() * perWork * scale
         var greatWorkPercent = 0
         for (unique in city.getMatchingUniques(UniqueType.GreatWorksTourismPercent, state))
             if (city.matchesFilter(unique.params[1])) greatWorkPercent += unique.params[0].toInt()
         base += greatWorkPercent * base / 100
-        base += city.greatWorks.getTotalThemingBonus()
+        base += city.greatWorks.getTotalThemingBonus() * scale
 
         var landmarkPercent = 0
         for (unique in city.getMatchingUniques(UniqueType.LandmarksTourismPercent, state))
             if (city.matchesFilter(unique.params[1])) landmarkPercent += unique.params[0].toInt()
         if (landmarkPercent > 0)
-            base += (getCultureOfWonders(city) + getCultureOfWorkedTiles(city)) * landmarkPercent / 100
+            base += (getCultureOfWonders(city) + getCultureOfWorkedTiles(city)) * scale * landmarkPercent / 100
 
         for (unique in city.getMatchingUniques(UniqueType.FlatTourism, state))
-            if (city.matchesFilter(unique.params[1])) base += unique.params[0].toInt()
+            if (city.matchesFilter(unique.params[1])) base += unique.params[0].toInt() * scale
 
         // Sacred Sites: CvCity::getBaseYieldRateTimes100 asks the majority religion of the city for GetFaithBuildingTourism(getOwner(), this) (V:CvCity.cpp:23358), which
         // goes through IsBeliefValid. Without reformationBeliefsLikeVp the beliefs of the majority religion count, whoever founded it; with it a Reformation belief only if the
@@ -177,7 +186,7 @@ class CultureManager : IsPartOfGameInfoSerialization {
         val majority = city.religion.getMajorityReligion()
         val faithBuildingTourism: (Unique) -> Unit = { unique ->
             if (city.matchesFilter(unique.params[2]))
-                base += unique.params[0].toInt() * getNumBuildingsOnlyBoughtWith(city, unique.params[1])
+                base += unique.params[0].toInt() * getNumBuildingsOnlyBoughtWith(city, unique.params[1]) * scale
         }
         if (majority != null) {
             if (!constants.reformationBeliefsLikeVp)
@@ -229,10 +238,11 @@ class CultureManager : IsPartOfGameInfoSerialization {
             .filter { !it.isCityCenter() && (it.isNaturalWonder() || it.improvement != null) }
             .sumOf { it.stats.getTileStats(city, civ).culture.toInt() }
 
-    /** The tourism of a city (CvCityCulture::GetBaseTourism): the above, increased by the bonuses of the city if they add up to something */
+    /** The tourism of a city (CvCityCulture::GetBaseTourism): the above, increased by the bonuses of the city if they add up to something,
+     *  in hundredths with [scale] 100 */
     @Readonly
-    fun getCityTourism(city: City, skipBlockable: Civilization? = null): Int {
-        val before = getCityTourismBeforeModifiers(city)
+    fun getCityTourism(city: City, skipBlockable: Civilization? = null, scale: Int = 1): Int {
+        val before = getCityTourismBeforeModifiers(city, scale)
         var percent = 0
         for (unique in city.getMatchingUniques(UniqueType.TourismPercent, city.state))
             if (city.matchesFilter(unique.params[1])) percent += unique.params[0].toInt()
@@ -364,6 +374,16 @@ class CultureManager : IsPartOfGameInfoSerialization {
         return total * (100 + getTourismModifierToward(other)) / 100
     }
 
+    /** [getInfluencePerTurn] in hundredths. With [ModConstants.tourismPrecisionLikeVp] the tourism of the cities is added up in hundredths
+     *  before the modifier towards [other] (CvPlayerCulture::GetInfluencePerTurnTimes100, V:CvCultureClasses.cpp:3778-3793) */
+    @Readonly
+    fun getInfluencePerTurnTimes100(other: Civilization): Long {
+        if (!civ.gameInfo.ruleset.modOptions.constants.tourismPrecisionLikeVp) return getInfluencePerTurn(other) * 100L
+        if (!canInfluence(other)) return 0L
+        val total = civ.cities.sumOf { getCityTourism(it, skipBlockable = other, scale = 100).toLong() }
+        return total * (100 + getTourismModifierToward(other)) / 100
+    }
+
     /** The actual integer influence gained by a first trade connection; a second route adds no new modifier. */
     @Readonly
     fun getTourismIncreaseFromTradeConnection(other: Civilization): Int {
@@ -381,11 +401,15 @@ class CultureManager : IsPartOfGameInfoSerialization {
     @Readonly
     fun getInfluence(other: Civilization) = influence[other.civID]
 
-    /** The influence on [other] as a percentage of the culture it has made in the whole game */
+    /** The influence on [other] in hundredths, with what [ModConstants.tourismPrecisionLikeVp] keeps below a whole one */
+    @Readonly
+    fun getInfluenceTimes100(other: Civilization): Long = influence[other.civID] * 100L + influenceRemainder[other.civID]
+
+    /** The influence on [other] as a percentage of the culture it has made in the whole game (CvPlayerCulture::GetInfluenceLevel, V:CvCultureClasses.cpp:3796-3820) */
     @Readonly
     fun getInfluencePercent(other: Civilization): Int {
         val lifetimeCulture = other.totalCultureForContests
-        return if (lifetimeCulture > 0) (getInfluence(other).toLong() * 100 / lifetimeCulture).toInt() else 0
+        return if (lifetimeCulture > 0) (getInfluenceTimes100(other) / lifetimeCulture).toInt() else 0
     }
 
     /** CvPlayerCulture::GetInfluenceLevel, null if we have not met [other] */
@@ -439,7 +463,7 @@ class CultureManager : IsPartOfGameInfoSerialization {
      *  changes of it, in hundredths. The original's global instant tourism average is left out: nothing records it (CvPlayer::doInstantYield skips Tourism) */
     @Readonly
     private fun getTourismPerTurnIncludingInstantTimes100(other: Civilization): Long =
-        getInfluencePerTurn(other) * 100L + instantTourismHistory.recentAverage(other.civID, civ.gameInfo.turns) * 100L
+        getInfluencePerTurnTimes100(other) + instantTourismHistory.recentAverage(other.civID, civ.gameInfo.turns) * 100L
 
     /** CvPlayerCulture::GetInfluenceTrend with [ModConstants.influenceTrendLikeVp] (V:CvCultureClasses.cpp:3849-3888), its units kept: influence in
      *  hundredths over whole culture, and last turn's culture per turn in hundredths added to last turn's lifetime culture */
@@ -447,8 +471,8 @@ class CultureManager : IsPartOfGameInfoSerialization {
     private fun getInfluenceTrendLikeVp(other: Civilization): InfluenceTrend {
         val theirCultureNow = (getCulturePerTurnIncludingInstantTimes100(other) / 100 + other.totalCultureForContests).toFloat().coerceAtLeast(1f)
         val theirCultureBefore = (other.culture.lastTurnLifetimeCulture + other.culture.lastTurnCulturePerTurnTimes100).toFloat().coerceAtLeast(1f)
-        val ourTourismNow = getInfluence(other) * 100f + getTourismPerTurnIncludingInstantTimes100(other)
-        val ourTourismBefore = (lastTurnInfluence[other.civID] + lastTurnInfluenceDelta[other.civID]) * 100f
+        val ourTourismNow = (getInfluenceTimes100(other) + getTourismPerTurnIncludingInstantTimes100(other)).toFloat()
+        val ourTourismBefore = (lastTurnInfluence[other.civID] * 100L + lastTurnInfluenceRemainder[other.civID] + lastTurnInfluenceDelta[other.civID]).toFloat()
         val before = ourTourismBefore / theirCultureBefore
         val now = ourTourismNow / theirCultureNow
         return when {
@@ -465,7 +489,7 @@ class CultureManager : IsPartOfGameInfoSerialization {
         val tourismPerTurn = getTourismPerTurnIncludingInstantTimes100(other)
         if (tourismPerTurn == 0L) return NEVER
         val percent = civ.gameInfo.ruleset.modOptions.constants.influencePercentInfluential
-        val needed = percent * (other.totalCultureForContests * 100L) / 100 - getInfluence(other) * 100L
+        val needed = percent * (other.totalCultureForContests * 100L) / 100 - getInfluenceTimes100(other)
         val divisor = max(1L, tourismPerTurn - percent * getCulturePerTurnIncludingInstantTimes100(other) / 100)
         var turns = needed / divisor
         if (needed % divisor != 0L) turns++
@@ -506,10 +530,16 @@ class CultureManager : IsPartOfGameInfoSerialization {
         return (hundredths / 100).toInt()
     }
 
-    fun addInfluence(other: Civilization, amount: Int) {
-        if (amount <= 0 || !canInfluence(other)) return
-        influence.add(other.civID, amount)
-        if (civ.gameInfo.ruleset.modOptions.constants.influenceTrendLikeVp) instantTourismHistory.add(civ.gameInfo.turns, other.civID, amount)
+    fun addInfluence(other: Civilization, amount: Int) = addInfluenceTimes100(other, amount * 100L)
+
+    /** Adds [hundredths] to the influence on [other]; the part below a whole one stays in [influenceRemainder] (CvPlayerCulture::ChangeInfluenceOnTimes100,
+     *  V:CvCultureClasses.cpp:3680-3693). Only [ModConstants.tourismPrecisionLikeVp] adds what is not whole */
+    fun addInfluenceTimes100(other: Civilization, hundredths: Long) {
+        if (hundredths <= 0 || !canInfluence(other)) return
+        val total = influenceRemainder[other.civID] + hundredths
+        influence.add(other.civID, (total / 100).toInt())
+        influenceRemainder[other.civID] = (total % 100).toInt()
+        if (civ.gameInfo.ruleset.modOptions.constants.influenceTrendLikeVp) instantTourismHistory.add(civ.gameInfo.turns, other.civID, (hundredths / 100).toInt())
     }
 
     /** Tourism that is not made by the cities: goes to every civilization we have met, as it is (CvPlayerCulture::AddTourismAllKnownCivs), or with
@@ -545,14 +575,20 @@ class CultureManager : IsPartOfGameInfoSerialization {
     /** What the trend looks at: how things were before this turn's culture and tourism */
     fun rememberLastTurn() {
         lastTurnInfluence = influence.clone()
+        lastTurnInfluenceRemainder = influenceRemainder.clone()
         lastTurnCulturePerTurnTimes100 = (civ.totalCultureForContests - lastTurnLifetimeCulture) * 100L
         lastTurnLifetimeCulture = civ.totalCultureForContests
     }
 
     /** Adds this turn's tourism to the influence on every civilization met, and tells how that is going (CvPlayerCulture::DoTurn) */
     fun endTurn() {
-        for (other in getOtherMajorCivs()) addInfluence(other, getInfluencePerTurn(other))
-        lastTurnInfluenceDelta = Counter(influence.mapValues { it.value - lastTurnInfluence[it.key] })
+        val delta = Counter<String>()
+        for (other in getOtherMajorCivs()) {
+            val hundredths = getInfluencePerTurnTimes100(other)
+            addInfluenceTimes100(other, hundredths)
+            if (hundredths > 0) delta.add(other.civID, hundredths.toInt())
+        }
+        lastTurnInfluenceDelta = delta
         publicOpinion.update()
         reportProgress()
     }

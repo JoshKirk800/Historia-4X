@@ -159,7 +159,7 @@ object ReligionAutomation {
     fun spendFaithOnReligion(civ: Civilization) {
         if (civ.cities.isEmpty()) return
         if (religionAiLikeVp(civ)) {
-            doFaithPurchasesLikeVp(civ)
+            doTurnLikeVp(civ)
             return
         }
         when (chooseFaithPurchase(civ)) {
@@ -439,6 +439,84 @@ object ReligionAutomation {
             if (civ.gameInfo.getCities().count { majorityReligionName(it) == owned.name } <= 2) maxTurns = 20
         }
         return turns < maxTurns
+    }
+
+    /**
+     *  CvReligionAI::DoTurn (V:CvReligionClasses.cpp:6121-6160), with [religionAiLikeVp]: the faith goes to [doFaithPurchasesLikeVp], else to emergency
+     *  inquisitors ([doReligionDefenseInCitiesLikeVp]); if neither spent nor saved it and we need not save for founding (religions still to found while
+     *  we own none), each of our cities not in resistance or under siege may buy a building ([doFaithPurchasesInCityLikeVp]), most faith first (halved
+     *  for puppets, doubled for holy cities of any religion, ties in city order).
+     */
+    private fun doTurnLikeVp(civ: Civilization) {
+        if (doFaithPurchasesLikeVp(civ) || doReligionDefenseInCitiesLikeVp(civ)) return
+        val religionManager = civ.religionManager
+        if (religionManager.remainingFoundableReligions() > 0 && religionManager.getOwnedReligion() == null) return
+        val byFaith = civ.cities.filter { !it.isInResistance() && !CityDangerAi.isUnderSiege(it) }
+            .sortedByDescending { city ->
+                var faith = (city.cityStats.currentCityStats.faith * 100).toInt()
+                if (city.isPuppet) faith /= 2
+                if (city.religion.religionThisIsTheHolyCityOf != null) faith *= 2
+                faith
+            }
+        for (city in byFaith) doFaithPurchasesInCityLikeVp(civ, city)
+    }
+
+    /**
+     *  CvReligionAI::DoReligionDefenseInCities (V:CvReligionClasses.cpp:7014-7068): in each of our cities of the religion we spread ([religionToSpread],
+     *  foreign ones considered) whose inquisitor price we can pay there and that no inquisitor of ours guards (CvCityReligions::IsDefendedByOurInquisitor),
+     *  an inquisitor for each tile within 3 that holds a foreign Great Prophet of another religion able to reach the city or a tile next to it this turn.
+     *  True once one was tried, bought or not, as the original.
+     */
+    fun doReligionDefenseInCitiesLikeVp(civ: Civilization): Boolean {
+        val desired = religionToSpread(civ, considerForeign = true)
+        val inquisitor = inquisitorUnit(civ) ?: return false
+        var result = false
+        for (city in civ.cities.toList()) {
+            if (majorityReligionName(city) != desired?.name) continue
+            val cost = inquisitor.getStatBuyCost(city, Stat.Faith) ?: continue
+            if (cost > civ.religionManager.storedFaith) continue
+            if (desired != null && isDefendedByOurInquisitor(city, desired.name)) continue
+            val center = city.getCenterTile()
+            for (tile in center.getTilesInDistance(3)) {
+                if (tile.getUnits().none { unit ->
+                        unit.civ != civ && unit.hasUnique(UniqueType.MayFoundReligion) && unit.religion != desired?.name
+                            && center.getTilesInDistance(1).any { unit.movement.canReachInCurrentTurn(it) }
+                    }) continue
+                purchase(city, inquisitor)
+                result = true
+            }
+        }
+        return result
+    }
+
+    /** CvCityReligions::IsDefendedByOurInquisitor: a unit of [religion] of the city's owner in or next to it that prevents the spread */
+    private fun isDefendedByOurInquisitor(city: City, religion: String): Boolean =
+        city.getCenterTile().getTilesInDistance(1).any { tile ->
+            tile.getUnits().any { it.civ == city.civ && it.religion == religion && it.hasUnique(UniqueType.PreventSpreadingReligion) }
+        }
+
+    /**
+     *  CvReligionAI::DoFaithPurchasesInCities (V:CvReligionClasses.cpp:6865-6973), its first two priorities, for [city] with a majority religion:
+     *  1. the faith building of that religion ([faithBuildingAvailable]) if the city lacks it and can buy it now;
+     *  2. else the first of our buildings the city lacks and can buy now with Faith that adds no religious pressure (NaturalReligionSpreadStrength).
+     *  Not built: the last priority, units hurried with faith (S12b2), and the choice among several faith buildings by build sanity (the first is taken).
+     */
+    private fun doFaithPurchasesInCityLikeVp(civ: Civilization, city: City) {
+        val religion = city.religion.getMajorityReligion() ?: return
+        val faithBuilding = faithBuildingAvailable(civ, religion)
+        if (faithBuilding != null && !city.cityConstructions.isBuilt(faithBuilding.name) && canPurchase(city, faithBuilding)) {
+            purchase(city, faithBuilding)
+            return
+        }
+        for (building in civ.gameInfo.ruleset.buildings.values) {
+            if (civ.getEquivalentBuilding(building) != building || city.cityConstructions.isBuilt(building.name)) continue
+            if (building.getMatchingUniques(UniqueType.NaturalReligionSpreadStrength, GameContext.IgnoreConditionals).any { it.params[0].toInt() > 0 })
+                continue
+            if (canPurchase(city, building)) {
+                purchase(city, building)
+                return
+            }
+        }
     }
     //endregion
 

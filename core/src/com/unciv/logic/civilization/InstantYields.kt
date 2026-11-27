@@ -3,6 +3,7 @@ package com.unciv.logic.civilization
 import com.unciv.Constants
 import com.unciv.logic.GameInfo
 import com.unciv.logic.city.City
+import com.unciv.logic.civilization.managers.CultureManager
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.TradeRoute
@@ -318,6 +319,9 @@ object InstantYields {
             Stat.Culture -> {
                 civ.addStat(stat, amount)
                 if (city != null) city.expansion.cultureStored += amount
+                // the recent culture that the influence trend reads (CvPlayer::doInstantYield calls changeInstantYieldValue, V:CvPlayer.cpp:27414-27418)
+                if (civ.gameInfo.ruleset.modOptions.constants.influenceTrendLikeVp)
+                    civ.culture.instantCultureHistory.add(civ.gameInfo.turns, CultureManager.INSTANT_CULTURE, amount)
             }
             else -> civ.addStat(stat, amount)
         }

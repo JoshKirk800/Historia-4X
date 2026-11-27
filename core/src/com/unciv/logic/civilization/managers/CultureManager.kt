@@ -10,6 +10,7 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -77,6 +78,20 @@ class CultureManager : IsPartOfGameInfoSerialization {
     var lastTurnLifetimeCulture = 0
         private set
 
+    /** What the last turn added to the influence on each civilization (CvPlayerCulture::m_aiLastTurnCulturalIPT, set in DoTurn), and the lifetime
+     *  culture that turn made, in hundredths (CvPlayer::doTurnPostDiplomacy sets m_iLastTurnCPT, V:CvPlayer.cpp:10448), for [ModConstants.influenceTrendLikeVp] */
+    var lastTurnInfluenceDelta = Counter<String>()
+        private set
+    var lastTurnCulturePerTurnTimes100 = 0L
+        private set
+
+    /** With [ModConstants.influenceTrendLikeVp]: every change of the influence on each civilization, the turn's included (CvPlayerCulture::
+     *  ChangeInfluenceOnTimes100, V:CvCultureClasses.cpp:3680-3693), and the culture of instant yields under [INSTANT_CULTURE] */
+    var instantTourismHistory = InstantHistory()
+        private set
+    var instantCultureHistory = InstantHistory()
+        private set
+
     /** The notifications about the progress towards a culture victory come once each */
     var reportedTwoCivsAway = false
         private set
@@ -107,6 +122,10 @@ class CultureManager : IsPartOfGameInfoSerialization {
         toReturn.influence = influence.clone()
         toReturn.lastTurnInfluence = lastTurnInfluence.clone()
         toReturn.lastTurnLifetimeCulture = lastTurnLifetimeCulture
+        toReturn.lastTurnInfluenceDelta = lastTurnInfluenceDelta.clone()
+        toReturn.lastTurnCulturePerTurnTimes100 = lastTurnCulturePerTurnTimes100
+        toReturn.instantTourismHistory = instantTourismHistory.clone()
+        toReturn.instantCultureHistory = instantCultureHistory.clone()
         toReturn.reportedTwoCivsAway = reportedTwoCivsAway
         toReturn.reportedOneCivAway = reportedOneCivAway
         toReturn.numCivsInfluentialLastTurn = numCivsInfluentialLastTurn
@@ -383,6 +402,7 @@ class CultureManager : IsPartOfGameInfoSerialization {
     /** CvPlayerCulture::GetInfluenceTrend: whether the influence on [other] grows faster than the culture of the other */
     @Readonly
     fun getInfluenceTrend(other: Civilization): InfluenceTrend? {
+        if (civ.gameInfo.ruleset.modOptions.constants.influenceTrendLikeVp) return getInfluenceTrendLikeVp(other)
         val now = other.totalCultureForContests.toLong()
         val before = other.culture.lastTurnLifetimeCulture.toLong()
         if (now <= 0 || before <= 0) return null
@@ -400,11 +420,56 @@ class CultureManager : IsPartOfGameInfoSerialization {
     fun getTurnsToInfluential(other: Civilization): Int {
         val level = getInfluenceLevel(other) ?: return NEVER
         if (level >= InfluenceLevel.Influential) return 0
+        if (civ.gameInfo.ruleset.modOptions.constants.influenceTrendLikeVp) return getTurnsToInfluentialLikeVp(other)
         if (getInfluenceTrend(other) != InfluenceTrend.Rising) return NEVER
         val percent = civ.gameInfo.ruleset.modOptions.constants.influencePercentInfluential
         val needed = percent.toLong() * other.totalCultureForContests / 100 - getInfluence(other)
         val perTurn = getInfluencePerTurn(other) - percent.toLong() * other.stats.statsForNextTurn.culture.toInt() / 100
         return if (perTurn > 0) ((needed + perTurn - 1) / perTurn).toInt() else NEVER
+    }
+
+    /** CvPlayerCulture::GetOtherPlayerCulturePerTurnIncludingInstantTimes100 (V:CvCultureClasses.cpp:3891-3897): the culture [other] makes per turn
+     *  and its recent instant culture, in hundredths */
+    @Readonly
+    private fun getCulturePerTurnIncludingInstantTimes100(other: Civilization): Long =
+        (other.stats.statsForNextTurn.culture * 100).toLong() +
+            other.culture.instantCultureHistory.recentAverage(INSTANT_CULTURE, civ.gameInfo.turns) * 100L
+
+    /** CvPlayerCulture::GetTourismPerTurnIncludingInstantTimes100 (V:CvCultureClasses.cpp:3901-3914): this turn's influence on [other] and the recent
+     *  changes of it, in hundredths. The original's global instant tourism average is left out: nothing records it (CvPlayer::doInstantYield skips Tourism) */
+    @Readonly
+    private fun getTourismPerTurnIncludingInstantTimes100(other: Civilization): Long =
+        getInfluencePerTurn(other) * 100L + instantTourismHistory.recentAverage(other.civID, civ.gameInfo.turns) * 100L
+
+    /** CvPlayerCulture::GetInfluenceTrend with [ModConstants.influenceTrendLikeVp] (V:CvCultureClasses.cpp:3849-3888), its units kept: influence in
+     *  hundredths over whole culture, and last turn's culture per turn in hundredths added to last turn's lifetime culture */
+    @Readonly
+    private fun getInfluenceTrendLikeVp(other: Civilization): InfluenceTrend {
+        val theirCultureNow = (getCulturePerTurnIncludingInstantTimes100(other) / 100 + other.totalCultureForContests).toFloat().coerceAtLeast(1f)
+        val theirCultureBefore = (other.culture.lastTurnLifetimeCulture + other.culture.lastTurnCulturePerTurnTimes100).toFloat().coerceAtLeast(1f)
+        val ourTourismNow = getInfluence(other) * 100f + getTourismPerTurnIncludingInstantTimes100(other)
+        val ourTourismBefore = (lastTurnInfluence[other.civID] + lastTurnInfluenceDelta[other.civID]) * 100f
+        val before = ourTourismBefore / theirCultureBefore
+        val now = ourTourismNow / theirCultureNow
+        return when {
+            abs(before - now) <= 0.1f -> InfluenceTrend.Static
+            before < now -> InfluenceTrend.Rising
+            else -> InfluenceTrend.Falling
+        }
+    }
+
+    /** CvPlayerCulture::GetTurnsToInfluential with [ModConstants.influenceTrendLikeVp] (V:CvCultureClasses.cpp:3917-3952), below Influential */
+    @Readonly
+    private fun getTurnsToInfluentialLikeVp(other: Civilization): Int {
+        if (getInfluenceTrendLikeVp(other) != InfluenceTrend.Rising) return NEVER
+        val tourismPerTurn = getTourismPerTurnIncludingInstantTimes100(other)
+        if (tourismPerTurn == 0L) return NEVER
+        val percent = civ.gameInfo.ruleset.modOptions.constants.influencePercentInfluential
+        val needed = percent * (other.totalCultureForContests * 100L) / 100 - getInfluence(other) * 100L
+        val divisor = max(1L, tourismPerTurn - percent * getCulturePerTurnIncludingInstantTimes100(other) / 100)
+        var turns = needed / divisor
+        if (needed % divisor != 0L) turns++
+        return if (turns <= 0 || turns >= NEVER) NEVER else turns.toInt()
     }
 
     /** How many steps above Exotic the influence on [other] is: 0 up to Exotic, 1 for Familiar, up to 4 for Dominant */
@@ -442,7 +507,9 @@ class CultureManager : IsPartOfGameInfoSerialization {
     }
 
     fun addInfluence(other: Civilization, amount: Int) {
-        if (amount > 0 && canInfluence(other)) influence.add(other.civID, amount)
+        if (amount <= 0 || !canInfluence(other)) return
+        influence.add(other.civID, amount)
+        if (civ.gameInfo.ruleset.modOptions.constants.influenceTrendLikeVp) instantTourismHistory.add(civ.gameInfo.turns, other.civID, amount)
     }
 
     /** Tourism that is not made by the cities: goes to every civilization we have met, as it is (CvPlayerCulture::AddTourismAllKnownCivs), or with
@@ -468,6 +535,8 @@ class CultureManager : IsPartOfGameInfoSerialization {
             if (other == target) toTarget = amount
             addInfluence(other, amount)
         }
+        // With [ModConstants.influenceTrendLikeVp] the strength is recorded for the owner of the tile once more, as the original does (V:CvUnit.cpp:13236-13237)
+        if (civ.gameInfo.ruleset.modOptions.constants.influenceTrendLikeVp) instantTourismHistory.add(civ.gameInfo.turns, target.civID, strength)
         return toTarget
     }
     //endregion
@@ -476,12 +545,14 @@ class CultureManager : IsPartOfGameInfoSerialization {
     /** What the trend looks at: how things were before this turn's culture and tourism */
     fun rememberLastTurn() {
         lastTurnInfluence = influence.clone()
+        lastTurnCulturePerTurnTimes100 = (civ.totalCultureForContests - lastTurnLifetimeCulture) * 100L
         lastTurnLifetimeCulture = civ.totalCultureForContests
     }
 
     /** Adds this turn's tourism to the influence on every civilization met, and tells how that is going (CvPlayerCulture::DoTurn) */
     fun endTurn() {
         for (other in getOtherMajorCivs()) addInfluence(other, getInfluencePerTurn(other))
+        lastTurnInfluenceDelta = Counter(influence.mapValues { it.value - lastTurnInfluence[it.key] })
         publicOpinion.update()
         reportProgress()
     }
@@ -518,5 +589,7 @@ class CultureManager : IsPartOfGameInfoSerialization {
     companion object {
         /** What [getTurnsToInfluential] returns when it will not come to that */
         const val NEVER = 999
+        /** The key of the culture in [instantCultureHistory] */
+        const val INSTANT_CULTURE = "Culture"
     }
 }

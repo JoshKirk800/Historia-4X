@@ -5,6 +5,7 @@ import com.unciv.logic.automation.city.HurryChoice
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.TheftAi
 import com.unciv.logic.automation.diplomacy.TheftType
+import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.automation.strategy.AiOperationLogic
 import com.unciv.logic.automation.strategy.CityDangerAi
 import com.unciv.logic.automation.strategy.MilitaryOperations
@@ -27,6 +28,7 @@ import com.unciv.models.ruleset.INonPerpetualConstruction
 import com.unciv.models.ruleset.PurchaseReason
 import com.unciv.models.ruleset.QuestName
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.unique.Countables
 import com.unciv.models.ruleset.unique.GameContext
@@ -667,10 +669,11 @@ object ReligionAutomation {
      *  - Merchant: 1000 with the United Nations grand strategy, else 400
      *  - Engineer: 2000 while ECONOMICAISTRATEGY_GS_SPACESHIP_HOMESTRETCH is active, else 500
      *  - General / Admiral: 1000 with the Conquest grand strategy on a land / naval map, else 400; also ÷ the ones we have
-     *  each ÷ (1 + that Great Person bought with Faith). Null if none scores above 0.
+     *  each ÷ (1 + that Great Person bought with Faith). Null if none scores above 0. Vox Populi's version: [desiredFaithGreatPersonLikeVp].
      */
     fun getDesiredFaithGreatPerson(civ: Civilization): BaseUnit? = timeThis("AI.DesiredFaithGreatPerson") {
         val capital = civ.getCapital() ?: return@timeThis null
+        if (religionAiLikeVp(civ)) return@timeThis desiredFaithGreatPersonLikeVp(civ, capital)
         val ai = civ.ai
         val culture = ai.isGoingForCultureVictory()
         val bought = civ.civConstructions.boughtItemsWithIncreasingPrice
@@ -711,6 +714,64 @@ object ReligionAutomation {
         }
         best
     }
+
+    /**
+     *  Vox Populi's CvReligionAI::GetDesiredFaithGreatPerson (V:CvReligionClasses.cpp:11549-11718): among the Great People this civilization
+     *  can buy with Faith in its [capital], the best by 20000 - its Faith price there, plus
+     *  - Prophet: only while the capital or our holy city has our religion to spread as its majority (both without a majority when there is
+     *    none to spread); × 2 while that religion is not enhanced
+     *  - Writer: 200 going for culture, + 100 for each major civilization close to a culture victory
+     *  - Artist: 200 going for culture; Musician: 200 going for culture, else 100 when close to a culture victory
+     *  - Scientist: 200 going for the spaceship, else 100; Merchant, General, Admiral: 100
+     *  - Engineer: 200 in ECONOMICAISTRATEGY_GS_SPACESHIP_HOMESTRETCH, else at least 100 by 100 / 3 × (WonderCompetitiveness + 0.3)
+     *  - Diplomat: 200 going for diplomacy, else 100 (Unciv has no ECONOMICAISTRATEGY_NEED_DIPLOMATS_CRITICAL for its other 200)
+     *  The first in ruleset order wins ties. Null if none scores above 0.
+     */
+    private fun desiredFaithGreatPersonLikeVp(civ: Civilization, capital: City): BaseUnit? {
+        val religion = religionToSpread(civ)
+        val ai = civ.ai
+        val rules = civ.gameInfo.ruleset.ai
+        val culture = ai.isGoingForCultureVictory()
+        var best: BaseUnit? = null
+        var bestScore = 0
+        for (unit in civ.gameInfo.ruleset.units.values) {
+            if (!unit.isGreatPerson || !unit.hasUnique(UniqueType.Unbuildable, GameContext.IgnoreConditionals)) continue
+            if (civ.getEquivalentUnit(unit) != unit) continue
+            if (!unit.canBePurchasedWithStat(capital, Stat.Faith)) continue
+            val price = unit.getStatBuyCost(capital, Stat.Faith) ?: continue
+            var score = max(0, FAITH_GREAT_PERSON_BASE_SCORE - price)
+            when (unitClass(unit)) {
+                "Great Prophet" -> {
+                    if (capital.religion.getMajorityReligion() != religion) {
+                        val holyCity = foundedReligion(civ)?.let { founded -> civ.cities.firstOrNull { it.isHolyCityOf(founded.name) } }
+                        if (holyCity == null || holyCity.religion.getMajorityReligion() != religion) continue
+                    }
+                    if (religion != null && religion.isMajorReligion() && !religion.isEnhancedReligion()) score *= 2
+                }
+                "Great Writer" -> {
+                    if (culture) score += 200
+                    score += 100 * civ.gameInfo.civilizations.count {
+                        it.isAlive() && it.isMajorCiv && VictoryProgressAi.isCloseToCultureVictory(it, rules)
+                    }
+                }
+                "Great Artist" -> if (culture) score += 200
+                "Great Musician" -> score += if (culture) 200 else if (VictoryProgressAi.isCloseToCultureVictory(civ, rules)) 100 else 0
+                "Great Scientist" -> score += if (ai.isGoingForSpaceshipVictory()) 200 else 100
+                "Great Merchant", "Great General", "Great Admiral" -> score += 100
+                "Great Engineer" -> score += if (ai.isEconomicStrategyActive("ECONOMICAISTRATEGY_GS_SPACESHIP_HOMESTRETCH")) 200
+                    else max(100, (100.0 / 3.0 * (ai.diplomacyValue(DiplomacyPersonality.WonderCompetitiveness) + 0.3)).toInt())
+                "Great Diplomat" -> score += if (ai.isGoingForDiploVictory()) 200 else 100
+            }
+            if (score > bestScore) {
+                bestScore = score
+                best = unit
+            }
+        }
+        return best
+    }
+
+    /** The 20000 that a Great Person's Faith price is taken from in CvReligionAI::GetDesiredFaithGreatPerson */
+    private const val FAITH_GREAT_PERSON_BASE_SCORE = 20000
     //endregion
 
     //region Strategic targets of religious units

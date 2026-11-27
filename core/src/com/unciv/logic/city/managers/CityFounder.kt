@@ -12,6 +12,7 @@ import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.logic.map.HexCoord
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.TileMap
+import com.unciv.logic.map.tile.ArchaeologyFunctions
 import com.unciv.models.ruleset.nation.Nation
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
@@ -102,6 +103,10 @@ class CityFounder {
         triggerCitiesSettledNearOtherCiv(city)
 
         addStartingBuildings(city, civInfo, startingEra)
+        // CvPlayer::foundCity: the free resources of the first cities, after the free buildings that may change the work range (V:CvPlayer.cpp:13930-13942)
+        if (ruleset.modOptions.constants.archaeologyChoicesLikeVp)
+            for (unique in civInfo.getMatchingUniques(UniqueType.SarcophagusSitesNearNewCities, civInfo.state))
+                if (civInfo.citiesCreated <= unique.params[1].toInt()) ArchaeologyFunctions.spawnSarcophagi(city, unique.params[0].toInt())
         if (ruleset.modOptions.constants.cityCombatLikeVp) city.health = city.getMaxHealth()
 
         city.resetDisabledConstructions()

@@ -1213,6 +1213,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "[positiveAmount] antiquity sites with a sarcophagus appear near each of the first [positiveAmount] cities founded"
+	With the ModConstants `archaeologyChoicesLikeVp`: sites of `archaeologySiteResource` whose finds are of the artifact class `Sarcophagus` and of our civilization, on our tiles in the work range of the new city first, then on our other tiles, then on tiles in its range that no one owns, preferring tiles without a history; they appear also after archaeology has begun and are not counted among the sites that appear then (the original's `Trait_FreeResourceFirstXCities` with `RESOURCE_ARTIFACTS`)
+
+	Example: "[3] antiquity sites with a sarcophagus appear near each of the first [3] cities founded"
+
+	Applicable to: Global
+
 ??? example  "Gain a free [buildingName] [cityFilter]"
 	Free buildings CANNOT be self-removing - this leads to an endless loop of trying to add the building
 

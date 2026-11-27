@@ -157,6 +157,19 @@ enum class Countables(
             Accomplishment.entries.map { text.fillPlaceholders(it.label) }.toSet()
     },
 
+    LongCountChoices("Long Count choices of [baseUnitFilter]", shortDocumentation = "How often the civilization chose a matching Great Person for the Long Count " +
+        "(Vox Populi's LONGCOUNT accomplishments, CvPlayerTraits::SetUnitBaktun); 0 without the ModConstants `longCountYieldsLikeVp`") {
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val filter = parameterText.getPlaceholderParameters()[0]
+            val civ = gameContext.civInfo ?: return null
+            return civ.greatPeople.longCountChoices.entries.sumOf { (name, times) ->
+                if (civ.gameInfo.ruleset.units[name]?.matchesFilter(filter, gameContext) == true) times else 0
+            }
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.BaseUnitFilter.getTranslatedErrorSeverity(parameterText, ruleset)
+    },
+
     FilteredCities("[cityFilter] Cities") {
         override fun eval(parameterText: String, gameContext: GameContext): Int? {
             val filter = parameterText.getPlaceholderParameters()[0]

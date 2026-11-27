@@ -1327,6 +1327,9 @@ class ModConstants {
     /** Vox Populi's accomplishments (CvPlayer::CompleteAccomplishment, V:CvPlayer.cpp:38783-38840): a finished policy branch of the first, third or fifth era,
      *  the first ideology, each chosen belief by its type and each civilization eliminated are counted, for `Completed [accomplishment] accomplishments` */
     var accomplishmentsLikeVp = false
+    /** Vox Populi's Long Count yields: the end of a b'ak'tun fires `upon the end of a b'ak'tun` (CvPlayerTraits::IsEndOfMayaLongCount, V:CvTraitClasses.cpp:6993-7018),
+     *  and each Great Person chosen for it is counted (CvPlayerTraits::SetUnitBaktun, V:CvTraitClasses.cpp:7325-7369), for `Long Count choices of [baseUnitFilter]` */
+    var longCountYieldsLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

@@ -5,6 +5,8 @@ import com.unciv.Constants
 import com.unciv.UncivGame
 import com.unciv.logic.automation.unit.GreatPersonAutomation
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.InstantYields
+import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.tr
 import com.unciv.ui.popups.Popup
 import com.unciv.ui.components.input.KeyCharAndCode.Companion.makeChar
@@ -87,6 +89,9 @@ object MayaCalendar {
         val year = game.getYear()
         if (!isNewCycle(year, game.getYear(-1))) return
         civInfo.greatPeople.triggerMayanGreatPerson()
+        // CvPlayerTraits::IsEndOfMayaLongCount (V:CvTraitClasses.cpp:6993-7018): the yields of each city's buildings (CvPlayer::doInstantYield, V:CvPlayer.cpp:27149-27153)
+        if (game.ruleset.modOptions.constants.longCountYieldsLikeVp)
+            InstantYields.fire(UniqueType.TriggerUponBaktunEnd, civInfo)
         if (civInfo.isAI() || UncivGame.Current.worldScreen?.autoPlay?.isAutoPlayingAndFullAutoPlayAI() == true)
             GreatPersonAutomation.chooseFreeGreatPeople(civInfo)
     }

@@ -69,6 +69,7 @@ class InstantYieldNotices {
             UniqueType.TriggerUponCompletingUnit to "Producing a Unit",
             UniqueType.TriggerUponPillaging to "Pillaging a Tile",
             UniqueType.TriggerUponWltkdStart to "Start of We Love The King Day",
+            UniqueType.TriggerUponBaktunEnd to "End of a B'ak'tun",
             UniqueType.TriggerUponGainingLuxury to "Acquiring a Luxury Resource",
             UniqueType.TriggerUponConstructingBuilding to "Constructing a Building",
             UniqueType.TriggerUponConstructingBuildingCityFilter to "Constructing a Building",

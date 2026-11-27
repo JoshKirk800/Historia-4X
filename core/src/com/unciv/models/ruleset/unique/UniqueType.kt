@@ -1523,14 +1523,16 @@ enum class UniqueType(
     OneTimeExcavation("Excavate what was found here", UniqueTarget.Triggerable,
         docDescription = "For the improvement that an archaeologist builds on a site: when it is complete, its civilization chooses between an artifact or writing for a Great Work slot, culture, or a Landmark, and the archaeologist is used up"),
     OneTimeGainTourism("[positiveAmount] Tourism towards all civilizations we have met", UniqueTarget.Triggerable,
-        docDescription = "Added to the influence of this civilization on each of them, not changed by modifiers"),
+        docDescription = "Added to the influence of this civilization on each of them, not changed by modifiers. With the ModConstants `instantTourismLikeVp`, " +
+            "times the speed's culture cost modifier and the tourism modifier towards each, cut to a whole number (the original's `AddTourismAllKnownCivsWithModifiers`)"),
     OneTimeGainTourismTowardsEventCityOwner("[positiveAmount] Tourism towards the owner of the city of the event", UniqueTarget.Triggerable,
         docDescription = "Added to the influence on the major civilization that owns the city of the triggering event (the original's `ChangeInfluenceOn`, " +
             "V:CvCultureClasses.cpp:3699-3735): times the speed's culture cost modifier and the tourism modifier towards that civilization, cut to a whole number. " +
             "Nothing for a city-state or a civilization we have not met. Takes `(modified by game speed)`, as the instant yields do"),
     OneTimeConcertTour("Perform a concert tour: [positiveAmount] times our Tourism towards the civilization whose territory we are in, [positiveAmount]% of that towards each other civilization we have met", UniqueTarget.UnitTriggerable,
         docDescription = "The unit has to be in the territory of another living major civilization. The first amount is made at least 100, " +
-            "and is multiplied twice by the game speed, as in the original"),
+            "and is multiplied twice by the game speed, as in the original. With the ModConstants `instantTourismLikeVp`, what each civilization gets also takes " +
+            "the tourism modifier towards it"),
     CanExcavate("Can excavate archaeological sites", UniqueTarget.Unit,
         docDescription = "The unit can dig up sites if it can also build the improvement, and the AI sends it to them. Needed for what its finds are put to"),
     OneTimeCreateGreatWork("Create a Great Work", UniqueTarget.UnitTriggerable,

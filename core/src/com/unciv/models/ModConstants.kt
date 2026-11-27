@@ -262,6 +262,12 @@ class ModConstants {
      *  of a city's buildings add to what that city gives. false: they are not read. Staged with the Vox Populi difficulty table and the building rows (decision D26): the three flip together. */
     var unitSupplyBuildingsLikeVp = false
 
+    /** VP 5.4.8 CvCity::canTrain (V:CvCity.cpp:8696-8703). true (and [unitSupplyLikeVp]): a civilization whose city production the AI decides (an AI, a city-state; not a human player, not a
+     *  barbarian) cannot train or buy a combat unit that uses supply once its units to supply are as many as its supply (`GetNumUnitsToSupply() < GetNumUnitsSupplied()` is the
+     *  condition to train: "this works when we're at the limit"). false: only the limit of [UnitSupplyConstants.maxProductionPenalty] / [UnitSupplyConstants.productionPenaltyPerUnit] units over the
+     *  supply stops the training, and the AI's own army sizing and `HurryChoice` hold it back. Staged with the flip of the AI's supply consumers (decision D26) */
+    var unitSupplyAiAtLimitLikeVp = false
+
     /**
      *  The GlobalDefines of VP's unit supply, read only with [unitSupplyLikeVp] (can only be modded all-or-nothing, a data class so the Json serializer can omit it when default). The
      *  defaults are the numbers of the original / Community Patch (nothing reduces the supply, 10% production per unit over it); `DEF-VP` is `(2) Vox Populi/Database Changes/DefineChanges.sql:160-195`.

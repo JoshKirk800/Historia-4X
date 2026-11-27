@@ -223,11 +223,12 @@ class RejectionReason(
             RejectionReasonType.MaxNumberBuildable,
             RejectionReasonType.NoPlaceToPutUnit,
         )
-        // Exceptions. Used for units spawned/upgrade path, not built
+        // Exceptions. Used for units spawned/upgrade path, not built. AtUnitSupplyLimit is CvCity::canTrain's, and CvUnit::CanUpgradeTo (V:CvUnit.cpp:14027) does not read it: an upgrade adds no unit
         private val constructionRejectionReasonType = listOf(
             RejectionReasonType.Unbuildable,
             RejectionReasonType.CannotBeBuilt,
             RejectionReasonType.CanOnlyBeBuiltInSpecificCities,
+            RejectionReasonType.AtUnitSupplyLimit,
         )
         private val neverVisible = listOf(
             RejectionReasonType.AlreadyBuilt,
@@ -301,6 +302,7 @@ enum class RejectionReasonType(val shouldShow: Boolean, val errorMessage: String
     NoPlaceToPutUnit(true, "No space to place this unit"),
     NoTradeRouteSlot(false, "No free trade route slot or no city to trade with"),
     OutOfUnitSupply(true, "Too many units out of supply"),
+    AtUnitSupplyLimit(false, "The AI trains no combat unit at its unit supply limit"),
     ;
 
     val defaultInstance by lazy { RejectionReason(this, errorMessage, shouldShow) }

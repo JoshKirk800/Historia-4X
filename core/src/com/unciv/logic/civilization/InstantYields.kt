@@ -8,6 +8,7 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.TradeRoute
 import com.unciv.models.ruleset.INonPerpetualConstruction
 import com.unciv.models.ruleset.tile.ResourceType
+import com.unciv.models.ruleset.unique.Countables
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueTarget
@@ -121,10 +122,18 @@ object InstantYields {
                 { it.forEachMultiplied(civContext) { unique -> if (effectFilter(unique)) gathered.add(unique to creditedCity) } }
             )
 
-        for ((unique, creditedTo) in gathered) {
+        val cutTotal = civ.gameInfo.ruleset.modOptions.constants.instantYieldsCutTotalLikeVp
+        var index = 0
+        while (index < gathered.size) {
+            val (unique, creditedTo) = gathered[index]
+            // the copies of one unique that its `<for every>` modifiers made follow each other
+            var copies = 1
+            if (cutTotal && unique.type == UniqueType.OneTimeGainStat && unique.isModifiedByGameSpeed())
+                while (index + copies < gathered.size && gathered[index + copies].first === unique && gathered[index + copies].second == creditedTo) copies++
             val tile = context.tile ?: creditedTo?.getCenterTileOrNull() ?: context.unit?.takeIf { it.hasTile() }?.currentTile
-            UniqueTriggerActivation.triggerUnique(unique, civ, creditedTo, context.unit, tile,
+            UniqueTriggerActivation.triggerUnique(if (copies == 1) unique else totalOf(unique, copies, civ), civ, creditedTo, context.unit, tile,
                 triggerNotificationText = triggerNotificationText, triggeringAmount = amount)
+            index += copies
         }
         civ.instantYieldNotices.flush(civ) // one notification for the event, see InstantYieldNotices
     }
@@ -239,6 +248,24 @@ object InstantYields {
      */
     fun riggingWon(winner: Civilization) {
         fire(UniqueType.TriggerUponRiggingElection, winner, triggerNotificationText = "due to winning a rigged election")
+    }
+
+    /**
+     *  The `Gain [amount] [stat] <(modified by game speed)>` [unique] that [fire] triggers [copies] times, as one gain under ModConstants `instantYieldsCutTotalLikeVp`:
+     *  CvPlayer::doInstantYield adds up a yield, changes it by the speed's percentage and cuts it once, then multiplies it by the era (V:CvPlayer.cpp:27162-27184).
+     *  So the amount times the copies but those of `<for every [Era scaler]>` is changed by [scaleBySpeed], then multiplied by the `Era scaler`.
+     */
+    private fun totalOf(unique: Unique, copies: Int, civ: Civilization): Unique {
+        val stat = Stat.safeValueOf(unique.params[1]) ?: return unique
+        val eraModifiers = unique.getModifiers(UniqueType.ForEveryCountable).count { it.params[0] == Countables.EraScaler.text }
+        var era = 1
+        if (eraModifiers > 0) {
+            val scaler = Countables.getCountableAmount(Countables.EraScaler.text, GameContext(civ)) ?: 1
+            repeat(eraModifiers) { era *= scaler }
+        }
+        val total = scaleBySpeed(unique, stat, unique.params[0].toInt() * (copies / era), civ.gameInfo) * era
+        val modifiers = unique.modifiers.filter { it.type != UniqueType.ModifiedByGameSpeed }.joinToString("") { " <${it.text}>" }
+        return Unique("Gain [$total] [${unique.params[1]}]$modifiers", unique.sourceObjectType, unique.sourceObjectName)
     }
 
     /** Whether [unique] is one of the effects that Vox Populi's `processBuilding` hands out only the first time a building is built in a city (V:CvCity.cpp:14830-14853) */

@@ -1516,6 +1516,10 @@ enum class UniqueType(
         docDescription = "For the improvement that an archaeologist builds on a site: when it is complete, its civilization chooses between an artifact or writing for a Great Work slot, culture, or a Landmark, and the archaeologist is used up"),
     OneTimeGainTourism("[positiveAmount] Tourism towards all civilizations we have met", UniqueTarget.Triggerable,
         docDescription = "Added to the influence of this civilization on each of them, not changed by modifiers"),
+    OneTimeGainTourismTowardsEventCityOwner("[positiveAmount] Tourism towards the owner of the city of the event", UniqueTarget.Triggerable,
+        docDescription = "Added to the influence on the major civilization that owns the city of the triggering event (the original's `ChangeInfluenceOn`, " +
+            "V:CvCultureClasses.cpp:3699-3735): times the speed's culture cost modifier and the tourism modifier towards that civilization, cut to a whole number. " +
+            "Nothing for a city-state or a civilization we have not met. Takes `(modified by game speed)`, as the instant yields do"),
     OneTimeConcertTour("Perform a concert tour: [positiveAmount] times our Tourism towards the civilization whose territory we are in, [positiveAmount]% of that towards each other civilization we have met", UniqueTarget.UnitTriggerable,
         docDescription = "The unit has to be in the territory of another living major civilization. The first amount is made at least 100, " +
             "and is multiplied twice by the game speed, as in the original"),
@@ -1641,6 +1645,11 @@ enum class UniqueType(
      *  and CvPlayerPolicies::DoUnlockPolicyBranch fire (V:CvPlayer.cpp:24323-24395, V:CvPolicyClasses.cpp:5120-5188) and the branch's finisher does not */
     TriggerUponAdoptingAnyPolicy("upon adopting a policy", UniqueTarget.TriggerCondition,
         docDescription = "Any policy or the opening of a branch, but not the policy given for completing a branch"),
+    TriggerUponSpreadingReligion("upon spreading a religion to a city", UniqueTarget.TriggerCondition,
+        docDescription = "A unit's Spread Religion action in any city, after the pressure. The Triggering amount is one more than the followers its religion won there"),
+    TriggerUponSpreadingReligionAbroad("upon spreading a religion to a city of another civilization", UniqueTarget.TriggerCondition,
+        docDescription = "A unit's Spread Religion action in a city of another civilization, before the pressure. " +
+            "The Triggering amount is one more than the city's followers of other religions"),
     TriggerUponDeclaringWarFiltered("upon declaring war on [civFilter] Civilizations", UniqueTarget.TriggerCondition),
     TriggerUponBeingDeclaredWarUpon("upon being declared war on by [civFilter] Civilizations", UniqueTarget.TriggerCondition),
     TriggerUponEnteringWar("upon entering a war with [civFilter] Civilizations", UniqueTarget.TriggerCondition),

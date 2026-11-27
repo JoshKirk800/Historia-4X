@@ -1,6 +1,7 @@
 package com.unciv.logic.map.mapunit.actions
 
 import com.unciv.logic.automation.diplomacy.DiplomacyEvents
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.ReligionState
@@ -8,11 +9,13 @@ import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UnitAction
 import com.unciv.models.UnitActionType
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
 import com.unciv.ui.components.extensions.toPercent
 import yairm210.purity.annotations.Readonly
+import kotlin.math.max
 
 object UnitActionsReligion {
 
@@ -106,13 +109,23 @@ object UnitActionsReligion {
                 unit.forEachMatchingUnique(UniqueType.StatsWhenSpreading, checkCivInfoUniques = true) { unique ->
                     unit.civ.addStat(Stat.valueOf(unique.params[1]), followersOfOtherReligions * unique.params[0].toInt())
                 }
+                // CvUnit::DoSpreadReligion (V:CvUnit.cpp:11371-11396): INSTANT_YIELD_TYPE_F_SPREAD before the pressure, SPREAD after it,
+                // each with a number of followers that doInstantYield makes max(1, n + 1) (V:CvPlayer.cpp:26772-26802)
+                val eventContext = GameContext(unit.civ, unit = unit, tile = city.getCenterTile())
+                if (city.civ != unit.civ)
+                    InstantYields.fire(UniqueType.TriggerUponSpreadingReligionAbroad, unit.civ, amount = max(1, followersOfOtherReligions + 1),
+                        context = eventContext, triggerNotificationText = "due to spreading our religion")
+                val followersBefore = city.religion.getFollowersOf(unit.religion!!)
                 val previousReligion = city.religion.getMajorityReligion()
                 if (unit.hasUnique(UniqueType.RemoveOtherReligions)) {
                     city.religion.addPressure(unit.religion!!, getPressureAddedFromSpread(unit))
                     city.religion.removeAllPressuresExceptFor(unit.religion!!)
                 } else // only a spreader that leaves the other religions in place erodes them, with Evangelism
                     city.religion.addPressureFromSpreading(unit.religion!!, getPressureAddedFromSpread(unit), unit.civ)
-                
+                InstantYields.fire(UniqueType.TriggerUponSpreadingReligion, unit.civ,
+                    amount = max(1, city.religion.getFollowersOf(unit.religion!!) - followersBefore + 1),
+                    context = eventContext, triggerNotificationText = "due to spreading our religion")
+
                 val newReligion = city.religion.getMajorityReligion()
                 if (previousReligion != newReligion && newReligion != null && city.civ != unit.civ) {
                     city.civ.addNotification("[${unit.civ.civName}]'s [${unit.name}] has converted [${city.name}] to [${newReligion.name}]!", NotificationCategory.Religion)

@@ -9,6 +9,7 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
+import kotlin.math.roundToInt
 
 /** How far a civilization's tourism has made another take to its culture (CvCultureClasses.h InfluenceLevels) */
 enum class InfluenceLevel(val label: String) {
@@ -382,6 +383,19 @@ class CultureManager : IsPartOfGameInfoSerialization {
 
     @Readonly
     fun getNumCivsInfluentialOn(): Int = getOtherMajorCivs().count { isInfluentialOver(it) }
+
+    /**
+     *  The influence on [other] that [amount] of tourism of an event makes (CvPlayerCulture::ChangeInfluenceOn with modifiers and speed, V:CvCultureClasses.cpp:3699-3735):
+     *  in hundredths, times the speed's culture cost modifier, then times (100 + [getTourismModifierToward]) percent, cut to a whole number.
+     *  The original's halving for a civilization with IsNoOpenTrade that has no trade connection with us is not built.
+     */
+    @Readonly
+    fun getInstantInfluenceOn(other: Civilization, amount: Int): Int {
+        var hundredths = amount.toLong() * 100 * (civ.gameInfo.speed.cultureCostModifier * 100).roundToInt() / 100
+        val modifier = getTourismModifierToward(other)
+        if (modifier != 0) hundredths = hundredths * (100 + modifier) / 100
+        return (hundredths / 100).toInt()
+    }
 
     fun addInfluence(other: Civilization, amount: Int) {
         if (amount > 0 && canInfluence(other)) influence.add(other.civID, amount)

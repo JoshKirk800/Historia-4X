@@ -589,6 +589,19 @@ object UniqueTriggerActivation {
                 }
             }
 
+            UniqueType.OneTimeGainTourismTowardsEventCityOwner -> {
+                val target = tile?.getCity()?.civ ?: return null
+                if (!civInfo.culture.canInfluence(target)) return null
+                val amount = InstantYields.scaleBySpeed(unique, Stat.Culture, unique.params[0].toInt(), civInfo.gameInfo)
+                val influence = civInfo.culture.getInstantInfluenceOn(target, amount)
+                if (influence <= 0) return null
+                return {
+                    civInfo.culture.addInfluence(target, influence)
+                    if (notification != null) civInfo.addNotification(notification, NotificationCategory.Diplomacy, "StatIcons/Culture")
+                    true
+                }
+            }
+
             UniqueType.OneTimeGainGoldenAgePoints -> {
                 val points = unique.params[0].toInt()
                 return {

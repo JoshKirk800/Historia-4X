@@ -948,4 +948,100 @@ class ReligionAiTests {
         assertEquals(1, count(civ, ReligionAutomation.inquisitorUnit(civ)!!.name))
     }
     //endregion
+
+    //region DoTurn like Vox Populi
+
+    @Test
+    fun `with Vox Populi a foreign Great Prophet of another religion that reaches our unguarded city this turn makes us buy an emergency inquisitor`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv()
+        val foreigner = game.addCiv()
+        val heretics = foundReligion(foreigner)
+        val prophetName = civ.religionManager.getGreatProphetEquivalent()!!.name
+        val inquisitor = ReligionAutomation.inquisitorUnit(civ)!!.name
+
+        game.addUnit(prophetName, civ, tile(2, 0)).religion = heretics.name
+        assertTrue("our own prophet", !ReligionAutomation.doReligionDefenseInCitiesLikeVp(civ))
+
+        val prophet = game.addUnit(prophetName, foreigner, tile(0, 3))
+        prophet.religion = religion.name
+        assertTrue("a prophet of our religion", !ReligionAutomation.doReligionDefenseInCitiesLikeVp(civ))
+        prophet.religion = heretics.name
+        civ.religionManager.storedFaith = 0
+        assertTrue("no faith for it", !ReligionAutomation.doReligionDefenseInCitiesLikeVp(civ))
+        civ.religionManager.storedFaith = 100_000
+        assertTrue(ReligionAutomation.doReligionDefenseInCitiesLikeVp(civ))
+        assertEquals(1, count(civ, inquisitor))
+        assertTrue("guarded now", !ReligionAutomation.doReligionDefenseInCitiesLikeVp(civ))
+    }
+
+    @Test
+    fun `with Vox Populi a foreign Great Prophet that cannot reach our city this turn makes us buy no inquisitor`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, _) = foundedCiv()
+        val foreigner = game.addCiv()
+        val prophet = game.addUnit(civ.religionManager.getGreatProphetEquivalent()!!.name, foreigner, tile(0, 3))
+        prophet.religion = foundReligion(foreigner).name
+        prophet.currentMovement = 0f
+        assertTrue(!ReligionAutomation.doReligionDefenseInCitiesLikeVp(civ))
+    }
+
+    @Test
+    fun `with Vox Populi the faith left buys the faith building of each city's religion, the holy city first, unless we must save to found a religion`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        game.ruleset.modOptions.constants.religionLimitBase = 4
+        val civ = game.addCiv()
+        val liked = foundReligion(game.addCiv())
+        liked.addBelief("Pagodas")
+        val capital = cityWith(civ, 0, 0, 3, liked.name to 5000)
+        val other = cityWith(civ, 4, 0, 3, liked.name to 5000)
+        capital.religion.religionThisIsTheHolyCityOf = liked.name
+        val pagoda = game.ruleset.buildings["Pagoda"]!!
+        civ.religionManager.storedFaith = pagoda.getStatBuyCost(capital, Stat.Faith)!!
+        assertTrue(civ.religionManager.remainingFoundableReligions() > 0)
+        ReligionAutomation.spendFaithOnReligion(civ)
+        assertTrue("saving to found a religion", !capital.cityConstructions.isBuilt(pagoda.name))
+
+        noMoreReligionsToFound()
+        capital.cityStats.currentCityStats = Stats(faith = 3f)
+        other.cityStats.currentCityStats = Stats(faith = 5f)
+        ReligionAutomation.spendFaithOnReligion(civ)
+        assertTrue("3 doubled in the holy city", capital.cityConstructions.isBuilt(pagoda.name))
+        assertTrue(!other.cityConstructions.isBuilt(pagoda.name))
+    }
+
+    @Test
+    fun `with Vox Populi the turn's faith left by DoFaithPurchases buys the emergency inquisitor`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, _) = foundedCiv()
+        val foreigner = game.addCiv()
+        game.addUnit(civ.religionManager.getGreatProphetEquivalent()!!.name, foreigner, tile(0, 3)).religion = foundReligion(foreigner).name
+        ReligionAutomation.spendFaithOnReligion(civ)
+        assertEquals(1, count(civ, ReligionAutomation.inquisitorUnit(civ)!!.name))
+    }
+
+    @Test
+    fun `with Vox Populi a city buys the faith building of its religion before other buildings`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv("May buy [Monument] buildings with [Faith] [in all cities]")
+        religion.addBelief("Pagodas")
+        val capital = civ.getCapital()!!
+        ReligionAutomation.spendFaithOnReligion(civ)
+        assertTrue(capital.cityConstructions.isBuilt("Pagoda"))
+        assertTrue(!capital.cityConstructions.isBuilt("Monument"))
+    }
+
+    @Test
+    fun `with Vox Populi the faith left buys other buildings that add no religious pressure`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val pressure = game.createBuilding("[+25]% Natural religion spread [in this city]")
+        val plain = game.createBuilding()
+        val (civ, _) = foundedCiv("May buy [${pressure.name}] buildings with [Faith] [in all cities]",
+            "May buy [${plain.name}] buildings with [Faith] [in all cities]")
+        val capital = civ.getCapital()!!
+        ReligionAutomation.spendFaithOnReligion(civ)
+        assertTrue(!capital.cityConstructions.isBuilt(pressure.name))
+        assertTrue(capital.cityConstructions.isBuilt(plain.name))
+    }
+    //endregion
 }

@@ -3,10 +3,13 @@ package com.unciv.logic.civilization
 import com.unciv.logic.civilization.managers.InfluenceLevel
 import com.unciv.logic.civilization.managers.PublicOpinionType
 import com.unciv.models.metadata.BaseRuleset
+import com.unciv.models.ruleset.Milestone
+import com.unciv.models.ruleset.Victory
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.OriginalHappinessModel
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -225,5 +228,18 @@ class PublicOpinionTests {
         assertEquals(5, opinion.unhappiness)
         assertEquals(me.culture.publicOpinion.preferredIdeology, opinion.preferredIdeology)
         assertTrue(opinion.pressure.isNotEmpty())
+    }
+
+    @Test
+    fun `the culture victory of Vox Populi wants an ideology and content people`() {
+        val milestone = Milestone("Follow an ideology with a content populace", Victory())
+        updateOpinion()
+        assertFalse("no ideology", milestone.hasBeenCompletedBy(me))
+        adopt(me, "Freedom")
+        updateOpinion()
+        assertTrue(milestone.hasBeenCompletedBy(me))
+        influence(autocracyCiv, me, InfluenceLevel.Familiar)
+        updateOpinion()
+        assertFalse("dissidents", milestone.hasBeenCompletedBy(me))
     }
 }

@@ -235,8 +235,8 @@
         // AI and city-state columns of Difficulties.json are the same table
         "unitSupplyBuildingsLikeVp": true,
         "unitSupplyPerPopulation": 0.2,
-        // CvCity::canTrain V:CvCity.cpp:8696-8703: an AI city trains and buys no combat unit that uses supply while GetNumUnitsToSupply() >= GetNumUnitsSupplied(). OFF until its study (D26)
-        "unitSupplyAiAtLimitLikeVp": false,
+        // CvCity::canTrain V:CvCity.cpp:8696-8703: an AI city trains and buys no combat unit that uses supply while GetNumUnitsToSupply() >= GetNumUnitsSupplied() (paired 10-seed study: phaseE/m6-supply-deep.md section 13)
+        "unitSupplyAiAtLimitLikeVp": true,
         // The promotion and unit columns of Vox Populi: ExtraFlankPower, IgnoreTerrainCostIn / HalfMove / ExtraMove, GainsXPFromScouting (BALANCE_SCOUT_XP_*: 12 and 10, the defaults),
         // XPFromPillaging, LostOnGifting, MinorCivGift / NoMinorCivGift
         "flankPowerLikeVp": true,

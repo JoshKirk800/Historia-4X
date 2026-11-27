@@ -8,6 +8,7 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.models.ModConstants
+import com.unciv.models.SpyAction
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileImprovement
@@ -595,6 +596,12 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
             forEachUnique(UniqueType.StatsFromGlobalCitiesFollowingReligionPer) { unique ->
                 val cities = religionManager.numberOfCitiesFollowingThisReligion(unique.params[2], founderReligion)
                 statMap.add("Religion", unique.stats * (cities / unique.params[1].toInt()))
+            }
+
+            // V:CvPlayer.cpp:21891-21915: the spies that are neither dead (a dead spy is in the hideout) nor travelling, in a city
+            forEachUnique(UniqueType.HappinessForEachSpyInACity) { unique ->
+                val spies = civInfo.espionageManager.spyList.count { it.action != SpyAction.Moving && it.getCityOrNull() != null }
+                statMap.add("Religion", Stats(happiness = unique.params[0].toFloat() * spies))
             }
         }
 

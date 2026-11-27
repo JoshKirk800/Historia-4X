@@ -405,6 +405,13 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         return followers.filterNot { it.key == religion }.values.sum()
     }
 
+    /** CvCityReligions::GetFollowersOtherReligions without the pantheons (V:CvReligionClasses.cpp:4572-4593): the followers of the major religions other than [religion] */
+    @Readonly
+    fun getFollowersOfOtherMajorReligionsThan(religion: String): Int {
+        val religions = city.civ.gameInfo.religions
+        return followers.entries.sumOf { (name, amount) -> if (name != religion && religions[name]?.isMajorReligion() == true) amount else 0 }
+    }
+
     /** Removes all pantheons except for the one founded by the current owner of the city
      *  Should be called whenever a city changes hands, e.g. conquering and trading
      */

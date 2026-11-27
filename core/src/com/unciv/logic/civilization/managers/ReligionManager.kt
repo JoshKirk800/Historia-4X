@@ -630,6 +630,15 @@ class ReligionManager : IsPartOfGameInfoSerialization {
     private fun isHolyCityOf(city: City, religionName: String): Boolean =
         city.religion.religionThisIsTheHolyCityOf == religionName && !(city.religion.isBlockedHolyCity && validityLikeVp())
 
+    /** Whether [city] is the holy city of the religion we have the founder benefits of ([getFounderBenefitsReligion]) and follows it: where VP's
+     *  Enhancer and Founder beliefs asked with `bHolyCityOnly` work (CvReligionBeliefs::IsBeliefValid, V:CvBeliefClasses.cpp:2181-2216), as
+     *  CvCity::UpdateSpecialReligionYields asks them of the city's majority religion (V:CvCity.cpp:22340-22347). */
+    @Readonly
+    fun isFollowingHolyCityOfOurReligion(city: City): Boolean {
+        val ours = getFounderBenefitsReligion() ?: return false
+        return isHolyCityOf(city, ours.name) && city.religion.getMajorityReligion() == ours
+    }
+
     /** Whether the holy city of [religion] is one of ours */
     @Readonly
     fun ownsHolyCityOf(religion: Religion): Boolean = civInfo.cities.any { isHolyCityOf(it, religion.name) }

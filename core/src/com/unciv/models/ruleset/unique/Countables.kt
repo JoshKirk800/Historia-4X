@@ -1,5 +1,6 @@
 package com.unciv.models.ruleset.unique
 
+import com.unciv.logic.civilization.Accomplishment
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.unique.expressions.Expressions
 import com.unciv.models.ruleset.unique.expressions.Operator
@@ -142,6 +143,18 @@ enum class Countables(
     PolicyBranches("Completed Policy branches") {
         override fun eval(parameterText: String, gameContext: GameContext) =
             gameContext.civInfo?.getCompletedPolicyBranchesCount()
+    },
+
+    Accomplishments("Completed [accomplishment] accomplishments", shortDocumentation = "How often the civilization completed a Vox Populi accomplishment " +
+        "(CvPlayer::GetNumTimesAccomplishmentCompleted); 0 without the ModConstants `accomplishmentsLikeVp`") {
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val accomplishment = Accomplishment.byLabel(parameterText.getPlaceholderParameters()[0]) ?: return null
+            return gameContext.civInfo?.accomplishments?.get(accomplishment.name)
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.AccomplishmentName.getTranslatedErrorSeverity(parameterText, ruleset)
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset): Set<String> =
+            Accomplishment.entries.map { text.fillPlaceholders(it.label) }.toSet()
     },
 
     FilteredCities("[cityFilter] Cities") {

@@ -1324,6 +1324,9 @@ class ModConstants {
     /** Vox Populi's culture of the turn in hundredths (CvPlayer::doTurnPostDiplomacy, V:CvPlayer.cpp:10450-10459): the stored culture and the culture
      *  of the whole game keep what is below a whole one for the next turn, and the influence levels read the latter */
     var cultureHundredthsLikeVp = false
+    /** Vox Populi's accomplishments (CvPlayer::CompleteAccomplishment, V:CvPlayer.cpp:38783-38840): a finished policy branch of the first, third or fifth era,
+     *  the first ideology, each chosen belief by its type and each civilization eliminated are counted, for `Completed [accomplishment] accomplishments` */
+    var accomplishmentsLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

@@ -69,6 +69,11 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     private val longestRoutes = HashMap<String, Int>()
     @Transient @Cache
     private var longestRoutesTurn = -1
+    /** The costs of the cheapest trade paths from each of our cities, by city and domain, valid for [potentialPathCostsTurn] ([getPotentialPathCosts]) */
+    @Transient @Cache
+    private val potentialPathCosts = HashMap<String, Map<Tile, Int>>()
+    @Transient @Cache
+    private var potentialPathCostsTurn = -1
     /** The connections our routes had when the turn started: the original works the longest routes out then, from the connections that were free (V:CvTradeClasses.cpp:540-550) */
     @Transient
     private var connectionsAtTurnStart: Set<String> = emptySet()
@@ -273,6 +278,29 @@ class TradeRouteManager : IsPartOfGameInfoSerialization {
     @Readonly
     fun getBaseRange(unit: BaseUnit): Int? =
         unit.getMatchingUniques(UniqueType.EstablishTradeRoutes, GameContext.IgnoreConditionals).firstOrNull()?.params?.get(0)?.toInt()
+
+    /** CvPlayerTrade::GetTradeRouteRange(domain, [origin]) for the trade unit we would use, `null` without one */
+    @Readonly
+    fun getPotentialRange(origin: City, isSea: Boolean): Int? =
+        getTradeUnitType(isSea)?.let { getBaseRange(it) }?.let { getRange(origin, isSea, it) }
+
+    /**
+     * The trade path cache of the original (CvGameTrade::UpdateTradePathCache, V:CvTradeClasses.cpp:363-552, read by HavePotentialTradePath): the cost of the cheapest trade path
+     * from [origin], one of our cities, to each tile within [getPotentialRange], worked out once a turn, whatever the borders and existing routes. Empty for a
+     * city-state or the barbarians, whose paths the original never caches.
+     */
+    @Readonly
+    fun getPotentialPathCosts(origin: City, isSea: Boolean): Map<Tile, Int> {
+        if (!civ.isMajorCiv) return emptyMap()
+        if (potentialPathCostsTurn != civ.gameInfo.turns) {
+            potentialPathCosts.clear()
+            potentialPathCostsTurn = civ.gameInfo.turns
+        }
+        return potentialPathCosts.getOrPut(origin.id + if (isSea) ":sea" else ":land") {
+            val range = getPotentialRange(origin, isSea) ?: return@getOrPut emptyMap()
+            TradeRoutePathfinder.reachableCosts(civ, origin.getCenterTile(), isSea, range)
+        }
+    }
 
     /** CvPlayerTrade::GetNumPotentialConnections(origin, domain) > 0: whether [origin] could start any route in the domain; kept for the turn */
     @Readonly

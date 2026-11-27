@@ -14,10 +14,13 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueMap.Companion.NO_UNIQUE_FILTER
+import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.ui.components.extensions.toPercent
 import yairm210.purity.annotations.LocalState
 import yairm210.purity.annotations.Readonly
+import kotlin.math.max
+import kotlin.math.min
 
 class CityReligionManager : IsPartOfGameInfoSerialization {
     @Transient
@@ -440,6 +443,13 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         val majorityReligion = sender.religion.getMajorityReligion() ?: return null
         if (!majorityReligion.isMajorReligion()) return null
         val tradeConnection = tradeConnections[sender]
+        if (spreadLikeVp()) {
+            val connectedWithTrade = tradeConnection != null
+            val distancePercent = if (connectedWithTrade) 0 else sender.religion.relativeDistancePercentLikeVp(majorityReligion, city)
+            if (distancePercent >= 100) return null
+            val pressure = sender.religion.pressureLikeVp(majorityReligion, city, connectedWithTrade, distancePercent)
+            return if (pressure > 0) majorityReligion.name to pressure else null
+        }
         if (tradeConnection == null
             && sender.getCenterTile().aerialDistanceTo(city.getCenterTile()) > sender.religion.getSpreadRange()) return null
         return majorityReligion.name to sender.religion.pressureAmountToAdjacentCities(city, tradeConnection == true)
@@ -454,6 +464,14 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
     fun wouldExertTradeRoutePressureToward(target: City): Pair<String, Int>? {
         val majorityReligion = getMajorityReligion() ?: return null
         if (!majorityReligion.isMajorReligion()) return null
+        if (spreadLikeVp()) {
+            // V:CvReligionClasses.cpp:4759-4787: the pressure with a route less the pressure there is, which is the same if a route links the cities already
+            val withRoute = pressureLikeVp(majorityReligion, target, connectedWithTrade = true, relativeDistancePercent = 0)
+            val withoutRoute = if (target in getTradeConnections()) withRoute
+                else pressureLikeVp(majorityReligion, target, connectedWithTrade = false,
+                    relativeDistancePercent = relativeDistancePercentLikeVp(majorityReligion, target))
+            return if (withRoute > withoutRoute) majorityReligion.name to withRoute - withoutRoute else null
+        }
         if (city.getCenterTile().aerialDistanceTo(target.getCenterTile()) <= getSpreadRange()) return null
         return majorityReligion.name to pressureAmountToAdjacentCities(target, viaTradeRouteFromHere = true)
     }
@@ -537,6 +555,66 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         }
 
         return pressure.toInt()
+    }
+
+    @Readonly
+    private fun spreadLikeVp() = city.civ.gameInfo.ruleset.modOptions.constants.religiousSpreadLikeVp
+
+    /** With [com.unciv.models.ModConstants.religiousSpreadLikeVp], the uniques of [uniqueType] that change the natural spread of [religion], the majority of this city:
+     *  those of its beliefs that [com.unciv.logic.civilization.managers.ReligionManager.isBeliefValid] accepts for the owner of this city, without a city
+     *  (CvReligionBeliefs::GetSpreadStrengthModifier, V:CvBeliefClasses.cpp:2505-2521), their conditionals asked of the founder, whose technology doubles the strength
+     *  (V:CvReligionClasses.cpp:2889-2904); and the uniques of this city that come from no belief, its buildings (CvCityReligions::GetReligiousPressureModifier) and its civilization */
+    @Readonly
+    private fun forEachSpreadUniqueLikeVp(religion: Religion, uniqueType: UniqueType, op: (Unique) -> Unit) {
+        for (belief in religion.getAllBeliefsOrdered())
+            if (belief.hasUnique(uniqueType) && city.civ.religionManager.isBeliefValid(belief, religion))
+                belief.forEachMatchingUnique(uniqueType, religion.foundingCiv.state, op)
+        city.forEachMatchingUnique(uniqueType) {
+            if (it.sourceObjectType != UniqueTarget.FollowerBelief && it.sourceObjectType != UniqueTarget.FounderBelief) op(it)
+        }
+    }
+
+    /**
+     * CvGameReligions::IsCityConnectedToCity without a trade route (V:CvReligionClasses.cpp:560-631): how far [target] is from this city, in percent of the trade range of
+     * this city, by the cheapest of the cached land and sea trade paths from here to there and from there to here; the trade path cost is SPath::iNormalizedDistanceRaw less
+     * one (V:CvAStar.cpp:3419). The spread distance beliefs lengthen the range, ten percent a tile. [Int.MAX_VALUE] without a path.
+     */
+    @Readonly
+    private fun relativeDistancePercentLikeVp(religion: Religion, target: City): Int {
+        var distanceMod = 0
+        forEachSpreadUniqueLikeVp(religion, UniqueType.ReligionSpreadDistance) { distanceMod += it.params[0].toInt() * 10 }
+        var percent = Int.MAX_VALUE
+        for (isSea in listOf(false, true)) {
+            var maxDistance = (city.civ.tradeRoutes.getPotentialRange(city, isSea) ?: continue) * 100
+            if (distanceMod > 0) maxDistance = maxDistance * (100 + distanceMod) / 100
+            if (maxDistance <= 0) continue
+            val there = city.civ.tradeRoutes.getPotentialPathCosts(city, isSea)[target.getCenterTile()]
+            if (there != null) percent = min(percent, (there + 1) * 100 / maxDistance)
+            val back = target.civ.tradeRoutes.getPotentialPathCosts(target, isSea)[city.getCenterTile()]
+            if (back != null) percent = min(percent, (back + 1) * 100 / maxDistance)
+        }
+        return percent
+    }
+
+    /**
+     * CvGameReligions::GetAdjacentCityReligiousPressure (V:CvReligionClasses.cpp:2801-2950): the natural pressure of [religion], the majority of this city, on [target],
+     * with or without a trade route that links them, [relativeDistancePercent] away ([relativeDistancePercentLikeVp]) if without
+     */
+    @Readonly
+    private fun pressureLikeVp(religion: Religion, target: City, connectedWithTrade: Boolean, relativeDistancePercent: Int): Int {
+        var basePressure = pressureFromAdjacentCities
+        var pressureMod = 0
+        if (connectedWithTrade)
+            city.civ.forEachMatchingUnique(UniqueType.TradeRouteReligionPressure) { pressureMod += it.params[0].toInt() }
+        else {
+            val pressurePercent = max(100 - relativeDistancePercent, 1)
+            basePressure = basePressure * pressurePercent * pressurePercent / (100 * 100)
+        }
+        forEachSpreadUniqueLikeVp(religion, UniqueType.NaturalReligionSpreadStrength) {
+            if (target.matchesFilter(it.params[1])) pressureMod += it.params[0].toInt()
+        }
+        pressureMod += city.civ.gameInfo.league?.getReligionSpreadPercent(religion.name) ?: 0
+        return max(0, basePressure * (100 + pressureMod) / 100)
     }
 
     /** Calculates how much pressure this religion is lacking compared to the majority religion

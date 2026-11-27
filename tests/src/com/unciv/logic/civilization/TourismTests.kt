@@ -449,6 +449,65 @@ class TourismTests {
     }
 
     @Test
+    fun `like Vox Populi the percentages of a city keep their hundredths up to the influence per turn`() {
+        game.ruleset.modOptions.constants.tourismPrecisionLikeVp = true
+        galleryWith(1, "[+25]% Tourism from Great Works [in this city]", "[+10]% Tourism [in this city]")
+        // 2 and 25% is 2.5, and 10% is 2.75
+        assertEquals(275L, civA.culture.getInfluencePerTurnTimes100(civB))
+    }
+
+    @Test
+    fun `like Vox Populi a quarter of a tourism a turn adds up`() {
+        game.ruleset.modOptions.constants.tourismPrecisionLikeVp = true
+        addBuilding("[+1] Tourism [in this city]", "[+25]% Tourism [in this city]")
+        repeat(3) { civA.culture.endTurn() }
+        assertEquals(375L, civA.culture.getInfluenceTimes100(civB))
+        assertEquals("a copy of the game keeps the hundredths", 375L,
+            game.gameInfo.clone().getCivilization(civA.civName).culture.getInfluenceTimes100(civB))
+        civA.culture.endTurn()
+        assertEquals(5, civA.culture.getInfluence(civB))
+    }
+
+    @Test
+    fun `like Vox Populi the level reads the hundredths of influence`() {
+        civB.totalCultureForContests = 99
+        civA.culture.addInfluenceTimes100(civB, 499)
+        assertEquals(5, civA.culture.getInfluencePercent(civB))
+    }
+
+    @Test
+    fun `like Vox Populi the trend reads last turn's influence and what the turn added in hundredths`() {
+        game.ruleset.modOptions.constants.tourismPrecisionLikeVp = true
+        game.ruleset.modOptions.constants.influenceTrendLikeVp = true
+        addBuilding("[+1] Tourism [in this city]", "[+25]% Tourism [in this city]")
+        civB.totalCultureForContests = 10
+        civB.culture.rememberLastTurn()
+        civB.culture.rememberLastTurn()
+        repeat(2) {
+            civA.culture.rememberLastTurn()
+            civA.culture.endTurn()
+        }
+        civB.stats.statsForNextTurn.culture = 5f
+        // before (100 + 25 + 125) / 10, now (250 + 125) / (10 + 5)
+        assertEquals(InfluenceTrend.Static, civA.culture.getInfluenceTrend(civB))
+    }
+
+    @Test
+    fun `like Vox Populi turns to influential count the hundredths of influence`() {
+        game.ruleset.modOptions.constants.tourismPrecisionLikeVp = true
+        game.ruleset.modOptions.constants.influenceTrendLikeVp = true
+        civB.totalCultureForContests = 1000
+        civB.culture.rememberLastTurn()
+        civB.culture.rememberLastTurn()
+        civA.culture.addInfluenceTimes100(civB, 10150)
+        civA.culture.rememberLastTurn()
+        civA.culture.endTurn()
+        civB.stats.statsForNextTurn.culture = 0.91f
+        // (100000 - 10150) / (101 / 31 cut to 3, times 100, less 91) = 429.9
+        assertEquals(430, civA.culture.getTurnsToInfluential(civB))
+    }
+
+    @Test
     fun `conquest and trade route bonuses grow with the level`() {
         civB.totalCultureForContests = 1000
         val expected = listOf(0 to 0, 5 to 0, 10 to 0, 30 to 1, 60 to 2, 100 to 3, 200 to 4)

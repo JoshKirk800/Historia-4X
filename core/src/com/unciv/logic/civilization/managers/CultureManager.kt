@@ -5,11 +5,13 @@ import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.models.Counter
+import com.unciv.models.ModConstants
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** How far a civilization's tourism has made another take to its culture (CvCultureClasses.h InfluenceLevels) */
@@ -242,16 +244,46 @@ class CultureManager : IsPartOfGameInfoSerialization {
 
     /** The relations between this civilization and [other] that hold, as seen from this one as the one who makes the tourism */
     @Readonly
-    fun getRelationsWith(other: Civilization): List<TourismRelation> = TourismRelation.entries.filter { relation ->
+    fun getRelationsWith(other: Civilization): List<TourismRelation> {
+        val likeVp = civ.gameInfo.ruleset.modOptions.constants.tourismModifierLikeVp
+        return TourismRelation.entries.filter { relation -> holds(relation, other, likeVp) }
+    }
+
+    /** Vox Populi: some of the people of the other follow our state religion; Brave New World: most cities of both follow the same religion.
+     *  Open borders in Brave New World let us in, in Vox Populi (MOD_BALANCE_FLIPPED_OPEN_BORDERS_TOURISM) let the other in (V:CvCultureClasses.cpp:4341-4342) */
+    @Readonly
+    private fun holds(relation: TourismRelation, other: Civilization, likeVp: Boolean): Boolean =
         when (relation) {
-            TourismRelation.SharedReligion -> getReligionInMostCities(civ).let { it != null && it == getReligionInMostCities(other) }
-            TourismRelation.OpenBorders -> civ.getDiplomacyManager(other)?.hasOpenBorders == true
+            TourismRelation.SharedReligion ->
+                if (likeVp) getSharedReligionFollowersLikeVp(other) > 0
+                else getReligionInMostCities(civ).let { it != null && it == getReligionInMostCities(other) }
+            TourismRelation.OpenBorders ->
+                if (likeVp) other.getDiplomacyManager(civ)?.hasOpenBorders == true
+                else civ.getDiplomacyManager(other)?.hasOpenBorders == true
             TourismRelation.TradeRoute -> areConnectedByTrade(other)
             TourismRelation.LowerHappiness -> civ.stats.happiness > other.stats.happiness
             TourismRelation.CommonEnemies -> getNumCommonEnemies(other) > 0
             TourismRelation.SharedIdeology -> civ.getIdeology().let { it != null && it == other.getIdeology() }
             TourismRelation.DifferentIdeologies -> civ.getIdeology().let { mine -> mine != null && other.getIdeology().let { it != null && it != mine } }
         }
+
+    /** The people of [other] that follow our state religion, none if it is a pantheon (CvPlayerCulture::GetTourismModifierSharedReligion) */
+    @Readonly
+    private fun getSharedReligionFollowersLikeVp(other: Civilization): Int {
+        val religion = civ.religionManager.getStateReligion()?.takeIf { it.isMajorReligion() } ?: return 0
+        return other.cities.sumOf { it.religion.getFollowersOf(religion.name) }
+    }
+
+    /** Vox Populi's percent more tourism for the share of the people of [other] that follow our state religion, capped, times the policies'
+     *  percent (TOURISM_MODIFIER_SHARED_RELIGION_TYPE 2, V:CvCultureClasses.cpp:4702-4732) */
+    @Readonly
+    private fun getSharedReligionModifierLikeVp(other: Civilization, constants: ModConstants): Int {
+        val population = other.cities.sumOf { it.population.population }
+        var modifier = constants.tourismModifierSharedReligion * 100 * getSharedReligionFollowersLikeVp(other) / max(population, 1)
+        if (constants.tourismModifierSharedReligionMax > 0) modifier = min(constants.tourismModifierSharedReligionMax, modifier)
+        val multiplier = civ.getMatchingUniques(UniqueType.TourismTowardsPercent)
+            .filter { it.params[1] == TourismRelation.SharedReligion.label }.sumOf { it.params[0].toInt() }
+        return modifier * (100 + multiplier) / 100
     }
 
     /** CvPlayerCulture::GetInfluenceSurveillanceTime: a familiar major (or an allied city-state's major ally) needs one turn, otherwise three. */
@@ -274,9 +306,10 @@ class CultureManager : IsPartOfGameInfoSerialization {
         if (civ.getCapital() == null) return 0
         val constants = civ.gameInfo.ruleset.modOptions.constants
         var modifier = 0
+        val likeVp = constants.tourismModifierLikeVp
         val relations = getRelationsWith(other)
         for (relation in relations) modifier += when (relation) {
-            TourismRelation.SharedReligion -> constants.tourismModifierSharedReligion
+            TourismRelation.SharedReligion -> if (likeVp) getSharedReligionModifierLikeVp(other, constants) else constants.tourismModifierSharedReligion
             TourismRelation.OpenBorders -> constants.tourismModifierOpenBorders
             TourismRelation.TradeRoute -> constants.tourismModifierTradeRoute
             TourismRelation.DifferentIdeologies -> constants.tourismModifierDifferentIdeologies
@@ -284,12 +317,12 @@ class CultureManager : IsPartOfGameInfoSerialization {
         }
         // CvPlayerCulture::GetTourismModifierWith: in Brave New World propaganda only counters a *different* ideology,
         // in Vox Populi the diplomat counts whatever the ideologies (V:CvCultureClasses.cpp:4415-4418)
-        val likeVp = constants.tourismModifierLikeVp
         if ((likeVp || TourismRelation.DifferentIdeologies in relations) && civ.espionageManager.getActiveDiplomatFor(other) != null)
             modifier += constants.tourismModifierDiplomat
         for (unique in civ.getMatchingUniques(UniqueType.TourismTowardsPercent)) {
             val relation = TourismRelation.fromLabel(unique.params[1]) ?: continue
             if (relation !in relations) continue
+            if (likeVp && relation == TourismRelation.SharedReligion) continue // a multiplier there, see getSharedReligionModifierLikeVp
             // Brave New World adds the common foe bonus for each foe, Vox Populi once (V:CvCultureClasses.cpp:4381-4398)
             val times = if (relation == TourismRelation.CommonEnemies && !likeVp) getNumCommonEnemies(other) else 1
             modifier += unique.params[0].toInt() * times

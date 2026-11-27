@@ -34,6 +34,9 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
     // Cached because using `updateNumberOfFollowers` to get this value resulted in many calls
     @Transient
     private val followers: Counter<String> = Counter()
+    /** With [com.unciv.models.ModConstants.religiousSpreadLikeVp]: the majority religion that [updateNumberOfFollowers] found, VP's m_eMajorityCityReligion */
+    @Transient
+    private var majorityLikeVp: String? = null
 
     @delegate:Transient
     private val pressureFromAdjacentCities: Int by lazy { city.civ.gameInfo.speed.religiousPressureAdjacentCity }
@@ -51,6 +54,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         toReturn.religionsAtSomePointAdopted.addAll(religionsAtSomePointAdopted)
         toReturn.pressures.putAll(pressures)
         toReturn.followers.putAll(followers)
+        toReturn.majorityLikeVp = majorityLikeVp
         toReturn.religionThisIsTheHolyCityOf = religionThisIsTheHolyCityOf
         toReturn.isBlockedHolyCity = isBlockedHolyCity
         return toReturn
@@ -166,6 +170,13 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
 
     fun addPressure(religionName: String, amount: Int, shouldUpdateFollowers: Boolean = true) {
         if (!city.civ.gameInfo.isReligionEnabled()) return // No religion, no pressures
+        if (spreadLikeVp() && city.civ.gameInfo.religions[religionName]?.isMajorReligion() == true) {
+            // CvCityReligions::AddReligiousPressure (V:CvReligionClasses.cpp:4896-4930): the pressure of a religion takes half as much (MOD_BALANCE_RESILIENT_PANTHEONS,
+            // on in VP) from each pantheon in the city, down to 0
+            for ((name, pressure) in pressures.toList()) // a copy, as the pressures change
+                if (pressure > 0 && city.civ.gameInfo.religions[name]?.isPantheon() == true)
+                    pressures[name] = max(0, pressure - amount / 2)
+        }
         pressures.add(religionName, amount)
 
         if (shouldUpdateFollowers) updateNumberOfFollowers()
@@ -283,9 +294,72 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
 
         val previousFollowers = followers.clone()
         followers.clear()
+        majorityLikeVp = null
 
         if (city.population.population <= 0) return
 
+        if (spreadLikeVp()) recomputeFollowersLikeVp()
+        else divideFollowers()
+
+        if (checkForReligionAdoption) {
+            val newMajorityReligion = getMajorityReligionName()
+            if (oldMajorityReligion != newMajorityReligion && newMajorityReligion != null) {
+                triggerReligionAdoption(newMajorityReligion)
+            }
+            if (oldMajorityReligion != newMajorityReligion)
+                city.civ.cache.updateCivResources() // follower uniques can provide resources
+            if (followers != previousFollowers)
+                city.cityStats.update()
+        }
+    }
+
+    /** CvCityReligions::RecomputeFollowers and ComputeReligiousMajority (V:CvReligionClasses.cpp:5430-5520, 4443-4489), in whole numbers:
+     *  - each religion gets its pressure divided by `total pressure / population` (atheism counts), the rest go one each to the largest remainders,
+     *    first in pressure order; a citizen left with no remainder above 0 follows nothing;
+     *  - the majority is the religion with the most followers (more pressure breaks a tie) if it has at least half the followers there are, atheists
+     *    included; atheism with the most followers means no majority.
+     *  VP keeps its religions sorted by pressure, the most first, atheism last; a tie in pressure keeps the order the religions came in here. */
+    private fun recomputeFollowersLikeVp() {
+        if (pressures.values.sum() <= 0) clearAllPressures() // VP's safety net: the atheism of one citizen
+        // VP divides by zero if the pressure is below the population; one per follower is the least here
+        val pressurePerFollower = max(1, pressures.values.sum() / city.population.population)
+        val inOrder = pressures.entries.sortedWith(compareBy<Map.Entry<String, Int>> { it.key == Constants.noReligionName }.thenByDescending { it.value })
+        val remainders = IntArray(inOrder.size)
+        var unassigned = city.population.population
+        for ((index, entry) in inOrder.withIndex()) {
+            val count = entry.value / pressurePerFollower
+            followers.add(entry.key, count)
+            unassigned -= count
+            remainders[index] = entry.value - count * pressurePerFollower
+        }
+        repeat(unassigned) {
+            var recipient = -1
+            var largest = 0
+            for (index in remainders.indices) if (remainders[index] > largest) {
+                largest = remainders[index]
+                recipient = index
+            }
+            if (recipient >= 0) {
+                followers.add(inOrder[recipient].key, 1)
+                remainders[recipient] = 0
+            }
+        }
+        var most: String? = null
+        var mostFollowers = -1
+        var mostPressure = 0
+        for (entry in inOrder) {
+            val count = followers[entry.key]
+            if (count > mostFollowers || (count == mostFollowers && entry.value > mostPressure)) {
+                most = entry.key
+                mostFollowers = count
+                mostPressure = entry.value
+            }
+        }
+        if (most != Constants.noReligionName && mostFollowers * 2 >= followers.values.sum()) majorityLikeVp = most
+        followers.remove(Constants.noReligionName)
+    }
+
+    private fun divideFollowers() {
         val remainders = HashMap<String, Float>()
         val pressurePerFollower = pressures.values.sum() / city.population.population
 
@@ -311,18 +385,6 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         }
 
         followers.remove(Constants.noReligionName)
-
-
-        if (checkForReligionAdoption) {
-            val newMajorityReligion = getMajorityReligionName()
-            if (oldMajorityReligion != newMajorityReligion && newMajorityReligion != null) {
-                triggerReligionAdoption(newMajorityReligion)
-            }
-            if (oldMajorityReligion != newMajorityReligion)
-                city.civ.cache.updateCivResources() // follower uniques can provide resources
-            if (followers != previousFollowers)
-                city.cityStats.update()
-        }
     }
 
     @Readonly fun getNumberOfFollowers(): Counter<String> = followers.clone()
@@ -357,6 +419,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
 
     @Readonly
     fun getMajorityReligionName(): String? {
+        if (spreadLikeVp()) return majorityLikeVp
         if (followers.isEmpty()) return null
         val religionWithMaxPressure = followers.maxByOrNull { it.value }!!.key
         return when {
@@ -374,6 +437,7 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
 
     private fun getAffectedBySurroundingCities() {
         if (!city.civ.gameInfo.isReligionEnabled()) return // No religion, no spreading
+        if (spreadLikeVp()) return getAffectedBySurroundingCitiesLikeVp()
         // We don't update the amount of followers yet, as only the end result should matter
         // If multiple religions would become the majority religion due to pressure,
         // this will make it so we only receive a notification for the last one.
@@ -397,26 +461,49 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
         updateNumberOfFollowers()
     }
 
+    /** CvGameReligions::SpreadReligionToOneCity (V:CvReligionClasses.cpp:358-445): the followers are recomputed after each source, so a source can flip the
+     *  majority that the next one finds: the holy city pressure first, then for each civilization in turn the pressure of each of its cities, then that of
+     *  its spy. Each flip notifies, as VP's CityConvertsReligion does. Not built: VP takes the cities to spread to in player order, the engine in turn order */
+    private fun getAffectedBySurroundingCitiesLikeVp() {
+        if (city.isHolyCity()) addPressure(religionThisIsTheHolyCityOf!!, 5 * pressureFromAdjacentCities) // AddHolyCityPressure, 5174-5183
+        val tradeConnections = getTradeConnections()
+        for (civ in city.civ.gameInfo.civilizations) {
+            for (otherCity in civ.cities) {
+                if (otherCity == city) continue
+                val (religionName, pressure) = getPressureFrom(otherCity, tradeConnections) ?: continue
+                addPressure(religionName, pressure)
+            }
+            val (religionName, times) = getSpyPressureTimes(civ) ?: continue
+            if (pressures.containsKey(religionName)) addPressure(religionName, times * pressureFromAdjacentCities)
+        }
+    }
+
     /** For each religion whose founder has a living spy in this city: how many times the natural pressure it adds, by [UniqueType.SpyReligionPressure] */
     @Readonly
     private fun getSpyPressureTimes(): Counter<String> {
         val result = Counter<String>()
-        val reformationLikeVp = city.civ.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp
         for (spyCiv in city.civ.gameInfo.civilizations) {
-            // CvPlayerReligions::GetSpyPressure (V:CvReligionClasses.cpp:4017-4031): the spy pressure of the STATE religion of the civilization, asked with its holy city.
-            // With the switch the state religion gets the pressure and a Reformation belief counts for any civilization it applies to; without it the religion the civilization
-            // founded does, with all its founder-side beliefs. DEPARTURE with the switch: the Founder and Enhancer beliefs are still those of the religion the civilization
-            // FOUNDED (VP asks the state religion): no unique of that kind has SpyReligionPressure in the ruleset, only the Reformation belief Underground Sect.
-            val religion = (if (reformationLikeVp) spyCiv.religionManager.getStateReligionCached()?.takeIf { it.isMajorReligion() }
-                else spyCiv.religionManager.religion?.takeIf { it.isMajorReligion() }) ?: continue
-            var times = 0
-            if (reformationLikeVp) spyCiv.religionManager.forEachBeliefUniqueMap { map ->
-                map.forEachMatchingUnique(UniqueType.SpyReligionPressure, spyCiv.state) { times += it.params[0].toInt() }
-            } else religion.founderBeliefUniqueMap.forEachMatchingUnique(UniqueType.SpyReligionPressure, spyCiv.state) { times += it.params[0].toInt() }
-            if (times > 0 && spyCiv.espionageManager.getSpiesInCity(city).any { it.isAlive() })
-                result.add(religion.name, times)
+            val (religionName, times) = getSpyPressureTimes(spyCiv) ?: continue
+            result.add(religionName, times)
         }
         return result
+    }
+
+    /** The religion that a living spy of [spyCiv] in this city spreads and how many times the natural pressure it adds, by [UniqueType.SpyReligionPressure] */
+    @Readonly
+    private fun getSpyPressureTimes(spyCiv: Civilization): Pair<String, Int>? {
+        val reformationLikeVp = city.civ.gameInfo.ruleset.modOptions.constants.reformationBeliefsLikeVp
+        // CvPlayerReligions::GetSpyPressure (V:CvReligionClasses.cpp:4017-4031): the spy pressure of the STATE religion of the civilization, asked with its holy city.
+        // With the switch the state religion gets the pressure and a Reformation belief counts for any civilization it applies to; without it the religion the civilization
+        // founded does, with all its founder-side beliefs. DEPARTURE with the switch: the Founder and Enhancer beliefs are still those of the religion the civilization
+        // FOUNDED (VP asks the state religion): no unique of that kind has SpyReligionPressure in the ruleset, only the Reformation belief Underground Sect.
+        val religion = (if (reformationLikeVp) spyCiv.religionManager.getStateReligionCached()?.takeIf { it.isMajorReligion() }
+            else spyCiv.religionManager.religion?.takeIf { it.isMajorReligion() }) ?: return null
+        var times = 0
+        if (reformationLikeVp) spyCiv.religionManager.forEachBeliefUniqueMap { map ->
+            map.forEachMatchingUnique(UniqueType.SpyReligionPressure, spyCiv.state) { times += it.params[0].toInt() }
+        } else religion.founderBeliefUniqueMap.forEachMatchingUnique(UniqueType.SpyReligionPressure, spyCiv.state) { times += it.params[0].toInt() }
+        return if (times > 0 && spyCiv.espionageManager.getSpiesInCity(city).any { it.isAlive() }) religion.name to times else null
     }
 
     /** The cities that a trade route of anyone links this city to, in either direction (CvGameTrade::IsCityConnectedToCity, CvTradeClasses.cpp:661),

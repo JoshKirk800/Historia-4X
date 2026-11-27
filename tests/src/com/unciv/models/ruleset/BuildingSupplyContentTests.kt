@@ -5,7 +5,6 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,8 +64,8 @@ class BuildingSupplyContentTests {
         assertTrue(ruleset.modOptions.constants.unitSupplyLikeVp)
         assertTrue(ruleset.modOptions.constants.unitSupplyBuildingsLikeVp)
         assertEquals(0.2, ruleset.modOptions.constants.unitSupplyPerPopulation, 0.0)
-        // staged: the AI's check at the supply limit (CvCity::canTrain V:CvCity.cpp:8696-8703) is flipped by its own slice, after its study
-        assertFalse(ruleset.modOptions.constants.unitSupplyAiAtLimitLikeVp)
+        // the AI's check at the supply limit (CvCity::canTrain V:CvCity.cpp:8696-8703), flipped by its own slice after its study
+        assertTrue(ruleset.modOptions.constants.unitSupplyAiAtLimitLikeVp)
     }
 
     @Test

@@ -1347,7 +1347,8 @@ class ModConstants {
     /** Vox Populi's celebrations of new Great Works (CvUnit::createGreatWork and the others that create one): `GreatWorkWltkdTurns` works */
     var greatWorkWltkdLikeVp = false
     /** Vox Populi's theming (CvPlayerCulture::MoveWorks and CvCityCulture::GetThemingBonusMultiplierTimes10000): where the AI puts its works and in which
-     *  order, the theming bonuses of a building from the highest; theming percentages added up and truncated once */
+     *  order, the theming bonuses of a building from the highest, the works other civilizations offer swapped in while theming; theming percentages
+     *  added up and truncated once */
     var greatWorkThemingLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100

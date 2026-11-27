@@ -13,6 +13,7 @@ import com.unciv.models.stats.Stat
 import com.unciv.models.translations.getPlaceholderParameters
 import com.unciv.models.translations.getPlaceholderText
 import com.unciv.logic.civilization.managers.InfluenceLevel
+import com.unciv.logic.civilization.managers.PublicOpinionType
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.toTextButton
 import com.unciv.ui.objectdescriptions.uniquesToCivilopediaTextLines
@@ -36,6 +37,8 @@ enum class MilestoneType(val text: String) {
     HaveCountable("Have at least [amount] [countable]"),
     /** Tourism has made this civilization at least that influential over each other living major civilization, those it has not met included (CvGame::testVictory for an `Influential` victory) */
     InfluentialOverAllCivs("Be [Influential] over all other civilizations"),
+    /** An ideology and a public opinion no worse than content (CvGame::testVictory with MOD_BALANCE_CULTURE_VICTORY_CHANGES, V:CvGame.cpp:9485-9493) */
+    IdeologyContent("Follow an ideology with a content populace"),
 }
 
 class Victory : RulesetObject() {
@@ -180,6 +183,8 @@ class Milestone(val uniqueDescription: String, private val parentVictory: Victor
                 val others = civInfo.culture.getOtherMajorCivs()
                 others.isNotEmpty() && others.all { isInfluentialEnough(civInfo, it) }
             }
+            MilestoneType.IdeologyContent ->
+                civInfo.getIdeology() != null && civInfo.culture.publicOpinion.type == PublicOpinionType.Content
             MilestoneType.WinDiplomaticVote -> civInfo.victoryManager.hasEverWonDiplomaticVote
             MilestoneType.ScoreAfterTimeOut -> {
                 civInfo.gameInfo.turns >= civInfo.gameInfo.gameParameters.maxTurns
@@ -216,7 +221,7 @@ class Milestone(val uniqueDescription: String, private val parentVictory: Victor
     fun getVictoryScreenButtonHeaderText(completed: Boolean, civInfo: Civilization): String {
         return when (type!!) {
             MilestoneType.BuildingBuiltGlobally, MilestoneType.WinDiplomaticVote,
-            MilestoneType.ScoreAfterTimeOut, MilestoneType.BuiltBuilding ->
+            MilestoneType.ScoreAfterTimeOut, MilestoneType.BuiltBuilding, MilestoneType.IdeologyContent ->
                 uniqueDescription
             MilestoneType.CompletePolicyBranches -> {
                 val amountToDo = params[0].tr()
@@ -313,7 +318,7 @@ class Milestone(val uniqueDescription: String, private val parentVictory: Victor
             null,
             MilestoneType.BuiltBuilding, MilestoneType.BuildingBuiltGlobally,
             MilestoneType.ScoreAfterTimeOut, MilestoneType.WinDiplomaticVote,
-            MilestoneType.HaveCountable -> {}
+            MilestoneType.HaveCountable, MilestoneType.IdeologyContent -> {}
 
             MilestoneType.AddedSSPartsInCapital -> {
                 val completedSpaceshipParts = civInfo.victoryManager.currentsSpaceshipParts
@@ -468,7 +473,7 @@ class Milestone(val uniqueDescription: String, private val parentVictory: Victor
                 Victory.Focus.Production
             }
             MilestoneType.DestroyAllPlayers, MilestoneType.CaptureAllCapitals -> Victory.Focus.Military
-            MilestoneType.CompletePolicyBranches, MilestoneType.InfluentialOverAllCivs -> Victory.Focus.Culture
+            MilestoneType.CompletePolicyBranches, MilestoneType.InfluentialOverAllCivs, MilestoneType.IdeologyContent -> Victory.Focus.Culture
             MilestoneType.MoreCountableThanEachPlayer -> getFocusFromCountable(params[0], ruleset)
             MilestoneType.HaveCountable -> getFocusFromCountable(params[1], ruleset)
             MilestoneType.WinDiplomaticVote -> Victory.Focus.CityStates

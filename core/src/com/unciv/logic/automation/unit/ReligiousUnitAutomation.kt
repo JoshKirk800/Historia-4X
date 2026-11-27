@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.unit
 
 import com.unciv.Constants
+import com.unciv.logic.automation.civilization.AutomationCache
 import com.unciv.logic.automation.civilization.ReligionAutomation
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.managers.ReligionState
@@ -13,30 +14,73 @@ import com.unciv.view.MapUnitView
 object ReligiousUnitAutomation {
 
     /** CvHomelandAI::ExecuteMissionaryMoves: to the plot from [chooseTargetPlot] next to CvReligionAI::ChooseMissionaryTargetCity, then spread */
-    fun automateMissionary(unitView: MapUnitView) {
+    fun automateMissionary(unitView: MapUnitView, cache: AutomationCache) {
+        @Suppress("DEPRECATION") val unit = unitView.getUnit()
+        if (ReligionAutomation.targetsLikeVp(unit.civ)) return automateMissionaryLikeVp(unitView, unit, cache)
         if (unitView.religion != unitView.civ().getReligion()?.name || unitView.religion == null) {
             // A unit of another religion would spread that one - nothing for us to do with it
             unitView.tryDisband()
             return
         }
-        @Suppress("DEPRECATION") val unit = unitView.getUnit()
         val city = ReligionAutomation.chooseMissionaryTargetCity(unit.civ, unit) ?: return
         val target = chooseTargetPlot(unit, city) { it.getCity() == city } ?: return
         moveAndAct(unitView, unit, target, UnitActionType.SpreadReligion)
     }
 
     /** CvHomelandAI::ExecuteInquisitorMoves: to the plot next to CvReligionAI::ChooseInquisitorTargetCity, then remove heresy */
-    fun automateInquisitor(unitView: MapUnitView) {
+    fun automateInquisitor(unitView: MapUnitView, cache: AutomationCache) {
+        @Suppress("DEPRECATION") val unit = unitView.getUnit()
+        if (ReligionAutomation.targetsLikeVp(unit.civ)) {
+            // VP keeps an inquisitor of any religion: it guards and cleanses for its own (CvHomelandAI::ExecuteInquisitorMoves)
+            unit.religion?.let { automateInquisitorLikeVp(unitView, unit, it, cache) }
+            return
+        }
         if (unitView.religion != unitView.civ().getReligion()?.name || unitView.religion == null) {
             // No need to keep a unit we can't use, as it only blocks religion spreads of religions other that its own
             unitView.tryDisband()
             return
         }
-        @Suppress("DEPRECATION") val unit = unitView.getUnit()
         val religion = unit.religion!!
         val city = ReligionAutomation.chooseInquisitorTargetCity(unit.civ, unit) ?: return
         val target = chooseTargetPlot(unit, city) { it.getCity() == city && hasReligionOtherThan(city, religion) } ?: return
         moveAndAct(unitView, unit, target, UnitActionType.RemoveHeresy)
+    }
+
+    /**
+     *  CvHomelandAI::ExecuteMissionaryMoves (V:CvHomelandAI.cpp:5353-5423) with CvReligionAI::ChooseMissionaryTargetCity: the best city it has a
+     *  path to, burned for the other missionaries. Without one, a missionary of another religion than the one we spread is disbanded; ours waits.
+     *  Not built: the move to a garrison city (CvHomelandAI::MoveCivilianToGarrison, not in Unciv).
+     */
+    private fun automateMissionaryLikeVp(unitView: MapUnitView, unit: MapUnit, cache: AutomationCache) {
+        for (city in ReligionAutomation.missionaryTargetsLikeVp(unit.civ, unit, cache.missionaryTargets)) {
+            val target = chooseTargetPlot(unit, city) { it.getCity() == city } ?: continue
+            cache.missionaryTargets[city] = unit
+            moveAndAct(unitView, unit, target, UnitActionType.SpreadReligion)
+            return
+        }
+        if (unit.religion != ReligionAutomation.religionToSpread(unit.civ)?.name) unitView.tryDisband()
+    }
+
+    /**
+     *  CvHomelandAI::ExecuteInquisitorMoves (V:CvHomelandAI.cpp:5426-5490) with CvReligionAI::ChooseInquisitorTargetCity: the best city to remove
+     *  heresy from that it has a path to, then the best one to guard; the city is burned for the other inquisitors. A city to remove heresy from
+     *  is one where CvReligionAIHelpers::ShouldRemoveHeresy holds, which a city to guard never is; a guard goes into the city, or next to it
+     *  ([chooseTargetPlot]), and stays.
+     */
+    private fun automateInquisitorLikeVp(unitView: MapUnitView, unit: MapUnit, religion: String, cache: AutomationCache) {
+        val targets = ReligionAutomation.inquisitorTargetsLikeVp(unit.civ, unit, cache.inquisitorTargets)
+        for (city in targets.offensive) {
+            val target = chooseTargetPlot(unit, city) { it.getCity() == city && hasReligionOtherThan(city, religion) } ?: continue
+            cache.inquisitorTargets[city] = unit
+            moveAndAct(unitView, unit, target, UnitActionType.RemoveHeresy)
+            return
+        }
+        for (city in targets.defensive) {
+            val target = chooseTargetPlot(unit, city) { it.getCity() == city } ?: continue
+            cache.inquisitorTargets[city] = unit
+            if (unit.getTile() != target) unit.movement.tryHeadTowards(target)
+            return
+        }
     }
 
     /** CvCityReligions::IsReligionHereOtherThan */

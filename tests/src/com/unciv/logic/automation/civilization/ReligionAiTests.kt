@@ -2,11 +2,13 @@ package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.civilization.ReligionAutomation.FaithPurchase
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.unit.ReligiousUnitAutomation
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.managers.ReligionManager
 import com.unciv.logic.civilization.managers.ReligionState
+import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.Religion
 import com.unciv.models.metadata.BaseRuleset
@@ -15,6 +17,7 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
+import com.unciv.view.GameView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -402,4 +405,205 @@ class ReligionAiTests {
         ours.setFlag(DiplomacyFlags.AgreedToNotSpreadReligion, 20)
         assertTrue("their promise to us does not bind us", score() > 0)
     }
+
+    //region Targets like Vox Populi (religionCultureAiLikeVp)
+
+    /** A city of [owner] at [x], [y] with [population] and these accumulated pressures (atheism keeps its starting 100 plus [atheism]) */
+    private fun cityWith(owner: Civilization, x: Int, y: Int, population: Int, vararg pressures: Pair<String, Int>, atheism: Int = 0): City {
+        val city = game.addCity(owner, tile(x, y), initialPopulation = population)
+        if (atheism > 0) city.religion.addPressure(com.unciv.Constants.noReligionName, atheism)
+        for ((religion, amount) in pressures) city.religion.addPressure(religion, amount)
+        for (civ in game.gameInfo.civilizations) city.getCenterTile().setExplored(civ, true)
+        return city
+    }
+
+    @Test
+    fun `with Vox Populi a missionary weighs the distances and how much its visit would move the city`() {
+        val (civ, religion) = foundedCiv()
+        assertEquals("BNW missionary: strength 1000, 2 spreads", 1000, ReligionAutomation.missionaryUnit(civ)!!.religiousStrength)
+        val missionaryTile = tile(0, 1)
+        val missionary = game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, missionaryTile)
+        missionary.religion = religion.name
+        val heretic = game.addCiv()
+        val hereticReligion = foundReligion(heretic)
+        val pagan = game.addCiv()
+        fun distances(city: City) = 50 - city.getCenterTile().aerialDistanceTo(tile(0, 0)) - city.getCenterTile().aerialDistanceTo(missionaryTile)
+
+        // 2000 of 5000 is an impact of 40 (+17 × 3), our share 20 (+6 × 3); a major without a religion, its state religion not ours: × 3/2
+        val paganCity = cityWith(pagan, 3, 0, 1, hereticReligion.name to 4000, religion.name to 1000)
+        assertEquals((distances(paganCity) + 51 + 18) * 3 / 2, ReligionAutomation.scoreCityForMissionaryLikeVp(civ, paganCity, missionary, religion))
+        assertEquals("without a unit only the holy city's distance",
+            (50 - 3 + 51 + 18) * 3 / 2, ReligionAutomation.scoreCityForMissionaryLikeVp(civ, paganCity, null, religion))
+
+        // no founded religion there: the impact is capped at 100 (+77 × 3, +46 × 3), × 3/2 without a majority, × 3/2 for the owner
+        val emptyCity = cityWith(pagan, -3, 3, 1)
+        assertEquals((distances(emptyCity) + 231 + 138) * 3 / 2 * 3 / 2,
+            ReligionAutomation.scoreCityForMissionaryLikeVp(civ, emptyCity, missionary, religion))
+
+        // our own city doubles, without the bonus for an owner without a religion
+        val own = cityWith(civ, 0, -3, 1, hereticReligion.name to 4000, religion.name to 1000)
+        assertEquals((distances(own) + 51 + 18) * 2, ReligionAutomation.scoreCityForMissionaryLikeVp(civ, own, missionary, religion))
+
+        // the holy city of the owner's religion is halved, an owner with a religion gets no bonus
+        val holy = cityWith(heretic, 4, -4, 1, hereticReligion.name to 4000, religion.name to 1000)
+        holy.religion.religionThisIsTheHolyCityOf = hereticReligion.name
+        assertEquals((distances(holy) + 51 + 18) / 2, ReligionAutomation.scoreCityForMissionaryLikeVp(civ, holy, missionary, religion))
+        // a founder without its holy city owns no religion (CvPlayerReligions::OwnsReligion): the bonus, and nothing to halve
+        holy.religion.religionThisIsTheHolyCityOf = null
+        assertEquals((distances(holy) + 51 + 18) * 3 / 2, ReligionAutomation.scoreCityForMissionaryLikeVp(civ, holy, missionary, religion))
+
+        civ.diplomacyFunctions.makeCivilizationsMeet(pagan)
+        civ.getDiplomacyManager(pagan)!!.declareWar()
+        assertEquals("at war", 0, ReligionAutomation.scoreCityForMissionaryLikeVp(civ, paganCity, missionary, religion))
+    }
+
+    @Test
+    fun `with Vox Populi missionaries go to the best city first and leave one another's targets alone`() {
+        val (civ, religion) = foundedCiv()
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val missionary = game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(0, 1))
+        missionary.religion = religion.name
+        val other = game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(1, 0))
+        other.religion = religion.name
+        val pagan = game.addCiv()
+        val near = cityWith(pagan, 3, 0, 1)
+        val far = cityWith(pagan, -4, 4, 1)
+
+        assertEquals(listOf(near, far), ReligionAutomation.missionaryTargetsLikeVp(civ, missionary, emptyMap()))
+        assertEquals(listOf(far), ReligionAutomation.missionaryTargetsLikeVp(civ, missionary, mapOf(near to other)))
+        assertEquals("its own target stays", listOf(near, far), ReligionAutomation.missionaryTargetsLikeVp(civ, missionary, mapOf(near to missionary)))
+
+        val cache = AutomationCache()
+        val view = GameView(game.gameInfo, civ)
+        ReligiousUnitAutomation.automateMissionary(view.getMapUnitView(missionary), cache)
+        ReligiousUnitAutomation.automateMissionary(view.getMapUnitView(other), cache)
+        assertEquals("the second missionary takes the next city", mapOf(near to missionary, far to other), cache.missionaryTargets)
+    }
+
+    @Test
+    fun `with Vox Populi heresy is removed from a city where another religion leads, or gains on ours without a majority`() {
+        val (civ, religion) = foundedCiv()
+        val heretic = game.addCiv()
+        val hereticReligion = foundReligion(heretic)
+
+        // 7 citizens, 700 pressure: 4 atheists, 2 of the strongest religion, 1 of the other; no majority
+        val split = cityWith(civ, -3, 3, 7, religion.name to 200, hereticReligion.name to 100, atheism = 300)
+        assertEquals(null, split.religion.getMajorityReligion())
+        fun perTurn() = split.religion.getPressuresFromSurroundingCities()
+        assertTrue("precondition: the heretics gain no more than we do", perTurn()[hereticReligion.name] <= perTurn()[religion.name])
+        assertTrue(!ReligionAutomation.shouldRemoveHeresyLikeVp(split, religion.name))
+        for (x in listOf(-4, -2, 2)) cityWith(heretic, x, -4, 1, hereticReligion.name to 4000)
+        assertTrue("precondition: the heretics gain more", perTurn()[hereticReligion.name] > perTurn()[religion.name])
+        assertTrue(ReligionAutomation.shouldRemoveHeresyLikeVp(split, religion.name))
+
+        val hereticMajority = cityWith(civ, 3, 0, 1, hereticReligion.name to 4000)
+        assertTrue(ReligionAutomation.shouldRemoveHeresyLikeVp(hereticMajority, religion.name))
+        assertTrue("ours is the majority", !ReligionAutomation.shouldRemoveHeresyLikeVp(civ.cities.first(), religion.name))
+        val hereticsLead = cityWith(civ, 0, 5, 7, hereticReligion.name to 200, religion.name to 100, atheism = 300)
+        assertEquals(null, hereticsLead.religion.getMajorityReligion())
+        assertTrue(ReligionAutomation.shouldRemoveHeresyLikeVp(hereticsLead, religion.name))
+    }
+
+    @Test
+    fun `with Vox Populi an inquisitor goes against more than 6 heretics, doubled under a heretic majority, farthest first`() {
+        val (civ, religion) = foundedCiv()
+        val heretic = game.addCiv()
+        val hereticReligion = foundReligion(heretic)
+        val inquisitorTile = tile(0, 1)
+        val inquisitor = game.addUnit(ReligionAutomation.inquisitorUnit(civ)!!.name, civ, inquisitorTile)
+        inquisitor.religion = religion.name
+        fun score(city: City, unit: MapUnit? = inquisitor) = ReligionAutomation.scoreCityForInquisitorOffensiveLikeVp(civ, city, unit, religion)
+
+        // 6 citizens: 3 heretics (the majority), 2 ours, 1 atheist: 3 × 2 = 6 is not enough
+        val three = cityWith(civ, 3, 0, 6, hereticReligion.name to 3000, religion.name to 2000, atheism = 900)
+        assertEquals(3, three.religion.getFollowersOf(hereticReligion.name))
+        assertEquals(0, score(three))
+        // 8 citizens: 4 heretics, the majority: 8 scores the distance, or the count without a unit
+        val four = cityWith(civ, -3, 3, 8, hereticReligion.name to 4000, religion.name to 3000, atheism = 900)
+        assertEquals(4, four.religion.getFollowersOf(hereticReligion.name))
+        assertEquals(inquisitorTile.aerialDistanceTo(four.getCenterTile()), score(four))
+        assertEquals(8, score(four, null))
+        inquisitor.putInTile(four.getCenterTile())
+        assertEquals("a unit in the city scores its distance, 0", 0, score(four))
+        val foreign = cityWith(heretic, 0, -5, 8, hereticReligion.name to 4000, religion.name to 3000, atheism = 900)
+        assertEquals(0, score(foreign))
+    }
+
+    @Test
+    fun `with Vox Populi an inquisitor guards the holy city or a border city a missionary could sway`() {
+        val (civ, religion) = foundedCiv()
+        val inquisitorTile = tile(0, 2)
+        val inquisitor = game.addUnit(ReligionAutomation.inquisitorUnit(civ)!!.name, civ, inquisitorTile)
+        inquisitor.religion = religion.name
+        fun score(city: City, unfriendly: List<Civilization> = emptyList(), unit: MapUnit? = inquisitor) =
+            ReligionAutomation.scoreCityForInquisitorDefensiveLikeVp(civ, city, unit, religion, unfriendly)
+        val capital = civ.cities.first()
+
+        // 2000 of 5000: impact 40 + 7 for the holy city
+        assertEquals(2, score(capital))
+        assertEquals(47, score(capital, unit = null))
+        capital.religion.addPressure(religion.name, 5000)
+        assertEquals("impact 20 + 7 for the holy city", 27, score(capital, unit = null))
+
+        val twenty = cityWith(civ, 3, -3, 1, religion.name to 10_000)
+        assertEquals("impact 20 is not enough", 0, score(twenty, unit = null))
+        val twentyTwo = cityWith(civ, 0, -4, 1, religion.name to 9000)
+        assertEquals("impact 22 is not enough either", 0, score(twentyTwo, unit = null))
+        val twentyFive = cityWith(civ, -3, 0, 1, religion.name to 8000)
+        assertEquals(25, score(twentyFive, unit = null))
+
+        val rival = game.addCiv()
+        cityWith(rival, 5, -3, 1)
+        assertEquals("impact 20 + 11 on the border", 31, score(twenty, listOf(rival), unit = null))
+    }
+
+    @Test
+    fun `with Vox Populi an inquisitor tries heretic cities first and skips a city another of ours already guards`() {
+        val (civ, religion) = foundedCiv()
+        val heretic = game.addCiv()
+        val hereticReligion = foundReligion(heretic)
+        // next to the capital: it does not count as a guard against itself
+        val inquisitor = game.addUnit(ReligionAutomation.inquisitorUnit(civ)!!.name, civ, tile(0, 1))
+        inquisitor.religion = religion.name
+        val capital = civ.cities.first()
+        val heretics = cityWith(civ, -3, 3, 8, hereticReligion.name to 4000, religion.name to 3000, atheism = 900)
+
+        val targets = ReligionAutomation.inquisitorTargetsLikeVp(civ, inquisitor, emptyMap())
+        assertEquals(listOf(heretics), targets.offensive)
+        assertEquals(listOf(capital), targets.defensive)
+
+        val guard = game.addUnit(ReligionAutomation.inquisitorUnit(civ)!!.name, civ, tile(1, 0))
+        guard.religion = religion.name
+        assertEquals(emptyList<City>(), ReligionAutomation.inquisitorTargetsLikeVp(civ, inquisitor, emptyMap()).defensive)
+        assertEquals(emptyList<City>(), ReligionAutomation.inquisitorTargetsLikeVp(civ, inquisitor, mapOf(heretics to guard)).offensive)
+    }
+
+    @Test
+    fun `with Vox Populi an inquisitor of another religion works for it, a missionary of another religion without a target is disbanded`() {
+        val (civ, religion) = foundedCiv()
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val hereticReligion = foundReligion(game.addCiv())
+        val ours = cityWith(civ, -3, 3, 8, religion.name to 50_000)
+        val foreignInquisitor = game.addUnit(ReligionAutomation.inquisitorUnit(civ)!!.name, civ, tile(0, 1))
+        foreignInquisitor.religion = hereticReligion.name
+        assertEquals("our 8 followers are heretics to it", listOf(ours),
+            ReligionAutomation.inquisitorTargetsLikeVp(civ, foreignInquisitor, emptyMap()).offensive)
+
+        // no other city to convert: our missionary waits, the other one goes
+        val missionary = game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(1, 0))
+        missionary.religion = religion.name
+        val foreignMissionary = game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, tile(1, -1))
+        foreignMissionary.religion = hereticReligion.name
+        val view = GameView(game.gameInfo, civ)
+        val cache = AutomationCache()
+        ReligiousUnitAutomation.automateMissionary(view.getMapUnitView(missionary), cache)
+        ReligiousUnitAutomation.automateMissionary(view.getMapUnitView(foreignMissionary), cache)
+        ReligiousUnitAutomation.automateInquisitor(view.getMapUnitView(foreignInquisitor), cache)
+        val units = civ.units.getCivUnits().toList()
+        assertTrue(missionary in units)
+        assertTrue(foreignMissionary !in units)
+        assertTrue(foreignInquisitor in units)
+        assertEquals(foreignInquisitor, cache.inquisitorTargets[ours])
+    }
+    //endregion
 }

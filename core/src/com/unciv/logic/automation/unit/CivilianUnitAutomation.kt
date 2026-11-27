@@ -113,10 +113,10 @@ object CivilianUnitAutomation {
 
         // A Great Prophet here has the directive to build the Holy Site, not to spread
         if (!mapUnit.baseUnit.isGreatPerson && mapUnit.civ.religionManager.maySpreadReligionAtAll(mapUnit))
-            return ReligiousUnitAutomation.automateMissionary(unit)
+            return ReligiousUnitAutomation.automateMissionary(unit, cache)
 
         if (unit.hasUnique(UniqueType.PreventSpreadingReligion) || unit.hasUnique(UniqueType.CanRemoveHeresy))
-            return ReligiousUnitAutomation.automateInquisitor(unit)
+            return ReligiousUnitAutomation.automateInquisitor(unit, cache)
 
         if (unit.hasUnique(UniqueType.GainFreeBuildings)) {
             val unique = mapUnit.getMatchingUniques(UniqueType.GainFreeBuildings).first()

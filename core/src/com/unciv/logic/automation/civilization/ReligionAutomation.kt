@@ -3,6 +3,9 @@ package com.unciv.logic.automation.civilization
 import com.unciv.logic.automation.Timers.Companion.timeThis
 import com.unciv.logic.automation.diplomacy.TheftAi
 import com.unciv.logic.automation.diplomacy.TheftType
+import com.unciv.logic.automation.strategy.AiOperationLogic
+import com.unciv.logic.automation.strategy.CityDangerAi
+import com.unciv.logic.automation.unit.CityDistances
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.ReligionState
@@ -21,6 +24,8 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 /** Port of CvReligionAI (CvReligionClasses.cpp): faith purchases, belief choices and the strategic targets of religious units */
@@ -494,6 +499,201 @@ object ReligionAutomation {
             }
         }
         best
+    }
+    //endregion
+
+    //region Targets of religious units like Vox Populi (religionCultureAiLikeVp)
+
+    fun targetsLikeVp(civ: Civilization): Boolean = civ.gameInfo.ruleset.modOptions.constants.religionCultureAiLikeVp
+
+    /** CvReligionAI::ChooseMissionaryTargetCity: no target for a city further than this from our nearest city by path */
+    private const val MISSIONARY_MAX_CITY_PATH_LENGTH = 37
+
+    /** The holy city of [religion], whoever holds it (CvReligion::GetHolyCity) */
+    private fun holyCityOf(civ: Civilization, religion: String): City? = civ.gameInfo.getCities().firstOrNull { it.isHolyCityOf(religion) }
+
+    /** CvCityReligions::GetTotalAccumulatedPressure(false): the pressure of the founded religions in [city], at least 1 as the callers use it */
+    private fun accumulatedPressureLikeVp(city: City): Int {
+        val religions = city.civ.gameInfo.religions
+        var total = 0
+        for ((name, pressure) in city.religion.getPressures())
+            if (religions[name]?.isMajorReligion() == true) total += pressure
+        return max(1, total)
+    }
+
+    /**
+     *  RELIGION_MISSIONARY_PRESSURE_MULTIPLIER × ReligiousStrength × ReligionSpreads of our missionary (CvReligionAI::ScoreCityForMissionary,
+     *  ScoreCityForInquisitorDefensive: "assume we spread multiple times with same strength"). Unciv's pressures are VP's ÷ 10 (a neighbour city's 6
+     *  for VP's 65 on Standard, and a spread adds the religious strength itself, [UnitActionsReligion.getPressureAddedFromSpread]), so the
+     *  multiplier is left out; 1 without a missionary.
+     */
+    private fun missionaryPressureLikeVp(civ: Civilization): Int {
+        val missionary = missionaryUnit(civ) ?: return 1
+        val spreads = missionary.getMatchingUniques(UniqueType.CanSpreadReligion, GameContext.IgnoreConditionals).firstOrNull()
+            ?.getModifiers(UniqueType.UnitActionLimitedTimes)?.maxOfOrNull { it.params[0].toInt() } ?: 1
+        return missionary.religiousStrength * spreads
+    }
+
+    /** min(100, the missionary's pressure as a percent of the city's [accumulated] pressure) */
+    private fun missionaryImpactPercentLikeVp(civ: Civilization, accumulated: Int): Int =
+        min(100, missionaryPressureLikeVp(civ) * 100 / accumulated)
+
+    /**
+     *  CvReligionAI::ScoreCityForMissionary (V:CvReligionClasses.cpp:10961-11118) for [unit], or for no unit when it is null:
+     *  0 if unrevealed, at war with the owner, already of [religion], or a major that is a bad target for a conversion ([TheftAi.isBadTheftTarget]);
+     *  else 50 − the distances to the holy city and to the unit (at least 0), + 3 × each of (missionary impact − 23) and (our share + impact − 54)
+     *  where positive, × 3/2 without a founded religion as majority, 0 if an inquisitor guards the city, × 2 for our own city, else × 3/2 for a major
+     *  that owns no religion (CvPlayerReligions::OwnsReligion) and has another state religion, ÷ 2 for the holy city of the religion the owner owns
+     *  ([com.unciv.logic.civilization.managers.ReligionManager.getOwnedReligion], founded or conquered).
+     *  Not built: VP lets a missionary spread at half strength next to an inquisitor (MOD_BALANCE_INQUISITOR_NERF, × 50%); Unciv's spread is
+     *  blocked there ([com.unciv.logic.civilization.managers.ReligionManager]), as VP's is without the option, so the city scores 0. Neither is the
+     *  × 3/2 for a City-State with a missionary-influence belief (no such belief in Unciv), the Horde and Rebellion quests (none in Unciv), the
+     *  unique-belief rule (off in VP, MOD_BALANCE_UNIQUE_BELIEFS_ONLY_FOR_CIV) or the teammate check (no teams).
+     */
+    fun scoreCityForMissionaryLikeVp(civ: Civilization, city: City, unit: MapUnit?, religion: Religion): Int {
+        val center = city.getCenterTile()
+        if (!center.isExplored(civ)) return 0
+        val owner = city.civ
+        if (civ.isAtWarWith(owner)) return 0
+        if (majorityReligionName(city) == religion.name) return 0
+        if (owner.isMajorCiv && TheftAi.isBadTheftTarget(civ, owner, TheftType.Conversion)) return 0
+
+        val toHolyCity = holyCityOf(civ, religion.name)?.let { center.aerialDistanceTo(it.getCenterTile()) } ?: 0
+        val toUnit = unit?.let { center.aerialDistanceTo(it.getTile()) } ?: 0
+        var score = max(0, 50 - toHolyCity - toUnit)
+        val accumulated = accumulatedPressureLikeVp(city)
+        val impact = missionaryImpactPercentLikeVp(civ, accumulated)
+        val ourShare = city.religion.getPressures()[religion.name] * 100 / accumulated
+        score += max(0, impact - 23) * 3
+        score += max(0, ourShare + impact - 54) * 3
+
+        if (city.religion.getMajorityReligion()?.isMajorReligion() != true) score = score * 3 / 2
+        if (isDefendedAgainstSpread(civ, city, religion.name)) return 0
+        if (owner == civ) return score * 2
+        val ownersReligion = owner.religionManager.getOwnedReligion()
+        if (owner.isMajorCiv && ownersReligion == null && owner.religionManager.getStateReligion() != religion)
+            score = score * 3 / 2
+        if (ownersReligion != null && city.isHolyCityOf(ownersReligion.name)) score /= 2
+        return score
+    }
+
+    /**
+     *  CvReligionAIHelpers::ShouldRemoveHeresy (V:CvReligionClasses.cpp:11946-11981): a founded religion other than [religion] is the majority of
+     *  [city]; or, without a majority, the founded religion with the most pressure is another one, or is ours while the runner-up gains more pressure
+     *  each turn ([com.unciv.logic.city.managers.CityReligionManager.getPressuresFromSurroundingCities]). Never for a pantheon majority.
+     *  Pressure ties keep the order of the city's pressures, where VP's are left as its last recount sorted them. No teams, so no teammate check.
+     */
+    fun shouldRemoveHeresyLikeVp(city: City, religion: String): Boolean {
+        val majority = city.religion.getMajorityReligion()
+        if (majority != null) return majority.isMajorReligion() && majority.name != religion
+        val religions = city.civ.gameInfo.religions
+        val ranked = city.religion.getPressures().entries
+            .filter { it.value > 0 && religions[it.key] != null }
+            .sortedByDescending { it.value }
+            .map { religions[it.key]!! }
+        val strongest = ranked.firstOrNull() ?: return false
+        if (!strongest.isMajorReligion()) return false
+        if (strongest.name != religion) return true
+        val runnerUp = ranked.getOrNull(1) ?: return false
+        val perTurn = city.religion.getPressuresFromSurroundingCities()
+        return perTurn[runnerUp.name] > perTurn[religion]
+    }
+
+    /**
+     *  CvReligionAI::ScoreCityForInquisitorOffensive (V:CvReligionClasses.cpp:11121-11170): our city, not under siege ([CityDangerAi.isUnderSiege]),
+     *  where heresy should go ([shouldRemoveHeresyLikeVp]) and the followers of other religions, doubled when ours is not the majority, are more than 6;
+     *  the score is then the distance to [unit] (as VP has it, the farthest first, and 0 for a unit in the city), or that follower count without a unit.
+     */
+    fun scoreCityForInquisitorOffensiveLikeVp(civ: Civilization, city: City, unit: MapUnit?, religion: Religion): Int {
+        if (CityDangerAi.isUnderSiege(city) || city.civ != civ) return 0
+        if (!shouldRemoveHeresyLikeVp(city, religion.name)) return 0
+        var otherFollowers = followersOfOtherReligions(city, religion.name)
+        if (majorityReligionName(city) != religion.name) otherFollowers *= 2
+        if (otherFollowers <= 6) return 0
+        return unit?.let { city.getCenterTile().aerialDistanceTo(it.getTile()) } ?: otherFollowers
+    }
+
+    /**
+     *  CvReligionAI::ScoreCityForInquisitorDefensive (V:CvReligionClasses.cpp:11173-11222): our city, not under siege, where heresy need not go;
+     *  7 for our holy city, + 11 on the border with an [unfriendly] major ([AiOperationLogic.isBorderLand], CvCity::isBorderCity), + a missionary's
+     *  impact percent; above 23 it scores the distance to [unit] (or itself without a unit), else 0.
+     */
+    fun scoreCityForInquisitorDefensiveLikeVp(
+        civ: Civilization, city: City, unit: MapUnit?, religion: Religion, unfriendly: List<Civilization>
+    ): Int {
+        if (CityDangerAi.isUnderSiege(city) || city.civ != civ) return 0
+        if (shouldRemoveHeresyLikeVp(city, religion.name)) return 0
+        var score = if (city.isHolyCityOf(religion.name)) 7 else 0
+        if (unfriendly.isNotEmpty() && AiOperationLogic.isBorderLand(civ, city.getCenterTile(), unfriendly)) score += 11
+        score += missionaryImpactPercentLikeVp(civ, accumulatedPressureLikeVp(city))
+        if (score <= 23) return 0
+        return unit?.let { city.getCenterTile().aerialDistanceTo(it.getTile()) } ?: score
+    }
+
+    /** CvCityReligions::IsDefendedByOurInquisitor: another inquisitor of the city's owner and of [religion] stands in or next to [city] */
+    private fun isDefendedByOurInquisitor(city: City, religion: String, ignore: MapUnit): Boolean =
+        city.getCenterTile().getTilesInDistance(1).any { tile ->
+            tile.getUnits().any {
+                it != ignore && it.civ == city.civ && it.religion == religion && it.hasUnique(UniqueType.PreventSpreadingReligion)
+            }
+        }
+
+    /** The best first, ties going to the later one: VP's ascending std::stable_sort, then std::reverse */
+    private fun bestFirstLikeVp(targets: List<Pair<City, Int>>): List<City> =
+        targets.asReversed().sortedByDescending { it.second }.map { it.first }
+
+    /**
+     *  CvReligionAI::ChooseMissionaryTargetCity (V:CvReligionClasses.cpp:6367-6431) before its path check: the cities with a positive
+     *  [scoreCityForMissionaryLikeVp], best first, for a [unit] of the religion we spread; skipping a city whose danger to the unit is above a quarter of
+     *  its health ([com.unciv.logic.automation.unit.PlotDanger]), one being razed, one [taken] by another missionary this turn and one more than 37
+     *  steps from our nearest city ([CityDistances.cityDistancePathLength]). The caller takes the first it can reach.
+     */
+    fun missionaryTargetsLikeVp(civ: Civilization, unit: MapUnit, taken: Map<City, MapUnit>): List<City> {
+        val religion = religionToSpread(civ) ?: return emptyList()
+        if (unit.religion != religion.name) return emptyList()
+        val danger = civ.ai.plotDanger
+        val targets = ArrayList<Pair<City, Int>>()
+        for (other in civ.gameInfo.civilizations) {
+            if (!other.isAlive()) continue
+            for (city in other.cities) {
+                if (danger.get(unit, city.getCenterTile()) > unit.health / 4 || city.isBeingRazed) continue
+                val holder = taken[city]
+                if (holder != null && holder != unit) continue
+                if (CityDistances.cityDistancePathLength(civ, city.getCenterTile()) > MISSIONARY_MAX_CITY_PATH_LENGTH) continue
+                val score = scoreCityForMissionaryLikeVp(civ, city, unit, religion)
+                if (score > 0) targets += city to score
+            }
+        }
+        return bestFirstLikeVp(targets)
+    }
+
+    /** The cities an inquisitor would go to, best first: to remove heresy, and to guard */
+    class InquisitorTargets(val offensive: List<City>, val defensive: List<City>)
+
+    /**
+     *  CvReligionAI::ChooseInquisitorTargetCity (V:CvReligionClasses.cpp:6434-6489) before its path checks: our cities without danger to [unit],
+     *  not [taken] by another inquisitor this turn and not already guarded by another of our inquisitors ([isDefendedByOurInquisitor]), scored by
+     *  [scoreCityForInquisitorOffensiveLikeVp] and [scoreCityForInquisitorDefensiveLikeVp] for the unit's own religion, which need not be the one we
+     *  spread; there must be one to spread, though. The caller tries the offensive ones first.
+     */
+    fun inquisitorTargetsLikeVp(civ: Civilization, unit: MapUnit, taken: Map<City, MapUnit>): InquisitorTargets {
+        val religion = unit.religion?.let { civ.gameInfo.religions[it] }
+        if (religionToSpread(civ) == null || religion == null || !religion.isMajorReligion()) return InquisitorTargets(emptyList(), emptyList())
+        val danger = civ.ai.plotDanger
+        val unfriendly = AiOperationLogic.unfriendlyMajors(civ)
+        val offensive = ArrayList<Pair<City, Int>>()
+        val defensive = ArrayList<Pair<City, Int>>()
+        for (city in civ.cities) {
+            if (danger.get(unit, city.getCenterTile()) > 0) continue
+            val holder = taken[city]
+            if (holder != null && holder != unit) continue
+            if (isDefendedByOurInquisitor(city, religion.name, unit)) continue
+            val offensiveScore = scoreCityForInquisitorOffensiveLikeVp(civ, city, unit, religion)
+            if (offensiveScore > 0) offensive += city to offensiveScore
+            val defensiveScore = scoreCityForInquisitorDefensiveLikeVp(civ, city, unit, religion, unfriendly)
+            if (defensiveScore > 0) defensive += city to defensiveScore
+        }
+        return InquisitorTargets(bestFirstLikeVp(offensive), bestFirstLikeVp(defensive))
     }
     //endregion
 

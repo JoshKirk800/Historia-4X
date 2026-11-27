@@ -1401,6 +1401,9 @@ class ModConstants {
      *  an ideology few follow and one just chosen get pressure of their own; the first of the strongest others is preferred; the unhappiness grows with
      *  the dissatisfaction itself. Its limits of the types are 4 and 7 in [publicOpinionCivilResistance] and [publicOpinionRevolutionaryWave] */
     var publicOpinionLikeVp = false
+    /** Vox Populi's religion and culture AI (CvReligionAI, CvHomelandAI): missionaries and inquisitors pick their cities by VP's scores
+     *  (CvReligionAI::ChooseMissionaryTargetCity, ChooseInquisitorTargetCity), one unit per city a turn, avoiding cities in danger */
+    var religionCultureAiLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

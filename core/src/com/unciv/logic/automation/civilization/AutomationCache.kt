@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.unit.PlotDanger
+import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
 
@@ -15,6 +16,10 @@ class AutomationCache {
      *  The units whose moves were decided this turn (CvUnit::TurnProcessed): whoever commands a unit adds it here, every later routine skips it.
      */
     val processedUnits = HashSet<MapUnit>()
+
+    /** The cities missionaries and inquisitors set out for this turn (CvHomelandAI::m_automatedTargetPlots, burned targets): one unit per city */
+    val missionaryTargets = HashMap<City, MapUnit>()
+    val inquisitorTargets = HashMap<City, MapUnit>()
 
     /** The plot danger of [civ] for the current turn, see [com.unciv.logic.automation.strategy.CivAi.plotDanger] */
     fun plotDanger(civ: Civilization): PlotDanger = civ.ai.plotDanger

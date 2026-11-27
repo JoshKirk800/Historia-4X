@@ -228,11 +228,11 @@ class GreatWorkSwapAutomationTests {
         game.ruleset.modOptions.constants.greatWorkThemingLikeVp = true
     }
 
-    /** A building with two art slots and [bonuses], in their order */
-    private fun gallery(name: String, vararg bonuses: ThemingBonus): Building = Building().apply {
+    /** A building with [slots] art slots and [bonuses], in their order */
+    private fun gallery(name: String, vararg bonuses: ThemingBonus, slots: Int = 2): Building = Building().apply {
         this.name = name
         ruleset = game.ruleset
-        uniques.add("Has [2] [Art/Artifact] Great Work slots")
+        uniques.add("Has [$slots] [Art/Artifact] Great Work slots")
         themingBonuses.addAll(bonuses)
         game.ruleset.buildings[name] = this
     }
@@ -375,6 +375,189 @@ class GreatWorkSwapAutomationTests {
         likeVp()
         // 1 x (100 + 50 + 50)% = 2; the puppets' percentage is not for this city
         assertEquals(2, patronCity.greatWorks.getThemingBonus(gallery))
+    }
+
+    @Test
+    fun `like Vox Populi an offered work completes a set for the first of our works not in it, which the other then offers`() {
+        likeVp()
+        val (museum, toGive, wanted) = setUpSwap()
+        other.culture.swappableArt = wanted.id
+        civ.culture.swappableArt = "" // Vox Populi marks the work it gives when it gives it
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        // "Museum of [era] Art": our Ancient art and theirs
+        assertEquals(wanted, worksIn(city, museum)[1])
+        assertEquals(1, city.greatWorks.getThemingBonus(museum))
+        assertTrue(other.cities.first().greatWorks.getWorks().any { it === toGive })
+        assertEquals("what the other got is what it offers now", toGive.id, other.culture.swappableArt)
+        assertEquals("none of our art is left to offer", "", civ.culture.swappableArt)
+    }
+
+    @Test
+    fun `like Vox Populi nothing is offered by a civilization at war with us`() {
+        likeVp()
+        val (museum, toGive, wanted) = setUpSwap()
+        other.culture.swappableArt = wanted.id
+        civ.getDiplomacyManager(other)!!.declareWar()
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        assertTrue(other.cities.first().greatWorks.getWorks().any { it === wanted })
+        assertTrue(worksIn(city, museum).any { it === toGive })
+        assertEquals("the first of our works is the one we offer", worksIn(city, museum)[0]!!.id, civ.culture.swappableArt)
+    }
+
+    @Test
+    fun `like Vox Populi a set of offered works needs as many of our works as slots`() {
+        likeVp()
+        val gallery = gallery("Gallery", bonus("Their art", 3, 1) { mustBeArt = true; requiresAnyButOwner = true })
+        city.cityConstructions.addBuilding(gallery)
+        val ours = art("Ancient era", civ)
+        put(city, gallery, 0, ours)
+        val fromOther = art("Ancient era", other)
+        val fromThird = art("Ancient era", third)
+        val otherCity = other.cities.first()
+        val thirdCity = third.cities.first()
+        val otherGallery = building("Museum")
+        otherCity.cityConstructions.addBuilding(otherGallery)
+        thirdCity.cityConstructions.addBuilding(otherGallery)
+        put(otherCity, otherGallery, 0, fromOther)
+        put(thirdCity, otherGallery, 0, fromThird)
+        other.culture.swappableArt = fromOther.id
+        third.culture.swappableArt = fromThird.id
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        // Both offers make the set, but we hold one work for two slots: no swap, our work fills the gallery
+        assertEquals(listOf(ours, null), worksIn(city, gallery))
+        assertEquals(listOf(fromOther, null), worksIn(otherCity, otherGallery))
+        assertEquals(listOf(fromThird, null), worksIn(thirdCity, otherGallery))
+    }
+
+    @Test
+    fun `like Vox Populi the leftovers fill with our works only`() {
+        likeVp()
+        val museum = building("Museum")
+        city.cityConstructions.addBuilding(museum)
+        secondCity.cityConstructions.addBuilding(museum)
+        val ours = art("Medieval era", civ)
+        put(secondCity, museum, 1, ours)
+        val (otherCity, wanted) = other.cities.first() to art("Ancient era", other)
+        otherCity.cityConstructions.addBuilding(museum)
+        put(otherCity, museum, 0, wanted)
+        other.culture.swappableArt = wanted.id
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        // The capital's Museum comes first: our work moves there, the offer is not swapped in beside it
+        assertEquals(listOf(ours, null), worksIn(city, museum))
+        assertEquals(listOf(wanted, null), worksIn(otherCity, museum))
+    }
+
+    @Test
+    fun `like Vox Populi the Louvre counts our works from its first artifact, and leaves a slot when nothing is left to give`() {
+        likeVp()
+        val louvre = gallery("Louvre", bonus("Their art and artifacts", 8, 5) { mustBeEqualArtArtifact = true; requiresAnyButOwner = true }, slots = 4)
+        city.cityConstructions.addBuilding(louvre)
+        secondCity.cityConstructions.addBuilding(building("Museum"))
+        val artifact1 = art("Ancient era", third, GreatWorkType.Artifact)
+        val artifact2 = art("Ancient era", third, GreatWorkType.Artifact)
+        val ourArt = art("Ancient era", civ)
+        put(city, louvre, 0, ourArt)
+        put(secondCity, building("Museum"), 0, artifact1)
+        put(secondCity, building("Museum"), 1, artifact2)
+        val fromOther = art("Ancient era", other)
+        val fromThird = art("Ancient era", third)
+        val otherCity = other.cities.first()
+        val thirdCity = third.cities.first()
+        otherCity.cityConstructions.addBuilding(building("Museum"))
+        thirdCity.cityConstructions.addBuilding(building("Museum"))
+        put(otherCity, building("Museum"), 0, fromOther)
+        put(thirdCity, building("Museum"), 0, fromThird)
+        other.culture.swappableArt = fromOther.id
+        third.culture.swappableArt = fromThird.id
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        // The art count adds the first artifact (ours) once per piece of art tried: 2 by the second, enough. Our art goes for the first offer;
+        // for the second nothing of ours is left, so its slot is skipped
+        assertEquals(listOf(artifact1, artifact2, fromOther, null), worksIn(city, louvre))
+        assertTrue(otherCity.greatWorks.getWorks().any { it === ourArt })
+        assertTrue(thirdCity.greatWorks.getWorks().any { it === fromThird })
+    }
+
+    /** Artifacts of a third civilization in our [where]'s Museum, and [offers] made by [other], each in its Museum */
+    private fun ownArtifactsAndOffers(where: City, era: List<String>, vararg offers: GreatWorkInstance): List<GreatWorkInstance> {
+        val museum = building("Museum")
+        where.cityConstructions.addBuilding(museum)
+        val artifacts = era.map { art(it, third, GreatWorkType.Artifact) }
+        for ((slot, artifact) in artifacts.withIndex()) put(where, museum, slot, artifact)
+        val otherCity = other.cities.first()
+        otherCity.cityConstructions.addBuilding(museum)
+        for ((slot, offer) in offers.withIndex()) put(otherCity, museum, slot, offer)
+        return artifacts
+    }
+
+    @Test
+    fun `like Vox Populi with no particular kind our works are tried before those offered`() {
+        likeVp()
+        val gallery = gallery("Gallery", bonus("Their era", 3, 5) { sameEra = true; requiresAnyButOwner = true }, slots = 3)
+        city.cityConstructions.addBuilding(gallery)
+        val ourArt = art("Medieval era", civ)
+        val ancientArtifact = art("Ancient era", third, GreatWorkType.Artifact)
+        put(city, gallery, 0, ancientArtifact)
+        put(city, gallery, 1, ourArt)
+        val offeredArt = art("Medieval era", other)
+        val offeredArtifact = art("Ancient era", other, GreatWorkType.Artifact)
+        val (medieval1, medieval2) = ownArtifactsAndOffers(secondCity, listOf("Medieval era", "Medieval era"), offeredArt, offeredArtifact)
+        other.culture.swappableArt = offeredArt.id
+        other.culture.swappableArtifact = offeredArtifact.id
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        // Our Medieval artifacts start the set and the offered art completes it, for our art; trying the offer first would put it first
+        assertEquals(listOf(medieval1, medieval2, offeredArt), worksIn(city, gallery))
+        assertTrue(other.cities.first().greatWorks.getWorks().any { it === ourArt })
+    }
+
+    @Test
+    fun `like Vox Populi a slot stays for the next work when an offered one can not be had`() {
+        likeVp()
+        val gallery = gallery("Gallery", bonus("Their era", 3, 5) { sameEra = true; requiresAnyButOwner = true }, slots = 3)
+        city.cityConstructions.addBuilding(gallery)
+        val ancientArtifact = art("Ancient era", third, GreatWorkType.Artifact)
+        put(city, gallery, 0, ancientArtifact)
+        val offeredArt = art("Ancient era", other)
+        val offeredArtifact = art("Ancient era", other, GreatWorkType.Artifact)
+        val (medieval1, _) = ownArtifactsAndOffers(secondCity, listOf("Medieval era", "Medieval era"), offeredArt, offeredArtifact)
+        other.culture.swappableArt = offeredArt.id
+        other.culture.swappableArtifact = offeredArtifact.id
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        // We have no art to give for the offered art; the offered artifact, had for our first Medieval artifact, takes the slot it left
+        assertEquals(listOf(ancientArtifact, offeredArtifact, null), worksIn(city, gallery))
+        assertTrue(other.cities.first().greatWorks.getWorks().any { it === medieval1 })
+    }
+
+    @Test
+    fun `like Vox Populi the Louvre counts our works for the art up to where the search stopped`() {
+        likeVp()
+        val louvre = gallery("Louvre", bonus("Art and artifacts", 8, 5) { mustBeEqualArtArtifact = true }, slots = 4)
+        city.cityConstructions.addBuilding(louvre)
+        val ourArt = art("Ancient era", civ)
+        put(city, louvre, 0, ourArt)
+        val fromOther = art("Ancient era", other)
+        ownArtifactsAndOffers(secondCity, listOf("Ancient era", "Ancient era"), fromOther)
+        other.culture.swappableArt = fromOther.id
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        // With our art first the set takes the offer, but only the first artifact is counted for it, 1 of 2: no theme. Our artifacts then theme
+        // the Museum, and our art alone fills the Louvre
+        assertEquals(listOf(ourArt, null, null, null), worksIn(city, louvre))
+        assertTrue(other.cities.first().greatWorks.getWorks().any { it === fromOther })
     }
     //endregion
 }

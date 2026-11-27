@@ -17,6 +17,7 @@ import com.unciv.models.ruleset.GreatWorkInstance
 import com.unciv.models.ruleset.GreatWorkSlotType
 import com.unciv.models.ruleset.GreatWorkType
 import com.unciv.models.ruleset.ThemingBonus
+import java.util.IdentityHashMap
 
 /**
  * How the AI arranges its Great Works each turn (CvPlayerCulture::DoSwapGreatWorks and what it calls, SDK:CvCultureClasses.cpp:941-1749):
@@ -24,7 +25,8 @@ import com.unciv.models.ruleset.ThemingBonus
  * themed with whole matching sets of works, undamaged cities first; then those still one work short try to swap with another civilization;
  * then the first work left of each kind is marked as the one to swap; then the leftovers fill the unthemed buildings.
  * With the ModConstants `greatWorkThemingLikeVp`, Vox Populi's choice of buildings and their order: no works into a city that might fall,
- * undamaged puppets between the other undamaged cities and the endangered ones, and the theming bonuses of a building from the highest.
+ * undamaged puppets between the other undamaged cities and the endangered ones, and the theming bonuses of a building from the highest;
+ * the works other civilizations offer are in the lists from the start and are swapped in when a set takes one, with no later pass for a missing work.
  *
  * Swaps between civilizations (CvGameCulture::SwapGreatWorks): both works must be the ones their owners marked as swappable. As in the DLL
  * the work wanted is looked up among the works of its creator, so only works still owned by the civilization that made them can be taken.
@@ -42,8 +44,12 @@ object GreatWorkSwapAutomation {
     /** What one call works with: the civilization, and the cities whose works were moved, whose stats are updated once at the end */
     private class Context(val civ: Civilization) {
         val ruleset = civ.gameInfo.ruleset
+        val likeVp = ruleset.modOptions.constants.greatWorkThemingLikeVp
         val touchedCities = LinkedHashSet<City>()
+        /** Vox Populi: the works in the lists that another civilization holds (CvGreatWorkAvailableForUse::m_eOwnedByPlayer), as the lists see it */
+        val heldBy = IdentityHashMap<GreatWorkInstance, Civilization>()
         fun typeOf(work: GreatWorkInstance): GreatWorkType? = ruleset.greatWorks[work.work]?.type
+        fun isOurs(work: GreatWorkInstance) = !heldBy.containsKey(work)
     }
 
     /** CvPlayerCulture::DoSwapGreatWorks (CvEconomicAI::DoTurn, AI players only) */
@@ -61,7 +67,7 @@ object GreatWorkSwapAutomation {
         val music = ArrayList<GreatWorkInstance>()
 
         // Cities in order, their buildings in the order of the ruleset (the DLL loops over building classes), slots in order
-        val likeVp = context.ruleset.modOptions.constants.greatWorkThemingLikeVp
+        val likeVp = context.likeVp
         for (city in civ.cities) {
             // Vox Populi (CvPlayerCulture::DoSwapGreatWorks, V:CvCultureClasses.cpp:1285-1304): a city that might fall soon gives its works but takes none;
             // the capital is never endangered, another city is when it has lost more than half its health or is razed below 3 citizens; puppets come
@@ -105,11 +111,12 @@ object GreatWorkSwapAutomation {
                           works1: ArrayList<GreatWorkInstance>, works2: ArrayList<GreatWorkInstance>) {
         // SortThemingBonus: by the AI priority of the first theming bonus, buildings without one last
         val buildings = unsorted.sortedByDescending { it.building.themingBonuses.firstOrNull()?.aiPriority ?: Int.MIN_VALUE }
+        if (context.likeVp) {
+            moveWorksLikeVp(context, type, buildings, works1, works2)
+            return
+        }
 
-        // Undamaged cities, then (Vox Populi, V:CvCultureClasses.cpp:1476-1518) undamaged puppets, then endangered cities
-        for (building in buildings) if (!building.endangered && !building.puppet)
-            building.themed = themeBuilding(context, building, works1, works2, considerOtherPlayers = false)
-        for (building in buildings) if (!building.endangered && building.puppet)
+        for (building in buildings) if (!building.endangered)
             building.themed = themeBuilding(context, building, works1, works2, considerOtherPlayers = false)
         for (building in buildings) if (building.endangered)
             building.themed = themeBuilding(context, building, works1, works2, considerOtherPlayers = false)
@@ -128,11 +135,260 @@ object GreatWorkSwapAutomation {
             GreatWorkSlotType.Music -> {}
         }
 
+        for (building in buildings) if (!building.endangered && !building.themed) fillBuilding(context, building, works1, works2)
+        for (building in buildings) if (building.endangered && !building.themed) fillBuilding(context, building, works1, works2)
+    }
+
+    /**
+     * Vox Populi's MoveWorks (V:CvCultureClasses.cpp:1394-1597): the work each other civilization we have met and are at peace with offers joins the
+     * lists first (not for music); then undamaged cities, undamaged puppets and endangered cities are themed, a work offered being swapped in when a
+     * set takes it; the first of our works left is the one we offer; the leftovers fill the same tiers, with our works only.
+     */
+    private fun moveWorksLikeVp(context: Context, type: GreatWorkSlotType, buildings: List<EmpireBuilding>,
+                                works1: ArrayList<GreatWorkInstance>, works2: ArrayList<GreatWorkInstance>) {
+        val civ = context.civ
+        if (type != GreatWorkSlotType.Music) for (other in civ.gameInfo.civilizations) {
+            if (!isPlayerValid(civ, other) || civ.isAtWarWith(other)) continue
+            fun offer(id: String, into: ArrayList<GreatWorkInstance>) {
+                val work = findSlotById(other, id)?.getWork() ?: return
+                context.heldBy[work] = other
+                into.add(work)
+            }
+            if (type == GreatWorkSlotType.Literature) offer(other.culture.swappableWriting, works1)
+            else {
+                offer(other.culture.swappableArt, works1)
+                offer(other.culture.swappableArtifact, works2)
+            }
+        }
+
+        // Undamaged cities, then undamaged puppets, then endangered cities (V:CvCultureClasses.cpp:1476-1518)
+        for (building in buildings) if (!building.endangered && !building.puppet) building.themed = themeBuildingLikeVp(context, building, works1, works2)
+        for (building in buildings) if (!building.endangered && building.puppet) building.themed = themeBuildingLikeVp(context, building, works1, works2)
+        for (building in buildings) if (building.endangered) building.themed = themeBuildingLikeVp(context, building, works1, works2)
+
+        // The first of our works left is the one we are willing to trade (V:CvCultureClasses.cpp:1522-1594)
+        val culture = civ.culture
+        when (type) {
+            GreatWorkSlotType.Literature -> culture.swappableWriting = works1.firstOrNull { context.isOurs(it) }?.id ?: ""
+            GreatWorkSlotType.ArtArtifact -> {
+                culture.swappableArt = works1.firstOrNull { context.isOurs(it) }?.id ?: ""
+                culture.swappableArtifact = works2.firstOrNull { context.isOurs(it) }?.id ?: ""
+            }
+            GreatWorkSlotType.Music -> {}
+        }
+
         // The same order for the leftovers (CvPlayerCulture::MoveSingleWorks, V:CvCultureClasses.cpp:2105-2180; all Vox Populi's slot buildings
         // yield culture, so its split by the focused yield changes nothing)
-        for (building in buildings) if (!building.endangered && !building.puppet && !building.themed) fillBuilding(context, building, works1, works2)
-        for (building in buildings) if (!building.endangered && building.puppet && !building.themed) fillBuilding(context, building, works1, works2)
-        for (building in buildings) if (building.endangered && !building.themed) fillBuilding(context, building, works1, works2)
+        for (building in buildings) if (!building.endangered && !building.puppet && !building.themed) fillBuildingLikeVp(context, building, works1, works2)
+        for (building in buildings) if (!building.endangered && building.puppet && !building.themed) fillBuildingLikeVp(context, building, works1, works2)
+        for (building in buildings) if (building.endangered && !building.themed) fillBuildingLikeVp(context, building, works1, works2)
+    }
+
+    /**
+     * Vox Populi's ThemeBuilding (V:CvCultureClasses.cpp:1629-1880): the bonuses from the highest; with no kind required, our works come before those
+     * offered. A set counts only if as many of our works as there are slots come up to where the search for it stopped, counting from the first work
+     * tried. The chosen works go into the slots in order, a slot being skipped when an offered work can not be had
+     */
+    private fun themeBuildingLikeVp(context: Context, entry: EmpireBuilding, works1: ArrayList<GreatWorkInstance>, works2: ArrayList<GreatWorkInstance>): Boolean {
+        val building = entry.building
+        val numSlots = entry.slots
+        if (numSlots < 2) return false
+        val owner = context.civ.civName
+        val oursFirst = { works1.filter { context.isOurs(it) } + works2.filter { context.isOurs(it) } +
+            works1.filter { !context.isOurs(it) } + works2.filter { !context.isOurs(it) } }
+
+        // The bonuses from the highest, those of one value in order (V:CvCultureClasses.cpp:1648-1657)
+        for ((bonusIndex, bonus) in building.themingBonuses.withIndex().sortedByDescending { it.value.bonus }) {
+            val worksToConsider: List<GreatWorkInstance> = when {
+                bonus.mustBeArt -> ArrayList(works1)
+                bonus.mustBeArtifact -> ArrayList(works2)
+                bonus.mustBeEqualArtArtifact -> {
+                    if (themeEqualArtArtifactLikeVp(context, entry, bonusIndex, numSlots, works1, works2)) return true
+                    continue
+                }
+                else -> oursFirst()
+            }
+            if (worksToConsider.size < numSlots) continue
+
+            var ownedWorks = 0
+            for ((starterIndex, starter) in worksToConsider.withIndex()) {
+                if (context.isOurs(starter)) ownedWorks++
+                if (bonus.requiresOwner && starter.creatorCiv != owner) continue
+                if (bonus.requiresAnyButOwner && starter.creatorCiv == owner) continue
+
+                val chosen = arrayListOf(starter)
+                val players = arrayListOf(starter.creatorCiv)
+                val eras = arrayListOf(starter.era)
+                var extraOwnedWorks = 0
+                for (index in starterIndex + 1 until worksToConsider.size) {
+                    if (chosen.size >= numSlots) break
+                    val work = worksToConsider[index]
+                    if (context.isOurs(work)) extraOwnedWorks++
+                    if (isValidForThemingBonus(bonus, work.era, eras, work.creatorCiv, players, owner)) {
+                        chosen.add(work)
+                        players.add(work.creatorCiv)
+                        eras.add(work.era)
+                    }
+                }
+                if (ownedWorks + extraOwnedWorks < numSlots) continue
+                if (chosen.size != numSlots || getThemingBonusIndex(context, owner, building, chosen) != bonusIndex) continue
+
+                val toIgnore = ArrayList<GreatWorkInstance>()
+                var slot = 0
+                for (work in chosen) if (moveWorkIntoSlotLikeVp(context, work, entry, slot, works1, works2, toIgnore)) {
+                    slot++
+                    toIgnore.add(work)
+                }
+                // What is left, ours before those of others (whose they are as the moves left it)
+                for (list in listOf(works1, works2)) {
+                    val left = list.filter { work -> chosen.none { it === work } }
+                    list.clear()
+                    list.addAll(left.filter { context.isOurs(it) } + left.filter { !context.isOurs(it) })
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Vox Populi's ThemeEqualArtArtifact (V:CvCultureClasses.cpp:1883-2087): no looking to other civilizations for a missing piece; a set counts only
+     * with enough of our works up to where its search stopped. As in the source, the count for the art restarts at 0 and adds the starting artifact
+     * for every piece of art tried, and the count of artifacts goes on from there.
+     */
+    private fun themeEqualArtArtifactLikeVp(context: Context, entry: EmpireBuilding, bonusIndex: Int, numSlots: Int,
+                                            works1: ArrayList<GreatWorkInstance>, works2: ArrayList<GreatWorkInstance>): Boolean {
+        val worksInHalf = numSlots / 2
+        if (worksInHalf % 2 != 0 || works1.size < worksInHalf || works2.size < worksInHalf) return false
+        val building = entry.building
+        if (building.greatWorkSlotTypes.size < 2) return false
+        val bonus = building.themingBonuses[bonusIndex]
+        val owner = context.civ.civName
+
+        var ownedWorks = 0
+        val artifacts = ArrayList(works2)
+        val arts = ArrayList(works1)
+        for ((starterIndex, starter) in artifacts.withIndex()) {
+            if (context.isOurs(starter)) ownedWorks++
+            if (bonus.requiresOwner && starter.creatorCiv != owner) continue
+            if (bonus.requiresAnyButOwner && starter.creatorCiv == owner) continue
+
+            val artifactsChosen = arrayListOf(starter)
+            val artifactPlayers = arrayListOf(starter.creatorCiv)
+            val artifactEras = arrayListOf(starter.era)
+            var extraOwnedWorks = 0
+            for (index in starterIndex + 1 until artifacts.size) {
+                if (artifactsChosen.size >= worksInHalf) break
+                val work = artifacts[index]
+                if (context.isOurs(work)) extraOwnedWorks++
+                if (isValidForThemingBonus(bonus, work.era, artifactEras, work.creatorCiv, artifactPlayers, owner)) {
+                    artifactsChosen.add(work)
+                    artifactPlayers.add(work.creatorCiv)
+                    artifactEras.add(work.era)
+                }
+            }
+            if (ownedWorks + extraOwnedWorks < worksInHalf) continue
+            if (artifactsChosen.size != worksInHalf) continue
+
+            ownedWorks = 0
+            var chosen = ArrayList<GreatWorkInstance>()
+            for ((artIndex, art) in arts.withIndex()) {
+                if (chosen.size >= numSlots) break
+                if (context.isOurs(starter)) ownedWorks++
+                if (bonus.requiresOwner && art.creatorCiv != owner) continue
+                if (bonus.requiresAnyButOwner && art.creatorCiv == owner) continue
+                if (bonus.sameEra && art.era != artifactEras[0]) continue
+                if ((bonus.uniqueEras || bonus.consecutiveEras) && art.era in artifactEras) continue
+
+                chosen = ArrayList(artifactsChosen)
+                val players = ArrayList(artifactPlayers)
+                val eras = ArrayList(artifactEras)
+                chosen.add(art)
+                players.add(art.creatorCiv)
+                eras.add(art.era)
+                extraOwnedWorks = 0
+                for (index in artIndex + 1 until arts.size) {
+                    if (chosen.size >= numSlots) break
+                    val work = arts[index]
+                    if (context.isOurs(work)) extraOwnedWorks++
+                    if (isValidForThemingBonus(bonus, work.era, eras, work.creatorCiv, players, owner)) {
+                        chosen.add(work)
+                        players.add(work.creatorCiv)
+                        eras.add(work.era)
+                    }
+                }
+                if (ownedWorks + extraOwnedWorks < worksInHalf) continue
+                if (chosen.size != numSlots || getThemingBonusIndex(context, owner, building, chosen) != bonusIndex) continue
+
+                val toIgnore = ArrayList<GreatWorkInstance>()
+                var slot = 0
+                for (work in chosen) for (list in listOf(works1, works2)) {
+                    if (list.none { it === work }) continue
+                    if (moveWorkIntoSlotLikeVp(context, work, entry, slot, works1, works2, toIgnore)) {
+                        slot++
+                        toIgnore.add(work)
+                    }
+                }
+                works1.removeAll { work -> chosen.any { it === work } }
+                works2.removeAll { work -> chosen.any { it === work } }
+                return true
+            }
+        }
+        return false
+    }
+
+    /** Vox Populi's FillBuilding (V:CvCultureClasses.cpp:2215-2228): any of our works, in the order of the lists; the works of others are left out */
+    private fun fillBuildingLikeVp(context: Context, entry: EmpireBuilding, works1: ArrayList<GreatWorkInstance>, works2: ArrayList<GreatWorkInstance>) {
+        if (entry.slots < 1) return
+        val chosen = (works1 + works2).filter { context.isOurs(it) }.take(entry.slots)
+        for ((slotIndex, work) in chosen.withIndex()) moveWorkIntoSlotLikeVp(context, work, entry, slotIndex, works1, works2, emptyList())
+        works1.removeAll { work -> chosen.any { it === work } }
+        works2.removeAll { work -> chosen.any { it === work } }
+    }
+
+    /**
+     * Vox Populi's MoveWorkIntoSlot (V:CvCultureClasses.cpp:2270-2490): one of our works moves as in [moveWorkIntoSlot]. A work another civilization
+     * offered is had for the first of our works of its list (art and writing from the first list, artifacts from the second) not in [toIgnore], which
+     * becomes the one we offer: the two are swapped, then the work we got moves into the slot and its old owner is told. False only when we have no
+     * work to give. As in the source, the lists take the swap as done even if [swapGreatWorksLikeVp] refused it
+     */
+    private fun moveWorkIntoSlotLikeVp(context: Context, work: GreatWorkInstance, entry: EmpireBuilding, slotIndex: Int,
+                                       works1: List<GreatWorkInstance>, works2: List<GreatWorkInstance>, toIgnore: List<GreatWorkInstance>): Boolean {
+        val holder = context.heldBy[work]
+        if (holder == null) {
+            moveWorkIntoSlot(context, work, entry, slotIndex)
+            return true
+        }
+        val type = context.typeOf(work) ?: return false
+        val giveFrom = if (type == GreatWorkType.Artifact) works2 else works1
+        val toGive = giveFrom.firstOrNull { candidate -> context.isOurs(candidate) && toIgnore.none { it === candidate } } ?: return false
+        setSwappable(context.civ, type, toGive.id)
+        swapGreatWorksLikeVp(context, context.civ, toGive, holder, work)
+        context.heldBy.remove(work)
+        context.heldBy[toGive] = holder
+        moveWorkIntoSlot(context, work, entry, slotIndex)
+        holder.addNotification("[${context.civ.civName}] has swapped your Great Work [${work.work}] for the Great Work [${toGive.work}]",
+            NotificationCategory.General, "StatIcons/Culture")
+        return true
+    }
+
+    /**
+     * Vox Populi's CvGameCulture::SwapGreatWorks (V:CvCultureClasses.cpp:540-775): not between civilizations at war; both works must be of one kind and be
+     * what their owners marked as swappable. Works are exchanged slot for slot; [first] then offers nothing and [second] offers the work it got.
+     */
+    private fun swapGreatWorksLikeVp(context: Context, first: Civilization, firstWork: GreatWorkInstance, second: Civilization, secondWork: GreatWorkInstance) {
+        if (!first.isAlive() || !second.isAlive() || first.isAtWarWith(second)) return
+        val type = context.typeOf(firstWork) ?: return
+        if (type != context.typeOf(secondWork)) return
+        if (getSwappable(first, type) != firstWork.id || getSwappable(second, type) != secondWork.id) return
+        val firstSlot = findSlot(first, firstWork) ?: return
+        val secondSlot = findSlot(second, secondWork) ?: return
+        firstSlot.city.greatWorks.place(secondWork, firstSlot)
+        secondSlot.city.greatWorks.place(firstWork, secondSlot)
+        setSwappable(first, type, "")
+        setSwappable(second, type, firstWork.id)
+        context.touchedCities.add(firstSlot.city)
+        secondSlot.city.cityStats.update()
     }
 
     /** CvPlayerCulture::ThemeBuilding: fills [entry] with works that make one of its theming bonuses, trying the bonuses in order */
@@ -143,11 +399,7 @@ object GreatWorkSwapAutomation {
         if (numSlots < 2) return false
         val owner = context.civ.civName
 
-        // Vox Populi tries the bonuses from the highest, those of one value in order (V:CvCultureClasses.cpp:1648-1657)
-        val bonuses = if (context.ruleset.modOptions.constants.greatWorkThemingLikeVp)
-            building.themingBonuses.withIndex().sortedByDescending { it.value.bonus }
-        else building.themingBonuses.withIndex().toList()
-        for ((bonusIndex, bonus) in bonuses) {
+        for ((bonusIndex, bonus) in building.themingBonuses.withIndex()) {
             val worksToConsider: List<GreatWorkInstance> = when {
                 bonus.mustBeArt -> ArrayList(works1)
                 bonus.mustBeArtifact -> ArrayList(works2)
@@ -376,6 +628,13 @@ object GreatWorkSwapAutomation {
 
     private fun findSlot(civ: Civilization, work: GreatWorkInstance): GreatWorkSlot? {
         for (city in civ.cities) for (slot in city.greatWorks.getSlots()) if (slot.getWork() === work) return slot
+        return null
+    }
+
+    /** Where [civ] keeps the work with this [id], none for an empty one */
+    private fun findSlotById(civ: Civilization, id: String): GreatWorkSlot? {
+        if (id.isEmpty()) return null
+        for (city in civ.cities) for (slot in city.greatWorks.getSlots()) if (slot.getWork()?.id == id) return slot
         return null
     }
 

@@ -316,6 +316,11 @@ class ModConstants {
      *  supply stops the training, and the AI's own army sizing and `HurryChoice` hold it back. Staged with the flip of the AI's supply consumers (decision D26) */
     var unitSupplyAiAtLimitLikeVp = false
 
+    /** VP 5.4.8 CvPlayer::DoGreatPersonExpended (V:CvPlayer.cpp:28895-28899), GetUnitSupplyFromExpendedGreatPeople, read in GetUnitSupplyBreakdown (V:CvPlayer.cpp:16995-16997). true (and
+     *  [unitSupplyLikeVp]): expending a unit with the unique `Grants [amount] Unit Supply when expended` (a Great General, a Great Admiral, a Khan: VP's free promotion
+     *  PROMOTION_MILITARY_TRADITION, MilitaryCapChange 1) adds that amount to the civilization's supply for good, before the empire size divisor. false: the unique is not read. */
+    var unitSupplyExpendedGreatPeopleLikeVp = false
+
     /**
      *  The GlobalDefines of VP's unit supply, read only with [unitSupplyLikeVp] (can only be modded all-or-nothing, a data class so the Json serializer can omit it when default). The
      *  defaults are the numbers of the original / Community Patch (nothing reduces the supply, 10% production per unit over it); `DEF-VP` is `(2) Vox Populi/Database Changes/DefineChanges.sql:160-195`.

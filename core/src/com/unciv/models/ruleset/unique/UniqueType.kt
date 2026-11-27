@@ -502,6 +502,11 @@ enum class UniqueType(
     NoUnitSupply("Does not use unit supply", UniqueTarget.Unit,
         docDescription = "The unit does not count against the civilization's unit supply, whether the unit type or one of its promotions has it (CvUnit::isNoSupply). " +
             "Conditionals are not evaluated. Only read with the ModConstants switch `unitSupplyLikeVp`."),
+    /** VP 5.4.8 CvPlayer::DoGreatPersonExpended (V:CvPlayer.cpp:28895-28899): Units.SupplyCapBoost (0 on every unit in 5.4.8) + the unit's MilitaryCapChange (PROMOTION_MILITARY_TRADITION, 1) */
+    UnitSupplyWhenExpended("Grants [amount] Unit Supply when expended", UniqueTarget.Unit,
+        docDescription = "Expending this unit (consuming it: a Citadel, a Great Person's action) adds that many units to the civilization's supply for good, as the original's " +
+            "`MilitaryCapChange` of a Great General's free promotion does. Several add up. Conditionals are not evaluated. " +
+            "Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyExpendedGreatPeopleLikeVp`"),
     /** VP 5.4.8 Buildings.CitySupplyFlat, CvCity::processBuilding (V:CvCity.cpp:13657), CvCity::getCitySupplyFlat (V:CvCity.cpp:19060-19064), read at V:CvPlayer.cpp:17152 */
     UnitSupplyInCity("[amount] Unit Supply in this city", UniqueTarget.Building,
         docDescription = "The city gives that many more units of supply, as if the difficulty's supply per city were that much higher in this city alone: it is divided by the technology " +

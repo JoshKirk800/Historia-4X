@@ -15,6 +15,7 @@ data class UnitSupplyBreakdown(
     val citiesNet: Int = 0,
     val populationGross: Int = 0,
     val populationNet: Int = 0,
+    val greatPeople: Int = 0,
     val subtotal: Int = 0,
     val effectiveCities: Int = 0,
     val empireSizeDivisorPercent: Int = 100,

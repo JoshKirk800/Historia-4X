@@ -561,6 +561,10 @@ class BaseUnit : RulesetObject(), INonPerpetualConstruction {
     /** CvUnitEntry::IsNoSupply: the unit type (or the uniques every unit has) has [UniqueType.NoUnitSupply]. Only read with `unitSupplyLikeVp`. */
     val hasNoUnitSupply by lazy { rulesetUniqueObjects.any { it.type == UniqueType.NoUnitSupply } }
 
+    /** CvUnitEntry::GetSupplyCapBoost (+ the MilitaryCapChange of the free promotion MILITARY_TRADITION): the sum of the [UniqueType.UnitSupplyWhenExpended] amounts of the unit type,
+     *  which expending the unit adds to its civilization's supply (see [com.unciv.logic.map.mapunit.MapUnit.consume]). Only read with `unitSupplyExpendedGreatPeopleLikeVp`. */
+    val supplyWhenExpended by lazy { rulesetUniqueObjects.filter { it.type == UniqueType.UnitSupplyWhenExpended }.sumOf { it.params[0].toInt() } }
+
     /**
      *  CvCity::canTrain (Vox Populi, BALANCE_VP): a combat unit that uses supply can not be trained once the units out of supply are as many as the
      *  production penalty takes [com.unciv.models.ModConstants.UnitSupplyConstants.maxProductionPenalty] percent for ([maxProductionPenalty] / [productionPenaltyPerUnit]

@@ -371,7 +371,9 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
      *  Barbarians have no limit. Gross values are those before the technology reductions ([includeGross] false leaves them 0).
      *
      *  A city's own supply flat and percent from its buildings (CvCity::getCitySupplyFlat, getCitySupplyModifier) are in with `unitSupplyBuildingsLikeVp`.
-     *  Not in it, for lack of the state: the supply of expended Great People (CvPlayer::GetUnitSupplyFromExpendedGreatPeople), the player-wide
+     *  The supply of expended Great People (CvPlayer::GetUnitSupplyFromExpendedGreatPeople, [Civilization.unitSupplyFromExpendedGreatPeople]) is in with
+     *  `unitSupplyExpendedGreatPeopleLikeVp`, before the empire size divisor.
+     *  Not in it, for lack of the state: the player-wide
      *  building supply (CitySupplyFlatGlobal, CitySupplyModifierGlobal), the player and trait supply and puppet-share changes,
      *  the era columns of the difficulty and the start era's base supply, the city-state trait and personality modifiers (all 0 in Vox Populi), the cities not yet
      *  decided on (CvCity::IsIgnoreCityForHappiness) and the war weariness reduction (CvPlayer::GetSupplyReductionFromWarWeariness: [CivNeeds.warWeariness] is 0).
@@ -383,7 +385,8 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
         val difficultyNet = getVpUnitSupplyFromDifficulty(false)
         val citiesNet = getVpUnitSupplyFromCities(false)
         val populationNet = getVpUnitSupplyFromPopulation(false)
-        val subtotal = difficultyNet + citiesNet + populationNet
+        val greatPeople = if (constants.unitSupplyExpendedGreatPeopleLikeVp) civInfo.unitSupplyFromExpendedGreatPeople else 0
+        val subtotal = difficultyNet + citiesNet + populationNet + greatPeople
 
         val effectiveCities = if (civInfo.cities.isEmpty()) 0 else max(1, civInfo.cities.count { !it.isPuppet })
         val empireSizeDivisor = 100 + max(effectiveCities * constants.unitSupplyConstants.empireSizePenaltyPerCity, 0)
@@ -405,6 +408,7 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
             citiesNet = citiesNet,
             populationGross = if (includeGross) getVpUnitSupplyFromPopulation(true) else 0,
             populationNet = populationNet,
+            greatPeople = greatPeople,
             subtotal = subtotal,
             effectiveCities = effectiveCities,
             empireSizeDivisorPercent = empireSizeDivisor,

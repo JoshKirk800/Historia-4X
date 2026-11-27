@@ -1524,6 +1524,20 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "[amount]% less war weariness"
+	The war weariness percent of the civilization is reduced by this many percent of itself (at most 100 in all), as the original's `WarWearinessModifier` of a policy or a trait does. Several add up. Conditionals are not evaluated. Only with the ModConstants `warWearinessLikeVp`
+
+	Example: "[3]% less war weariness"
+
+	Applicable to: Global
+
+??? example  "Enemies gain [amount]% more war weariness from our war damage"
+	The war weariness that war damage done by this civilization (and a turn of war against it) causes its enemies is raised by this many percent, as the original's `EnemyWarWearinessModifier` of a trait does. Several add up. Conditionals are not evaluated. Only with the ModConstants `warWearinessLikeVp`
+
+	Example: "Enemies gain [3]% more war weariness from our war damage"
+
+	Applicable to: Global
+
 ??? example  "Enables embarkation for land units"
 	Due to performance considerations, this unique is cached, thus conditionals that may change within a turn may not work.
 

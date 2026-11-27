@@ -9,6 +9,7 @@ import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.AiRuleset
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.tile.TileImprovement
+import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import yairm210.purity.annotations.LocalState
@@ -50,6 +51,11 @@ object WarDamageAi {
                     else -> 25
                 }
                 third.ai.diplomacy.changeCommonFoeValue(winner, amount * percent / 100)
+            }
+            // V:CvPlayer.cpp:36688-36690, with or without the rating and the common foe: the winner is weary by half the damage, the loser by all of it
+            if (winner.gameInfo.ruleset.modOptions.constants.warWearinessLikeVp) {
+                changeWarWeariness(winner, loser, amount / 2)
+                changeWarWeariness(loser, winner, amount * (100 + enemyWarWearinessModifier(winner)) / 100)
             }
         }
         if (loser.isMajorCiv || loser.isCityState) loser.ai.diplomacy.memoryOf(winner).warValueLost += amount
@@ -189,6 +195,117 @@ object WarDamageAi {
         return if (current > 0) lost * 200 / current else lost * 2
     }
 
+    /** CvPlayer::GetWarWeariness: how weary [civ] is of its wars with [other]; 0 for anyone but a major, and for a civilization that is not another major */
+    @Readonly
+    fun warWeariness(civ: Civilization, other: Civilization): Int {
+        if (!civ.isMajorCiv || !other.isMajorCiv) return 0
+        return civ.ai.diplomacy.memories[other.civID]?.warWeariness ?: 0
+    }
+
+    /** CvPlayer::SetWarWeariness: not below 0, and not between two civilizations of the same team (the engine has no teams) */
+    private fun setWarWeariness(civ: Civilization, other: Civilization, value: Int) {
+        if (!civ.isMajorCiv || !other.isMajorCiv || civ == other) return
+        civ.ai.diplomacy.memoryOf(other).warWeariness = maxOf(value, 0)
+    }
+
+    private fun changeWarWeariness(civ: Civilization, other: Civilization, change: Int) =
+        setWarWeariness(civ, other, warWeariness(civ, other) + change)
+
+    /** CvTraits::GetEnemyWarWearinessModifier: the percent more war weariness that [civ]'s damage causes its enemy (Vox Populi's Raze and Horses: 100) */
+    @Readonly
+    private fun enemyWarWearinessModifier(civ: Civilization): Int =
+        civ.getMatchingUniques(UniqueType.EnemyWarWearinessModifier, GameContext.IgnoreConditionals).sumOf { it.params[0].toInt() }
+
+    /** CvPlayer::GetWarWearinessModifier + CvTraits::GetWarWearinessModifier: the percent less weariness that [civ]'s policies and trait give (not capped here) */
+    @Readonly
+    private fun warWearinessModifier(civ: Civilization): Int =
+        civ.getMatchingUniques(UniqueType.WarWearinessModifier, GameContext.IgnoreConditionals).sumOf { it.params[0].toInt() }
+
+    /** CvTeam::GetNumTurnsAtWar: the game turn less the turn the war began; a huge number when there is no war (the original's INT_MAX) */
+    @Readonly
+    fun numTurnsAtWar(civ: Civilization, other: Civilization): Int {
+        val started = civ.ai.diplomacy.memories[other.civID]?.turnWarStarted ?: -1
+        return if (started == -1) Int.MAX_VALUE else civ.gameInfo.turns - started
+    }
+
+    /**
+     *  CvTeam::canChangeWarPeace: neither side is locked into the war. The original also says no for game options, a vassal and permanent war or
+     *  peace; the engine has none of them.
+     */
+    @Readonly
+    fun canChangeWarPeace(civ: Civilization, other: Civilization): Boolean =
+        (civ.ai.diplomacy.memories[other.civID]?.turnsLockedIntoWar ?: 0) <= 0 &&
+            (other.ai.diplomacy.memories[civ.civID]?.turnsLockedIntoWar ?: 0) <= 0
+
+    /** The majors [civ] knows that are not [civ] (CvPlayer's loops over MAX_MAJOR_CIVS with `isHasMet`), alive or not */
+    @Readonly
+    private fun metMajors(civ: Civilization): List<Civilization> =
+        civ.gameInfo.civilizations.filter { it != civ && it.isMajorCiv && civ.knows(it) }
+
+    /**
+     *  CvPlayer::GetHighestWarWearinessPercent: the greatest war weariness against a met major (not one at war with whom peace cannot be made),
+     *  in percent of [civ]'s cached war value, less the percent of its modifiers, at most 100. 0 without `warWearinessLikeVp` and for a non-major.
+     *  Integer order of the original: 100 x weariness / max(value, 1), then x (100 - modifier) / 100.
+     */
+    @Readonly
+    fun highestWarWearinessPercent(civ: Civilization): Int {
+        if (!civ.gameInfo.ruleset.modOptions.constants.warWearinessLikeVp || !civ.isMajorCiv) return 0
+        var highest = 0
+        for (other in metMajors(civ)) {
+            val weariness = warWeariness(civ, other)
+            if (weariness <= highest) continue
+            if (civ.isAtWarWith(other) && !canChangeWarPeace(civ, other)) continue
+            highest = weariness
+        }
+        return scaledWarWearinessPercent(civ, highest)
+    }
+
+    /** CvPlayer::GetWarWearinessPercent: the same for the war weariness against [other] alone (0 when it is not a met major) */
+    @Readonly
+    fun warWearinessPercent(civ: Civilization, other: Civilization): Int {
+        if (!civ.gameInfo.ruleset.modOptions.constants.warWearinessLikeVp || !civ.isMajorCiv) return 0
+        if (other == civ || !other.isMajorCiv || !civ.knows(other)) return 0
+        val weariness = warWeariness(civ, other)
+        return if (weariness == 0) 0 else scaledWarWearinessPercent(civ, weariness)
+    }
+
+    @Readonly
+    private fun scaledWarWearinessPercent(civ: Civilization, weariness: Int): Int {
+        var percent = 100 * weariness / maxOf(civ.ai.diplomacy.cachedWarValue, 1)
+        percent *= 100 - minOf(warWearinessModifier(civ), 100)
+        percent /= 100
+        return minOf(percent, 100)
+    }
+
+    /**
+     *  The war weariness part of CvPlayer::DoUpdateWarDamageAndWeariness (V:CvPlayer.cpp:36913-36994), once a turn, for a major: against each met
+     *  civilization that is another major, a dead one halves it; one not at war halves it; one at war adds nothing before
+     *  [ModConstants.WarWearinessConstants.minimumTurns] turns of war or while peace cannot be made, else adds a hundredth of the empire's
+     *  current value (at least 1) raised by the enemy's modifier. Then the empire's value is cached for the percent.
+     */
+    private fun doWarWearinessTurn(civ: Civilization) {
+        val constants = civ.gameInfo.ruleset.modOptions.constants
+        if (!constants.warWearinessLikeVp || !civ.isMajorCiv) return
+        val currentValue = empireWarValue(civ)
+        for (other in metMajors(civ)) {
+            if (!other.isAlive()) {
+                setWarWeariness(civ, other, warWeariness(civ, other) / 2)
+                continue
+            }
+            if (!civ.isAtWarWith(other)) {
+                setWarWeariness(civ, other, warWeariness(civ, other) / 2)
+                continue
+            }
+            if (numTurnsAtWar(civ, other) < constants.warWeariness.minimumTurns) continue
+            if (!canChangeWarPeace(civ, other)) continue
+            var received = maxOf(currentValue / 100, 1)
+            received *= 100 + enemyWarWearinessModifier(other)
+            received /= 100
+            changeWarWeariness(civ, other, received)
+        }
+        civ.ai.diplomacy.cachedWarValue = maxOf(currentValue, 0)
+    }
+
     /** CvPlayer::GetWarScore: at war, the damage [civ] did to [other] less the damage it took from them, between -100 and 100 */
     @Readonly
     fun warScore(civ: Civilization, other: Civilization): Int {
@@ -259,6 +376,7 @@ object WarDamageAi {
             if (!other.isAlive()) continue
             memory.warValueLost -= maxOf(1, memory.warValueLost / if (civ.isAtWarWith(other)) 50 else 10)
         }
+        doWarWearinessTurn(civ)   // CvPlayer::doTurn: DoWarValueLostDecay, then DoUpdateWarDamageAndWeariness (V:CvPlayer.cpp:10176-10177)
         if (!civ.isMajorCiv) return
         // CvPlayer::doTurn: the recent war scores against the living majors decay
         if (civ.isAlive()) for (other in civ.gameInfo.civilizations) if (other.isMajorCiv && other.isAlive()) mostRecentWarScoreDecay(civ, other)

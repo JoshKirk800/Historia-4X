@@ -83,6 +83,10 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
     var turnMadePeace = -1
     /** CvTeam::GetNumTurnsLockedIntoWar */
     var turnsLockedIntoWar = 0
+    /** CvTeam::m_aiTurnWarStarted: the game turn the current war with them began, -1 = not at war ([WarDamageAi.numTurnsAtWar]) */
+    var turnWarStarted = -1
+    /** CvPlayer::m_aiWarWeariness: how weary we are of our wars with them, from war damage and the turns at war ([WarDamageAi]); majors only, kept with `warWearinessLikeVp` */
+    var warWeariness = 0
     /** CvDiplomacyAI::m_pabMusteringForAttack: our sneak attack operation against them finished with the army in position; war is declared next (see [WarAi]) */
     var musteringForAttack = false
     /** CvDiplomacyAI::IsAggressor (Vox Populi): we started this war or wanted it ([DiplomacyEvents.onWarDeclared]), until peace */
@@ -281,6 +285,7 @@ class MajorCivMemory : IsPartOfGameInfoSerialization {
         copy.warmongerAmountTimes100 = warmongerAmountTimes100; copy.numMinorsAttacked = numMinorsAttacked
         copy.numMajorsAttacked = numMajorsAttacked; copy.numPlayersNuked = numPlayersNuked
         copy.turnLastDeclaredWarOnThem = turnLastDeclaredWarOnThem; copy.mostRecentWarScore = mostRecentWarScore
+        copy.turnWarStarted = turnWarStarted; copy.warWeariness = warWeariness
         copy.treatyWillingToOffer = treatyWillingToOffer
         copy.treatyWillingToAccept = treatyWillingToAccept; copy.numWarsFought = numWarsFought; copy.turnMadePeace = turnMadePeace
         copy.numWarsDeclaredOnUs = numWarsDeclaredOnUs
@@ -370,6 +375,8 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
     var biggestCompetitor: String? = null
     /** CvPlayer::m_iMilitaryRating (Vox Populi), -1 = not moved yet (the starting rating): read through [WarDamageAi.militaryRating] */
     var militaryRating = -1
+    /** CvPlayer::m_iCachedCurrentWarValue: the value of this civilization's cities and units at the last turn update, the base of the war weariness percent ([WarDamageAi.doTurn]) */
+    var cachedWarValue = 0
     /** CvDiplomacyAI::IsSaneDiplomaticTarget (Vox Populi) is false for these civIDs: set each turn by [WarSanityAi.updateSaneTargets] */
     var insaneTargets = HashSet<String>()
     /** CvDiplomacyAI::IsPotentialWarTarget (Vox Populi): the civIDs of the majors we might want to attack, set each turn by [WarTargetAi.updateWarTargets] */
@@ -396,6 +403,7 @@ class DiplomacyAi : IsPartOfGameInfoSerialization {
         copy.lastTotalLandDisputeLevel = lastTotalLandDisputeLevel
         copy.biggestCompetitor = biggestCompetitor
         copy.militaryRating = militaryRating
+        copy.cachedWarValue = cachedWarValue
         copy.insaneTargets.addAll(insaneTargets)
         copy.potentialWarTargets.addAll(potentialWarTargets)
         copy.wondersConstructed = wondersConstructed

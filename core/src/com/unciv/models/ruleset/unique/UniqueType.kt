@@ -538,6 +538,14 @@ enum class UniqueType(
         docDescription = "Percent points added to the share of the citizens of every city of the civilization that count as supply, next to the difficulty's population percent " +
             "(the original's `CitySupplyModifierGlobal`, which the player keeps as ExtraSupplyPerPopulation). Several add up. " +
             "Only with the ModConstants `unitSupplyLikeVp` and `unitSupplyBuildingsLikeVp`"),
+    /** VP 5.4.8 Policies.WarWearinessModifier (CvPlayer::processPolicies, V:CvPlayer.cpp:43976) and Traits.WarWearinessModifier, read at V:CvPlayer.cpp:37014 and :37055 */
+    WarWearinessModifier("[amount]% less war weariness", UniqueTarget.Global,
+        docDescription = "The war weariness percent of the civilization is reduced by this many percent of itself (at most 100 in all), as the original's `WarWearinessModifier` of a policy " +
+            "or a trait does. Several add up. Conditionals are not evaluated. Only with the ModConstants `warWearinessLikeVp`"),
+    /** VP 5.4.8 Traits.EnemyWarWearinessModifier, read at V:CvPlayer.cpp:36690 and :36987 */
+    EnemyWarWearinessModifier("Enemies gain [amount]% more war weariness from our war damage", UniqueTarget.Global,
+        docDescription = "The war weariness that war damage done by this civilization (and a turn of war against it) causes its enemies is raised by this many percent, as the original's " +
+            "`EnemyWarWearinessModifier` of a trait does. Several add up. Conditionals are not evaluated. Only with the ModConstants `warWearinessLikeVp`"),
 
     // Units entering Tiles
     // ToDo: make per unit and use unit filters? "Enables embarkation <for [land] units>"

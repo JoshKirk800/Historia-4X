@@ -1650,6 +1650,9 @@ enum class UniqueType(
     TriggerUponSpreadingReligionAbroad("upon spreading a religion to a city of another civilization", UniqueTarget.TriggerCondition,
         docDescription = "A unit's Spread Religion action in a city of another civilization, before the pressure. " +
             "The Triggering amount is one more than the city's followers of other religions"),
+    TriggerUponCityAdoptingOurReligion("upon a city adopting our religion for the first time", UniqueTarget.TriggerCondition,
+        docDescription = "A city of any civilization whose majority becomes a religion, not a pantheon, that it never had before. " +
+            "For the owner of the religion's holy city, in the holy city, if the religion is its state religion"),
     TriggerUponDeclaringWarFiltered("upon declaring war on [civFilter] Civilizations", UniqueTarget.TriggerCondition),
     TriggerUponBeingDeclaredWarUpon("upon being declared war on by [civFilter] Civilizations", UniqueTarget.TriggerCondition),
     TriggerUponEnteringWar("upon entering a war with [civFilter] Civilizations", UniqueTarget.TriggerCondition),

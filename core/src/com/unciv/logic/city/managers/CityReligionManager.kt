@@ -4,6 +4,7 @@ import com.unciv.Constants
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.models.Counter
@@ -288,6 +289,15 @@ class CityReligionManager : IsPartOfGameInfoSerialization {
                 )
         }
         religionsAtSomePointAdopted.add(newMajorityReligion)
+
+        // CvCityReligions::CityConvertsReligion (V:CvReligionClasses.cpp:5593-5626): a full religion's first adoption pays INSTANT_YIELD_TYPE_CONVERSION
+        // to the owner of its holy city, in the holy city, if it is that owner's state religion
+        if (!newMajorityReligionObject.isMajorReligion()) return
+        val holyCity = city.civ.gameInfo.getCities().firstOrNull { it.isHolyCityOf(newMajorityReligion) } ?: return
+        val controller = holyCity.civ
+        if (controller.religionManager.getStateReligion()?.name != newMajorityReligion) return
+        InstantYields.fire(UniqueType.TriggerUponCityAdoptingOurReligion, controller, holyCity,
+            triggerNotificationText = "due to [${city.name}] adopting our religion")
     }
 
     private fun updateNumberOfFollowers(checkForReligionAdoption: Boolean = true) {

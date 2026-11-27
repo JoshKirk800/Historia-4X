@@ -189,6 +189,37 @@ class TourismTests {
     }
 
     @Test
+    fun `the bonus for common enemies counts for each enemy, like Vox Populi only once`() {
+        val emperor = game.addCiv("[+50]% Tourism towards civilizations with [Common Enemies]")
+        game.addCity(emperor, game.tileMap[0, -5], replacePalace = true)
+        emperor.diplomacyFunctions.makeCivilizationsMeet(civB)
+        emperor.getDiplomacyManager(civB)!!.makePeace()
+        for (y in listOf(-7, -8)) {
+            val enemyOfBoth = livingCiv(y)
+            for (civ in listOf(emperor, civB)) {
+                civ.diplomacyFunctions.makeCivilizationsMeet(enemyOfBoth)
+                civ.getDiplomacyManager(enemyOfBoth)!!.declareWar()
+            }
+        }
+        assertEquals("two enemies in common", 100, emperor.culture.getTourismModifierToward(civB))
+        game.ruleset.modOptions.constants.tourismModifierLikeVp = true
+        assertEquals("like Vox Populi", 50, emperor.culture.getTourismModifierToward(civB))
+    }
+
+    @Test
+    fun `like Vox Populi the modifier is never below minus a hundred`() {
+        val isolated = game.addCiv("[-150]% Tourism towards civilizations with [Open Borders]")
+        game.addCity(isolated, game.tileMap[0, -5], replacePalace = true)
+        isolated.diplomacyFunctions.makeCivilizationsMeet(civB)
+        isolated.getDiplomacyManager(civB)!!.makePeace()
+        civB.getDiplomacyManager(isolated)!!.hasOpenBorders = true
+        isolated.getDiplomacyManager(civB)!!.hasOpenBorders = true
+        assertEquals("25% for open borders and -150%", -125, isolated.culture.getTourismModifierToward(civB))
+        game.ruleset.modOptions.constants.tourismModifierLikeVp = true
+        assertEquals(-100, isolated.culture.getTourismModifierToward(civB))
+    }
+
+    @Test
     fun `a civilization with the blocking building does not get the tourism bonus that it blocks`() {
         val blocker = game.createBuilding()
         galleryWith(5, "[+100]% Tourism [in this city] unless the target has a [${blocker.name}]")

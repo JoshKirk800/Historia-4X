@@ -445,17 +445,30 @@ class CultureManager : IsPartOfGameInfoSerialization {
         if (amount > 0 && canInfluence(other)) influence.add(other.civID, amount)
     }
 
-    /** Tourism that is not made by the cities: goes to every civilization we have met, as it is (CvPlayerCulture::AddTourismAllKnownCivs) */
+    /** Tourism that is not made by the cities: goes to every civilization we have met, as it is (CvPlayerCulture::AddTourismAllKnownCivs), or with
+     *  [ModConstants.instantTourismLikeVp] times the speed and the modifier towards each (AddTourismAllKnownCivsWithModifiers, V:CvCultureClasses.cpp:4835-4851) */
     fun addInfluenceOnAllKnownCivs(amount: Int) {
-        for (other in getOtherMajorCivs()) addInfluence(other, amount)
+        val likeVp = civ.gameInfo.ruleset.modOptions.constants.instantTourismLikeVp
+        for (other in getOtherMajorCivs()) addInfluence(other, if (likeVp) getInstantInfluenceOn(other, amount) else amount)
     }
 
-    /** CvUnit::DoConcertTour: [times] our tourism with the civilization that owns the tile, a share [percentOthers] of it for each of the others */
-    fun addInfluenceFromConcertTour(target: Civilization, blast: Int, percentOthers: Int) {
+    /** CvUnit::DoConcertTour: the [strength] of the tour, times the speed, with the civilization that owns the tile, a share [percentOthers] of it for
+     *  each of the others. With [ModConstants.instantTourismLikeVp] each of those also takes the modifier towards that civilization, the share being
+     *  of the strength before the speed (V:CvUnit.cpp:13186-13191, 13236-13249). Returns what the owner of the tile got */
+    fun addInfluenceFromConcertTour(target: Civilization, strength: Int, percentOthers: Int): Int {
+        val likeVp = civ.gameInfo.ruleset.modOptions.constants.instantTourismLikeVp
+        val blast = (strength * civ.gameInfo.speed.cultureCostModifier).toInt()
+        var toTarget = 0
         for (other in getOtherMajorCivs()) {
-            if (other == target) addInfluence(other, blast)
-            else addInfluence(other, blast * percentOthers / 100)
+            val amount = when {
+                likeVp -> getInstantInfluenceOn(other, if (other == target) strength else strength * percentOthers / 100)
+                other == target -> blast
+                else -> blast * percentOthers / 100
+            }
+            if (other == target) toTarget = amount
+            addInfluence(other, amount)
         }
+        return toTarget
     }
     //endregion
 

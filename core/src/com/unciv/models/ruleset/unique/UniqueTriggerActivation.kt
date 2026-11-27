@@ -655,8 +655,7 @@ object UniqueTriggerActivation {
                     val modifier = speed.statCostModifiers[Stat.Culture] ?: speed.modifier
                     val constants = civInfo.gameInfo.ruleset.modOptions.constants
                     val strength = maxOf((unique.params[0].toInt() * civInfo.culture.getTourism() * modifier).toInt(), constants.concertTourMinimumTourism)
-                    val blast = (strength * modifier).toInt()
-                    civInfo.culture.addInfluenceFromConcertTour(target, blast, unique.params[1].toInt())
+                    val blast = civInfo.culture.addInfluenceFromConcertTour(target, strength, unique.params[1].toInt())
                     civInfo.addNotification("Our concert tour in [${target.civName}] brought [$blast] Tourism", tile.position, NotificationCategory.Diplomacy, "StatIcons/Culture")
                     true
                 }

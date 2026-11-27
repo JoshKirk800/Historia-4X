@@ -1311,6 +1311,9 @@ class ModConstants {
      *  [tourismModifierSharedReligion] for each percent of the people of the other that follow our state religion (not a pantheon),
      *  at most [tourismModifierSharedReligionMax], and the policies' percent for it multiplies that */
     var tourismModifierLikeVp = false
+    /** Vox Populi's tourism that is not made by the cities: `[n] Tourism towards all civilizations we have met` and a concert tour take the speed's
+     *  culture cost modifier and the modifier towards each civilization they reach (CvPlayerCulture::ChangeInfluenceOnTimes100 with modifiers, V:CvCultureClasses.cpp:3699-3735) */
+    var instantTourismLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

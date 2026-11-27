@@ -82,7 +82,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Triggerable
 
 ??? example  "[positiveAmount] Tourism towards all civilizations we have met"
-	Added to the influence of this civilization on each of them, not changed by modifiers
+	Added to the influence of this civilization on each of them, not changed by modifiers. With the ModConstants `instantTourismLikeVp`, times the speed's culture cost modifier and the tourism modifier towards each, cut to a whole number (the original's `AddTourismAllKnownCivsWithModifiers`)
 
 	Example: "[3] Tourism towards all civilizations we have met"
 
@@ -388,7 +388,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
     Uniques that have immediate, one-time effects on a unit.They can be added to units (on unit, unit type, or promotion) to grant them the ability to trigger this effect as an action, which can be modified with UnitActionModifier and UnitTriggerCondition conditionals.
 
 ??? example  "Perform a concert tour: [positiveAmount] times our Tourism towards the civilization whose territory we are in, [positiveAmount]% of that towards each other civilization we have met"
-	The unit has to be in the territory of another living major civilization. The first amount is made at least 100, and is multiplied twice by the game speed, as in the original
+	The unit has to be in the territory of another living major civilization. The first amount is made at least 100, and is multiplied twice by the game speed, as in the original. With the ModConstants `instantTourismLikeVp`, what each civilization gets also takes the tourism modifier towards it
 
 	Example: "Perform a concert tour: [3] times our Tourism towards the civilization whose territory we are in, [3]% of that towards each other civilization we have met"
 

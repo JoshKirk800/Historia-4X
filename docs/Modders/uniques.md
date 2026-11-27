@@ -724,7 +724,7 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: Global, FollowerBelief
 
 ??? example  "[relativeAmount]% Theming bonuses [cityFilter]"
-	Every such unique multiplies the theming bonuses of the matching cities by 100% plus its amount, one after the other
+	Every such unique multiplies the theming bonuses of the matching cities by 100% plus its amount, one after the other; with the ModConstants `greatWorkThemingLikeVp` the amounts are added up and the bonus is truncated once
 
 	Example: "[+20]% Theming bonuses [in all cities]"
 

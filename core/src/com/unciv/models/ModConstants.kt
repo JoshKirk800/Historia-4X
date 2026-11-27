@@ -1302,9 +1302,14 @@ class ModConstants {
     var tourismModifierTradeRoute = 25
     // Percent more tourism towards a civilization that has our diplomat in its capital (TOURISM_MODIFIER_DIPLOMAT: 25, 20 in Vox Populi)
     var tourismModifierDiplomat = 25
+    // With tourismModifierLikeVp, the most that shared religion gives before the policies' percent, 0 for no cap
+    // (TOURISM_MODIFIER_SHARED_RELIGION_MAX: 50 in Vox Populi)
+    var tourismModifierSharedReligionMax = 0
     /** Vox Populi's percent more tourism towards a civilization instead of Brave New World's (CvPlayerCulture::GetTourismModifierWith,
-     *  V:CvCultureClasses.cpp:4381-4479): the policies' bonus for common enemies counts once however many there are, the diplomat counts
-     *  whatever the ideologies, and the sum is never below -100 */
+     *  V:CvCultureClasses.cpp:4341-4479): the policies' bonus for common enemies counts once however many there are, the diplomat counts
+     *  whatever the ideologies, and the sum is never below -100. Open borders count when we let the other in. Shared religion is
+     *  [tourismModifierSharedReligion] for each percent of the people of the other that follow our state religion (not a pantheon),
+     *  at most [tourismModifierSharedReligionMax], and the policies' percent for it multiplies that */
     var tourismModifierLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100

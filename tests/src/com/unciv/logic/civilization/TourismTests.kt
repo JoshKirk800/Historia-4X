@@ -9,6 +9,7 @@ import com.unciv.logic.civilization.managers.InfluenceTrend
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.actions.UnitActions
 import com.unciv.models.UnitActionType
+import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.GreatWorkInstance
 import com.unciv.models.ruleset.Milestone
@@ -226,6 +227,52 @@ class TourismTests {
         assertEquals(20, civA.culture.getInfluencePerTurn(civB))
         civB.cities.first().cityConstructions.addBuilding(blocker)
         assertEquals(10, civA.culture.getInfluencePerTurn(civB))
+    }
+
+    @Test
+    fun `like Vox Populi shared religion counts the share of their people that follow our state religion, capped, times the policies`() {
+        val religion = game.addReligion(civA)
+        religion.addBeliefs(listOf(game.createBelief(BeliefType.Founder)))
+        cityA.religion.religionThisIsTheHolyCityOf = religion.name
+        cityA.religion.addPressure(religion.name, 5000)
+        val pious = civB.cities.first()
+        pious.population.setPopulation(3)
+        pious.religion.addPressure(religion.name, 5000)
+        game.addCity(civB, game.tileMap[3, 5], initialPopulation = 7)
+        val constants = game.ruleset.modOptions.constants
+        assertEquals("their capital alone follows it, not most of their cities", 0, civA.culture.getTourismModifierToward(civB))
+
+        constants.tourismModifierLikeVp = true
+        constants.tourismModifierSharedReligion = 1
+        constants.tourismModifierSharedReligionMax = 50
+        assertEquals("3 of their 10 people follow it", 30, civA.culture.getTourismModifierToward(civB))
+        constants.tourismModifierSharedReligion = 2
+        assertEquals("60 capped at 50", 50, civA.culture.getTourismModifierToward(civB))
+        addBuilding("[+50]% Tourism towards civilizations with [Shared Religion]")
+        assertEquals("50 and half of it", 75, civA.culture.getTourismModifierToward(civB))
+    }
+
+    @Test
+    fun `like Vox Populi a pantheon or no religion shares nothing`() {
+        game.ruleset.modOptions.constants.tourismModifierLikeVp = true
+        game.ruleset.modOptions.constants.tourismModifierSharedReligion = 1
+        assertEquals(0, civA.culture.getTourismModifierToward(civB))
+        val pantheon = game.addReligion(civA)
+        pantheon.addBeliefs(listOf(game.createBelief(BeliefType.Pantheon)))
+        cityA.religion.addPressure(pantheon.name, 5000)
+        civB.cities.first().religion.addPressure(pantheon.name, 5000)
+        assertEquals(0, civA.culture.getTourismModifierToward(civB))
+    }
+
+    @Test
+    fun `open borders count when they let us in, like Vox Populi when we let them in`() {
+        civB.getDiplomacyManager(civA)!!.hasOpenBorders = true
+        assertEquals("we only let them in", 0, civA.culture.getTourismModifierToward(civB))
+        game.ruleset.modOptions.constants.tourismModifierLikeVp = true
+        assertEquals(25, civA.culture.getTourismModifierToward(civB))
+        civB.getDiplomacyManager(civA)!!.hasOpenBorders = false
+        civA.getDiplomacyManager(civB)!!.hasOpenBorders = true
+        assertEquals("they only let us in", 0, civA.culture.getTourismModifierToward(civB))
     }
 
     //endregion

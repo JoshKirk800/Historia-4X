@@ -123,13 +123,20 @@ object TradeRoutePathfinder {
      * every city only to learn that there is none, or to learn a path it will never look at. Empty when [isSea] and [origin] is not on water.
      */
     @Readonly
-    fun reachableTiles(civ: Civilization, origin: Tile, isSea: Boolean, range: Int): Set<Tile> {
-        val reached = HashSet<Tile>()
-        if (isSea && !isOnWater(origin)) return reached
+    fun reachableTiles(civ: Civilization, origin: Tile, isSea: Boolean, range: Int): Set<Tile> = reachableCosts(civ, origin, isSea, range).keys
+
+    /**
+     * The cost of the cheapest path within [range] from [origin] to each tile in [reachableTiles], as [pathCost] counts it: CvPathFinder::GetMultiplePaths searches
+     * without a destination and keeps every node it closed (V:CvAStar.cpp:3374-3450). Empty when [isSea] and [origin] is not on water.
+     */
+    @Readonly
+    fun reachableCosts(civ: Civilization, origin: Tile, isSea: Boolean, range: Int): Map<Tile, Int> {
+        val cost = HashMap<Tile, Int>()
+        if (isSea && !isOnWater(origin)) return cost
         val budget = range * STEP + RANGE_SLACK
         val allWaterPassage = civ.tech.embarkedUnitsCanEnterOcean
         val woodsAreRoads = civ.hasUnique(UniqueType.ForestsAndJunglesAreRoads)
-        val cost = HashMap<Tile, Int>()
+        // Every tile that gets a cost is queued with it and later taken from the queue: the tiles with a cost are the reached ones
         cost[origin] = 0
         // (cost, tile number) in one long, the cheapest first
         val queue = PriorityQueue<Long>()
@@ -140,7 +147,6 @@ object TradeRoutePathfinder {
             val current = tiles[(entry and TILE_MASK).toInt()]
             val known = (entry shr TILE_BITS).toInt()
             if (known > cost[current]!!) continue
-            reached.add(current)
             for (next in current.neighbors) {
                 val stepCost = if (isSea) getWaterStepCost(civ, current, next, allWaterPassage)
                     else getLandStepCost(current, next, woodsAreRoads)
@@ -152,7 +158,7 @@ object TradeRoutePathfinder {
                 queue.add((newCost.toLong() shl TILE_BITS) or next.zeroBasedIndex.toLong())
             }
         }
-        return reached
+        return cost
     }
 
     /**

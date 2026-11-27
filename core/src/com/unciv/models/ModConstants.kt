@@ -232,6 +232,22 @@ class ModConstants {
      *  Off: the founded religion, the holy city of a religion counts while it is blocked, and the founder keeps its Founder and Enhancer beliefs. Independent of
      *  [reformationBeliefsLikeVp], which says who reads the Reformation beliefs at all. */
     var religiousBeliefValidityLikeVp = false
+    /** VP 5.4.8 natural religious pressure between cities (CvGameReligions::SpreadReligionToOneCity, V:CvReligionClasses.cpp:358-445):
+     *  - a city reaches another if a trade route links them in either direction, or a trade path that the original would cache does
+     *    (CvGameReligions::IsCityConnectedToCity, V:CvReligionClasses.cpp:534-632): the cheapest land or sea trade path from either city to the other, within the trade
+     *    range of the owner of the path's first city, measured against the trade range of the sending city, raised by the spread distance beliefs, under 100%.
+     *    City-states and barbarians cache no paths; their cities reach only cities that reach them;
+     *  - without a trade route the pressure falls with the square of the distance, `base * (100 - percent)² / 10000` in whole numbers; with one it is the whole base,
+     *    raised by the trade route pressure of the sending civilization, once however many routes there are
+     *    (CvGameReligions::GetAdjacentCityReligiousPressure, V:CvReligionClasses.cpp:2801-2950);
+     *  - the percentages add up and divide once, and the beliefs count if CvReligionBeliefs::IsBeliefValid accepts them for the owner of the sending city;
+     *    the doubling technology of a spread strength belief is the founder's (V:CvReligionClasses.cpp:2889-2904).
+     *  "Religion naturally spreads to cities [amount] tiles away" is ten percent of distance a tile: Brave New World's Itinerant Preachers is 30% and +3 tiles.
+     *  DEPARTURE: pressure keeps the engine's units, a tenth of the original's (6 a turn, not 60 or 65, on Standard), so the falloff rounds down in those.
+     *  Not built: the base pressure modifiers (India, buildings), the religion distance and pressure policies, the friendship that the city-state spread belief needs,
+     *  vassals, the conversion modifiers of the target, the traits of IsValidTarget, the trade pressure of buildings and beliefs.
+     *  Off: cities within 10 tiles, plus the spread distance uniques, or linked by a trade route spread the whole pressure, and the percentages multiply. */
+    var religiousSpreadLikeVp = false
     /** VP 5.4.8 CvUnit::GetGenericMeleeStrengthModifier (V:CvUnit.cpp:16471-16507) and CvUnit::GetMaxRangedCombatStrength (V:CvUnit.cpp:17336-17372): a land unit fighting a unit of
      *  a major civilization gets the four religious combat bonuses of its owner's state religion (Defender of the Faith, Evangelism) by the territory of the battle tile and
      *  the state religion of the other side ([com.unciv.logic.battle.ReligiousCombat]). Off: the uniques of [com.unciv.models.ruleset.unique.UniqueType.ReligiousStrengthOwnLands]

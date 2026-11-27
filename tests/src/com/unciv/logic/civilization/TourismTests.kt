@@ -502,6 +502,42 @@ class TourismTests {
         assertNull(tourAction(musician(null, own)))
         assertNull(tourAction(musician(null, game.tileMap[0, -6])))
     }
+
+    /** A third civilization we have met that is less happy than us, and a unique of ours that gives 20% more tourism towards such */
+    private fun lessHappyThird(): Civilization {
+        val third = livingCiv(-6)
+        civA.diplomacyFunctions.makeCivilizationsMeet(third)
+        addBuilding("[+20]% Tourism towards civilizations with [Lower Happiness]")
+        civA.stats.happiness = 5
+        civB.stats.happiness = 5
+        third.stats.happiness = 1
+        return third
+    }
+
+    @Test
+    fun `like Vox Populi a gain of tourism for all is changed by the speed and the modifier towards each`() {
+        val third = lessHappyThird()
+        game.ruleset.modOptions.constants.instantTourismLikeVp = true
+        game.gameInfo.speed = game.ruleset.speeds.values.first { it.cultureCostModifier == 3f }
+        val unique = game.createPolicy("[250] Tourism towards all civilizations we have met").uniqueObjects.single()
+        assertTrue(com.unciv.models.ruleset.unique.UniqueTriggerActivation.triggerUnique(unique, civA))
+        assertEquals("three times for the speed", 750, civA.culture.getInfluence(civB))
+        assertEquals("and 20% more", 900, civA.culture.getInfluence(third))
+    }
+
+    @Test
+    fun `like Vox Populi a concert tour takes the modifier towards each civilization it reaches`() {
+        galleryWith(10) // 20 tourism
+        val third = lessHappyThird()
+        val foreign = civB.cities.first().getCenterTile().neighbors.first()
+        game.addTileToCity(civB.cities.first(), foreign)
+        val unit = musician(civB.cities.first(), foreign)
+        game.ruleset.modOptions.constants.instantTourismLikeVp = true
+        game.gameInfo.speed = game.ruleset.speeds.values.first { it.cultureCostModifier == 3f }
+        tourAction(unit)!!.invoke()
+        assertEquals("ten times 20, three times for the speed, then again", 1800, civA.culture.getInfluence(civB))
+        assertEquals("a fifth of the strength before the second speed, then the speed and 20% more", 432, civA.culture.getInfluence(third))
+    }
     //endregion
 
     @Test

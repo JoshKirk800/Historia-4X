@@ -106,6 +106,10 @@ enum class UniqueType(
         docDescription = "With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for what " +
             "to do with the finds of a dig chosen, divided by 10; it counts as a historic event when the turns are positive (the original's " +
             "`ArchaeologicalDigTourism` of policies)"),
+    GreatWorkWltkdTurns("Each new Great Work gives all cities [positiveAmount] turns of We Love The King Day", UniqueTarget.Global,
+        docDescription = "With the ModConstants `greatWorkWltkdLikeVp`: a work created by a Great Person, a building or a dig adds these turns, " +
+            "times the game speed's production cost, to the We Love The King Day of every city, which starts it where there is none " +
+            "(the original's `GreatWorkWLTKD` of traits, with `CITY_RESOURCE_WLTKD_TURNS` / 3 = 6)"),
     DomesticTradeRouteTourism("Domestic trade routes give tourism for completed trade routes", UniqueTarget.Global,
         docDescription = "With the ModConstants `historicEventDispatchLikeVp`, a domestic trade route that ends gives the tourism of " +
             "`[positiveAmount] turns of yields as tourism for completed land trade routes` (or sea) as well, a third of it towards each civilization met " +

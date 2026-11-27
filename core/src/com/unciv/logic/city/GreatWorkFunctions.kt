@@ -2,6 +2,7 @@ package com.unciv.logic.city
 
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
+import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.GreatWork
@@ -10,6 +11,7 @@ import com.unciv.models.ruleset.GreatWorkSlotType
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
+import kotlin.math.roundToInt
 
 /** What Great Works need from more than one city: finding places for them, moving them, creating them */
 object GreatWorkFunctions {
@@ -105,7 +107,22 @@ object GreatWorkFunctions {
         val instance = GreatWorkInstance(definition.name, creatorCiv, era, civ.gameInfo.turns)
         slot.city.greatWorks.place(instance, slot)
         slot.city.cityStats.update()
+        if (civ.gameInfo.ruleset.modOptions.constants.greatWorkWltkdLikeVp) celebrateNewWork(civ, slot.city)
         return instance
+    }
+
+    /**
+     *  A new work with `Each new Great Work gives all cities [positiveAmount] turns of We Love The King Day`: the turns, times the game speed's
+     *  production cost, in every city (CvUnit::createGreatWork, V:CvUnit.cpp:9622-9648; the same in CvCity::processBuilding for a building's
+     *  work and CvPlayerCulture::DoArchaeologyChoice for an artifact or a writing)
+     */
+    private fun celebrateNewWork(civ: Civilization, city: City) {
+        val baseTurns = civ.getMatchingUniques(UniqueType.GreatWorkWltkdTurns, civ.state).sumOf { it.params[0].toInt() }
+        val turns = baseTurns * (civ.gameInfo.speed.productionCostModifier * 100).roundToInt() / 100
+        if (turns <= 0) return
+        for (ownCity in civ.cities) ownCity.extendWeLoveTheKingDay(turns)
+        civ.addNotification("Our new Great Work makes our cities celebrate We Love The King Day for [$turns] more turns",
+            city.location, NotificationCategory.General, NotificationIcon.Happiness)
     }
 
     /**

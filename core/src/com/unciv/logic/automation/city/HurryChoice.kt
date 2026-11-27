@@ -19,8 +19,8 @@ import kotlin.math.max
 
 /**
  *  The item a city would like to buy with gold: CvCityStrategyAI::ChooseHurry (CvCityStrategyAI.cpp), called per city by
- *  CvEconomicAI::DoHurry, which orders the cities' choices by [Candidate.score] and buys them. Gold only, units and buildings
- *  (the faith purchase and the "units only" flag of ChooseHurry belong to [com.unciv.logic.automation.civilization.ReligionAutomation]).
+ *  CvEconomicAI::DoHurry, which orders the cities' choices by [Candidate.score] and buys them; units and buildings. The faith mode and the
+ *  "units only" flag of ChooseHurry serve [com.unciv.logic.automation.civilization.ReligionAutomation] (see [choose]).
  *
  *  As the original:
  *  - candidates (m_BuildablesPrecheck): the unit for the next open slot of an operation ([Kind.Operation], CvCity::GetUnitForOperation,
@@ -79,8 +79,15 @@ object HurryChoice {
     /** HandicapInfos.CityProductionChoiceCutoffThreshold of Vox Populi (every difficulty), for a ruleset without the column */
     private const val DEFAULT_PRODUCTION_CUTOFF = 90
 
-    /** CvCityStrategyAI::ChooseHurry(false, false) for [city]: the item to buy, null if there is none (NOT_A_CITY_BUILDABLE) */
-    fun choose(city: City): Candidate? {
+    /**
+     *  CvCityStrategyAI::ChooseHurry(bUnitOnly, bFaithPurchase) for [city]: the item to buy, null if there is none (NOT_A_CITY_BUILDABLE).
+     *  [faithPurchase] (with [religionCultureAiLikeVp][com.unciv.models.ModConstants.religionCultureAiLikeVp], from
+     *  [com.unciv.logic.automation.civilization.ReligionAutomation]): no operation or army unit, the candidates are those the city may buy now with
+     *  Faith, and units that spread religion or remove heresy or are special (VP's Special: Great People, aircraft, missiles) are skipped; the
+     *  sanity check still asks that the unit can be bought with gold now, as the original's. [unitOnly]: no buildings.
+     *  [Candidate.goldCost] and [Candidate.canBuyNow] stay gold.
+     */
+    fun choose(city: City, unitOnly: Boolean = false, faithPurchase: Boolean = false): Candidate? {
         val civ = city.civ
         val rules = civ.gameInfo.ruleset.ai
         val constructions = city.cityConstructions
@@ -108,7 +115,7 @@ object HurryChoice {
         val offense = civ.ai.personalityAndGrandStrategy(Flavor.Offense)
 
         // Units for operations first, then for sneak attack armies
-        val offer = civ.ai.operations.nextUnitForOperationSlot(city)
+        val offer = if (faithPurchase) null else civ.ai.operations.nextUnitForOperationSlot(city)
         if (offer != null && isAllowed(offer.unit) && !outOfSupply(offer.unit)) {
             val weight = rules.define(AiDefine.AI_CITYSTRATEGY_OPERATION_UNIT_BASE_WEIGHT) +
                 rules.define(AiDefine.AI_CITYSTRATEGY_OPERATION_UNIT_FLAVOR_MULTIPLIER) * (offense + military.numberOfTimesOpsBuildSkippedOver) +
@@ -118,21 +125,25 @@ object HurryChoice {
                 military.numberOfTimesOpsBuildSkippedOver++
             }
         }
-        val armyUnit = MilitaryOperations.unitForArmy(city)
+        val armyUnit = if (faithPurchase) null else MilitaryOperations.unitForArmy(city)
         if (armyUnit != null && isAllowed(armyUnit) && !outOfSupply(armyUnit)) {
             val weight = rules.define(AiDefine.AI_CITYSTRATEGY_ARMY_UNIT_BASE_WEIGHT) +
                 rules.define(AiDefine.AI_CITYSTRATEGY_OPERATION_UNIT_FLAVOR_MULTIPLIER) * offense
             if (weight > 0) precheck.add(Precheck(armyUnit, Kind.Army, weight, ProductionAi.turnsLeft(city, armyUnit)))
         }
 
+        val purchaseStat = if (faithPurchase) Stat.Faith else Stat.Gold
         fun canPurchase(construction: INonPerpetualConstruction): Boolean {
             if (city.isBeingRazed) return false   // IsRazing
-            val cost = construction.getStatBuyCost(city, Stat.Gold) ?: return false
-            return constructions.isConstructionPurchaseAllowed(construction, Stat.Gold, cost)
+            val cost = construction.getStatBuyCost(city, purchaseStat) ?: return false
+            return constructions.isConstructionPurchaseAllowed(construction, purchaseStat, cost)
         }
 
         // The units that can be bought now
         for (unit in ruleset.units.values) {
+            // the original's faith price test (GetFaithCost > 0) is in canPurchase
+            if (faithPurchase && (unit.hasUnique(UniqueType.CanSpreadReligion) || unit.hasUnique(UniqueType.CanRemoveHeresy)
+                    || unit.isGreatPerson || unit.isAirUnit())) continue
             if (outOfSupply(unit)) continue
             val weight = ProductionAi.unitWeight(city, unit)
             if (weight <= 0 || !isAllowed(unit) || !canPurchase(unit)) continue
@@ -141,7 +152,7 @@ object HurryChoice {
         }
 
         // The buildings that can be bought now (projects are not purchasable)
-        for (building in ruleset.buildings.values) {
+        if (!unitOnly) for (building in ruleset.buildings.values) {
             if (ProductionAi.isProject(rules, building)) continue
             val weight = ProductionAi.buildingWeight(city, building)
             if (weight <= 0 || !isAllowed(building) || !canPurchase(building)) continue

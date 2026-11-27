@@ -1,10 +1,12 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.logic.automation.city.HurryChoice
 import com.unciv.logic.automation.civilization.ReligionAutomation.FaithPurchase
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.TheftAi
 import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.automation.strategy.GrandStrategyAi
+import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.ReligiousUnitAutomation
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -1042,6 +1044,69 @@ class ReligionAiTests {
         ReligionAutomation.spendFaithOnReligion(civ)
         assertTrue(!capital.cityConstructions.isBuilt(pressure.name))
         assertTrue(capital.cityConstructions.isBuilt(plain.name))
+    }
+
+    /** A converted civilization that may buy Warriors with Faith, has the gold to buy them too (ChooseHurry's sanity asks it) and earns gold */
+    private fun warriorBuyer(): Civilization {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, _) = foundedCiv("May buy [Warrior] units with [Faith] [in all cities]")
+        civ.addGold(10_000)
+        civ.stats.statsForNextTurn = Stats(gold = 5f)
+        return civ
+    }
+
+    @Test
+    fun `with Vox Populi a converted civilization earning gold buys a unit with the faith left`() {
+        val civ = warriorBuyer()
+        ReligionAutomation.spendFaithOnReligion(civ)
+        assertEquals(1, count(civ, "Warrior"))
+    }
+
+    @Test
+    fun `with Vox Populi no unit is bought with faith without net gold`() {
+        val civ = warriorBuyer()
+        civ.stats.statsForNextTurn = Stats(gold = 0f)
+        ReligionAutomation.spendFaithOnReligion(civ)
+        assertEquals(0, count(civ, "Warrior"))
+    }
+
+    @Test
+    fun `with Vox Populi no unit is bought with faith while a city of ours follows another religion`() {
+        val civ = warriorBuyer()
+        val religion = civ.religionManager.religion!!
+        religion.addBelief(game.ruleset.beliefs.values.first { it.type == BeliefType.Enhancer })
+        follow(game.addCity(civ, tile(4, 0)), foundReligion(game.addCiv()))
+        // so many missionaries that DoFaithPurchases buys none for the heretic city and leaves the faith to the cities
+        for (place in tile(0, 0).getTilesAtDistance(6).take(20))
+            game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, place).religion = religion.name
+        civ.stats.statsForNextTurn = Stats(gold = 5f) // adding units updates the stats
+        ReligionAutomation.spendFaithOnReligion(civ)
+        assertEquals(0, count(civ, "Warrior"))
+    }
+
+    @Test
+    fun `ChooseHurry for Faith offers only what the city may buy with Faith, and with units only no building`() {
+        val (civ, religion) = foundedCiv()
+        religion.addBelief("Pagodas")
+        civ.addGold(10_000)
+        val capital = civ.getCapital()!!
+        assertEquals(null, HurryChoice.choose(capital, unitOnly = true, faithPurchase = true))
+        assertEquals("Pagoda", HurryChoice.choose(capital, unitOnly = false, faithPurchase = true)?.construction?.name)
+    }
+
+    @Test
+    fun `with Vox Populi a unit is bought with faith while we have at most 5 of its unit AI`() {
+        for (others in 5..6) {
+            setUp()
+            val civ = warriorBuyer()
+            val unitAi = UnitAiTypes.defaultOf(game.ruleset.units["Warrior"]!!, game.ruleset.ai)
+            // civilians given the Warrior's unit AI, so that the military sanity check does not see them
+            for (place in tile(0, 0).getTilesAtDistance(6).take(others))
+                UnitAiTypes.set(game.addUnit(ReligionAutomation.missionaryUnit(civ)!!.name, civ, place), unitAi)
+            civ.stats.statsForNextTurn = Stats(gold = 5f) // adding units updates the stats
+            ReligionAutomation.spendFaithOnReligion(civ)
+            assertEquals("with $others", if (others <= 5) 1 else 0, count(civ, "Warrior"))
+        }
     }
     //endregion
 }

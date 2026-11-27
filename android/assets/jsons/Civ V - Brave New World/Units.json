@@ -1660,6 +1660,7 @@
 		"upgradesTo": "Fighter",
 		"obsoleteTech": "Radar",
 		"uniques": ["[50]% chance to intercept air attacks", "[+150]% Strength <vs [Bomber] units>", "[+150]% Strength <vs [Helicopter] units>",
+			"Does not use unit supply",
 			"Can only be purchased in cities with [Military Academy]"
 		],
 		"attackSound": "machinegun",
@@ -1677,6 +1678,7 @@
 		"requiredResource": "Oil",
 		"upgradesTo": "Bomber",
 		"obsoleteTech": "Radar",
+		"uniques": ["Does not use unit supply"],
 		"attackSound": "bombing"
 	},
 	{
@@ -1866,6 +1868,7 @@
 		"requiredResource": "Oil",
 		"upgradesTo": "Jet Fighter",
 		"uniques": ["[100]% chance to intercept air attacks", "[+150]% Strength <vs [Bomber] units>", "[+150]% Strength <vs [Helicopter] units>",
+			"Does not use unit supply",
 			"Can only be purchased in cities with [Airport]",
 			"Can only be purchased in cities with [Military Academy]"
 		],
@@ -1886,6 +1889,7 @@
 		"requiredTech": "Radar",
 		"upgradesTo": "Jet Fighter",
 		"uniques": ["[100]% chance to intercept air attacks", "[+150]% Strength <vs [Bomber] units>", "[+150]% Strength <vs [Helicopter] units>",
+			"Does not use unit supply",
 			"Can only be purchased in cities with [Airport]",
 			"Can only be purchased in cities with [Military Academy]"
 		],
@@ -1907,6 +1911,7 @@
 		"attackSound": "bombing",
 		"purchaseCooldown": 1,
 		"uniques": [
+			"Does not use unit supply",
 			"Can only be purchased in cities with [Military Academy]"
 		]
 	},
@@ -1927,6 +1932,7 @@
 		"attackSound": "bombing",
 		"purchaseCooldown": 1,
 		"uniques": [
+			"Does not use unit supply",
 			"Can only be purchased in cities with [Airport]",
 			"Can only be purchased in cities with [Military Academy]"
 		]
@@ -2239,6 +2245,7 @@
 		"requiredTech": "Lasers",
 		"requiredResource": "Aluminum",
 		"uniques": ["[100]% chance to intercept air attacks", "[+150]% Strength <vs [Bomber] units>", "[+150]% Strength <vs [Helicopter] units>",
+			"Does not use unit supply",
 			"Can only be purchased in cities with [Airport]",
 			"Can only be purchased in cities with [Military Base]"
 		],

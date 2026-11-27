@@ -1637,6 +1637,10 @@ enum class UniqueType(
     TriggerUponEnteringEra("upon entering the [era]", UniqueTarget.TriggerCondition),
     TriggerUponEnteringEraUnfiltered("upon entering a new era", UniqueTarget.TriggerCondition),
     TriggerUponAdoptingPolicyOrBelief("upon adopting [policy/belief]", UniqueTarget.TriggerCondition),
+    /** Any policy or branch the civilization adopts, not the policy that completes a branch: Vox Populi's INSTANT_YIELD_TYPE_POLICY_UNLOCK, which CvPlayer::doAdoptPolicy
+     *  and CvPlayerPolicies::DoUnlockPolicyBranch fire (V:CvPlayer.cpp:24323-24395, V:CvPolicyClasses.cpp:5120-5188) and the branch's finisher does not */
+    TriggerUponAdoptingAnyPolicy("upon adopting a policy", UniqueTarget.TriggerCondition,
+        docDescription = "Any policy or the opening of a branch, but not the policy given for completing a branch"),
     TriggerUponDeclaringWarFiltered("upon declaring war on [civFilter] Civilizations", UniqueTarget.TriggerCondition),
     TriggerUponBeingDeclaredWarUpon("upon being declared war on by [civFilter] Civilizations", UniqueTarget.TriggerCondition),
     TriggerUponEnteringWar("upon entering a war with [civFilter] Civilizations", UniqueTarget.TriggerCondition),

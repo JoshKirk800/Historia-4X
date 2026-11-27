@@ -71,7 +71,7 @@ enum class SpyOutcome(val label: String) {
  *    VP reads from `pLoopCity`) and of its religion (the follower beliefs of the city's majority religion, `pReligion`), with the city as the context;
  *  - then one pass for the civilization: its nation, policies, techs, era, founder beliefs and global uniques, and the buildings' uniques that do not say
  *    `in this city` (VP's `...Global` tables and player fields), which VP adds in the pass of the event's city (BIRTH, BORDERS, CONSTRUCTION...) or of the capital
- *    (TECH, GP_USE, F_CONQUEST...). The city of the pass is the event's, else the capital: that is where Food and Production go.
+ *    (TECH, GP_USE, F_CONQUEST...). The city of the pass is the event's, else the capital (a founder belief's: the holy city): that is where Food and Production go.
  *
  *  No yields for city-states and barbarians (V:CvPlayer.cpp:25912). Every unique runs once for each time its `<for every ...>` modifiers say, with the
  *  event's [GameContext.amount] as the countable `Triggering amount`, and the `Era scaler` for the yields that VP multiplies by `max(1, era)`.
@@ -115,7 +115,12 @@ object InstantYields {
 
         val creditedCity = city ?: civ.getCapital()
         val civContext = context.copy(city = creditedCity, amount = amount)
-        civ.forEachTriggeredUnique(trigger, civContext, triggerFilter, true) { if (effectFilter(it)) gathered.add(it to creditedCity) }
+        // An event of the whole civilization gives a founder belief's yield to the holy city: VP's loop over the cities finds the belief valid only there
+        // (`bHolyCityOnly` of the belief getters, CvReligionBeliefs::IsBeliefValid, V:CvBeliefClasses.cpp:2156-2197)
+        val holyCity = if (city != null) null else civ.religionManager.getFounderBenefitsReligion()?.let { ours -> civ.cities.firstOrNull { it.isHolyCityOf(ours.name) } }
+        civ.forEachTriggeredUnique(trigger, civContext, triggerFilter, true) {
+            if (effectFilter(it)) gathered.add(it to if (holyCity != null && it.sourceObjectType == UniqueTarget.FounderBelief) holyCity else creditedCity)
+        }
         for (cityWithBuildings in civ.cities)
             cityWithBuildings.cityConstructions.builtBuildingUniqueMap.forEachUnique(
                 { !it.isLocalEffect && it.getModifiers(trigger).any(triggerFilter) && it.conditionalsApply(civContext) },

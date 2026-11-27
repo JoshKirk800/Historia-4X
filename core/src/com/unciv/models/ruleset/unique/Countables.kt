@@ -583,14 +583,32 @@ enum class Countables(
         override val documentationStrings = listOf(
             "The original's City of God (`Belief_YieldPerHolyCityBirth`) multiplies its yield by the cities following the religion, `CvGameReligions::GetNumCitiesFollowing`, " +
                 "at most the belief's `CityScalerLimiter` (`CvReligionBeliefs::GetYieldPerHolyCityBirth`, V:CvBeliefClasses.cpp:4577-4597; V:CvPlayer.cpp:25957-25960): " +
-                "`Gain [15] [Faith] (modified by game speed) <upon population growth> <in [in the holy city of our religion following any religion] cities> " +
-                "<for every [Cities following our religion up to [25]]>`. 0 without such a religion."
+                "`Gain [15] [Faith] <upon population growth> <(modified by game speed)> <in [in the holy city of our religion following any religion] cities> " +
+                "<for every [Cities following our religion up to [25]]>`; Initiation Rites (`Belief_YieldFromEraUnlock`) by the same count (V:CvPlayer.cpp:26074-26081). " +
+                "0 without such a religion."
         )
         override fun eval(parameterText: String, gameContext: GameContext): Int? {
             val cap = parameterText.getPlaceholderParameters()[0].toIntOrNull() ?: return null
             val religionManager = gameContext.civInfo?.religionManager ?: return null
             val ours = religionManager.getFounderBenefitsReligion() ?: return 0
             return religionManager.numberOfCitiesFollowingThisReligion(ours).coerceAtMost(cap)
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            UniqueParameterType.PositiveNumber.getTranslatedErrorSeverity(parameterText, ruleset)
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = setOf<String>()
+    },
+    FollowersOfOurReligionUpTo("Followers of our religion up to [positiveAmount]",
+        shortDocumentation = "The followers in the cities of every civilization of the religion we have the founder benefits of, at most the amount") {
+        override val documentationStrings = listOf(
+            "The original's Tithe (`Belief_YieldFromTechUnlock`) and Church Property (`Belief_YieldFromPolicyUnlock`) multiply their yield by the followers of the religion, " +
+                "`CvGameReligions::GetNumFollowers`, at most the belief's `FollowerScalerLimiter` (V:CvPlayer.cpp:25957-25960, 26082-26098, 26134-26152): " +
+                "`Gain [2] [Faith] <upon discovering [All] technology> <(modified by game speed)> <for every [Followers of our religion up to [250]]>`. 0 without such a religion."
+        )
+        override fun eval(parameterText: String, gameContext: GameContext): Int? {
+            val cap = parameterText.getPlaceholderParameters()[0].toIntOrNull() ?: return null
+            val civ = gameContext.civInfo ?: return null
+            val ours = civ.religionManager.getFounderBenefitsReligion() ?: return 0
+            return civ.gameInfo.getCities().sumOf { it.religion.getFollowersOf(ours.name) }.coerceAtMost(cap)
         }
         override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
             UniqueParameterType.PositiveNumber.getTranslatedErrorSeverity(parameterText, ruleset)

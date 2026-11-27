@@ -582,6 +582,10 @@ class ModConstants {
     // multipliers make is changed by the speed and cut by itself. true: CvPlayer::doInstantYield's order, the amount times every multiplier but the `Era scaler`
     // changed by the speed and cut once, then times the `Era scaler` (V:CvPlayer.cpp:27162-27184): a belief's 2 Faith for each of 250 followers is 375 at Quick, not 250
     var instantYieldsCutTotalLikeVp = false
+    // Whether researching a tech that can be researched again (Future Tech) fires `upon discovering [techFilter] technology` for the instant yields of
+    // the civilization's uniques. false: every time. true: never, as CvTeam::setHasTech calls processTech, which fires INSTANT_YIELD_TYPE_TECH, only for a tech
+    // that does not repeat (V:CvTeam.cpp:6516-6518). The tech's own triggered uniques fire either way
+    var repeatTechsGiveNoInstantYieldsLikeVp = false
     // Whether a unit with the unique "Before engaging in combat performs an extra ranged attack with [amount]% of melee combat strength" gets
     // no combat bonus for being fortified. false: it does. true: CvUnit::fortifyModifier returns 0 for a unit with ranged support fire (the Impi).
     var rangedSupportFireUnitsGetNoFortification = false

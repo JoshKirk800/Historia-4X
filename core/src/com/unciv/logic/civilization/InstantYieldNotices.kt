@@ -76,6 +76,7 @@ class InstantYieldNotices {
             UniqueType.TriggerUponEnteringEra to "Entering a New Era",
             UniqueType.TriggerUponEnteringEraUnfiltered to "Entering a New Era",
             UniqueType.TriggerUponAdoptingPolicyOrBelief to "Adopting a Policy or Belief",
+            UniqueType.TriggerUponAdoptingAnyPolicy to "Adopting a Policy",
             UniqueType.TriggerUponEnteringGoldenAge to "Starting a Golden Age",
             // No name for `upon defeating a [mapUnitFilter] unit`: the uniques of the units that win also use it, and their notifications are given at once, not at the end of the event
         ).mapKeys { it.key.name }

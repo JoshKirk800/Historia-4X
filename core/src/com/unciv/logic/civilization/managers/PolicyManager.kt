@@ -309,6 +309,8 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         // INSTANT_YIELD_TYPE_POLICY_UNLOCK (V:CvPolicyClasses.cpp:5167)
         InstantYields.fire(UniqueType.TriggerUponAdoptingPolicyOrBelief, civInfo, null, 0, civInfo.state, triggerNotificationText,
             triggerFilter = { it.params[0] == policy.name })
+        if (!branchCompletion)
+            InstantYields.fire(UniqueType.TriggerUponAdoptingAnyPolicy, civInfo, null, 0, civInfo.state, triggerNotificationText)
 
         civInfo.religionManager.checkReformationBelief() // a policy with "bonus Reformation belief"
 

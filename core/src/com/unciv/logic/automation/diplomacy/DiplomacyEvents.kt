@@ -9,6 +9,7 @@ import com.unciv.logic.civilization.Accomplishment
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
+import com.unciv.logic.civilization.diplomacy.WarVictory
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.MajorCivApproach
@@ -373,6 +374,7 @@ object DiplomacyEvents {
     fun onLastCityTaken(newOwner: Civilization, oldOwner: Civilization) {
         oldOwner.killedBy = newOwner.civID // CvPlayer::verifyAlive(eKiller): CvTeam::SetKilledByTeam, whoever the killer is
         newOwner.completeAccomplishment(Accomplishment.EliminatedCivilization) // CvPlayer::CheckForMurder (V:CvPlayer.cpp:34438-34465)
+        WarVictory.onEliminated(newOwner, oldOwner)
         if (!newOwner.isMajorCiv) return
         GrandStrategyAi.onCivDestroyed(newOwner, oldOwner)
         // CvPlayer::verifyAlive: every major at war with the killed player remembers a won war, the killed player a lost one (they

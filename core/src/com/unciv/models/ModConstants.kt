@@ -1334,6 +1334,9 @@ class ModConstants {
      *  tourism from the culture and tourism of the last turns that `[positiveAmount] turns of yields as tourism for historic events` say, and are counted for
      *  the countable `Historic events` (CvPlayer::ChangeNumHistoricEvents) */
     var historicEventsLikeVp = false
+    /** Vox Populi's war victories (CvPlayer::DoWarVictoryBonuses, V:CvPlayer.cpp:18734-18760): the winner of a peace deal its loser surrenders, of a third-party
+     *  peace or of an elimination completes `War won`, fires `upon winning a war` and has the historic event of a won war */
+    var warVictoryLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

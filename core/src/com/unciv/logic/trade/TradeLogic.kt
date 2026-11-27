@@ -13,6 +13,7 @@ import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomacyManager
 import com.unciv.logic.civilization.diplomacy.DiplomaticModifiers
 import com.unciv.logic.civilization.diplomacy.WarType
+import com.unciv.logic.civilization.diplomacy.WarVictory
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
@@ -152,6 +153,12 @@ class TradeLogic(val ourCivilization: Civilization, val otherCivilization: Civil
             updateHasOpenBorders()
         }
 
+        // CvGameDeals::ActivateDeal: who had won the war before a peace deal (V:CvDealClasses.cpp:4482-4491), for WarVictory
+        val isPeaceDeal = (currentTrade.ourOffers + currentTrade.theirOffers).any { it.type == TradeOfferType.Treaty && it.name == Constants.peaceTreaty }
+        val checksWarVictory = isPeaceDeal && ourCivilization.gameInfo.ruleset.modOptions.constants.warVictoryLikeVp
+        val weWonBefore = checksWarVictory && WarVictory.hasWon(ourCivilization, otherCivilization)
+        val theyWonBefore = checksWarVictory && WarVictory.hasWon(otherCivilization, ourCivilization)
+
         // instant transfers
         fun transferTrade(from: Civilization, to: Civilization, offer: TradeOffer) {
             when (offer.type) {
@@ -248,6 +255,9 @@ class TradeLogic(val ourCivilization: Civilization, val otherCivilization: Civil
                         updateHasOpenBorders()
                     }
 
+                    // CvGameDeals::ActivateDeal, TRADE_ITEM_THIRD_PARTY_PEACE: the giver has won if its war score says so, but not over a City-State
+                    // and not when this deal is a peace deal as well (V:CvDealClasses.cpp:4803-4820)
+                    if (!isPeaceDeal && !thirdCiv.isCityState && WarVictory.hasWon(from, thirdCiv)) WarVictory.onWarWon(from)
                     tradePartnerDiplo.makePeace()
                 }
                 TradeOfferType.VoteCommitment -> {
@@ -272,9 +282,20 @@ class TradeLogic(val ourCivilization: Civilization, val otherCivilization: Civil
         for (offer in currentTrade.ourOffers.filterNot { it.type == TradeOfferType.Treaty })
             transferTrade(ourCivilization, otherCivilization, offer)
 
+        // V:CvDealClasses.cpp:5196-5201: the war score after the cities changed hands counts too
+        val weWonAfter = checksWarVictory && WarVictory.hasWon(ourCivilization, otherCivilization)
+        val theyWonAfter = checksWarVictory && WarVictory.hasWon(otherCivilization, ourCivilization)
+
         // Transfter of treaties should only be done from one side to avoid double signing and notifying
         for (offer in currentTrade.theirOffers.filter { it.type == TradeOfferType.Treaty })
             transferTrade(otherCivilization, ourCivilization, offer)
+
+        if (checksWarVictory) {
+            val weGive = currentTrade.ourOffers.any { it.type != TradeOfferType.Treaty }
+            val theyGive = currentTrade.theirOffers.any { it.type != TradeOfferType.Treaty }
+            WarVictory.onPeaceDeal(ourCivilization, otherCivilization, weWonBefore, theyWonBefore, weWonAfter, theyWonAfter,
+                fromGivesOnly = weGive && !theyGive, toGivesOnly = theyGive && !weGive)
+        }
 
         fun applyEmbassyOffer(diploManager: DiplomacyManager) {
             if (diploManager.hasModifier(DiplomaticModifiers.EstablishedEmbassy)) {

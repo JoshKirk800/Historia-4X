@@ -11,4 +11,6 @@ enum class HistoricEvent(val label: String, val divisor: Int) {
     EraChange("new era", 10),
     /** A world wonder built (CvCity::processBuilding, V:CvCity.cpp:13300-13319) */
     WorldWonder("wonder", 5),
+    /** A war won (CvPlayer::DoWarVictoryBonuses, V:CvPlayer.cpp:18734-18760), see [com.unciv.logic.civilization.diplomacy.WarVictory] */
+    WonWar("victory", 5),
 }

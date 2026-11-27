@@ -627,6 +627,46 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "[positiveAmount] turns of yields as tourism for golden ages"
+	With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for a golden age that starts or becomes longer, divided by 5; it counts as a historic event when the turns are positive (the original's `GoldenAgeTourism` of policies)
+
+	Example: "[3] turns of yields as tourism for golden ages"
+
+	Applicable to: Global
+
+??? example  "[positiveAmount] turns of yields as tourism for completed land trade routes"
+	With the ModConstants `historicEventDispatchLikeVp`, the uniques of the city a land trade route to a major civilization started in (`<in this city>` for those of a building alone) give tourism when the route ends: a fifteenth of the yields of that many turns towards the civilization of its destination, a third of that towards those it has met; it counts as a historic event when the tourism is positive (the original's `FinishLandTRTourism`)
+
+	Example: "[3] turns of yields as tourism for completed land trade routes"
+
+	Applicable to: Global
+
+??? example  "[positiveAmount] turns of yields as tourism for completed sea trade routes"
+	As `[positiveAmount] turns of yields as tourism for completed land trade routes` for sea trade routes (the original's `FinishSeaTRTourism`)
+
+	Example: "[3] turns of yields as tourism for completed sea trade routes"
+
+	Applicable to: Global
+
+??? example  "[positiveAmount] turns of yields as tourism for completed trade routes to City-States"
+	With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for a trade route to a City-State that ends, divided by 5; it counts as a historic event when the turns are positive (the original's `EventTourismCS` of policies)
+
+	Example: "[3] turns of yields as tourism for completed trade routes to City-States"
+
+	Applicable to: Global
+
+??? example  "[positiveAmount] turns of yields as tourism for religion spread"
+	With the ModConstants `historicEventDispatchLikeVp`, as `[positiveAmount] turns of yields as tourism for historic events` for a city adopting the religion of our holy city for the first time while it is our state religion, divided by 15; it counts as a historic event when the tourism is positive (the original's `ReligionSpreadTourism` of traits)
+
+	Example: "[3] turns of yields as tourism for religion spread"
+
+	Applicable to: Global
+
+??? example  "Domestic trade routes give tourism for completed trade routes"
+	With the ModConstants `historicEventDispatchLikeVp`, a domestic trade route that ends gives the tourism of `[positiveAmount] turns of yields as tourism for completed land trade routes` (or sea) as well, a third of it towards each civilization met (the original's `InternalTRTourism` of policies)
+
+	Applicable to: Global
+
 ??? example  "[stats] from each Great Work"
 	Added to the culture a city gets from each of its Great Works (see `greatWorkBaseCulture` in ModConstants), in every city of the civilization
 

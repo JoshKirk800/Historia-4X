@@ -1,8 +1,10 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.city.City
+import com.unciv.logic.city.GreatWorkFunctions
 import com.unciv.logic.city.GreatWorkSlot
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.PlayerType
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.GreatWorkInstance
@@ -558,6 +560,104 @@ class GreatWorkSwapAutomationTests {
         // the Museum, and our art alone fills the Louvre
         assertEquals(listOf(ourArt, null, null, null), worksIn(city, louvre))
         assertTrue(other.cities.first().greatWorks.getWorks().any { it === fromOther })
+    }
+
+    @Test
+    fun `like Vox Populi the AI arranges its works right after a new one, a human does not`() {
+        likeVp()
+        val museum = building("Museum")
+        city.cityConstructions.addBuilding(museum)
+        secondCity.cityConstructions.addBuilding(museum)
+        val first = art("Ancient era", civ)
+        put(city, museum, 0, first)
+
+        val created = GreatWorkFunctions.createWork(civ, game.createGreatWork(GreatWorkType.Art), GreatWorkSlot(secondCity, museum, 0), era = "Ancient era")
+        assertEquals("two Ancient works of ours theme the Museum", listOf(first, created), worksIn(city, museum))
+
+        city.greatWorks.takeAll(museum)
+        put(city, museum, 0, first)
+        civ.playerType = PlayerType.Human
+        val ofHuman = GreatWorkFunctions.createWork(civ, game.createGreatWork(GreatWorkType.Art), GreatWorkSlot(secondCity, museum, 0), era = "Ancient era")
+        assertEquals(listOf(ofHuman, null), worksIn(secondCity, museum))
+    }
+
+    @Test
+    fun `like Vox Populi a City-State swaps with no one and offers nothing`() {
+        likeVp()
+        val cityState = game.addCiv(cityStateType = game.ruleset.cityStateTypes.keys.first())
+        val cityStateCity = game.addCity(cityState, game.tileMap[-5, -5], replacePalace = true)
+        cityState.diplomacyFunctions.makeCivilizationsMeet(other)
+        val museum = building("Museum")
+        cityStateCity.cityConstructions.addBuilding(museum)
+        val ours = art("Ancient era", cityState)
+        val toGive = art("Medieval era", third)
+        put(cityStateCity, museum, 0, ours)
+        put(cityStateCity, museum, 1, toGive)
+        val wanted = art("Ancient era", other)
+        other.cities.first().cityConstructions.addBuilding(museum)
+        put(other.cities.first(), museum, 0, wanted)
+        other.culture.swappableArt = wanted.id
+        cityState.culture.swappableArt = toGive.id
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(cityState)
+
+        assertEquals(listOf(ours, toGive), worksIn(cityStateCity, museum))
+        assertEquals("", cityState.culture.swappableArt)
+    }
+
+    @Test
+    fun `like Vox Populi with no works of a kind what was offered stays`() {
+        likeVp()
+        civ.culture.swappableArt = "gone"
+
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+
+        assertEquals("gone", civ.culture.swappableArt)
+    }
+
+    @Test
+    fun `like Vox Populi Optimize swaps with no one and takes back our offer, Swap and Optimize swaps`() {
+        likeVp()
+        val (museum, toGive, wanted) = setUpSwap()
+        other.culture.swappableArt = wanted.id
+        civ.culture.swappableArt = toGive.id
+
+        GreatWorkSwapAutomation.arrangeWorksForHuman(civ, swapWithOthers = false)
+        assertTrue(worksIn(city, museum).any { it === toGive })
+        assertEquals("", civ.culture.swappableArt)
+
+        GreatWorkSwapAutomation.arrangeWorksForHuman(civ, swapWithOthers = true)
+        assertEquals(wanted, worksIn(city, museum)[1])
+        assertTrue(other.cities.first().greatWorks.getWorks().any { it === toGive })
+    }
+
+    @Test
+    fun `like Vox Populi for a human any damage endangers a city, and puppets are as the other cities`() {
+        likeVp()
+        val museum = building("Museum")
+        val thirdCity = game.addCity(civ, game.tileMap[0, -5])
+        secondCity.cityConstructions.addBuilding(museum)
+        thirdCity.cityConstructions.addBuilding(museum)
+        val a = art("Ancient era", civ)
+        val b = art("Ancient era", civ)
+        put(thirdCity, museum, 0, a)
+        put(thirdCity, museum, 1, b)
+        val inSecond = { worksIn(secondCity, museum) == listOf(a, b) }
+
+        val max = secondCity.health // a new city has all its health
+        secondCity.health = max - 1
+        GreatWorkSwapAutomation.arrangeWorksForHuman(civ, swapWithOthers = true)
+        assertFalse("endangered: the Museum of the third city is themed first, in place", inSecond())
+        GreatWorkSwapAutomation.doSwapGreatWorks(civ)
+        assertTrue("for the AI not endangered, and first in empire order", inSecond())
+
+        secondCity.greatWorks.takeAll(museum)
+        put(thirdCity, museum, 0, a)
+        put(thirdCity, museum, 1, b)
+        secondCity.health = max
+        secondCity.isPuppet = true
+        GreatWorkSwapAutomation.arrangeWorksForHuman(civ, swapWithOthers = true)
+        assertTrue("the puppet is first in empire order", inSecond())
     }
     //endregion
 }

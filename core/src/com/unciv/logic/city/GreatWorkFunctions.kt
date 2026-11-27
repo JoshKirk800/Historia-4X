@@ -1,5 +1,6 @@
 package com.unciv.logic.city
 
+import com.unciv.logic.automation.civilization.GreatWorkSwapAutomation
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
@@ -108,6 +109,9 @@ object GreatWorkFunctions {
         slot.city.greatWorks.place(instance, slot)
         slot.city.cityStats.update()
         if (civ.gameInfo.ruleset.modOptions.constants.greatWorkWltkdLikeVp) celebrateNewWork(civ, slot.city)
+        // Vox Populi's AI arranges its works right after each new one (CvUnit::createGreatWork, V:CvUnit.cpp:9694-9697; the same in
+        // CvCity::processBuilding and CvPlayerCulture::DoArchaeologyChoice)
+        if (civ.gameInfo.ruleset.modOptions.constants.greatWorkThemingLikeVp && civ.isAI()) GreatWorkSwapAutomation.doSwapGreatWorks(civ)
         return instance
     }
 

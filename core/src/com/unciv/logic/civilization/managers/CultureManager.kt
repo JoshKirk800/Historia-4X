@@ -128,7 +128,12 @@ class CultureManager : IsPartOfGameInfoSerialization {
         val constants = civ.gameInfo.ruleset.modOptions.constants
         val state = city.state
 
-        var base = city.greatWorks.getNumWorks() * constants.greatWorkBaseTourism
+        // CvCityBuildings::GetYieldFromGreatWorksTimes100 (V:CvBuildingClasses.cpp:6651-6656, 6696-6702): the tourism of each work, the base and the buildings'
+        // (global and local), for each work, then the great-work tourism modifier
+        var perWork = constants.greatWorkBaseTourism
+        for (unique in city.getMatchingUniques(UniqueType.TourismFromGreatWorks, state))
+            if (city.matchesFilter(unique.params[1])) perWork += unique.params[0].toInt()
+        var base = city.greatWorks.getNumWorks() * perWork
         var greatWorkPercent = 0
         for (unique in city.getMatchingUniques(UniqueType.GreatWorksTourismPercent, state))
             if (city.matchesFilter(unique.params[1])) greatWorkPercent += unique.params[0].toInt()

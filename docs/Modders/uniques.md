@@ -599,6 +599,13 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global
 
+??? example  "[amount] Tourism from each Great Work [cityFilter]"
+	Added to `greatWorkBaseTourism` of ModConstants for each Great Work of the matching cities, before the `% Tourism from Great Works`
+
+	Example: "[3] Tourism from each Great Work [in all cities]"
+
+	Applicable to: Global
+
 ??? example  "[positiveAmount]% of the Culture from wonders, natural wonders and improved tiles becomes Tourism [cityFilter]"
 	Counts the culture of the world wonders of the city, and of its worked natural wonder and improved tiles
 

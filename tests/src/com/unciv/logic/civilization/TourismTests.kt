@@ -85,6 +85,18 @@ class TourismTests {
     }
 
     @Test
+    fun `tourism for each Great Work adds to the base of each work before the percentage, locally or in every city`() {
+        // CvCityBuildings::GetYieldFromGreatWorksTimes100 (V:CvBuildingClasses.cpp:6651-6656, 6696-6702)
+        galleryWith(2, "[1] Tourism from each Great Work [in this city]", "[+50]% Tourism from Great Works [in this city]")
+        val other = game.addCity(civA, game.tileMap[3, 0])
+        addBuilding("[2] Tourism from each Great Work [in all cities]", "[4] Tourism from each Great Work [in this city]",
+            "[8] Tourism from each Great Work [in all coastal cities]", to = other)
+        // each work makes 2 + 1 + 2, the two make 10, 50% more is 15; the other city's own 4 is not for these works, nor the 8 of coastal cities
+        assertEquals(15, tourism())
+        assertEquals("no work, no tourism", 0, tourism(other))
+    }
+
+    @Test
     fun `flat tourism that depends on a technology counts once it is known`() {
         addBuilding("[+12] Tourism [in this city] <after discovering [Pottery]>")
         assertEquals(0, tourism())

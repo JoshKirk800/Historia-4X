@@ -44,6 +44,8 @@ class GreatPersonManager : IsPartOfGameInfoSerialization {
     var mayaLimitedFreeGP = 0
     /** Remaining candidates for maya ability - whenever empty refilled from all GP, starts out empty */
     var longCountGPPool = HashSet<String>()
+    /** How often each Great Person was chosen for the Long Count, with the ModConstants `longCountYieldsLikeVp`: Vox Populi's LONGCOUNT accomplishments */
+    var longCountChoices = Counter<String>()
 
     /** Only in games saved before Great Person points were kept per city (base threshold per group, doubled per Great Person);
      *  read and emptied by [com.unciv.logic.BackwardCompatibility.migrateGreatPersonPointsToCities] */
@@ -65,6 +67,7 @@ class GreatPersonManager : IsPartOfGameInfoSerialization {
         toReturn.greatGeneralPoints = greatGeneralPoints
         toReturn.mayaLimitedFreeGP = mayaLimitedFreeGP
         toReturn.longCountGPPool = longCountGPPool.toHashSet()
+        toReturn.longCountChoices = longCountChoices.clone()
         return toReturn
     }
 
@@ -214,6 +217,11 @@ class GreatPersonManager : IsPartOfGameInfoSerialization {
         if (useMayaLongCount) {
             mayaLimitedFreeGP--
             longCountGPPool.remove(choice.name)
+            // CvPlayerTraits::SetUnitBaktun (V:CvTraitClasses.cpp:7325-7369): the choice is an accomplishment by the kind of Great Person, and the cities update
+            if (civInfo.gameInfo.ruleset.modOptions.constants.longCountYieldsLikeVp) {
+                longCountChoices.add(choice.name, 1)
+                for (city in civInfo.cities) city.cityStats.update()
+            }
         }
         countGreatPersonGained(choice)
         return unit

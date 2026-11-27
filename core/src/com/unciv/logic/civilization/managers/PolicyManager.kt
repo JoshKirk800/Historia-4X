@@ -1,8 +1,9 @@
 package com.unciv.logic.civilization.managers
 
 import com.unciv.logic.IsPartOfGameInfoSerialization
-import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.Accomplishment
 import com.unciv.logic.civilization.CivFlags
+import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.InstantYields
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.models.ruleset.Policy
@@ -300,10 +301,15 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         adoptedPolicies.add(policy.name)
         addPolicyToTransients(policy)
 
+        // CvPlayerPolicies::SetPolicyBranchUnlocked (V:CvPolicyClasses.cpp:5380-5391): the first ideology ever chosen
+        if (policy is PolicyBranch && policy.isIdeology && civInfo.accomplishments[Accomplishment.Ideology.name] == 0)
+            civInfo.completeAccomplishment(Accomplishment.Ideology)
+
         if (!branchCompletion) {
             val branch = policy.branch
             if (branch.policies.count { isAdopted(it.name) } == branch.policies.size - 1) { // All done apart from branch completion
                 adopt(branch.policies.last(), true) // add branch completion!
+                Accomplishment.ofPolicyBranchEra(civInfo.gameInfo.ruleset.eras[branch.era]?.eraNumber ?: 0)?.let { civInfo.completeAccomplishment(it) }
             }
         }
 

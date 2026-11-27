@@ -298,6 +298,16 @@ class Civilization : IsPartOfGameInfoSerialization {
     var totalCultureRemainder = 0
     var totalFaithForContests = 0
 
+    /** How often each [Accomplishment] was completed, by name (CvPlayer::m_aiAccomplishments); only with `ModConstants.accomplishmentsLikeVp` */
+    val accomplishments = Counter<String>()
+
+    /** CvPlayer::CompleteAccomplishment (V:CvPlayer.cpp:38783-38840): one more of [accomplishment], and the cities update their yields */
+    fun completeAccomplishment(accomplishment: Accomplishment) {
+        if (!gameInfo.ruleset.modOptions.constants.accomplishmentsLikeVp) return
+        accomplishments.add(accomplishment.name, 1)
+        for (city in cities) city.cityStats.update()
+    }
+
     /** [totalCultureForContests] in hundredths */
     @Readonly
     fun getLifetimeCultureTimes100(): Long = totalCultureForContests * 100L + totalCultureRemainder
@@ -438,6 +448,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.totalCultureForContests = totalCultureForContests
         toReturn.totalCultureRemainder = totalCultureRemainder
         toReturn.totalFaithForContests = totalFaithForContests
+        toReturn.accomplishments.add(accomplishments)
         toReturn.attacksSinceTurnStart = attacksSinceTurnStart.copy()
         toReturn.hasMovedAutomatedUnits = hasMovedAutomatedUnits
         toReturn.statsHistory = statsHistory.clone()

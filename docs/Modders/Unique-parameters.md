@@ -422,6 +422,8 @@ Allowed values:
     - Gets the amount of a stat or resource the civilization gains per turn
 -   `Completed Policy branches`
     - Example: `Only available <when number of [Completed Policy branches] is more than [0]>`
+-   `Completed [accomplishment] accomplishments` - How often the civilization completed a Vox Populi accomplishment (CvPlayer::GetNumTimesAccomplishmentCompleted); 0 without the ModConstants `accomplishmentsLikeVp`
+    - Example: `Only available <when number of [Completed [Ancient policy branch] accomplishments] is more than [0]>`
 -   `[cityFilter] Cities`
     - Example: `Only available <when number of [[in all cities] Cities] is more than [0]>`
 -   `[mapUnitFilter] Units`

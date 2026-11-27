@@ -2,6 +2,7 @@ package com.unciv.logic.civilization.managers
 
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
+import com.unciv.logic.civilization.Accomplishment
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Notification
 import com.unciv.logic.civilization.NotificationIcon
@@ -467,6 +468,7 @@ class ReligionManager : IsPartOfGameInfoSerialization {
             foundPantheon(beliefs[0].name, useFreeBeliefs)  // makes religion non-null
         // add beliefs (religion exists at this point)
         religion!!.addBeliefs(beliefs)
+        for (belief in beliefs) Accomplishment.ofBelief(belief.type)?.let { civInfo.completeAccomplishment(it) }
 
         when (religionState) {
             ReligionState.None -> {

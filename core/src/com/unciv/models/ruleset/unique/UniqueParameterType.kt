@@ -621,6 +621,14 @@ enum class UniqueParameterType(
         override val staticKnownValues = com.unciv.logic.city.NeedType.entries.map { it.label }.toSet()
     },
 
+    /** The Vox Populi accomplishments, used by [Countables.Accomplishments], see [com.unciv.logic.civilization.Accomplishment] */
+    AccomplishmentName("accomplishment", "Ancient policy branch", "One of " +
+        com.unciv.logic.civilization.Accomplishment.entries.joinToString { "`${it.label}`" }, "Accomplishments",
+        severityDefault = UniqueType.UniqueParameterErrorSeverity.RulesetInvariant
+    ) {
+        override val staticKnownValues = com.unciv.logic.civilization.Accomplishment.entries.map { it.label }.toSet()
+    },
+
     /** The kinds of trade route a trigger names, used by [UniqueType.TriggerUponCompletingTradeRoute]: a domestic route is one between two cities of the same civilization
      *  (`TradeRouteKind.Food` or `Production`), see [com.unciv.models.TradeRoute.matchesFilter] */
     TradeRouteKindName("tradeRouteKind", "international", "One of `international`, `domestic` or `any`", "Trade route kinds",

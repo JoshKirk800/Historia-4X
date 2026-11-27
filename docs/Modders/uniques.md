@@ -5815,6 +5815,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: TriggerCondition
 
+??? example  "&lt;upon adopting a policy&gt;"
+	Any policy or the opening of a branch, but not the policy given for completing a branch
+
+	Applicable to: TriggerCondition
+
 ??? example  "&lt;upon declaring war on [civFilter] Civilizations&gt;"
 	Example: "&lt;upon declaring war on [City-States] Civilizations&gt;"
 

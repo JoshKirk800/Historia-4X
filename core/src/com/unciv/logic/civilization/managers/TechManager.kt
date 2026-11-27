@@ -378,8 +378,10 @@ class TechManager : IsPartOfGameInfoSerialization {
         }
 
         // INSTANT_YIELD_TYPE_TECH (V:CvTeam.cpp:8251): a building's uniques that say `in this city` in each city, the rest once, in the capital
-        InstantYields.fire(UniqueType.TriggerUponResearch, civInfo, null, 0, civInfo.state, triggerNotificationText,
-            triggerFilter = { newTech.matchesFilter(it.params[0], civInfo.state) })
+        // CvTeam::setHasTech calls processTech, which fires it, only for a tech that is not repeated (V:CvTeam.cpp:6516-6518)
+        if (!newTech.isContinuallyResearchable() || !getRuleset().modOptions.constants.repeatTechsGiveNoInstantYieldsLikeVp)
+            InstantYields.fire(UniqueType.TriggerUponResearch, civInfo, null, 0, civInfo.state, triggerNotificationText,
+                triggerFilter = { newTech.matchesFilter(it.params[0], civInfo.state) })
 
 
         val revealedResources = getRuleset().tileResources.values.filter { techName == it.revealedBy }

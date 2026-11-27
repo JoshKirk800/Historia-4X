@@ -644,10 +644,23 @@ class ReligionManager : IsPartOfGameInfoSerialization {
      *  CvPlayerReligions::UpdateStateReligion (3769-3812) records when it picks the founded or a conquered religion; a pantheon is owned by nobody.
      *  Without [com.unciv.models.ModConstants.religiousBeliefValidityLikeVp] it is the founded religion while we own its holy city. */
     @Readonly
-    fun getOwnedReligion(): Religion? {
-        if (!validityLikeVp()) return getFoundedReligionWithHolyCity()
+    fun getOwnedReligion(): Religion? = if (validityLikeVp()) getOwnedReligionLikeVp() else getFoundedReligionWithHolyCity()
+
+    @Readonly
+    private fun getOwnedReligionLikeVp(): Religion? {
         val state = getStateReligionCached() ?: return null
         return if (state.isMajorReligion() && ownsHolyCityOf(state)) state else null
+    }
+
+    /** Whether [majority], a city's majority religion, is this civilization's own: the religion it owns (CvPlayerReligions::GetOwnedReligion, whatever
+     *  [com.unciv.models.ModConstants.religiousBeliefValidityLikeVp] says, since only Vox Populi rows use it), else the one it founded while it owns its holy
+     *  city (CvGameReligions::GetReligionCreatedByPlayer, V:CvReligionClasses.cpp:2335-2355), or a pantheon while it founded one (V:CvCity.cpp:25440-25451):
+     *  every pantheon there is the one RELIGION_PANTHEON, so a city following another civilization's pantheon counts too. */
+    @Readonly
+    fun isOwnPantheonOrReligion(majority: Religion?): Boolean {
+        if (majority == null) return false
+        val own = getOwnedReligionLikeVp() ?: getFoundedReligionWithHolyCity()
+        return majority == own || majority.isPantheon() && getOwnPantheon() != null
     }
 
     /** The pantheon this civilization founded, which it keeps for good even when its major religion also carries the belief

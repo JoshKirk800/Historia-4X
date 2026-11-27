@@ -745,6 +745,10 @@ class City : IsPartOfGameInfoSerialization, INamed {
             "in cities following this religion" -> true
             // CvUnit::GetGenericMaxStrengthModifier: the religion must be the one the civilization has the founder benefits of
             "in cities following our religion" -> viewingCiv?.religionManager?.getFounderBenefitsReligion().let { it != null && it == religion.getMajorityReligion() }
+            // CvCity::getBaseYieldRateTimes100 (V:CvCity.cpp:23480-23481): the majority is a major religion and the owner's state religion
+            "in cities following our state religion" -> religion.getMajorityReligion().let { it != null && it.isMajorReligion() && it == civ.religionManager.getStateReligionCached() }
+            // CvCity::GetBaseYieldRateFromReligionTimes100 (V:CvCity.cpp:25440-25451): see ReligionManager.isOwnPantheonOrReligion
+            "in cities following our own pantheon or religion" -> civ.religionManager.isOwnPantheonOrReligion(religion.getMajorityReligion())
             else -> civ.matchesFilter(filter, state, false)
         }
     }

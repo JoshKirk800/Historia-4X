@@ -286,6 +286,8 @@ enum class UniqueParameterType(
             "in City-State cities",
             "in cities following this religion",
             "in cities following our religion",
+            "in cities following our state religion",
+            "in cities following our own pantheon or religion",
         ) + Constants.all
 
         override fun getErrorSeverity(parameterText: String, ruleset: Ruleset) = getErrorSeverityForFilter(parameterText, ruleset)

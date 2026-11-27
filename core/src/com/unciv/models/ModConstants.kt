@@ -1300,6 +1300,12 @@ class ModConstants {
     var tourismModifierSharedReligion = 25
     var tourismModifierOpenBorders = 25
     var tourismModifierTradeRoute = 25
+    // Percent more tourism towards a civilization that has our diplomat in its capital (TOURISM_MODIFIER_DIPLOMAT: 25, 20 in Vox Populi)
+    var tourismModifierDiplomat = 25
+    /** Vox Populi's percent more tourism towards a civilization instead of Brave New World's (CvPlayerCulture::GetTourismModifierWith,
+     *  V:CvCultureClasses.cpp:4381-4479): the policies' bonus for common enemies counts once however many there are, the diplomat counts
+     *  whatever the ideologies, and the sum is never below -100 */
+    var tourismModifierLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100
     // A civilization is Exotic, Familiar, Popular, Influential or Dominant over another once its tourism towards it, added up over the game,

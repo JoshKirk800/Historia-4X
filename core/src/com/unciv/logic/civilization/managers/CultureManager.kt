@@ -9,6 +9,7 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueType
 import yairm210.purity.annotations.Readonly
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 /** How far a civilization's tourism has made another take to its culture (CvCultureClasses.h InfluenceLevels) */
@@ -281,15 +282,20 @@ class CultureManager : IsPartOfGameInfoSerialization {
             TourismRelation.DifferentIdeologies -> constants.tourismModifierDifferentIdeologies
             else -> 0
         }
-        // CvPlayerCulture::GetTourismModifierWith: propaganda only counters a *different* ideology.
-        if (TourismRelation.DifferentIdeologies in relations && civ.espionageManager.getActiveDiplomatFor(other) != null)
-            modifier += 25 // BNW GlobalDefines.xml TOURISM_MODIFIER_DIPLOMAT
+        // CvPlayerCulture::GetTourismModifierWith: in Brave New World propaganda only counters a *different* ideology,
+        // in Vox Populi the diplomat counts whatever the ideologies (V:CvCultureClasses.cpp:4415-4418)
+        val likeVp = constants.tourismModifierLikeVp
+        if ((likeVp || TourismRelation.DifferentIdeologies in relations) && civ.espionageManager.getActiveDiplomatFor(other) != null)
+            modifier += constants.tourismModifierDiplomat
         for (unique in civ.getMatchingUniques(UniqueType.TourismTowardsPercent)) {
             val relation = TourismRelation.fromLabel(unique.params[1]) ?: continue
             if (relation !in relations) continue
-            modifier += unique.params[0].toInt() * (if (relation == TourismRelation.CommonEnemies) getNumCommonEnemies(other) else 1)
+            // Brave New World adds the common foe bonus for each foe, Vox Populi once (V:CvCultureClasses.cpp:4381-4398)
+            val times = if (relation == TourismRelation.CommonEnemies && !likeVp) getNumCommonEnemies(other) else 1
+            modifier += unique.params[0].toInt() * times
         }
-        return modifier
+        // Vox Populi: never less than all of it (V:CvCultureClasses.cpp:4479)
+        return if (likeVp) max(modifier, -100) else modifier
     }
     //endregion
 

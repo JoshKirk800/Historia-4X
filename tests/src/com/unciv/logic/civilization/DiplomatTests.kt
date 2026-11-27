@@ -141,6 +141,16 @@ class DiplomatTests {
     }
 
     @Test
+    fun `like Vox Populi a diplomat gives its tourism bonus whatever the ideologies`() {
+        makeTenTourism()
+        game.ruleset.modOptions.constants.tourismModifierLikeVp = true
+        game.ruleset.modOptions.constants.tourismModifierDiplomat = 50
+        assertEquals(10, a.culture.getInfluencePerTurn(b))
+        becomeDiplomat()
+        assertEquals(15, a.culture.getInfluencePerTurn(b))
+    }
+
+    @Test
     fun `familiarity shortens surveillance and increases spy skill without changing persisted rank`() {
         val capital = b.getCapital()!!
         assertEquals(3, a.culture.getSurveillanceTurns(b))

@@ -2376,9 +2376,16 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 	Applicable to: FounderBelief
 
 ??? example  "Spies exert [positiveAmount] times the natural religious pressure on the cities they occupy"
-	Every turn, each living spy of the founder of a religion adds this multiple of the pressure that a nearby city exerts to the religion in the city the spy is in, if the religion already has a presence there
+	Every turn, each living spy of the founder of a religion adds this multiple of the pressure that a nearby city exerts to the religion in the city the spy is in, if the religion already has a presence there (with the mod constant religiousSpreadLikeVp: also where it has none, and only for major civilizations' spies that are not travelling)
 
 	Example: "Spies exert [3] times the natural religious pressure on the cities they occupy"
+
+	Applicable to: FounderBelief
+
+??? example  "Spies erode [positiveAmount] times the natural religious pressure of the other religions in the cities they occupy"
+	Read only with the mod constant religiousSpreadLikeVp. Every turn, each spy of a major civilization whose state religion has this belief takes this multiple of the pressure that a nearby city exerts away from each other religion in the city the spy is in, down to nothing; pantheons and atheism are left alone
+
+	Example: "Spies erode [3] times the natural religious pressure of the other religions in the cities they occupy"
 
 	Applicable to: FounderBelief
 

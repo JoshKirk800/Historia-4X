@@ -580,7 +580,10 @@ enum class UniqueType(
             "when a unit removes other religions (Inquisitors, Great Prophets)"),
     SpyReligionPressure("Spies exert [positiveAmount] times the natural religious pressure on the cities they occupy", UniqueTarget.FounderBelief,
         docDescription = "Every turn, each living spy of the founder of a religion adds this multiple of the pressure that a nearby city exerts to the religion in the city the spy is in, " +
-            "if the religion already has a presence there"),
+            "if the religion already has a presence there (with the mod constant religiousSpreadLikeVp: also where it has none, and only for major civilizations' spies that are not travelling)"),
+    SpyReligionPressureErosion("Spies erode [positiveAmount] times the natural religious pressure of the other religions in the cities they occupy", UniqueTarget.FounderBelief,
+        docDescription = "Read only with the mod constant religiousSpreadLikeVp. Every turn, each spy of a major civilization whose state religion has this belief takes this multiple " +
+            "of the pressure that a nearby city exerts away from each other religion in the city the spy is in, down to nothing; pantheons and atheism are left alone"),
     TradeRouteReligionPressure("[relativeAmount]% religious pressure along trade routes that start in our cities", UniqueTarget.Global,
         docDescription = "Cities linked by a trade route, of any civilization and in either direction, push the religion they follow on each other every turn as if they were close enough " +
             "(once only if they are). The pressure along a route that starts in a city of the civilization with this unique is changed by this percentage. " +

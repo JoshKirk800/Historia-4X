@@ -639,6 +639,16 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         return isHolyCityOf(city, ours.name) && city.religion.getMajorityReligion() == ours
     }
 
+    /** Whether [city] is the holy city of the religion we have the founder benefits of ([getFounderBenefitsReligion]) and has a majority religion, any one, a pantheon
+     *  included: where VP's City of God works. CvCity::setPopulation fires INSTANT_YIELD_TYPE_BIRTH_HOLY_CITY for a city with a majority (V:CvCity.cpp:16608-16615), and
+     *  doInstantYield asks the state religion's Founder belief with `bHolyCityOnly` (V:CvPlayer.cpp:26028-26035), valid only in that religion's holy city and while
+     *  the owner holds it (CvReligionBeliefs::IsBeliefValid, V:CvBeliefClasses.cpp:2156-2197). */
+    @Readonly
+    fun isHolyCityOfOurReligionWithAnyMajority(city: City): Boolean {
+        val ours = getFounderBenefitsReligion() ?: return false
+        return isHolyCityOf(city, ours.name) && city.religion.getMajorityReligion() != null
+    }
+
     /** Whether the holy city of [religion] is one of ours */
     @Readonly
     fun ownsHolyCityOf(religion: Religion): Boolean = civInfo.cities.any { isHolyCityOf(it, religion.name) }

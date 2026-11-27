@@ -321,6 +321,21 @@ class ModConstants {
      *  PROMOTION_MILITARY_TRADITION, MilitaryCapChange 1) adds that amount to the civilization's supply for good, before the empire size divisor. false: the unique is not read. */
     var unitSupplyExpendedGreatPeopleLikeVp = false
 
+    /** VP 5.4.8 CvPlayer::DoUpdateWarDamageAndWeariness, ApplyWarDamage, GetWarWearinessPercent, GetHighestWarWearinessPercent (V:CvPlayer.cpp:36622-36695, 36813-37061). true: a major
+     *  civilization keeps a war weariness against each other major ([WarWearinessConstants]): war damage adds to it, a turn at war (after [WarWearinessConstants.minimumTurns], while
+     *  peace can be made) adds a hundredth of the empire's value, and a turn at peace halves it; [WarDamageAi.warWearinessPercent] is its share of that value. Nothing reads the
+     *  percent yet (the supply, the unit cost and the unhappiness of VP are their own switches). false: nothing is kept. */
+    var warWearinessLikeVp = false
+    var warWeariness = WarWearinessConstants()
+
+    /** The defines of the war weariness (DEF-VP `(2) Vox Populi/Database Changes/DefineChanges.sql`; the same in `ref/db/vp.sqlite` `Defines`) */
+    data class WarWearinessConstants(
+        /** `WAR_WEARINESS_MINIMUM_TURNS`: a war must be this many turns old before it adds weariness */
+        val minimumTurns: Int = 10,
+        /** `UNIT_SUPPLY_WAR_WEARINESS_PERCENT_REDUCTION`: percent of the weariness percent that a major's unit supply loses (range 0-100) */
+        val supplyReductionPercent: Int = 34,
+    )
+
     /**
      *  The GlobalDefines of VP's unit supply, read only with [unitSupplyLikeVp] (can only be modded all-or-nothing, a data class so the Json serializer can omit it when default). The
      *  defaults are the numbers of the original / Community Patch (nothing reduces the supply, 10% production per unit over it); `DEF-VP` is `(2) Vox Populi/Database Changes/DefineChanges.sql:160-195`.

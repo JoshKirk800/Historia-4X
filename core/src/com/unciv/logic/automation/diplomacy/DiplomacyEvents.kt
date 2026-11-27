@@ -55,6 +55,9 @@ object DiplomacyEvents {
      */
     fun onWarDeclared(declarer: Civilization, victim: Civilization, isDefensivePact: Boolean) {
         val gameInfo = declarer.gameInfo
+        // CvTeam::setAtWar (V:CvTeam.cpp:4394): both sides note the turn the war began (CvTeam::GetNumTurnsAtWar reads it)
+        if (declarer.isMajorCiv) declarer.ai.diplomacy.memoryOf(victim).turnWarStarted = gameInfo.turns
+        if (victim.isMajorCiv) victim.ai.diplomacy.memoryOf(declarer).turnWarStarted = gameInfo.turns
         // CvTeam::DoDeclareWar (Vox Populi): the declarer is the aggressor, unless a defensive pact called it in; either side that
         // wanted the war is one too
         if (declarer.isMajorCiv) declarer.ai.diplomacy.memoryOf(victim).aggressor = !isDefensivePact || wantedWar(declarer, victim)
@@ -236,6 +239,7 @@ object DiplomacyEvents {
         val ai = civ.ai.diplomacy
         val memory = ai.memoryOf(other)
         memory.turnMadePeace = civ.gameInfo.turns
+        memory.turnWarStarted = -1   // CvTeam::setAtWar (V:CvTeam.cpp:4459)
         // CvDiplomacyAI::ResetSentAttackProtectedMinorTaunts: at peace with a city-state the taunts about it start over
         if (other.isCityState) for (tauntMemory in ai.memories.values) tauntMemory.sentAttackProtectedMinorTaunts.remove(other.civID)
         memory.musteringForAttack = false

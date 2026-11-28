@@ -470,25 +470,46 @@ class BeliefScoringContext(val civ: Civilization, considerExpansion: Boolean = f
 object BeliefScoring {
 
     /** CvReligionAI::ScoreBelief: 5, plus the plot scores × worked/owned/unowned multiplier, plus the city scores × the city multiplier,
-     *  plus the player score; halved for a pantheon belief */
+     *  plus the player score; halved for a pantheon belief. With Vox Populi's AI [scoreBeliefLikeVp]. */
     fun scoreBelief(belief: Belief, context: BeliefScoringContext): Int {
         val civ = context.civ
         val profile = BeliefAiProfile.of(belief, civ)
+        if (ReligionAutomation.religionAiLikeVp(civ)) return scoreBeliefLikeVp(belief, profile, context)
         var score = 5
-        val likeVp = ReligionAutomation.religionAiLikeVp(civ)
-        for (i in context.plots.indices) {
-            val tile = context.plots[i]
-            val atPlot = if (likeVp) scoreBeliefAtPlotLikeVp(profile, tile, context) else scoreBeliefAtPlot(profile, tile, civ)
-            score += atPlot * context.plotMultipliers[i]
-        }
+        for (i in context.plots.indices) score += scoreBeliefAtPlot(profile, context.plots[i], civ) * context.plotMultipliers[i]
         val cityMultiplier = civ.gameInfo.ruleset.ai.define(AiDefine.RELIGION_BELIEF_SCORE_CITY_MULTIPLIER)
-        for (city in civ.cities)
-            score += if (likeVp && belief.type == BeliefType.Pantheon) scorePantheonBeliefAtCity(profile, city, context)
-            else scoreBeliefAtCity(profile, city, context) * cityMultiplier
-        score += if (likeVp && belief.type == BeliefType.Pantheon) scorePantheonBeliefForPlayer(profile, context)
-        else scoreBeliefForPlayer(profile, context)
+        for (city in civ.cities) score += scoreBeliefAtCity(profile, city, context) * cityMultiplier
+        score += scoreBeliefForPlayer(profile, context)
         if (belief.type == BeliefType.Pantheon) score /= 2
         return score
+    }
+
+    /**
+     *  CvReligionAI::ScoreBelief (V:CvReligionClasses.cpp:7807-7891,7948-7958): the plot scores above 0 × their weights; each city's
+     *  [scorePantheonBeliefAtCity] for a pantheon, else [scoreBeliefAtCity] × 6 (VP's RELIGION_BELIEF_SCORE_CITY_MULTIPLIER; Unciv's
+     *  rulesets have 3); for any belief, when the weighted plots include land not ours, the cities we may still found:
+     *  (min(6, max(3, 1 + those plots / 20)) - our cities, below 0 too) × [scorePantheonBeliefAtCity] of no city / 2; the player's
+     *  [scorePantheonBeliefForPlayer] or [scoreBeliefForPlayer]; at least 0.
+     *  Not built: StartsWithPantheon (no Unciv trait), the civilization's own beliefs × 5 (Unciv's beliefs have none) and the bonus
+     *  belief modifier.
+     */
+    private fun scoreBeliefLikeVp(belief: Belief, profile: BeliefAiProfile, context: BeliefScoringContext): Int {
+        val civ = context.civ
+        val pantheon = belief.type == BeliefType.Pantheon
+        var score = 0
+        var landNotOurs = 0
+        for (i in context.plots.indices) {
+            val tile = context.plots[i]
+            if (tile.getOwner() != civ && tile.isLand) landNotOurs++
+            val atPlot = scoreBeliefAtPlotLikeVp(profile, tile, context)
+            if (atPlot > 0) score += atPlot * context.plotMultipliers[i]
+        }
+        for (city in civ.cities)
+            score += if (pantheon) scorePantheonBeliefAtCity(profile, city, context) else 6 * scoreBeliefAtCity(profile, city, context)
+        if (landNotOurs > 0)
+            score += (min(6, max(3, 1 + landNotOurs / 20)) - civ.cities.size) * scorePantheonBeliefAtCity(profile, null, context) / 2
+        score += if (pantheon) scorePantheonBeliefForPlayer(profile, context) else scoreBeliefForPlayer(profile, context)
+        return max(0, score)
     }
 
     /** CvReligionAI::ScoreBeliefAtPlot: the belief's yield changes on this plot; improvement changes count twice, and only on a resource plot

@@ -1,6 +1,7 @@
 package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.Timers.Companion.timeThis
+import com.unciv.logic.automation.WeightedChoice
 import com.unciv.logic.automation.city.HurryChoice
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
 import com.unciv.logic.automation.diplomacy.TheftAi
@@ -1297,17 +1298,48 @@ object ReligionAutomation {
     /**
      *  CvReligionAI::ChoosePantheonBelief / ChooseFounderBelief / ChooseFollowerBelief / ChooseEnhancerBelief / ChooseBonusBelief /
      *  ChooseReformationBelief: [BeliefScoring.scoreBelief] for each available belief (× the ruleset's AI weight uniques for the belief),
-     *  those above 0 roll among the top 3 weighted by score.
+     *  those above 0 roll among the top 3 weighted by score. With Vox Populi's AI [chooseBeliefLikeVp].
      */
     private fun chooseBelief(civ: Civilization, type: BeliefType, exclude: Set<Belief>, context: BeliefScoringContext, index: Int): Belief? {
+        if (religionAiLikeVp(civ)) return chooseBeliefLikeVp(civ, type, exclude, context)
         val gameContext = GameContext(civ)
-        val forBonus = type == BeliefType.Any
         val scored = availableBeliefs(civ, type, exclude).mapNotNull { belief ->
-            val score = (BeliefScoring.scoreBelief(belief, context, forBonus) * belief.getWeightForAiDecision(gameContext)).toInt()
+            val score = (BeliefScoring.scoreBelief(belief, context) * belief.getWeightForAiDecision(gameContext)).toInt()
             if (score > 0) belief to score else null
         }
         return chooseFromTopChoices(scored, 3, civ.ai.random("ReligionAutomation.chooseBelief.${type.name}.$index"))
     }
+
+    /**
+     *  CvReligionAI::ChoosePantheonBelief / ChooseFounderBelief / ChooseFollowerBelief / ChooseEnhancerBelief / ChooseBonusBelief /
+     *  ChooseReformationBelief (V:CvReligionClasses.cpp:6161-6364) with Vox Populi's AI: every available belief of [type] not in
+     *  [exclude], scored by [BeliefScoring.scoreBelief] (as a bonus belief for [BeliefType.Any]) × the ruleset's AI weight uniques
+     *  (an Unciv modding feature VP lacks), 0 included, stably sorted from the best; a weighted pick among those at least the
+     *  difficulty's BeliefChoiceCutoffThreshold % of the best, a uniform one when none scores above 0
+     *  ([WeightedChoice.chooseAbovePercentThreshold]). The roll is named by VP's seed inputs, the category salt and the number of
+     *  beliefs available; Unciv's generator still differs from VP's.
+     */
+    fun chooseBeliefLikeVp(civ: Civilization, type: BeliefType, exclude: Set<Belief>, context: BeliefScoringContext): Belief? {
+        val available = availableBeliefs(civ, type)
+        val gameContext = GameContext(civ)
+        val forBonus = type == BeliefType.Any
+        val scored = available.filter { it !in exclude }
+            .map { it to (BeliefScoring.scoreBelief(it, context, forBonus) * it.getWeightForAiDecision(gameContext)).toInt() }
+            .sortedByDescending { it.second }
+        if (scored.isEmpty()) return null
+        val cutoff = civ.gameInfo.ruleset.ai.handicapValue(civ.gameInfo.getDifficulty().name, BELIEF_CUTOFF) ?: DEFAULT_BELIEF_CUTOFF
+        val random = civ.ai.random("ReligionAutomation.chooseBeliefLikeVp.${beliefChoiceSalts[type]}.${available.size}")
+        return scored[WeightedChoice.chooseAbovePercentThreshold(scored.map { it.second }, cutoff, random)].first
+    }
+
+    private const val BELIEF_CUTOFF = "BeliefChoiceCutoffThreshold"
+    /** HandicapInfos.BeliefChoiceCutoffThreshold of Vox Populi (every difficulty), for a ruleset without the column */
+    private const val DEFAULT_BELIEF_CUTOFF = 90
+    /** The CvSeeder salts of CvReligionAI's Choose*Belief (V:CvReligionClasses.cpp:6186,6220,6254,6288,6325,6359) */
+    private val beliefChoiceSalts = mapOf(
+        BeliefType.Pantheon to "0af7fe29", BeliefType.Founder to "9db23f3c", BeliefType.Follower to "93c8983d",
+        BeliefType.Enhancer to "3a862bb8", BeliefType.Any to "c0809801", BeliefType.Reformation to "894eaafe",
+    )
 
     /** CvWeightedVector::ChooseFromTopChoices after SortItems: a roll up to the summed weight of the [numChoices] heaviest, ties in input order */
     fun <T> chooseFromTopChoices(choices: List<Pair<T, Int>>, numChoices: Int, random: Random): T? {

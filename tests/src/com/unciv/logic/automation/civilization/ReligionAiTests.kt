@@ -11,6 +11,7 @@ import com.unciv.logic.automation.strategy.UnitAiTypes
 import com.unciv.logic.automation.unit.ReligiousUnitAutomation
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.managers.ReligionManager
@@ -480,6 +481,157 @@ class ReligionAiTests {
         civ.getCapital()!!.getCenterTile().forgetAdjacentToRiver()
         // the capital on a river: 30, halved for a pantheon
         assertEquals(dry + 15, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
+    }
+
+    private fun pantheonPlayerScore(civ: Civilization, belief: Belief) =
+        BeliefScoring.scorePantheonBeliefForPlayer(BeliefAiProfile.of(belief, civ), BeliefScoringContext(civ))
+
+    private fun pantheonPlayerScore(civ: Civilization, belief: String) = pantheonPlayerScore(civ, game.ruleset.beliefs[belief]!!)
+
+    private fun adoptBranch(civ: Civilization, branch: String) {
+        civ.policies.freePolicies = 1
+        civ.policies.adopt(game.ruleset.policyBranches[branch]!!)
+    }
+
+    private val neighborSpots = ArrayDeque(listOf(6 to 0, -6 to 0, 0 to 6, 0 to -6, 6 to 6, -6 to -6))
+
+    /** A living major civilization that counts us as [proximity] (VP reads the neighbor's proximity to us) */
+    private fun neighbor(civ: Civilization, nation: String? = null, proximity: Proximity = Proximity.Close): Civilization {
+        val other = if (nation == null) game.addCiv() else game.addCiv(game.ruleset.nations[nation]!!)
+        val (x, y) = neighborSpots.removeFirst()
+        game.addCity(other, tile(x, y))
+        other.proximity[civ.civID] = proximity
+        return other
+    }
+
+    @Test
+    fun `with Vox Populi a warmonger with close neighbors values faith from kills`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Offense, 6)
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 10)
+        adoptBranch(civ, "Honor")
+        assertEquals("no neighbor to fight", 0, pantheonPlayerScore(civ, "God of War"))
+        neighbor(civ, proximity = Proximity.Far)
+        assertEquals(0, pantheonPlayerScore(civ, "God of War"))
+        game.addCiv().proximity[civ.civID] = Proximity.Close
+        assertEquals("a defeated civilization is no neighbor", 0, pantheonPlayerScore(civ, "God of War"))
+        neighbor(civ)
+        // 6 offense × 50% × 10 × 110 × 1 neighbor / 1000, halved: only near our cities
+        assertEquals(6 * 50 * 1100 / 1000 / 2, pantheonPlayerScore(civ, "God of War"))
+        repeat(3) { neighbor(civ) }
+        assertEquals("at most 3 neighbors count", 6 * 50 * 1100 * 3 / 1000 / 2, pantheonPlayerScore(civ, "God of War"))
+    }
+
+    @Test
+    fun `with Vox Populi a peaceful civilization next to a warmonger values healing and city strikes`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.CityDefense, 4)
+        civ.ai.setPersonalityFlavor(Flavor.Defense, 3)
+        neighbor(civ)
+        assertEquals("the neighbor is no warmonger", 0, pantheonPlayerScore(civ, "Faith Healers"))
+        neighbor(civ, "England")
+        // (4 + 3) × 30 × 1 warmonger neighbor
+        assertEquals(210, pantheonPlayerScore(civ, "Faith Healers"))
+        assertEquals(210, pantheonPlayerScore(civ, "Goddess of Protection"))
+        adoptBranch(civ, "Tradition")
+        assertEquals("tall, twice", 420, pantheonPlayerScore(civ, "Goddess of Protection"))
+    }
+
+    @Test
+    fun `with Vox Populi a warmonger values no defense and a defender no kills`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Offense, 6)
+        civ.ai.setPersonalityFlavor(Flavor.Defense, 3)
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 10)
+        neighbor(civ, "England")
+        assertEquals(0, pantheonPlayerScore(civ, "God of War"))
+        adoptBranch(civ, "Honor")
+        assertEquals(0, pantheonPlayerScore(civ, "Faith Healers"))
+    }
+
+    @Test
+    fun `with Vox Populi wonder production counts by the wonder flavor, our trait and the era it ends`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Wonder, 5)
+        // 5 × 15%, × the era after the Classical era (2) / 5
+        assertEquals(5 * 15 * 2 / 5, pantheonPlayerScore(civ, "Monument to the Gods"))
+        val egypt = neutralCiv("[+20]% Production when constructing [All] wonders [in all cities]")
+        game.addCity(egypt, tile(5, 0))
+        egypt.ai.setPersonalityFlavor(Flavor.Wonder, 5)
+        // × (100 + 2 × 20) / 100
+        assertEquals(5 * 15 * 140 / 100 * 2 / 5, pantheonPlayerScore(egypt, "Monument to the Gods"))
+        val goldenAgeBuilder = neutralCiv("[+20]% Production when constructing [All] wonders [in all cities] <during a Golden Age>")
+        goldenAgeBuilder.ai.setPersonalityFlavor(Flavor.Wonder, 5)
+        // the golden-age % counts once: × (100 + 20) / 100
+        assertEquals(5 * 15 * 120 / 100 * 2 / 5, pantheonPlayerScore(goldenAgeBuilder, "Monument to the Gods"))
+        val medieval = game.ruleset.technologies.values.first { it.era() == "Medieval era" }.name
+        civ.tech.addTechnology(medieval)
+        egypt.tech.addTechnology(medieval)
+        assertEquals("the game is past the Classical era", 0, pantheonPlayerScore(civ, "Monument to the Gods"))
+    }
+
+    @Test
+    fun `with Vox Populi world wonder yields count by the wonder flavor and the wonders we have`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Wonder, 4)
+        civ.ai.setPersonalityFlavor(Flavor.Culture, 10)
+        val belief = game.createBelief(BeliefType.Pantheon, "[+1 Culture] from every [Wonder]")
+        // 4 × 1, × 10 × 100 / 100
+        assertEquals(40, pantheonPlayerScore(civ, belief))
+        civ.getCapital()!!.cityConstructions.addBuilding("Stonehenge")
+        assertEquals("+ 10 a wonder", 140, pantheonPlayerScore(civ, belief))
+    }
+
+    @Test
+    fun `with Vox Populi growth and cheaper borders count by size and flavors`() {
+        val civ = vpPlotCiv()
+        assertEquals(2 * 10, pantheonPlayerScore(civ, "Fertility Rites"))
+        // 5 × max(15%, (defense - offense) × 7)
+        assertEquals(5 * 15, pantheonPlayerScore(civ, "Religious Settlements"))
+        civ.ai.setPersonalityFlavor(Flavor.Defense, 5)
+        civ.ai.setPersonalityFlavor(Flavor.Offense, 1)
+        assertEquals(5 * 28, pantheonPlayerScore(civ, "Religious Settlements"))
+        adoptBranch(civ, "Tradition")
+        assertEquals("tall, twice", 4 * 10, pantheonPlayerScore(civ, "Fertility Rites"))
+    }
+
+    @Test
+    fun `with Vox Populi without Tradition or Honor the leader's traits make us tall or a warmonger, unless Liberty`() {
+        val england = game.addCiv(game.ruleset.nations["England"]!!)
+        game.addCity(england, tile(0, 0))
+        england.ai.setPersonalityFlavor(Flavor.Offense, 6)
+        england.ai.setPersonalityFlavor(Flavor.Religion, 10)
+        neighbor(england)
+        assertEquals("a warmonger by trait", 6 * 50 * 1100 / 1000 / 2, pantheonPlayerScore(england, "God of War"))
+        adoptBranch(england, "Liberty")
+        assertEquals(0, pantheonPlayerScore(england, "God of War"))
+        val venice = game.addCiv(game.ruleset.nations["Venice"]!!)
+        game.addCity(venice, tile(-3, 3))
+        assertEquals("tall by its smaller trait", 4 * 10, pantheonPlayerScore(venice, "Fertility Rites"))
+    }
+
+    @Test
+    fun `with Vox Populi a belief that needs peace costs fighters and defenders`() {
+        val civ = vpPlotCiv()
+        val belief = game.createBelief(BeliefType.Pantheon, "[+10]% growth [in all cities] <when not at war>")
+        adoptBranch(civ, "Honor")
+        assertEquals("growth only, no one to fight", 2 * 10, pantheonPlayerScore(civ, belief))
+        neighbor(civ)
+        assertEquals(2 * 10 - 1000, pantheonPlayerScore(civ, belief))
+        val defender = neutralCiv()
+        game.addCity(defender, tile(-3, 3))
+        neighbor(defender, "England")
+        assertEquals("200 for each warmonger neighbor", 2 * 10 - 200, pantheonPlayerScore(defender, belief))
+    }
+
+    @Test
+    fun `with Vox Populi a pantheon belief adds its pantheon player score`() {
+        val civ = vpPlotCiv()
+        val belief = game.ruleset.beliefs["Fertility Rites"]!!
+        val wide = BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ))
+        adoptBranch(civ, "Tradition")
+        // 20 more when tall, halved for a pantheon
+        assertEquals(wide + 10, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
     }
     //endregion
 

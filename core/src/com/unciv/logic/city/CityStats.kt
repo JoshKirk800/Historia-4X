@@ -982,7 +982,7 @@ class CityStats(val city: City) {
     }
 
     @Readonly
-    private fun calcFoodEaten(): Float {
+    internal fun calcFoodEaten(): Float {
         var foodEatenBySpecialists = 2f * city.population.getNumberOfSpecialists()
         var foodEaten = city.population.population.toFloat() * 2 - foodEatenBySpecialists
 

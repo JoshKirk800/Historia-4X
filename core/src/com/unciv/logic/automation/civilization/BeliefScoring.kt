@@ -14,6 +14,7 @@ import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.models.ruleset.tile.TerrainType
@@ -73,6 +74,16 @@ class BeliefAiProfile private constructor() {
     val buildingYields = LinkedHashMap<Building, Stats>()
     val worldWonderYield = Stats()
     val maxYieldModifierPerFollower = Stats()
+    /** City filter -> yields of each "[stats] [cityFilter]": Vox Populi's city, capital, coastal and holy city yield changes by the filter */
+    val cityYields = ArrayList<Pair<String, Stats>>()
+    /** Tile filter -> stats of each "[stats] in cities on [terrainFilter] tiles": VP's river happiness and nearby terrain yield changes */
+    val cityTileYields = ArrayList<Pair<String, Stats>>()
+    /** Population per point of the yield (Belief_YieldPerPop, "[stats] per [n] population"), 0 = none */
+    val yieldPerPop = Stats()
+    /** Belief_YieldPerBirth: the yields gained upon population growth */
+    val yieldPerBirth = Stats()
+    /** UnitProductionModifier and Belief_UnitCombatProductionModifiers: each "[n]% Production when constructing [units] units" */
+    val unitProductionModifiers = ArrayList<Int>()
 
     // ScoreBeliefForPlayer
     var faithFromKills = 0
@@ -184,11 +195,18 @@ class BeliefAiProfile private constructor() {
                     } else {
                         profile.happinessPerCity += unique.stats.happiness.toInt()
                         profile.cityYield.addYields(unique.stats)
+                        profile.cityYields.add(unique.params[1] to unique.stats)
                     }
                 UniqueType.StatsFromCitiesOnSpecificTiles -> {
                     profile.riverHappiness += unique.stats.happiness.toInt()
                     profile.cityYield.addYields(unique.stats)
+                    profile.cityTileYields.add(unique.params[1] to unique.stats)
                 }
+                UniqueType.StatsPerPopulation ->
+                    for ((stat, value) in unique.stats)
+                        if (stat != Stat.Happiness && value > 0f)
+                            profile.yieldPerPop[stat] = (unique.params[1].toInt() / value).toInt().toFloat()
+                UniqueType.PercentProductionUnits -> profile.unitProductionModifiers.add(unique.params[0].toInt())
                 UniqueType.Stats -> profile.playerHappiness += unique.stats.happiness.toInt()
                 UniqueType.StatPercentBonus ->
                     if (unique.params[1] == Stat.Culture.name) profile.playerCultureModifier += unique.params[0].toInt()
@@ -229,9 +247,13 @@ class BeliefAiProfile private constructor() {
                 UniqueType.StatsFromGlobalFollowers -> addPerFollowers(unique.stats, unique.params[1].toInt(), isForeignFilter(unique.params[2]))
                 UniqueType.StatsWhenSpreading -> profile.sciencePerOtherReligionFollower += unique.params[0].toInt()
                 UniqueType.StatsWhenAdoptingReligion -> profile.goldWhenCityAdopts += unique.stats.gold.toInt()
-                UniqueType.OneTimeGainStat ->
+                UniqueType.OneTimeGainStat -> {
                     if (unique.params[1] == Stat.Faith.name && unique.getModifiers(UniqueType.TriggerUponExpendingUnit).isNotEmpty())
                         profile.greatPersonExpendedFaith += unique.params[0].toInt()
+                    val stat = Stat.safeValueOf(unique.params[1])
+                    if (stat != null && stat != Stat.Happiness && unique.getModifiers(UniqueType.TriggerUponPopulationGrowth).isNotEmpty())
+                        profile.yieldPerBirth.add(stat, unique.params[0].toFloat())
+                }
                 UniqueType.NaturalReligionSpreadStrength ->
                     if (unique.params[1].contains("City-State"))
                         profile.friendlyCityStateSpreadModifier = max(profile.friendlyCityStateSpreadModifier, unique.params[0].toInt())
@@ -487,7 +509,7 @@ object BeliefScoring {
 
     /**
      *  CvReligionAI::ScoreBelief (V:CvReligionClasses.cpp:7807-7891,7948-7958): the plot scores above 0 × their weights; each city's
-     *  [scorePantheonBeliefAtCity] for a pantheon, else [scoreBeliefAtCity] × 6 (VP's RELIGION_BELIEF_SCORE_CITY_MULTIPLIER; Unciv's
+     *  [scorePantheonBeliefAtCity] for a pantheon, else [scoreBeliefAtCityLikeVp] × 6 (VP's RELIGION_BELIEF_SCORE_CITY_MULTIPLIER; Unciv's
      *  rulesets have 3); for any belief, when the weighted plots include land not ours, the cities we may still found:
      *  (min(6, max(3, 1 + those plots / 20)) - our cities, below 0 too) × [scorePantheonBeliefAtCity] of no city / 2; the player's
      *  [scorePantheonBeliefForPlayer] or [scoreBeliefForPlayer]; [forBonus] the [bonusBeliefScore]; at least 0.
@@ -505,7 +527,7 @@ object BeliefScoring {
             if (atPlot > 0) score += atPlot * context.plotMultipliers[i]
         }
         for (city in civ.cities)
-            score += if (pantheon) scorePantheonBeliefAtCity(profile, city, context) else 6 * scoreBeliefAtCity(profile, city, context)
+            score += if (pantheon) scorePantheonBeliefAtCity(profile, city, context) else 6 * scoreBeliefAtCityLikeVp(profile, city, context)
         if (landNotOurs > 0)
             score += (min(6, max(3, 1 + landNotOurs / 20)) - civ.cities.size) * scorePantheonBeliefAtCity(profile, null, context) / 2
         score += if (pantheon) scorePantheonBeliefForPlayer(profile, context) else scoreBeliefForPlayer(profile, context)
@@ -798,6 +820,144 @@ object BeliefScoring {
             if (perFollower > 0) value += min(perFollower, population) / 2
         }
         return value
+    }
+
+    /**
+     *  CvReligionAI::ScoreBeliefAtCity (V:CvReligionClasses.cpp:8909-9445), for a belief other than a pantheon with Vox Populi's AI; 0
+     *  without a capital. "At the population" below: when the belief's minimum population is met (VP's MinPopulation).
+     *  - Growth × 2 for a smaller civilization; with peace required ÷ 3 going for world conquest, else ÷ 1. Cheaper borders
+     *    (-modifier / 7) × max(itself, Defense - Offense); city strength (/ 3) × max(itself, CityDefense - Offense); healing × Defense /
+     *    Offense; wonder production × its last era / 5 until the game passes that era, else / 3; each unit production modifier in full
+     *    for a warmonger or expansionist, else halved.
+     *  - Happiness × 15 when Offense × 2 + Happiness - Defense > 15, × 6 when < 6, else × 3: of cities on a tile (VP: river) only when
+     *    the city is, × 2 at the population; per city, × 3 at the population; of a building, × 2 at the minimum followers (by population).
+     *  - The food estimate: the city's food before eating × the ideal size (the capital's, at least 30; smaller +5, expansionist -4,
+     *    warmonger -2), at least 1. Per yield, that ÷ the population per point, and in our holy city (of the state religion, or where a
+     *    unit that may found a religion stands) the holy city yield; upon growth: the yield × (the estimate ÷ (400, smaller -50,
+     *    expansionist or warmonger +50)).
+     *  - Per yield, with E = max(1, (eras - our era) / 2): city yield × (E + population), capital and coastal yields × E there, the
+     *    best of cities on a tile the city is on × E, each × 2 at the population; trade route × E (× 2 at the population, × 5 when
+     *    connected to the capital); any specialist × E (+ the population when above 0, × 2 when the city has specialist slots); a
+     *    building's × E (halved short of the minimum followers, doubled when built, halved for a wonder); world wonders × the
+     *    personality's WonderCompetitiveness; the follower modifier × population² / 10.
+     *  Not built (no Unciv unique or trait): the diplomatic unit modifier, active trade route, luxury, border growth, Great Person point,
+     *  holy city birth, We Love the King Day, per-followers and construction yields, the trait doubling of the population yields.
+     */
+    fun scoreBeliefAtCityLikeVp(profile: BeliefAiProfile, city: City, context: BeliefScoringContext): Int {
+        val civ = context.civ
+        val capital = civ.getCapital() ?: return 0
+        val ai = civ.ai
+        val offense = ai.personality(Flavor.Offense)
+        val defense = ai.personality(Flavor.Defense)
+        val needFactor = offense * 2 + ai.personality(Flavor.Happiness) - defense
+        val happinessMultiplier = when {
+            needFactor > 15 -> 15
+            needFactor < 6 -> 6
+            else -> 3
+        }
+        val population = city.population.population
+        val atMinPop = profile.minPopulation in 1..population
+        val smaller = ai.hasTraitCategory(TraitCategory.Smaller)
+        val expansionist = ai.hasTraitCategory(TraitCategory.Expansionist)
+        val warmonger = ai.hasTraitCategory(TraitCategory.Warmonger)
+        var idealCityPop = max(capital.population.population, 30)
+        if (smaller) idealCityPop += 5
+        if (expansionist) idealCityPop -= 4
+        if (warmonger) idealCityPop -= 2
+
+        var value = if (smaller) profile.cityGrowthModifier * 2 else profile.cityGrowthModifier
+        if (profile.requiresPeace) value /= if (ai.isGoingForWorldConquest()) 3 else 1
+        val borders = -profile.plotCultureCostModifier / 7
+        value += borders * max(borders, defense - offense)
+        val strength = profile.cityRangeStrikeModifier / 3
+        value += strength * max(strength, ai.personality(Flavor.CityDefense) - offense)
+        value += profile.friendlyHealChange * defense / max(1, offense)
+        if (profile.obsoleteEra > 0) {
+            if (profile.obsoleteEra > context.gameEra) value += profile.wonderProductionModifier * profile.obsoleteEra / 5
+        } else value += profile.wonderProductionModifier / 3
+        for (modifier in profile.unitProductionModifiers) value += if (warmonger || expansionist) modifier else modifier / 2
+
+        val center = city.getCenterTile()
+        for ((filter, stats) in profile.cityTileYields) {
+            if (!center.matchesFilter(filter, civ)) continue
+            val happiness = stats.happiness.toInt() * happinessMultiplier
+            value += if (atMinPop) happiness * 2 else happiness
+        }
+        val perCity = profile.happinessPerCity * happinessMultiplier
+        value += if (atMinPop) perCity * 3 else perCity
+        for (happiness in profile.buildingHappiness.values)
+            value += happiness * happinessMultiplier * (if (profile.minFollowers in 1..population) 2 else 1)
+
+        val stateReligion = OpinionAi.stateReligion(civ)?.first?.name
+        val holyCity = city.isHolyCityOf(stateReligion)
+            || civ.units.getCivUnits().any { it.hasUnique(UniqueType.MayFoundReligion) && it.getTile().getCity() == city }
+        val foodTimes100 = ((city.cityStats.excessFood + city.cityStats.calcFoodEaten()) * 100).toInt()
+        val food = max(1, foodTimes100 * idealCityPop / 100)
+        var birthEvaluator = 400
+        if (smaller) birthEvaluator -= 50
+        if (expansionist || warmonger) birthEvaluator += 50
+        for (stat in vpCityYields) {
+            val perPop = profile.yieldPerPop[stat].toInt()
+            if (perPop > 0) value += food / perPop
+            if (holyCity)
+                for ((filter, stats) in profile.cityYields)
+                    if (cityYieldKind(filter) == CityYieldKind.Holy && stats[stat] > 0f) value += stats[stat].toInt()
+            val birth = profile.yieldPerBirth[stat].toInt()
+            if (birth > 0) value += birth * (food / birthEvaluator)
+        }
+
+        val eraBonus = max(1, (civ.gameInfo.ruleset.eras.size - civ.getEraNumber()) / 2)
+        val hasSpecialistSlots = city.population.getMaxSpecialists().values.any { it > 0 }
+        val wonderCompetitiveness = ai.diplomacyValue(DiplomacyPersonality.WonderCompetitiveness)
+        fun atPopulation(amount: Int) = if (atMinPop) amount * 2 else amount
+        for (stat in vpCityYields) {
+            for ((filter, stats) in profile.cityYields) {
+                val amount = stats[stat].toInt()
+                value += atPopulation(when (cityYieldKind(filter)) {
+                    CityYieldKind.Capital -> if (city.isCapital()) amount * eraBonus else 0
+                    CityYieldKind.Coastal -> if (city.isCoastal()) amount * eraBonus else 0
+                    CityYieldKind.Holy -> 0
+                    CityYieldKind.Any -> amount * (eraBonus + population)
+                })
+            }
+            val nearby = profile.cityTileYields.filter { center.matchesFilter(it.first, civ) }.maxOfOrNull { it.second[stat].toInt() } ?: 0
+            if (nearby > 0) value += atPopulation(nearby * eraBonus)
+
+            var temp = atPopulation(profile.tradeRouteYield[stat].toInt() * eraBonus)
+            if (city.isConnectedToCapital()) temp *= 5
+            value += temp
+
+            temp = profile.anySpecialistYield[stat].toInt() * eraBonus
+            if (temp > 0) temp += population
+            if (hasSpecialistSlots) temp *= 2
+            value += temp
+
+            for ((building, yields) in profile.buildingYields) {
+                temp = yields[stat].toInt() * eraBonus
+                if (profile.minFollowers > 0 && population < profile.minFollowers) temp /= 2
+                if (city.cityConstructions.isBuilt(building.name)) temp *= 2
+                if (building.isAnyWonder()) temp /= 2
+                value += temp
+            }
+
+            value += profile.worldWonderYield[stat].toInt() * wonderCompetitiveness
+            val perFollower = profile.maxYieldModifierPerFollower[stat].toInt()
+            if (perFollower > 0) value += perFollower * population * population / 10
+        }
+        return value
+    }
+
+    /** VP's yields among Unciv's stats: all but Happiness */
+    private val vpCityYields = Stat.entries.filter { it != Stat.Happiness }
+
+    private enum class CityYieldKind { Capital, Coastal, Holy, Any }
+
+    /** Which of VP's city yield changes a "[stats] [cityFilter]" is: capital, coastal, holy city, else the city yield of every city */
+    private fun cityYieldKind(filter: String) = when (filter) {
+        "in capital", "Capital" -> CityYieldKind.Capital
+        "in all coastal cities", "Coastal" -> CityYieldKind.Coastal
+        "in holy cities", "Holy" -> CityYieldKind.Holy
+        else -> CityYieldKind.Any
     }
 
     /**

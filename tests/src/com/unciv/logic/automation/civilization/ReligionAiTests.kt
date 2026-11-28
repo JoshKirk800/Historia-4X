@@ -764,6 +764,47 @@ class ReligionAiTests {
         setState(heretic, ReligionState.Religion)
         assertEquals("half the religions enhanced", 1 - base, bonusGain(civ, pantheon))
     }
+
+    /** The picks of [ReligionAutomation.chooseBeliefLikeVp] among [candidates] only (the other pantheons excluded), over 200 turns */
+    private fun pantheonPicks(civ: Civilization, vararg candidates: Belief): Set<Belief?> {
+        val others = game.ruleset.beliefs.values.filter { it.type == BeliefType.Pantheon && it !in candidates }.toSet()
+        val context = BeliefScoringContext(civ, considerExpansion = true)
+        return (0 until 200).mapTo(HashSet()) { turn ->
+            game.gameInfo.turns = turn
+            ReligionAutomation.chooseBeliefLikeVp(civ, BeliefType.Pantheon, others, context)
+        }
+    }
+
+    @Test
+    fun `with Vox Populi a belief is picked among all scoring at least 90 percent of the best`() {
+        val civ = vpPlotCiv()
+        // growth counts only for the player: 2 × the percent
+        val (twenty, eighteen, sixteen) = listOf(10, 9, 8).map { game.createBelief(BeliefType.Pantheon, "[+$it]% growth [in all cities]") }
+        assertEquals(listOf(20, 18, 16), listOf(twenty, eighteen, sixteen).map { BeliefScoring.scoreBelief(it, BeliefScoringContext(civ)) })
+        assertEquals("16 is below 90% of 20", setOf(twenty, eighteen), pantheonPicks(civ, twenty, eighteen, sixteen))
+        val four = (1..4).map { game.createBelief(BeliefType.Pantheon, "[+10]% growth [in all cities]") }
+        assertEquals("not only the best 3", four.toSet(), pantheonPicks(civ, *four.toTypedArray()))
+    }
+
+    @Test
+    fun `with Vox Populi a belief is picked even when none scores above 0, never one excluded`() {
+        val civ = vpPlotCiv()
+        val worthless = game.createBelief(BeliefType.Pantheon)
+        val alsoWorthless = game.createBelief(BeliefType.Pantheon)
+        assertEquals(0, BeliefScoring.scoreBelief(worthless, BeliefScoringContext(civ, considerExpansion = true)))
+        assertEquals(setOf(worthless, alsoWorthless), pantheonPicks(civ, worthless, alsoWorthless))
+        assertEquals(setOf(worthless), pantheonPicks(civ, worthless))
+    }
+
+    @Test
+    fun `with Vox Populi a belief of any type is scored as a bonus belief`() {
+        val civ = vpPlotCiv()
+        val founder = game.createBelief(BeliefType.Founder)
+        val pantheon = game.createBelief(BeliefType.Pantheon, "[+10]% growth [in all cities]")
+        val others = game.ruleset.beliefs.values.filter { it != founder && it != pantheon }.toSet()
+        // 0 + 800 against 20 - 500, at least 1
+        assertEquals(founder, ReligionAutomation.chooseBeliefLikeVp(civ, BeliefType.Any, others, BeliefScoringContext(civ)))
+    }
     //endregion
 
     @Test

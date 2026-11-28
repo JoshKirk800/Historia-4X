@@ -355,8 +355,8 @@ class ReligionAiTests {
         val none = BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ))
         civ.ai.setPersonalityFlavor(Flavor.Religion, 10)
         val gain = BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)) - none
-        // 11 a plot × its weight, halved for a pantheon
-        assertTrue("gained $gain over weight $weight", gain == 11 * weight / 2 || gain == (11 * weight + 1) / 2)
+        // 11 a plot × its weight
+        assertEquals(11 * weight, gain)
     }
 
     @Test
@@ -479,8 +479,8 @@ class ReligionAiTests {
         val dry = BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ))
         civ.getCapital()!!.getCenterTile().hasBottomRiver = true
         civ.getCapital()!!.getCenterTile().forgetAdjacentToRiver()
-        // the capital on a river: 30, halved for a pantheon
-        assertEquals(dry + 15, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
+        // the capital on a river: 30
+        assertEquals(dry + 30, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
     }
 
     private fun pantheonPlayerScore(civ: Civilization, belief: Belief) =
@@ -630,8 +630,75 @@ class ReligionAiTests {
         val belief = game.ruleset.beliefs["Fertility Rites"]!!
         val wide = BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ))
         adoptBranch(civ, "Tradition")
-        // 20 more when tall, halved for a pantheon
-        assertEquals(wide + 10, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
+        // 20 more when tall
+        assertEquals(wide + 20, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
+    }
+
+    @Test
+    fun `with Vox Populi a belief scores no base and a pantheon is not halved`() {
+        val civ = vpPlotCiv()
+        // growth counts only for the player: 2 × 10
+        val belief = game.createBelief(BeliefType.Pantheon, "[+10]% growth [in all cities]")
+        assertEquals(20, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
+    }
+
+    @Test
+    fun `with Vox Populi plots that lose yields count nothing and the total is at least 0`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Growth, 10)
+        val belief = game.createBelief(BeliefType.Pantheon, "[-1 Food] from every [Grassland]", "[+10]% growth [in all cities]")
+        assertEquals(20, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
+        adoptBranch(civ, "Honor")
+        neighbor(civ)
+        val peace = game.createBelief(BeliefType.Pantheon, "[+10]% growth [in all cities] <when not at war>")
+        assertEquals("20 - 1000", 0, BeliefScoring.scoreBelief(peace, BeliefScoringContext(civ)))
+    }
+
+    @Test
+    fun `with Vox Populi any belief counts the cities we may still found, by the land not ours`() {
+        val civ = vpPlotCiv()
+        val pantheon = game.ruleset.beliefs["Sacred Waters"]!!
+        val nearby = BeliefScoringContext(civ, considerExpansion = true)
+        assertTrue(nearby.plots.count { it.getOwner() != civ && it.isLand } < 40)
+        // with little land around still at least 3 cities: 9 × (3 - 1) / 2
+        assertEquals(9, BeliefScoring.scoreBelief(pantheon, nearby) - BeliefScoring.scoreBelief(pantheon, BeliefScoringContext(civ)))
+        for (tile in game.tileMap.values) tile.setExplored(civ, true)
+        val expanding = BeliefScoringContext(civ, considerExpansion = true)
+        val landNotOurs = expanding.plots.count { it.getOwner() != civ && it.isLand }
+        assertTrue("$landNotOurs plots", landNotOurs >= 100)
+        // a city to found counts a river 3 (of 10): 3 × 1 × 3 = 9, × (6 - 1 city) / 2
+        val potential = 3 * 1 * 3 * (6 - 1) / 2
+        assertEquals(potential, BeliefScoring.scoreBelief(pantheon, expanding) - BeliefScoring.scoreBelief(pantheon, BeliefScoringContext(civ)))
+        val follower = game.createBelief(BeliefType.Follower, *pantheon.uniques.toTypedArray())
+        assertEquals("not only pantheons", potential,
+            BeliefScoring.scoreBelief(follower, expanding) - BeliefScoring.scoreBelief(follower, BeliefScoringContext(civ)))
+    }
+
+    @Test
+    fun `with Vox Populi more cities than VP wants cost each city to found`() {
+        val civ = vpPlotCiv()
+        for ((x, y) in listOf(4 to 0, -4 to 0, 0 to 4, 0 to -4, 4 to 4, -4 to -4)) game.addCity(civ, tile(x, y))
+        for (tile in game.tileMap.values) tile.setExplored(civ, true)
+        val river = civ.cities.last().getCenterTile()
+        river.hasBottomRiver = true
+        river.forgetAdjacentToRiver()
+        val belief = game.ruleset.beliefs["Sacred Waters"]!!
+        // the river city 30, and (6 - 7 cities) × 9 / 2
+        assertEquals(30 + (6 - 7) * 9 / 2, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ, considerExpansion = true)))
+    }
+
+    @Test
+    fun `with Vox Populi a belief other than a pantheon counts its city score 6 times`() {
+        val civ = vpPlotCiv()
+        val belief = game.createBelief(BeliefType.Follower, "[+1 Happiness] from every [Shrine]")
+        civ.ai.setPersonalityFlavor(Flavor.Happiness, 10)
+        game.addCity(civ, tile(4, 0))
+        val context = BeliefScoringContext(civ)
+        val profile = BeliefAiProfile.of(belief, civ)
+        val atCities = civ.cities.sumOf { BeliefScoring.scoreBeliefAtCity(profile, it, context) }
+        assertTrue(atCities > 0)
+        // no plot yields, no land to expand to: the cities × 6 and the player's score
+        assertEquals(6 * atCities + BeliefScoring.scoreBeliefForPlayer(profile, context), BeliefScoring.scoreBelief(belief, context))
     }
     //endregion
 

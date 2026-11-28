@@ -1371,7 +1371,8 @@ class ModConstants {
      *  Sites, enhance or spread as GetDirectiveProphet says; beliefs weigh the plots of CalculatePlotWeightsForBeliefSelection
      *  and value each plot's yields as ScoreBeliefAtPlot, and a pantheon's cities and player value as
      *  ScorePantheonBeliefAtCity and ScorePantheonBeliefForPlayer, all totalled as ScoreBelief, with its bonus belief modifier for a
-     *  belief of any type a unique grants, and picked among those at least 90% of the best (ChooseAbovePercentThreshold) */
+     *  belief of any type a unique grants, and picked among those at least 90% of the best (ChooseAbovePercentThreshold); other
+     *  beliefs score each city as ScoreBeliefAtCity */
     var religionCultureAiLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100

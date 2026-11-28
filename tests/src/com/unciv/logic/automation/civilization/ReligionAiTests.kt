@@ -700,6 +700,70 @@ class ReligionAiTests {
         // no plot yields, no land to expand to: the cities × 6 and the player's score
         assertEquals(6 * atCities + BeliefScoring.scoreBeliefForPlayer(profile, context), BeliefScoring.scoreBelief(belief, context))
     }
+
+    private fun bonusGain(civ: Civilization, belief: Belief): Int {
+        val context = BeliefScoringContext(civ)
+        return BeliefScoring.scoreBelief(belief, context, forBonus = true) - BeliefScoring.scoreBelief(belief, context)
+    }
+
+    @Test
+    fun `with Vox Populi a bonus belief adds 800 for a founder belief and 200 for an enhancer while religions can spread`() {
+        val civ = vpPlotCiv()
+        assertEquals(0, BeliefScoringContext(civ).religionsEnhancedPercent)
+        assertEquals(800, bonusGain(civ, game.createBelief(BeliefType.Founder, "[+1 Happiness] from every [Shrine]")))
+        assertEquals(200, bonusGain(civ, game.createBelief(BeliefType.Enhancer, "[+1 Happiness] from every [Shrine]")))
+        val reformation = game.createBelief(BeliefType.Reformation, "[+1 Happiness] from every [Shrine]")
+        assertEquals("a reformation belief", 0, bonusGain(civ, reformation))
+        val worthless = game.createBelief(BeliefType.Reformation)
+        assertEquals("not raised to 1", 0, BeliefScoring.scoreBelief(worthless, BeliefScoringContext(civ), forBonus = true))
+        val pantheon = game.createBelief(BeliefType.Pantheon, "[+10]% growth [in all cities]")
+        assertEquals("20 - 500, at least 1", 1, BeliefScoring.scoreBelief(pantheon, BeliefScoringContext(civ), forBonus = true))
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = false
+        assertEquals("not without the switch", 0, bonusGain(civ, pantheon))
+    }
+
+    @Test
+    fun `with Vox Populi a bonus follower belief adds 100 for a building to buy with faith, 500 with a faith discount, else costs 200`() {
+        val civ = vpPlotCiv()
+        val cathedrals = game.createBelief(BeliefType.Follower, "May buy [Cathedral] buildings with [Faith] [in cities following this religion]")
+        assertEquals(100, bonusGain(civ, cathedrals))
+        val discount = neutralCiv("[Faith] cost of purchasing items in cities [-15]%")
+        game.addCity(discount, tile(4, 0))
+        assertEquals(500, bonusGain(discount, cathedrals))
+        val goldDiscount = neutralCiv("[Gold] cost of purchasing items in cities [-15]%")
+        game.addCity(goldDiscount, tile(-4, 0))
+        assertEquals("a gold discount", 100, bonusGain(goldDiscount, cathedrals))
+        civ.ai.setPersonalityFlavor(Flavor.Growth, 10)
+        val food = game.createBelief(BeliefType.Follower, "[+2 Food] from every [Grassland]")
+        val base = BeliefScoring.scoreBelief(food, BeliefScoringContext(civ))
+        assertTrue("base $base", base > 200)
+        assertEquals(-200, bonusGain(civ, food))
+    }
+
+    @Test
+    fun `with Vox Populi a bonus belief counts against us once most religions are enhanced and no city could follow us`() {
+        val (civ, religion) = foundedCiv()
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val heretic = game.addCiv()
+        val hereticReligion = foundReligion(heretic)
+        setState(heretic, ReligionState.EnhancedReligion)
+        assertEquals(100, BeliefScoringContext(civ).religionsEnhancedPercent)
+        val pantheon = game.createBelief(BeliefType.Pantheon, "[+10]% growth [in all cities]")
+        val base = BeliefScoring.scoreBelief(pantheon, BeliefScoringContext(civ))
+        assertTrue("base $base", base < 500)
+        // our holy city follows our state religion: 2 for our own city × the eras left / 2, of the 13 cities a map this small holds
+        assertEquals("spreads", 1 - base, bonusGain(civ, pantheon))
+        civ.getCapital()!!.religion.addPressure(hereticReligion.name, 100_000_000)
+        assertEquals("no city follows us", 500, bonusGain(civ, pantheon))
+        val founder = game.createBelief(BeliefType.Founder, "[+1 Happiness] from every [Shrine]")
+        assertEquals(1, BeliefScoring.scoreBelief(founder, BeliefScoringContext(civ), forBonus = true))
+        // a close neighbor's city following us: 1 × 2 (it has no religion) / 2 (close) × the eras left / 2, for all but a pantheon belief
+        neighbor(civ).getCapital()!!.religion.addPressure(religion.name, 5000)
+        assertEquals("only our own cities for a pantheon belief", 500, bonusGain(civ, pantheon))
+        assertEquals(800, bonusGain(civ, founder))
+        setState(heretic, ReligionState.Religion)
+        assertEquals("half the religions enhanced", 1 - base, bonusGain(civ, pantheon))
+    }
     //endregion
 
     @Test

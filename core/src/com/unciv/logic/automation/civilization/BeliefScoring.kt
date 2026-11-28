@@ -5,6 +5,7 @@ import com.unciv.logic.MultiFilter
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.ReligionState
+import com.unciv.logic.map.tile.ImprovementBuildingProblem
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.Belief
 import com.unciv.models.ruleset.BeliefType
@@ -13,6 +14,7 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.ai.TraitCategory
+import com.unciv.models.ruleset.tile.TerrainType
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
@@ -22,6 +24,9 @@ import com.unciv.models.stats.Stats
 import yairm210.purity.annotations.Readonly
 import kotlin.math.max
 import kotlin.math.min
+
+/** The sum of the original's yields: every [Stat] but Happiness */
+private fun Stats.yieldSum(): Int = (this.sum() - this[Stat.Happiness]).toInt()
 
 /**
  *  The fields of the original's CvBeliefEntry that CvReligionAI's belief scoring reads, derived from a belief's uniques for one civilization
@@ -35,11 +40,11 @@ class BeliefAiProfile private constructor() {
     var minPopulation = 0
     var minFollowers = 0
 
-    // ScoreBeliefAtPlot: terrain, feature, natural wonder and resource yield changes (tile filter -> summed yield),
-    // "tiles without" variants, and improvement yield changes (counted twice on resource plots that can take the improvement)
-    val tileYields = ArrayList<Pair<String, Int>>()
-    val tileWithoutYields = ArrayList<Triple<String, String, Int>>()
-    val improvementYields = ArrayList<Pair<List<TileImprovement>, Int>>()
+    // ScoreBeliefAtPlot: terrain, feature, natural wonder and resource yield changes (tile filter -> yields),
+    // "tiles without" variants, and improvement yield changes
+    val tileYields = ArrayList<Pair<String, Stats>>()
+    val tileWithoutYields = ArrayList<Triple<String, String, Stats>>()
+    val improvementYields = ArrayList<Pair<List<TileImprovement>, Stats>>()
 
     // ScoreBeliefAtCity
     var cityGrowthModifier = 0
@@ -106,8 +111,6 @@ class BeliefAiProfile private constructor() {
     companion object {
         private val worldWonderFilters = setOf("Wonder", "Wonders", "World Wonder", "World")
 
-        private fun Stats.yieldSum(): Int = (this.sum() - this[Stat.Happiness]).toInt()
-
         private fun Stats.addYields(other: Stats, divisor: Float = 1f) {
             for ((stat, value) in other) if (stat != Stat.Happiness) add(stat, value / divisor)
         }
@@ -170,7 +173,7 @@ class BeliefAiProfile private constructor() {
             when (unique.type) {
                 UniqueType.StatsFromObject -> addStatsFromObject(unique.params[1], unique.stats)
                 UniqueType.StatsFromTilesWithout ->
-                    profile.tileWithoutYields.add(Triple(unique.params[1], unique.params[2], unique.stats.yieldSum()))
+                    profile.tileWithoutYields.add(Triple(unique.params[1], unique.params[2], unique.stats))
                 UniqueType.StatsFromNamedSpecialist -> addSpecialistYield(unique.params[1], unique.stats)
                 UniqueType.StatsPerCity ->
                     if (bySpecialist) {
@@ -274,16 +277,16 @@ class BeliefAiProfile private constructor() {
                 filter in worldWonderFilters -> profile.worldWonderYield.addYields(stats)
                 ruleset.specialists.containsKey(filter) -> addSpecialistYield(filter, stats)
                 ruleset.terrains.containsKey(filter) || ruleset.tileResources.containsKey(filter) ->
-                    profile.tileYields.add(filter to stats.yieldSum())
+                    profile.tileYields.add(filter to stats)
                 else -> {
                     val improvements = ruleset.tileImprovements.values.filter { it.matchesFilter(filter, state) }
                     if (improvements.isNotEmpty()) {
-                        profile.improvementYields.add(improvements to stats.yieldSum())
+                        profile.improvementYields.add(improvements to stats)
                         return
                     }
                     val buildings = buildingClasses(filter)
                     if (buildings.isEmpty()) {
-                        profile.tileYields.add(filter to stats.yieldSum())
+                        profile.tileYields.add(filter to stats)
                         return
                     }
                     for (building in buildings) {
@@ -325,9 +328,10 @@ class BeliefAiProfile private constructor() {
  *  The data CvReligionAI::ScoreBelief computes over the map and the player once per decision: the plots it scores (revealed, unowned or
  *  ours, within 3 of one of our cities) with their multipliers, and the player-level inputs. With Vox Populi's AI
  *  ([ReligionAutomation.religionAiLikeVp]) the plots and their weights are [plotWeightsLikeVp]'s, the unowned ones only when
- *  [considerExpansion] (choosing a pantheon).
+ *  [considerExpansion] (choosing a pantheon); [considerFutureTech] is ScoreBelief's bConsiderFutureTech, false only for a foreign religion.
  */
-class BeliefScoringContext(val civ: Civilization, considerExpansion: Boolean = false) {
+class BeliefScoringContext(val civ: Civilization, considerExpansion: Boolean = false, val considerFutureTech: Boolean = true) {
+    private val withoutFeatureCache = HashMap<Tile, Tile>()
     val plots: List<Tile>
     val plotMultipliers: IntArray
     /** CvReligionAI::ScoreBeliefAtCity: 3 if Offense×2 + Happiness − Defense > 15, 1 if < 6, else 2 */
@@ -376,6 +380,14 @@ class BeliefScoringContext(val civ: Civilization, considerExpansion: Boolean = f
 
         val enhanced = civ.gameInfo.civilizations.count { it.religionManager.religionState == ReligionState.EnhancedReligion }
         religionsEnhancedPercent = 100 * enhanced / max(1, civ.religionManager.maxNumberOfReligions())
+    }
+
+    /** [tile] with its last feature removed, cached (as PlotBuildScorer.withoutFeature) */
+    fun withoutFeature(tile: Tile): Tile = withoutFeatureCache.getOrPut(tile) {
+        val copy = tile.clone(addUnits = false)
+        copy.setTerrainTransients()
+        copy.terrainFeatures.lastOrNull()?.let { copy.removeTerrainFeature(it) }
+        copy
     }
 
     private companion object {
@@ -461,8 +473,12 @@ object BeliefScoring {
         val civ = context.civ
         val profile = BeliefAiProfile.of(belief, civ)
         var score = 5
-        for (i in context.plots.indices)
-            score += scoreBeliefAtPlot(profile, context.plots[i], civ) * context.plotMultipliers[i]
+        val likeVp = ReligionAutomation.religionAiLikeVp(civ)
+        for (i in context.plots.indices) {
+            val tile = context.plots[i]
+            val atPlot = if (likeVp) scoreBeliefAtPlotLikeVp(profile, tile, context) else scoreBeliefAtPlot(profile, tile, civ)
+            score += atPlot * context.plotMultipliers[i]
+        }
         val cityMultiplier = civ.gameInfo.ruleset.ai.define(AiDefine.RELIGION_BELIEF_SCORE_CITY_MULTIPLIER)
         for (city in civ.cities) score += scoreBeliefAtCity(profile, city, context) * cityMultiplier
         score += scoreBeliefForPlayer(profile, context)
@@ -475,14 +491,185 @@ object BeliefScoring {
     fun scoreBeliefAtPlot(profile: BeliefAiProfile, tile: Tile, civ: Civilization): Int {
         var value = 0
         for ((filter, yields) in profile.tileYields)
-            if (tile.matchesFilter(filter, civ)) value += yields
+            if (tile.matchesFilter(filter, civ)) value += yields.yieldSum()
         for ((filter, without, yields) in profile.tileWithoutYields)
-            if (tile.matchesFilter(filter, civ) && !tile.matchesFilter(without, civ)) value += yields
+            if (tile.matchesFilter(filter, civ) && !tile.matchesFilter(without, civ)) value += yields.yieldSum()
         if (tile.resource != null)
             for ((improvements, yields) in profile.improvementYields)
                 for (improvement in improvements)
-                    if (tile.improvementFunctions.canImprovementBeBuiltHere(improvement)) value += yields * 2
+                    if (tile.improvementFunctions.canImprovementBeBuiltHere(improvement)) value += yields.yieldSum() * 2
         return value
+    }
+
+    /** Each yield VP's ScoreBeliefAtPlot looks at (through Faith) with the flavor and factor of CvReligionAI::ScoreYieldForReligionTimes100
+     *  (V:CvReligionClasses.cpp:8350-8378) */
+    private val vpPlotYieldFlavors = listOf(
+        Stat.Food to (Flavor.Growth to 50), Stat.Production to (Flavor.Production to 50), Stat.Gold to (Flavor.Gold to 50),
+        Stat.Science to (Flavor.Science to 80), Stat.Culture to (Flavor.Culture to 100), Stat.Faith to (Flavor.Religion to 110)
+    )
+
+    /** CvReligionAI::ScoreBeliefAtPlot (V:CvReligionClasses.cpp:8381-8399): each yield's [validPlotYieldTimes100] above 0, × the
+     *  civilization's personality flavor for it × its factor / 10000 */
+    fun scoreBeliefAtPlotLikeVp(profile: BeliefAiProfile, tile: Tile, context: BeliefScoringContext): Int {
+        val plot = VpPlot(tile, context)
+        var total = 0
+        for ((stat, flavorAndFactor) in vpPlotYieldFlavors) {
+            val value = validPlotYieldTimes100(profile, plot, stat)
+            if (value <= 0) continue
+            total += value * (context.civ.ai.personality(flavorAndFactor.first) * flavorAndFactor.second) / 10000
+        }
+        return total
+    }
+
+    private enum class PlotYieldKind { Terrain, Feature, NaturalWonder, Resource }
+
+    private fun plotYieldKind(filter: String, ruleset: Ruleset): PlotYieldKind {
+        val terrain = ruleset.terrains[filter]
+        return when {
+            terrain?.type == TerrainType.TerrainFeature -> PlotYieldKind.Feature
+            terrain?.type == TerrainType.NaturalWonder || filter == "Natural Wonder" -> PlotYieldKind.NaturalWonder
+            ruleset.tileResources.containsKey(filter) -> PlotYieldKind.Resource
+            else -> PlotYieldKind.Terrain
+        }
+    }
+
+    /**
+     *  CvReligionAI::GetValidPlotYieldTimes100 (V:CvReligionClasses.cpp:7960-8347) for the plot yields Unciv's beliefs have: terrain × 100;
+     *  terrain "without" a feature × that feature's [VpPlot.featureRemovalLikelihood] (VP's RequiresNoFeature, for the named feature only);
+     *  feature × 100 × (100 - its removal likelihood) / 100; natural wonder and (visible) resource × 100; improvements by
+     *  [VpPlot.improvementsTimes100].
+     */
+    private fun validPlotYieldTimes100(profile: BeliefAiProfile, plot: VpPlot, stat: Stat): Int {
+        val tile = plot.tile
+        val civ = plot.civ
+        val ruleset = civ.gameInfo.ruleset
+        var terrain = 0
+        var resource = 0
+        var wonder = 0
+        val features = LinkedHashMap<String, Int>(2)
+        for ((filter, stats) in profile.tileYields) {
+            if (!tile.matchesFilter(filter, civ)) continue
+            val amount = stats[stat].toInt()
+            when (plotYieldKind(filter, ruleset)) {
+                PlotYieldKind.Terrain -> terrain += amount
+                PlotYieldKind.Feature -> features[filter] = (features[filter] ?: 0) + amount
+                PlotYieldKind.NaturalWonder -> wonder += amount
+                PlotYieldKind.Resource -> resource += amount
+            }
+        }
+        var value = 0
+        if (terrain > 0) value += terrain * 100
+        for ((filter, without, stats) in profile.tileWithoutYields) {
+            val yieldTimes100 = stats[stat].toInt() * 100
+            if (yieldTimes100 <= 0 || !tile.matchesFilter(filter, civ)) continue
+            val modifier = if (tile.matchesFilter(without, civ)) plot.featureRemovalLikelihood(without) else 100
+            value += yieldTimes100 * modifier / 100
+        }
+        for ((feature, amount) in features)
+            if (amount > 0) value += amount * 100 * (100 - plot.featureRemovalLikelihood(feature)) / 100
+        if (tile.isNaturalWonder()) value += wonder * 100
+        value += resource * 100
+        value += plot.improvementsTimes100(profile, stat)
+        return value
+    }
+
+    /** One plot of CvReligionAI::GetValidPlotYieldTimes100: what it would take to remove its features or build improvements on it */
+    private class VpPlot(val tile: Tile, private val context: BeliefScoringContext) {
+        val civ = context.civ
+        private val ruleset = civ.gameInfo.ruleset
+        private val removalLikelihoods = HashMap<String, Int>(2)
+        private val legality = HashMap<TileImprovement, Boolean?>()
+
+        /** With future tech, each improvement's change × [improvementConfidence]; without, the current improvement's × 100
+         *  (V:CvReligionClasses.cpp:8264-8345) */
+        fun improvementsTimes100(profile: BeliefAiProfile, stat: Stat): Int {
+            var value = 0
+            for ((improvements, stats) in profile.improvementYields) {
+                val change = stats[stat].toInt()
+                if (!context.considerFutureTech) {
+                    if (improvements.any { it.name == tile.improvement }) value += change * 100
+                    continue
+                }
+                if (change <= 0) continue
+                for (improvement in improvements)
+                    if (!improvement.isGreatImprovement()) value += change * improvementConfidence(improvement)
+            }
+            return value
+        }
+
+        /** 100 when built; else, if the plot can take it, 90 when its tech is known, 80 while researching it, 50 later; × 80 / 100 when the
+         *  feature has to go */
+        private fun improvementConfidence(improvement: TileImprovement): Int {
+            if (tile.improvement == improvement.name) return 100
+            if (!isOurs(improvement)) return 0
+            val removesFeature = buildRemovesFeature(improvement) ?: return 0
+            val tech = improvement.techRequired
+            var confidence = when {
+                tech == null || civ.tech.isResearched(tech) -> 90
+                civ.tech.currentTechnologyName() == tech -> 80
+                else -> 50
+            }
+            if (removesFeature) confidence = confidence * 80 / 100
+            return confidence
+        }
+
+        /**
+         *  How likely [feature] is to be removed (V:CvReligionClasses.cpp:7975-8124): 0 without future tech or a way to remove it;
+         *  on a visible resource 0 once connected, else 75 if the last improvement the plot can take must remove it; without one 25,
+         *  Tradition +15, a forest or jungle -20 for a civilization that moves through them as on roads, else +50 when our unique
+         *  improvement must remove it.
+         */
+        fun featureRemovalLikelihood(feature: String): Int = removalLikelihoods.getOrPut(feature) {
+            if (!context.considerFutureTech || feature !in tile.terrainFeatures) return@getOrPut 0
+            if (!ruleset.tileImprovements.containsKey(Constants.remove + feature)) return@getOrPut 0
+            if (tile.resource != null && civ.canSeeResource(tile.tileResource)) {
+                if (tile.providesResources(civ)) return@getOrPut 0
+                val last = ruleset.tileImprovements.values
+                    .lastOrNull { isImprovementInfo(it) && isOurs(it) && buildRemovesFeature(it) != null }
+                return@getOrPut if (last != null && buildRemovesFeature(last) == true) 75 else 0
+            }
+            var likelihood = 25
+            if (civ.policies.isAdopted("Tradition")) likelihood += 15
+            if (civ.nation.forestsAndJunglesAreRoads && (feature == Constants.forest || feature == Constants.jungle)) likelihood -= 20
+            else {
+                val unique = ruleset.tileImprovements.values
+                    .firstOrNull { it.uniqueTo != null && isOurs(it) && buildRemovesFeature(it) != null }
+                if (unique != null && buildRemovesFeature(unique) == true) likelihood += 50
+            }
+            likelihood
+        }
+
+        /** An improvement of the original's improvement table: no route, removal, order or Great Person improvement */
+        private fun isImprovementInfo(improvement: TileImprovement) = !improvement.isRoad() && !improvement.isGreatImprovement()
+            && !improvement.name.startsWith(Constants.remove) && improvement.name != Constants.cancelImprovementOrder
+            && improvement.name != Constants.repair
+
+        private fun isOurs(improvement: TileImprovement) = improvement.uniqueTo == null || civ.matchesFilter(improvement.uniqueTo!!)
+
+        /** CvPlot::canHaveImprovement with the build's feature removal: false if the plot takes [improvement] as it is, true if only with
+         *  its last feature removed, null if not at all. Tech, borders, civilization and resource stock do not count. */
+        private fun buildRemovesFeature(improvement: TileImprovement): Boolean? {
+            if (legality.containsKey(improvement)) return legality[improvement]
+            val result = when {
+                canHave(improvement, tile) -> false
+                tile.terrainFeatures.isEmpty() -> null
+                !ruleset.tileImprovements.containsKey(Constants.remove + tile.terrainFeatures.last()) -> null
+                canHave(improvement, context.withoutFeature(tile)) -> true
+                else -> null
+            }
+            legality[improvement] = result
+            return result
+        }
+
+        private fun canHave(improvement: TileImprovement, plot: Tile) = plot.improvementFunctions
+            .getImprovementBuildingProblems(improvement, GameContext(civ, tile = plot)).none { it !in plotIndependentProblems }
+
+        companion object {
+            private val plotIndependentProblems = setOf(
+                ImprovementBuildingProblem.MissingTech, ImprovementBuildingProblem.WrongCiv, ImprovementBuildingProblem.OutsideBorders,
+                ImprovementBuildingProblem.NotJustOutsideBorders, ImprovementBuildingProblem.MissingResources
+            )
+        }
     }
 
     /** CvReligionAI::ScoreBeliefAtCity */

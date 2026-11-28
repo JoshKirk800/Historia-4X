@@ -74,7 +74,7 @@ object ReligionAutomation {
      */
     fun favoriteForeignReligion(civ: Civilization, forInternalSpread: Boolean): Religion? {
         if (civ.religionManager.remainingFoundableReligions() > 0) return null
-        val context = BeliefScoringContext(civ)
+        val context = BeliefScoringContext(civ, considerFutureTech = false)
         var bestOverall = 0
         var bestValidScore = 0
         var bestValid: Religion? = null

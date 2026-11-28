@@ -2,6 +2,7 @@ package com.unciv.logic.automation.civilization
 
 import com.unciv.Constants
 import com.unciv.logic.MultiFilter
+import com.unciv.logic.automation.diplomacy.DiplomacyTurn
 import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -484,7 +485,8 @@ object BeliefScoring {
         for (city in civ.cities)
             score += if (likeVp && belief.type == BeliefType.Pantheon) scorePantheonBeliefAtCity(profile, city, context)
             else scoreBeliefAtCity(profile, city, context) * cityMultiplier
-        score += scoreBeliefForPlayer(profile, context)
+        score += if (likeVp && belief.type == BeliefType.Pantheon) scorePantheonBeliefForPlayer(profile, context)
+        else scoreBeliefForPlayer(profile, context)
         if (belief.type == BeliefType.Pantheon) score /= 2
         return score
     }
@@ -510,6 +512,12 @@ object BeliefScoring {
         Stat.Food to (Flavor.Growth to 50), Stat.Production to (Flavor.Production to 50), Stat.Gold to (Flavor.Gold to 50),
         Stat.Science to (Flavor.Science to 80), Stat.Culture to (Flavor.Culture to 100), Stat.Faith to (Flavor.Religion to 110)
     )
+
+    /** CvReligionAI::ScoreYieldForReligionTimes100 (V:CvReligionClasses.cpp:8350-8378): our flavor for [stat] × its factor */
+    private fun yieldValueTimes100(civ: Civilization, stat: Stat): Int {
+        val (flavor, factor) = vpPlotYieldFlavors.first { it.first == stat }.second
+        return civ.ai.personality(flavor) * factor
+    }
 
     /** CvReligionAI::ScoreBeliefAtPlot (V:CvReligionClasses.cpp:8381-8399): each yield's [validPlotYieldTimes100] above 0, × the
      *  civilization's personality flavor for it × its factor / 10000 */
@@ -806,6 +814,83 @@ object BeliefScoring {
         }
         if (building.replaces != null) availability = min(10, availability + 3)
         return availability
+    }
+
+    /**
+     *  CvReligionAI::ScorePantheonBeliefForPlayer (V:CvReligionClasses.cpp:10714-10959) for the fields Unciv's pantheons have. We are
+     *  tall with Tradition, else a warmonger with Honor, else neither with Liberty; without these by trait (expansionist neither, else
+     *  smaller tall, else warmonger). A warmonger with close neighbors (majors close to us) values faith from kills by Offense × faith ×
+     *  its yield value × min(3, neighbors) / 1000, halved when limited by distance, 1000 less when peace is required; anyone else with
+     *  close warmonger neighbors values healing and city strikes by (City Defense + Defense) × amount × those neighbors (×2 tall), 200
+     *  less each when peace is required. Wonder production: Wonder × % (×2 tall) × (100 + 2 × our trait's % + its golden-age %) / 100,
+     *  × the era it ends / 5 until the game reaches that era, then 0. World wonder yields: Wonder × amount (×2 tall) × (100 + 3 × trait %
+     *  + golden-age %) / 100, + 10 a world wonder we have, × the yield's value / 100. Growth 2 × % (×2 tall). Cheaper borders
+     *  5 × max(-%, (Defense - Offense) × 7).
+     *  Not built (no Unciv pantheon has them): kill, barbarian kill and heal yields, unit production, border growth and its yields,
+     *  trade route, Great Work and luxury yields.
+     */
+    fun scorePantheonBeliefForPlayer(profile: BeliefAiProfile, context: BeliefScoringContext): Int {
+        val civ = context.civ
+        val ai = civ.ai
+        val (tall, warmonger) = when {
+            civ.policies.isAdopted("Tradition") -> true to false
+            civ.policies.isAdopted("Honor") -> false to true
+            civ.policies.isAdopted("Liberty") || ai.hasTraitCategory(TraitCategory.Expansionist) -> false to false
+            ai.hasTraitCategory(TraitCategory.Smaller) -> true to false
+            else -> false to ai.hasTraitCategory(TraitCategory.Warmonger)
+        }
+        val tallFactor = if (tall) 2 else 1
+        val offense = ai.personality(Flavor.Offense)
+        val defense = ai.personality(Flavor.Defense)
+        val neighbors = civ.gameInfo.civilizations.filter {
+            it != civ && it.isMajorCiv && it.isAlive() && DiplomacyTurn.proximity(it, civ) >= DiplomacyTurn.PROXIMITY_CLOSE
+        }
+        val warmongerNeighbors = neighbors.count { it.ai.hasTraitCategory(TraitCategory.Warmonger) }
+        var value = 0
+        if (warmonger && neighbors.isNotEmpty()) {
+            var temp = 0
+            if (profile.faithFromKills > 0)
+                temp += offense * profile.faithFromKills * yieldValueTimes100(civ, Stat.Faith) * min(3, neighbors.size) / 1000
+            if (profile.maxDistance != 0) temp /= 2
+            if (profile.requiresPeace) temp -= 1000
+            value += temp
+        }
+        if (!warmonger && warmongerNeighbors > 0) {
+            val defenders = (ai.personality(Flavor.CityDefense) + defense) * warmongerNeighbors * tallFactor
+            if (profile.friendlyHealChange > 0) value += defenders * profile.friendlyHealChange
+            if (profile.cityRangeStrikeModifier > 0) value += defenders * profile.cityRangeStrikeModifier
+            if (profile.requiresPeace) value -= 200 * warmongerNeighbors
+        }
+        val wonder = ai.personality(Flavor.Wonder)
+        val (wonderTrait, wonderTraitGoldenAge) = traitWonderProduction(civ)
+        if (profile.wonderProductionModifier > 0) {
+            var temp = wonder * profile.wonderProductionModifier * tallFactor * (100 + 2 * wonderTrait + wonderTraitGoldenAge) / 100
+            if (profile.obsoleteEra > 0) temp = if (profile.obsoleteEra > context.gameEra) temp * profile.obsoleteEra / 5 else 0
+            value += temp
+        }
+        val wonders = civ.cities.sumOf { city -> city.cityConstructions.getBuiltBuildings().count { it.isWonder } }
+        for ((stat, _) in vpPlotYieldFlavors) {
+            val change = profile.worldWonderYield[stat].toInt()
+            if (change <= 0) continue
+            val temp = wonder * change * tallFactor * (100 + 3 * wonderTrait + wonderTraitGoldenAge) / 100 + 10 * wonders
+            value += temp * yieldValueTimes100(civ, stat) / 100
+        }
+        if (profile.cityGrowthModifier > 0) value += 2 * profile.cityGrowthModifier * tallFactor
+        if (profile.plotCultureCostModifier < 0) value += 5 * max(-profile.plotCultureCostModifier, (defense - offense) * 7)
+        return value
+    }
+
+    /** CvPlayerTraits::GetWonderProductionModifier and GetWonderProductionModGA: our nation's wonder production %, always and in golden
+     *  ages */
+    private fun traitWonderProduction(civ: Civilization): Pair<Int, Int> {
+        var always = 0
+        var goldenAge = 0
+        for (unique in civ.nation.uniqueObjects) {
+            if (unique.type != UniqueType.PercentProductionWonders) continue
+            val amount = unique.params[0].toInt()
+            if (unique.hasModifier(UniqueType.ConditionalGoldenAge)) goldenAge += amount else always += amount
+        }
+        return always to goldenAge
     }
 
     /** CvReligionAI::ScoreBeliefForPlayer: the personality flavors (Offense, Defense, Happiness, Culture, Gold, Great People, Science,

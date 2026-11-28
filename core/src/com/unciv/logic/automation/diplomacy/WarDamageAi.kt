@@ -300,6 +300,19 @@ object WarDamageAi {
     }
 
     /**
+     *  The war score of [civ] against [other] as CvDiplomacyAI::DoUpdateWarStates weighs it (V:CvDiplomacyAI.cpp:10818-10832) for the war state, from the raw [warScore]: when
+     *  [other] is the enemy [civ] is wearier of ([highestWarWearinessPlayer]), that weariness would cost it unhappiness ([unhappinessFromWarWearinessWithTeam]) and the empire
+     *  is very unhappy, a negative score doubles and any other is cut to 75 percent (x 75 / 100, cut toward 0); else the raw score. The raw score still decides the
+     *  "losing" and "winning" flags (+/- 75) in the original. 0 change without `warStateWarWearinessLikeVp`.
+     */
+    @Readonly
+    fun warStateScore(civ: Civilization, other: Civilization, warScore: Int): Int {
+        if (!civ.gameInfo.ruleset.modOptions.constants.warStateWarWearinessLikeVp) return warScore
+        if (highestWarWearinessPlayer(civ) != other || unhappinessFromWarWearinessWithTeam(civ, other) <= 0 || !civ.isEmpireVeryUnhappy()) return warScore
+        return if (warScore < 0) warScore * 2 else warScore * 75 / 100
+    }
+
+    /**
      *  CvPlayer::GetUnitCostIncreaseFromWarWeariness (V:CvPlayer.cpp:37106-37109): the highest war weariness percent of [civ] times
      *  [ModConstants.WarWearinessConstants.unitCostPercent] (0 or more) / 100, cut. 0 without `unitCostWarWearinessLikeVp`.
      */

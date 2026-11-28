@@ -2,6 +2,7 @@ package com.unciv.logic.automation.civilization
 
 import com.unciv.Constants
 import com.unciv.logic.MultiFilter
+import com.unciv.logic.automation.diplomacy.OpinionAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.managers.ReligionState
@@ -480,7 +481,9 @@ object BeliefScoring {
             score += atPlot * context.plotMultipliers[i]
         }
         val cityMultiplier = civ.gameInfo.ruleset.ai.define(AiDefine.RELIGION_BELIEF_SCORE_CITY_MULTIPLIER)
-        for (city in civ.cities) score += scoreBeliefAtCity(profile, city, context) * cityMultiplier
+        for (city in civ.cities)
+            score += if (likeVp && belief.type == BeliefType.Pantheon) scorePantheonBeliefAtCity(profile, city, context)
+            else scoreBeliefAtCity(profile, city, context) * cityMultiplier
         score += scoreBeliefForPlayer(profile, context)
         if (belief.type == BeliefType.Pantheon) score /= 2
         return score
@@ -733,6 +736,76 @@ object BeliefScoring {
             if (perFollower > 0) value += min(perFollower, population) / 2
         }
         return value
+    }
+
+    /**
+     *  CvReligionAI::ScorePantheonBeliefAtCity (V:CvReligionClasses.cpp:8403-8905) for the fields Unciv's pantheons have; a null [city]
+     *  is one we may found (population 1, not the capital or connected to it). 0 without a capital. Happiness × 3 × availability: on a
+     *  river 10, else 0, 3 for a city to found; per city 10. Each yield: city change × 10, city connection change × 10 when connected to
+     *  the capital else 7, building change × [buildingAvailability]; their sum × the yield's flavor × factor / 100. Then 10% off for
+     *  each missing population, and for each missing follower of our state religion or pantheon (half the population without one;
+     *  none in a city to found).
+     *  Not built (no Unciv pantheon has them): building happiness, capital, coastal, nearby terrain, specialist, per population,
+     *  follower, gold per turn, birth, We Love the King Day, luxury, trade route, Great Work and construction yields, Great Person points.
+     */
+    fun scorePantheonBeliefAtCity(profile: BeliefAiProfile, city: City?, context: BeliefScoringContext): Int {
+        val civ = context.civ
+        if (civ.getCapital(firstCityIfNoCapital = false) == null) return 0
+        val population = city?.population?.population ?: 1
+        var value = 0
+        if (profile.riverHappiness > 0) {
+            val availability = when {
+                city == null -> 3
+                city.getCenterTile().isAdjacentToRiver() -> 10
+                else -> 0
+            }
+            value += availability * profile.riverHappiness * 3
+        }
+        if (profile.happinessPerCity > 0) value += 10 * profile.happinessPerCity * 3
+        for ((stat, flavorAndFactor) in vpPlotYieldFlavors) {
+            var yieldValue = 10 * profile.cityYield[stat].toInt()
+            val connection = profile.tradeRouteYield[stat].toInt()
+            if (connection > 0) yieldValue += (if (city?.isConnectedToCapital() == true) 10 else 7) * connection
+            for ((building, yields) in profile.buildingYields) {
+                val change = yields[stat].toInt()
+                if (change > 0) yieldValue += buildingAvailability(building, city, civ) * change
+            }
+            value += yieldValue * (civ.ai.personality(flavorAndFactor.first) * flavorAndFactor.second) / 100
+        }
+        if (profile.minPopulation > 0 && population < profile.minPopulation)
+            value = value * (100 - 10 * (profile.minPopulation - population)) / 100
+        if (profile.minFollowers > 0) {
+            // GetStateReligion(true): the state religion, else our pantheon
+            val religion = OpinionAi.stateReligion(civ)?.first?.name ?: civ.religionManager.religion?.takeIf { it.isPantheon() }?.name
+            val followers = when {
+                city == null -> 0
+                religion == null -> population / 2
+                else -> city.religion.getFollowersOf(religion)
+            }
+            if (followers < profile.minFollowers) value = value * (100 - 10 * (profile.minFollowers - followers)) / 100
+        }
+        return value
+    }
+
+    /**
+     *  How soon [city] will have [building] (V:CvReligionClasses.cpp:8789-8843): 10 built, 8 when it can build it now; else 0 for a
+     *  capital building outside the capital, 1 when it needs a nearby resource, 6 when its tech is known, else 3 less the eras until
+     *  that tech (one less for a city to found), at least 0. A civilization's unique building +3, at most 10.
+     */
+    private fun buildingAvailability(building: Building, city: City?, civ: Civilization): Int {
+        var availability = when {
+            city != null && city.cityConstructions.isBuilt(building.name) -> 10
+            city != null && building.isBuildable(city.cityConstructions) -> 8
+            building.hasUnique(UniqueType.IndicatesCapital) && city?.isCapital() != true -> 0
+            building.requiredNearbyImprovedResources != null -> 1
+            building.requiredTech.let { it == null || civ.tech.isResearched(it) } -> 6
+            else -> {
+                val era = civ.gameInfo.ruleset.technologies[building.requiredTech]?.era(civ.gameInfo.ruleset) ?: return 0
+                max(0, 3 - (era.eraNumber - civ.getEraNumber()) - (if (city == null) 1 else 0))
+            }
+        }
+        if (building.replaces != null) availability = min(10, availability + 3)
+        return availability
     }
 
     /** CvReligionAI::ScoreBeliefForPlayer: the personality flavors (Offense, Defense, Happiness, Culture, Gold, Great People, Science,

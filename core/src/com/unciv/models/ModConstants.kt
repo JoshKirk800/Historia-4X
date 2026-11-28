@@ -1408,7 +1408,7 @@ class ModConstants {
      *  home, then abroad (DoFaithPurchases), else emergency inquisitors against Great Prophets (DoReligionDefenseInCities), else buildings or
      *  units city by city (DoFaithPurchasesInCities); Great Prophets convert the cities of VP's ChooseProphetConversionCity and build Holy
      *  Sites, enhance or spread as GetDirectiveProphet says; beliefs weigh the plots of CalculatePlotWeightsForBeliefSelection
-     *  and value each plot's yields as ScoreBeliefAtPlot */
+     *  and value each plot's yields as ScoreBeliefAtPlot, and a pantheon's cities as ScorePantheonBeliefAtCity */
     var religionCultureAiLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100

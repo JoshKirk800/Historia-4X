@@ -1405,7 +1405,8 @@ class ModConstants {
      *  (CvReligionAI::ChooseMissionaryTargetCity, ChooseInquisitorTargetCity), one unit per city a turn, avoiding cities in danger; the religion to
      *  spread is the state religion, or a liked foreign one at home (CvReligionAI::GetReligionToSpread, GetFavoriteForeignReligion); faith buys, in
      *  order, an enhancing prophet, a Great Person from the Industrial era, missionaries or inquisitors at home, then abroad (DoFaithPurchases), else
-     *  emergency inquisitors against Great Prophets (DoReligionDefenseInCities), else buildings or units city by city (DoFaithPurchasesInCities) */
+     *  emergency inquisitors against Great Prophets (DoReligionDefenseInCities), else buildings or units city by city (DoFaithPurchasesInCities);
+     *  Great Prophets convert the cities of VP's ChooseProphetConversionCity and build Holy Sites, enhance or spread as GetDirectiveProphet says */
     var religionCultureAiLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100

@@ -21,6 +21,8 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.translations.removeConditionals
 import com.unciv.testing.GdxTestRunner
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
@@ -1107,6 +1109,164 @@ class ReligionAiTests {
             ReligionAutomation.spendFaithOnReligion(civ)
             assertEquals("with $others", if (others <= 5) 1 else 0, count(civ, "Warrior"))
         }
+    }
+    //endregion
+
+    //region Great Prophets (CvPlayerAI::GetDirectiveProphet, CvReligionAI::ChooseProphetConversionCity)
+
+    private fun prophet(civ: Civilization, religion: Religion, tile: Tile, spreads: Int = 0): MapUnit {
+        val unit = game.addUnit("Great Prophet", civ, tile)
+        unit.religion = religion.name
+        @Suppress("DEPRECATION")
+        val spread = unit.getMatchingUniques(UniqueType.CanSpreadReligion).first().text.removeConditionals()
+        if (spreads > 0) unit.abilityToTimesUsed[spread] = spreads
+        return unit
+    }
+
+    @Test
+    fun `with Vox Populi a Great Prophet converts our holy city first, then our cities by heretics and atheists over the distance to the holy city`() {
+        val (civ, religion) = foundedCiv()
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val heretic = game.addCiv()
+        val hereticReligion = foundReligion(heretic)
+        val underHeretics = cityWith(civ, 3, 0, 8, hereticReligion.name to 5000)
+        val atheists = cityWith(civ, -3, 0, 8, atheism = 5000)
+        assertEquals("7 follow the other religion, 1 none", 7, underHeretics.religion.getFollowersOf(hereticReligion.name))
+        val hereticsScore = 8 * 100 / (3 + 1) * 3
+        // the citizens who follow no religion count too: here all 8
+        val atheistsScore = 8 * 100 / (3 + 1)
+        assertTrue("no followers in the atheist city", atheists.religion.getNumberOfFollowers().isEmpty())
+        assertTrue("$hereticsScore > 500", hereticsScore > 500)
+        assertEquals("heretics × 100 / (distance to the holy city + 1), × 3 under a founded religion; atheists not above 500",
+            listOf(underHeretics to hereticsScore), ReligionAutomation.prophetTargetsLikeVp(civ, null))
+
+        val used = prophet(civ, religion, tile(1, 1), spreads = 1)
+        assertEquals("above 10 for a prophet that has spread", listOf(underHeretics to hereticsScore, atheists to atheistsScore),
+            ReligionAutomation.prophetTargetsLikeVp(civ, used))
+        val inquisitor = game.addUnit("Inquisitor", civ, tile(3, 1))
+        inquisitor.religion = hereticReligion.name
+        assertEquals("not where another religion's inquisitor guards", listOf(atheists to atheistsScore), ReligionAutomation.prophetTargetsLikeVp(civ, used))
+        assertEquals("a guard counts only for a unit", listOf(underHeretics to hereticsScore), ReligionAutomation.prophetTargetsLikeVp(civ, null))
+        inquisitor.destroy()
+
+        val capital = civ.getCapital()!!
+        capital.religion.addPressure(hereticReligion.name, 1_000_000)
+        assertEquals(capital to 100_000, ReligionAutomation.prophetTargetsLikeVp(civ, null).first())
+    }
+
+    @Test
+    fun `with Vox Populi a Great Prophet weighs foreign cities by heretics, the pressures, holy cities, founders and our beliefs`() {
+        val (civ, religion) = foundedCiv()
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val heretic = game.addCiv()
+        val hereticReligion = foundReligion(heretic)
+        val hereticHoly = cityWith(heretic, 5, 0, 12, hereticReligion.name to 5000)
+        hereticHoly.religion.religionThisIsTheHolyCityOf = hereticReligion.name
+        val pagan = game.addCiv()
+        val converted = cityWith(pagan, -5, 0, 12, hereticReligion.name to 5000)
+        cityWith(pagan, 0, 5, 12, atheism = 5000) // no followers of another religion
+        val nearUs = cityWith(pagan, -2, 2, 12, hereticReligion.name to 5000)
+        for ((x, y) in listOf(-1 to 3, -3 to 1, -1 to 1)) follow(game.addCity(civ, tile(x, y)), religion, 10)
+        val used = prophet(civ, religion, tile(1, 1), spreads = 1)
+        fun theirsAndOurs(city: City) = city.religion.getPressuresFromSurroundingCities().let { it[hereticReligion.name] to it[religion.name] }
+        // followers of other religions × 1000 / (distance to the holy city + 7), × their pressure per turn / ours when that is smaller
+        fun base(city: City): Int {
+            val score = city.religion.getFollowersOf(hereticReligion.name) * 1000 / (city.getCenterTile().aerialDistanceTo(tile(0, 0)) + 7)
+            val (theirs, ours) = theirsAndOurs(city)
+            return if (theirs < ours) score * theirs / ours else score
+        }
+        assertTrue("their pressure below ours", theirsAndOurs(nearUs).let { it.first in 1 until it.second })
+        assertTrue("their pressure not below ours", theirsAndOurs(hereticHoly).let { it.first >= it.second })
+
+        // × 2 when the majority religion's founder does not own the city, ÷ 2 for the holy city of the owner's religion
+        val expected = listOf(nearUs to base(nearUs) * 2, converted to base(converted) * 2, hereticHoly to base(hereticHoly) / 2)
+        assertEquals(expected.sortedByDescending { it.second }, ReligionAutomation.prophetTargetsLikeVp(civ, used))
+
+        // × 2 for each yield our beliefs give for foreign followers or cities, × 2 for happiness from peaceful foreign followers
+        religion.addBelief("Pilgrimage")
+        religion.addBelief("World Church")
+        religion.addBelief("Peace Loving")
+        assertEquals(expected.map { it.first to it.second * 8 }.sortedByDescending { it.second }, ReligionAutomation.prophetTargetsLikeVp(civ, used))
+
+        val guard = game.addUnit("Inquisitor", pagan, tile(-5, 1))
+        guard.religion = hereticReligion.name
+        civ.viewableTiles = civ.viewableTiles + guard.getTile()
+        civ.diplomacyFunctions.makeCivilizationsMeet(heretic)
+        civ.getDiplomacyManager(heretic)!!.declareWar()
+        assertEquals("not guarded against us, not at war", listOf(nearUs), ReligionAutomation.prophetTargetsLikeVp(civ, used).map { it.first })
+    }
+
+    @Test
+    fun `with Vox Populi a Great Prophet builds Holy Sites while we have few, spreads once it has, and enhances while our holy city follows us`() {
+        val (civ, religion) = foundedCiv()
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val view = GameView(game.gameInfo, civ)
+        val capital = civ.getCapital()!!
+        leaveCapital(civ)
+        val heretic = game.addCiv()
+        val hereticReligion = foundReligion(heretic)
+        val target = cityWith(civ, 3, 0, 8, hereticReligion.name to 5000)
+        fun automate(unit: MapUnit) = ReligiousUnitAutomation.automateGreatProphet(view.getMapUnitView(unit))
+
+        // not enhanced, our holy city under another religion: spread there, in the holy city itself
+        setState(civ, ReligionState.Religion)
+        capital.religion.addPressure(hereticReligion.name, 1_000_000)
+        val spreader = prophet(civ, religion, capital.getCenterTile())
+        assertTrue(automate(spreader))
+        assertEquals(ReligionState.Religion, civ.religionManager.religionState)
+        assertTrue("it spread", !ReligionAutomation.isFullStrength(spreader))
+        spreader.destroy()
+
+        // not enhanced, our holy city follows us: enhance
+        capital.religion.addPressure(religion.name, 100_000_000)
+        val enhancer = prophet(civ, religion, capital.getCenterTile())
+        assertTrue(automate(enhancer))
+        assertEquals(ReligionState.EnhancingReligion, civ.religionManager.religionState)
+        enhancer.destroy()
+
+        // enhanced: Holy Sites while we have no more than our religion flavor minus our prophets, else spread if there is a city to convert
+        religion.addBelief(game.ruleset.beliefs.values.first { it.type == BeliefType.Enhancer })
+        setState(civ, ReligionState.EnhancedReligion)
+        val full = prophet(civ, religion, tile(1, 1))
+        val flavor = civ.ai.personality(Flavor.Religion)
+        val sites = capital.getTiles().filter { it != capital.getCenterTile() }.toList()
+        for (tile in sites.take(flavor - 1)) tile.improvement = "Holy site"
+        assertEquals("$flavor - 1 prophet sites", false, automate(full))
+        sites[flavor - 1].improvement = "Holy site"
+        assertEquals("$flavor sites and a city to convert", true, automate(full))
+        full.destroy()
+        target.religion.addPressure(religion.name, 100_000_000)
+        assertEquals("$flavor sites and nothing to convert", false, automate(prophet(civ, religion, tile(1, 1))))
+
+        // a prophet that has spread keeps spreading
+        assertTrue(automate(prophet(civ, religion, tile(1, 2), spreads = 1)))
+    }
+
+    @Test
+    fun `with Vox Populi a Great Prophet takes the nearer of the two best cities when its score over turns + 3 is higher`() {
+        val (civ, religion) = foundedCiv()
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val hereticReligion = foundReligion(game.addCiv())
+        val far = cityWith(civ, -4, 0, 12, hereticReligion.name to 5000)
+        // 12 × 100 / 5 × 3 = 720 at 1 turn, 720 / (1 + 3) = 180; 10 × 100 / 5 × 3 = 600 at 0 turns, 600 / (0 + 3) = 200
+        val near = cityWith(civ, 4, 0, 10, hereticReligion.name to 5000)
+        val used = prophet(civ, religion, tile(4, 1), spreads = 1)
+        assertEquals("the far city scores best", listOf(far, near), ReligionAutomation.prophetTargetsLikeVp(civ, used).map { it.first })
+        assertTrue(ReligiousUnitAutomation.automateGreatProphet(GameView(game.gameInfo, civ).getMapUnitView(used)))
+        assertEquals(near.getCenterTile(), used.getTile())
+    }
+
+    @Test
+    fun `with Vox Populi a Great Prophet of a civilization without a religion founds one, or builds a Holy Site once none is left`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val civ = game.addCiv()
+        game.addCity(civ, tile(0, 0))
+        leaveCapital(civ)
+        val view = GameView(game.gameInfo, civ)
+        val prophet = game.addUnit("Great Prophet", civ, tile(1, 1))
+        assertTrue(ReligiousUnitAutomation.automateGreatProphet(view.getMapUnitView(prophet)))
+        noMoreReligionsToFound()
+        assertEquals(false, ReligiousUnitAutomation.automateGreatProphet(view.getMapUnitView(prophet)))
     }
     //endregion
 }

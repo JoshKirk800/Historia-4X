@@ -695,10 +695,108 @@ class ReligionAiTests {
         game.addCity(civ, tile(4, 0))
         val context = BeliefScoringContext(civ)
         val profile = BeliefAiProfile.of(belief, civ)
-        val atCities = civ.cities.sumOf { BeliefScoring.scoreBeliefAtCity(profile, it, context) }
-        assertTrue(atCities > 0)
+        val atCities = civ.cities.sumOf { BeliefScoring.scoreBeliefAtCityLikeVp(profile, it, context) }
+        // the Shrine's happiness × 3 (Happiness flavor 10) in each city
+        assertEquals(6, atCities)
         // no plot yields, no land to expand to: the cities × 6 and the player's score
         assertEquals(6 * atCities + BeliefScoring.scoreBeliefForPlayer(profile, context), BeliefScoring.scoreBelief(belief, context))
+    }
+
+    private fun cityScore(civ: Civilization, city: City, vararg uniques: String): Int {
+        val profile = BeliefAiProfile.of(game.createBelief(BeliefType.Follower, *uniques), civ)
+        return BeliefScoring.scoreBeliefAtCityLikeVp(profile, city, BeliefScoringContext(civ))
+    }
+
+    @Test
+    fun `with Vox Populi a city scores happiness by the offense the personality needs`() {
+        val civ = vpPlotCiv()
+        val city = civ.cities.first()
+        city.population.setPopulation(3)
+        assertEquals("× 6 below a need of 6", 6, cityScore(civ, city, "[+1 Happiness] [in all cities]"))
+        assertEquals("× 3 at the population", 18,
+            cityScore(civ, city, "[+1 Happiness] [in all cities] <in cities with at least [3] [Population]>"))
+        civ.ai.setPersonalityFlavor(Flavor.Offense, 8)
+        assertEquals("× 15 above 15", 15, cityScore(civ, city, "[+1 Happiness] [in all cities]"))
+        civ.ai.setPersonalityFlavor(Flavor.Offense, 7)
+        civ.ai.setPersonalityFlavor(Flavor.Happiness, 1)
+        assertEquals("× 3 at 15", 3, cityScore(civ, city, "[+1 Happiness] [in all cities]"))
+        civ.ai.setPersonalityFlavor(Flavor.Offense, 2)
+        assertEquals("× 6 at 5", 6, cityScore(civ, city, "[+1 Happiness] [in all cities]"))
+        civ.ai.setPersonalityFlavor(Flavor.Happiness, 0)
+        civ.ai.setPersonalityFlavor(Flavor.Offense, 3)
+        assertEquals("× 3 at 6", 3, cityScore(civ, city, "[+1 Happiness] [in all cities]"))
+        assertEquals("a building's × 2 at the minimum followers", 6,
+            cityScore(civ, city, "[+1 Happiness] from every [Shrine] <in cities with at least [3] [Followers of this Religion]>"))
+        civ.ai.setPersonalityFlavor(Flavor.Defense, 10)
+        assertEquals("cheaper borders (25 / 7) × max(3, Defense - Offense)", 3 * 7,
+            cityScore(civ, city, "[-25]% Culture cost of natural border growth [in all cities]"))
+        assertEquals("not on a hill", 0, cityScore(civ, city, "[+1 Happiness] in cities on [Hill] tiles"))
+        city.getCenterTile().setBaseTerrain(game.ruleset.terrains["Plains"]!!)
+        assertEquals("on plains, × 6 with Defense 10", 6, cityScore(civ, city, "[+1 Happiness] in cities on [Plains] tiles"))
+    }
+
+    @Test
+    fun `with Vox Populi a city yield counts by the eras left and the population, the capital's by the eras left`() {
+        val civ = vpPlotCiv()
+        val capital = civ.cities.first()
+        val other = game.addCity(civ, tile(4, 0))
+        capital.population.setPopulation(3)
+        // E = (9 eras - 0) / 2 = 4
+        assertEquals(2 * (4 + 3), cityScore(civ, capital, "[+2 Gold] [in all cities]"))
+        assertEquals(2 * (4 + 1), cityScore(civ, other, "[+2 Gold] [in all cities]"))
+        assertEquals(2 * 4, cityScore(civ, capital, "[+2 Gold] [in capital]"))
+        assertEquals(0, cityScore(civ, other, "[+2 Gold] [in capital]"))
+        assertEquals("world wonders × WonderCompetitiveness", 2 * civ.ai.diplomacyValue(DiplomacyPersonality.WonderCompetitiveness),
+            cityScore(civ, other, "[+2 Gold] from every [Wonder]"))
+        // a building's × E, halved for a wonder, doubled once built
+        assertEquals(2 * 4, cityScore(civ, other, "[+2 Gold] from every [Shrine]"))
+        assertEquals(2 * 4 / 2, cityScore(civ, other, "[+2 Gold] from every [Stonehenge]"))
+        other.cityConstructions.addBuilding("Shrine")
+        assertEquals(2 * 4 * 2, cityScore(civ, other, "[+2 Gold] from every [Shrine]"))
+        assertEquals("the follower modifier × population² / 10", 15 * 9 / 10,
+            cityScore(civ, capital, "[+1]% [Production] from every follower, up to [15]%"))
+        assertEquals("not coastal", 0, cityScore(civ, capital, "[+2 Gold] [in all coastal cities]"))
+        assertEquals("on grassland", 2 * 4, cityScore(civ, capital, "[+2 Gold] in cities on [Grassland] tiles"))
+        assertEquals("any specialist × E + the population, no slots", 2 * 4 + 3,
+            cityScore(civ, capital, "[+2 Gold] [in all cities] <in cities with at least [1] [Specialists]>"))
+        civ.cache.updateCitiesConnectedToCapital()
+        assertEquals("trade route × E × 5 when connected", 2 * 4 * 5, cityScore(civ, capital, "[+2 Gold] from each Trade Route"))
+        capital.cityStats.update()
+        assertEquals("the food before eating × the ideal size, at least 30", ((capital.cityStats.excessFood + 2 * 3) * 30).toInt(),
+            cityScore(civ, capital, "[+1 Faith] per [1] population [in all cities]"))
+    }
+
+    @Test
+    fun `with Vox Populi a city scores strength, healing, wonder and unit production by flavors and traits`() {
+        val civ = vpPlotCiv()
+        val city = civ.cities.first()
+        civ.ai.setPersonalityFlavor(Flavor.CityDefense, 12)
+        civ.ai.setPersonalityFlavor(Flavor.Offense, 2)
+        civ.ai.setPersonalityFlavor(Flavor.Defense, 5)
+        assertEquals("(30 / 3) × max(10, 12 - 2)", 100, cityScore(civ, city, "[+30]% Strength for cities"))
+        assertEquals("10 × Defense / Offense", 25, cityScore(civ, city, "[All] Units adjacent to this city heal [10] HP per turn when healing"))
+        assertEquals("× its last era (Classical: 2) / 5", 15 * 2 / 5,
+            cityScore(civ, city, "[+15]% Production when constructing [Classical era] wonders [in all cities]"))
+        assertEquals("halved without the traits", 10, cityScore(civ, city, "[+20]% Production when constructing [Military] units [in all cities]"))
+        val venice = neighbor(civ, "Venice")
+        assertEquals("growth × 2 when smaller", 20, cityScore(venice, venice.cities.first(), "[+10]% growth [in all cities]"))
+    }
+
+    @Test
+    fun `with Vox Populi a city scores population yields by its food over the ideal size, and the holy city yield in our holy city`() {
+        val (civ, _) = foundedCiv()
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val holy = civ.cities.first()
+        holy.population.setPopulation(100)
+        holy.cityStats.update()
+        // the food before eating (2 eaten per citizen) × the ideal size: the capital's 100
+        val food = ((holy.cityStats.excessFood + 2 * 100) * 100).toInt() * 100 / 100
+        assertTrue("$food", food / 300 != food / 400)
+        assertEquals("2 population per point", food / 2, cityScore(civ, holy, "[+2 Faith] per [4] population [in all cities]"))
+        assertEquals("upon growth: × (food / 400)", 12 * (food / 400), cityScore(civ, holy, "Gain [12] [Culture] <upon population growth>"))
+        val other = game.addCity(civ, tile(4, 0))
+        assertEquals(3, cityScore(civ, holy, "[+3 Gold] [in holy cities]"))
+        assertEquals(0, cityScore(civ, other, "[+3 Gold] [in holy cities]"))
     }
 
     private fun bonusGain(civ: Civilization, belief: Belief): Int {

@@ -20,6 +20,7 @@ import com.unciv.models.Religion
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.ai.AiDefine
+import com.unciv.models.ruleset.ai.DiplomacyPersonality
 import com.unciv.models.ruleset.ai.Flavor
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.removeConditionals
@@ -344,6 +345,46 @@ class ReligionAiTests {
         game.addUnit("Great General", civ, tile(1, 2))
         // 1000 / 3 = 333 < writer 400
         assertEquals("Great Writer", desired(civ))
+    }
+
+    @Test
+    fun `with Vox Populi the faith Great Person scores 20000 - its price, plus 100 or 200 by the victory pursued`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val civ = game.addCiv(
+            *listOf("Great Writer", "Great Scientist", "Great Merchant", "Great General")
+                .map { "May buy [$it] units with [Faith] [in all cities]" }.toTypedArray(),
+            "May buy [Great Engineer] units for [340] [Faith] [in all cities]"
+        )
+        val capital = game.addCity(civ, tile(0, 0))
+        fun price(name: String) = game.ruleset.units[name]!!.getStatBuyCost(capital, Stat.Faith)!!
+        assertEquals(listOf(200, 200, 340), listOf("Great Writer", "Great Scientist", "Great Engineer").map { price(it) })
+        civ.ai.setDiplomacyValue(DiplomacyPersonality.WonderCompetitiveness, 1) // max(100, 100 / 3 × 1.3) = 100
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.CULTURE)
+        assertEquals("the writer's 200 beats the others' 100", "Great Writer", desired(civ))
+        civ.ai.setGrandStrategyAndPursuit(GrandStrategyAi.SPACESHIP)
+        civ.ai.setDiplomacyValue(DiplomacyPersonality.WonderCompetitiveness, 9)
+        assertEquals("the engineer's 19660 + 100 / 3 × 9.3 = 19970 is below the scientist's 19800 + 200", "Great Scientist", desired(civ))
+        civ.ai.setDiplomacyValue(DiplomacyPersonality.WonderCompetitiveness, 10)
+        assertEquals("19660 + 100 / 3 × 10.3 = 20003", "Great Engineer", desired(civ))
+    }
+
+    @Test
+    fun `with Vox Populi a faith Great Prophet needs the capital or holy city to follow our religion, and counts twice unenhanced`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val (civ, religion) = foundedCiv(
+            "May buy [Great Prophet] units with [Faith] [in all cities]", "May buy [Great Scientist] units with [Faith] [in all cities]"
+        )
+        val holyCity = civ.getCapital()!!
+        val capital = game.addCity(civ, tile(4, 0))
+        civ.moveCapitalTo(capital, holyCity)
+        fun price(name: String) = game.ruleset.units[name]!!.getStatBuyCost(capital, Stat.Faith)!!
+        assertEquals("prophet ${price("Great Prophet")}, scientist ${price("Great Scientist")}: the holy city follows", "Great Prophet", desired(civ))
+        holyCity.religion.addPressure(foundReligion(game.addCiv()).name, 1_000_000)
+        assertEquals("neither follows", "Great Scientist", desired(civ))
+        capital.religion.addPressure(religion.name, 5000)
+        assertEquals("the capital follows", "Great Prophet", desired(civ))
+        religion.addBelief(game.ruleset.beliefs.values.first { it.type == BeliefType.Enhancer })
+        assertEquals("enhanced, not doubled", "Great Scientist", desired(civ))
     }
     //endregion
 

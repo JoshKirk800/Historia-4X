@@ -1,12 +1,11 @@
 package com.unciv.logic.automation.strategy
 
 import com.unciv.logic.automation.civilization.BeliefAiProfile
+import com.unciv.logic.automation.civilization.ReligionAutomation
 import com.unciv.logic.automation.diplomacy.TheftAi
-import com.unciv.logic.automation.diplomacy.TheftType
 import com.unciv.logic.automation.diplomacy.VictoryProgressAi
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
-import com.unciv.logic.civilization.Proximity
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.Ruleset
@@ -98,7 +97,7 @@ object BuildingValueAi {
      *  the works the city already holds), production for buildings, population gained, a puppet that can be bought in, food kept, trade
      *  routes between our cities, a free technology, free units (special units 100, city founders 50, others 10 each), the free building
      *  it gives (its own sanity result for weight 30, if positive), the missionary spread columns (a share of the cities our religion
-     *  could convert, see [numCitiesWithReligion]) and 100 for each building we could build now that needs this one.
+     *  could convert, see [ReligionAutomation.numCitiesWithReligion]) and 100 for each building we could build now that needs this one.
      */
     fun basicValue(city: City, building: Building): Int {
         val civ = city.civ
@@ -159,7 +158,7 @@ object BuildingValueAi {
             val spreads = BuildingProductionAi.extraMissionarySpreads(ruleset, building)
             val strength = building.hasUnique(UniqueType.SpreadReligionStrength, ignoreConditionals)
             if (spreads.isNotEmpty() || strength) {
-                val numNearbyCities = numCitiesWithReligion(civ)
+                val numNearbyCities = ReligionAutomation.numCitiesWithReligion(civ, civ.religionManager.religion)
                 if (spreads.any { it.isLocalEffect }) value += numNearbyCities / 25
                 if (spreads.any { !it.isLocalEffect }) value += numNearbyCities / 10
                 if (strength) value += numNearbyCities / 25
@@ -172,41 +171,6 @@ object BuildingValueAi {
             if (civ.tech.isResearched(tech) && other.requiredBuilding == building.name) value += 100
         }
         return value
-    }
-
-    /**
-     *  CvReligionAI::GetNumCitiesWithReligionCalculator for the state religion: every living civilization's cities that follow it (cities
-     *  without a majority religion or with a pantheon for none or a pantheon: 2 each), doubled for ourselves and for civilizations that
-     *  founded no religion, then halved, quartered or divided by six by how close their land is, times the eras left, halved. A major
-     *  skips the civilizations that are a bad target for a conversion ([TheftAi.isBadTheftTarget]).
-     */
-    private fun numCitiesWithReligion(civ: Civilization): Int {
-        val religion = civ.religionManager.religion
-        var total = 0
-        for (other in civ.gameInfo.civilizations) {
-            if (!other.isAlive() || !(other.isMajorCiv || other.isCityState)) continue
-            if (civ.isMajorCiv && TheftAi.isBadTheftTarget(civ, other, TheftType.Conversion)) continue
-            var numCities = 0
-            for (city in other.cities) {
-                val majority = city.religion.getMajorityReligion()
-                if (religion == null) {
-                    if (majority == null || majority.isPantheon()) numCities += 2
-                } else if (if (religion.isPantheon()) majority?.isPantheon() == true else majority == religion) numCities++
-            }
-            //Emphasis on our own!
-            if (other == civ) numCities *= 2
-            if (other.religionManager.religionState < ReligionState.Religion) numCities *= 2
-            when (other.getProximity(civ)) {
-                Proximity.Close -> numCities /= 2
-                Proximity.Far -> numCities /= 4
-                Proximity.Distant -> numCities /= 6
-                else -> {}
-            }
-            total += numCities
-        }
-        //Let's make some predictions. Earlier in the game = more cities to make. And they'll all potentially be ours!
-        val eraBonus = max(1, civ.gameInfo.ruleset.eras.size - civ.getEraNumber())
-        return total * eraBonus / 2
     }
 
     /**

@@ -270,6 +270,111 @@ class ReligionAiTests {
         assertEquals("beyond range 6 of the capital, 4 from a city", null, weights[tile(4, 0)])
         assertEquals("beyond range 6 of the capital, in reach of a city", 3, weights[tile(3, 0)])
     }
+
+    private fun vpPlotScore(civ: Civilization, belief: String, tile: Tile, futureTech: Boolean = true): Int {
+        val profile = BeliefAiProfile.of(game.ruleset.beliefs[belief]!!, civ)
+        return BeliefScoring.scoreBeliefAtPlotLikeVp(profile, tile, BeliefScoringContext(civ, considerFutureTech = futureTech))
+    }
+
+    private fun terrain(x: Int, y: Int, base: String, vararg features: String, resource: String? = null): Tile {
+        val tile = tile(x, y)
+        tile.baseTerrain = base
+        tile.setTerrainFeatures(features.toList())
+        if (resource != null) tile.setTileResource(resource)
+        tile.setTransients()
+        return tile
+    }
+
+    private fun vpPlotCiv(): Civilization {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val civ = neutralCiv()
+        game.addCity(civ, tile(0, 0))
+        return civ
+    }
+
+    @Test
+    fun `with Vox Populi a plot scores each yield by its personality flavor, each truncated`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Culture, 7)
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 3)
+        val wine = terrain(2, 0, Constants.plains, resource = "Wine")
+        // culture 100 × 7 × 100 / 10000, faith 100 × 3 × 110 / 10000 (3.3)
+        assertEquals(7 + 3, vpPlotScore(civ, "Goddess of Festivals", wine))
+        assertEquals(3, vpPlotScore(civ, "Desert Folklore", terrain(3, 0, Constants.desert)))
+        assertEquals(0, vpPlotScore(civ, "Desert Folklore", wine))
+        val fuji = tile(-2, 0)
+        fuji.naturalWonder = "Mount Fuji"
+        fuji.setTransients()
+        assertEquals(400 * 330 / 10000, vpPlotScore(civ, "One with Nature", fuji))
+    }
+
+    @Test
+    fun `with Vox Populi a feature yield counts as far as the feature is likely to stay`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Culture, 8)
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 10)
+        val jungle = terrain(2, 0, Constants.plains, Constants.jungle)
+        // 25% likely to be cleared: 100 × 75 / 100 × 8 × 100 / 10000
+        assertEquals(6, vpPlotScore(civ, "Sacred Path", jungle))
+        assertEquals("not looking ahead", 8, vpPlotScore(civ, "Sacred Path", jungle, futureTech = false))
+        assertEquals(11, vpPlotScore(civ, "Dance of the Aurora", terrain(3, 0, Constants.tundra)))
+        // only as likely as the forest is to go: 100 × 25 / 100 × 10 × 110 / 10000
+        val forest = terrain(4, 0, Constants.tundra, Constants.forest)
+        assertEquals(2, vpPlotScore(civ, "Dance of the Aurora", forest))
+        civ.policies.freePolicies = 1
+        civ.policies.adopt(game.ruleset.policyBranches["Tradition"]!!)
+        // 40%: 60 × 800 / 10000
+        assertEquals(4, vpPlotScore(civ, "Sacred Path", jungle))
+        assertEquals(40 * 1100 / 10000, vpPlotScore(civ, "Dance of the Aurora", forest))
+    }
+
+    @Test
+    fun `with Vox Populi a feature likely stays where the plot's last improvement keeps it or for a civilization that moves through it`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Culture, 8)
+        // a Fort, the last improvement this plot can take, keeps the jungle: 100 × 8 × 100 / 10000
+        assertEquals(8, vpPlotScore(civ, "Sacred Path", terrain(2, 0, Constants.plains, Constants.jungle, resource = "Bananas")))
+        civ.nation.forestsAndJunglesAreRoads = true
+        // 25 - 20 = 5% likely to be cleared: 95 × 800 / 10000
+        assertEquals(7, vpPlotScore(civ, "Sacred Path", terrain(3, 0, Constants.plains, Constants.jungle)))
+    }
+
+    @Test
+    fun `with Vox Populi a belief scores its plots by their weights and our flavors`() {
+        val civ = vpPlotCiv()
+        val belief = game.ruleset.beliefs["Desert Folklore"]!!
+        val context = BeliefScoringContext(civ)
+        for (plot in context.plots) terrain(plot.position.x, plot.position.y, Constants.desert)
+        val weight = context.plotMultipliers.sum()
+        assertTrue(weight > 0)
+        // with no religion flavor a desert's faith is worth nothing
+        val none = BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ))
+        civ.ai.setPersonalityFlavor(Flavor.Religion, 10)
+        val gain = BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)) - none
+        // 11 a plot × its weight, halved for a pantheon
+        assertTrue("gained $gain over weight $weight", gain == 11 * weight / 2 || gain == (11 * weight + 1) / 2)
+    }
+
+    @Test
+    fun `with Vox Populi an improvement yield counts by how soon the plot can have it`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Culture, 10)
+        val cattle = terrain(2, 0, Constants.grassland, resource = "Cattle")
+        val wooded = terrain(3, 0, Constants.grassland, Constants.forest, resource = "Cattle")
+        val bare = terrain(4, 0, Constants.grassland)
+        // a pasture some day: 1 × 50 × 10 × 100 / 10000
+        assertEquals(5, vpPlotScore(civ, "God of the Open Sky", cattle))
+        assertEquals("no pasture without a resource", 0, vpPlotScore(civ, "God of the Open Sky", bare))
+        civ.tech.techsToResearch.add("Animal Husbandry")
+        assertEquals("researching", 8, vpPlotScore(civ, "God of the Open Sky", cattle))
+        civ.tech.addTechnology("Animal Husbandry")
+        assertEquals(9, vpPlotScore(civ, "God of the Open Sky", cattle))
+        assertEquals("the forest must go first: 90 × 80 / 100", 7, vpPlotScore(civ, "God of the Open Sky", wooded))
+        cattle.setImprovement("Pasture")
+        assertEquals(10, vpPlotScore(civ, "God of the Open Sky", cattle))
+        assertEquals("not looking ahead, only what is built", 10, vpPlotScore(civ, "God of the Open Sky", cattle, futureTech = false))
+        assertEquals(0, vpPlotScore(civ, "God of the Open Sky", wooded, futureTech = false))
+    }
     //endregion
 
     @Test

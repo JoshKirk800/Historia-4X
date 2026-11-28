@@ -15,10 +15,12 @@ import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.managers.ReligionManager
 import com.unciv.logic.civilization.managers.ReligionState
+import com.unciv.logic.civilization.transients.CapitalConnectionsFinder.CapitalConnectionMedium
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.Religion
 import com.unciv.models.metadata.BaseRuleset
+import com.unciv.models.ruleset.Belief
 import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.DiplomacyPersonality
@@ -35,6 +37,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.EnumSet
 import kotlin.random.Random
 
 /** Decision-level checks of the CvReligionAI port (CvReligionClasses.cpp) against the DLL formulas, with the BNW beliefs */
@@ -374,6 +377,109 @@ class ReligionAiTests {
         assertEquals(10, vpPlotScore(civ, "God of the Open Sky", cattle))
         assertEquals("not looking ahead, only what is built", 10, vpPlotScore(civ, "God of the Open Sky", cattle, futureTech = false))
         assertEquals(0, vpPlotScore(civ, "God of the Open Sky", wooded, futureTech = false))
+    }
+
+    private fun pantheonCityScore(civ: Civilization, belief: Belief, city: City?) =
+        BeliefScoring.scorePantheonBeliefAtCity(BeliefAiProfile.of(belief, civ), city, BeliefScoringContext(civ))
+
+    private fun pantheonCityScore(civ: Civilization, belief: String, city: City?) =
+        pantheonCityScore(civ, game.ruleset.beliefs[belief]!!, city)
+
+    @Test
+    fun `with Vox Populi a pantheon's happiness counts in a city by whether the city has it and its population`() {
+        val civ = vpPlotCiv()
+        val capital = civ.getCapital()!!
+        // 3 a point of happiness, × 10 where it is sure, 3 for a city we may found
+        assertEquals(0, pantheonCityScore(civ, "Sacred Waters", capital))
+        assertEquals(9, pantheonCityScore(civ, "Sacred Waters", null))
+        capital.getCenterTile().hasBottomRiver = true
+        capital.getCenterTile().forgetAdjacentToRiver()
+        assertEquals(30, pantheonCityScore(civ, "Sacred Waters", capital))
+        // Goddess of Love wants 6 population: 10% off for each one missing
+        assertEquals(15, pantheonCityScore(civ, "Goddess of Love", capital))
+        assertEquals(15, pantheonCityScore(civ, "Goddess of Love", null))
+        assertEquals(21, pantheonCityScore(civ, "Goddess of Love", game.addCity(civ, tile(4, 0), initialPopulation = 3)))
+        assertEquals(30, pantheonCityScore(civ, "Goddess of Love", game.addCity(civ, tile(-4, 0), initialPopulation = 6)))
+        assertEquals("nothing without a capital", 0, pantheonCityScore(neutralCiv(), "Goddess of Love", null))
+    }
+
+    @Test
+    fun `with Vox Populi a pantheon's city yields count by the yield's flavor and the city's connection`() {
+        val civ = vpPlotCiv()
+        val capital = civ.getCapital()!!
+        civ.ai.setPersonalityFlavor(Flavor.Production, 8)
+        civ.ai.setPersonalityFlavor(Flavor.Science, 5)
+        // 1 production × 10 × 8 × 50 / 100, 20% off for the 2 population short of 3
+        assertEquals(32, pantheonCityScore(civ, "God of Craftsmen", capital))
+        assertEquals(40, pantheonCityScore(civ, "God of Craftsmen", game.addCity(civ, tile(4, 0), initialPopulation = 3)))
+        // 2 science × 7 until connected to the capital, then × 10; × 5 × 80 / 100
+        val town = game.addCity(civ, tile(-4, 0))
+        assertEquals(56, pantheonCityScore(civ, "Messenger of the Gods", town))
+        assertEquals(56, pantheonCityScore(civ, "Messenger of the Gods", null))
+        civ.cache.citiesConnectedToCapitalToMediums = mapOf(town to EnumSet.of(CapitalConnectionMedium.Road))
+        assertEquals(80, pantheonCityScore(civ, "Messenger of the Gods", town))
+        // a city yield for 2 followers: half the population follows before we have a religion, none in a city to found
+        val followers = game.createBelief(BeliefType.Pantheon,
+            "[+1 Science] [in all cities] <in cities with at least [2] [Followers of this Religion]>")
+        assertEquals(40 * 80 / 100, pantheonCityScore(civ, followers, null))
+        assertEquals(40 * 90 / 100, pantheonCityScore(civ, followers, game.addCity(civ, tile(0, 4), initialPopulation = 3)))
+        assertEquals(40, pantheonCityScore(civ, followers, game.addCity(civ, tile(0, -4), initialPopulation = 4)))
+    }
+
+    @Test
+    fun `with Vox Populi a pantheon's building yields count by how soon the city can have the building`() {
+        val civ = vpPlotCiv()
+        val capital = civ.getCapital()!!
+        civ.ai.setPersonalityFlavor(Flavor.Culture, 10)
+        val town = game.addCity(civ, tile(4, 0))
+        // 1 culture × availability × 10 × 100 / 100: a Granary needs Pottery, of our era: 3, 2 for a city we may found
+        val granary = game.createBelief(BeliefType.Pantheon, "[+1 Culture] from every [Granary]")
+        assertEquals(30, pantheonCityScore(civ, granary, capital))
+        assertEquals(20, pantheonCityScore(civ, granary, null))
+        civ.tech.addTechnology("Pottery")
+        assertEquals("buildable now", 80, pantheonCityScore(civ, granary, capital))
+        assertEquals("its tech known", 60, pantheonCityScore(civ, granary, null))
+        capital.cityConstructions.addBuilding("Granary")
+        assertEquals(100, pantheonCityScore(civ, granary, capital))
+        // a University's Education is two eras on: 3 - 2
+        val university = game.createBelief(BeliefType.Pantheon, "[+1 Culture] from every [University]")
+        assertEquals(10, pantheonCityScore(civ, university, capital))
+        assertEquals(0, pantheonCityScore(civ, university, null))
+        // Industrialization is four eras on: nothing, never less
+        assertEquals(0, pantheonCityScore(civ, game.createBelief(BeliefType.Pantheon, "[+1 Culture] from every [Factory]"), capital))
+        assertEquals("Stone Works needs stone nearby", 10,
+            pantheonCityScore(civ, game.createBelief(BeliefType.Pantheon, "[+1 Culture] from every [Stone Works]"), capital))
+        assertEquals("a loss from a building counts nothing", 0,
+            pantheonCityScore(civ, game.createBelief(BeliefType.Pantheon, "[-1 Culture] from every [Granary]"), capital))
+        // God-King's Palace yields only in the capital
+        assertEquals(100, pantheonCityScore(civ, "God-King", capital))
+        assertEquals(0, pantheonCityScore(civ, "God-King", town))
+        assertEquals(0, pantheonCityScore(civ, "God-King", null))
+    }
+
+    @Test
+    fun `with Vox Populi a pantheon counts our own unique building sooner`() {
+        val civ = vpPlotCiv()
+        civ.ai.setPersonalityFlavor(Flavor.Culture, 10)
+        val shrine = game.createBuilding()
+        shrine.replaces = "Shrine"
+        shrine.requiredTech = "Pottery"
+        civ.cache.uniqueBuildings.add(shrine)
+        // our Shrine needs Pottery: 3 + 3, then buildable 8 + 3, at most 10
+        assertEquals(60, pantheonCityScore(civ, "Ancestor Worship", civ.getCapital()))
+        civ.tech.addTechnology("Pottery")
+        assertEquals(100, pantheonCityScore(civ, "Ancestor Worship", civ.getCapital()))
+    }
+
+    @Test
+    fun `with Vox Populi a pantheon belief scores each city by its pantheon city score`() {
+        val civ = vpPlotCiv()
+        val belief = game.ruleset.beliefs["Sacred Waters"]!!
+        val dry = BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ))
+        civ.getCapital()!!.getCenterTile().hasBottomRiver = true
+        civ.getCapital()!!.getCenterTile().forgetAdjacentToRiver()
+        // the capital on a river: 30, halved for a pantheon
+        assertEquals(dry + 15, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
     }
     //endregion
 

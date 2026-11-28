@@ -12620,7 +12620,8 @@
       "researchPercent": 100,
       "numCitiesPolicyCostMod": 5.0,
       "numCitiesTechCostMod": 5.0,
-      "numCitiesUnhappinessPercent": 150
+      "numCitiesUnhappinessPercent": 150,
+      "estimatedNumCities": 13
     },
     {
       "name": "Tiny",
@@ -12631,7 +12632,8 @@
       "researchPercent": 100,
       "numCitiesPolicyCostMod": 5.0,
       "numCitiesTechCostMod": 5.0,
-      "numCitiesUnhappinessPercent": 125
+      "numCitiesUnhappinessPercent": 125,
+      "estimatedNumCities": 26
     },
     {
       "name": "Small",
@@ -12642,7 +12644,8 @@
       "researchPercent": 100,
       "numCitiesPolicyCostMod": 5.0,
       "numCitiesTechCostMod": 5.0,
-      "numCitiesUnhappinessPercent": 115
+      "numCitiesUnhappinessPercent": 115,
+      "estimatedNumCities": 39
     },
     {
       "name": "Standard",
@@ -12653,7 +12656,8 @@
       "researchPercent": 100,
       "numCitiesPolicyCostMod": 5.0,
       "numCitiesTechCostMod": 5.0,
-      "numCitiesUnhappinessPercent": 100
+      "numCitiesUnhappinessPercent": 100,
+      "estimatedNumCities": 52
     },
     {
       "name": "Large",
@@ -12664,7 +12668,8 @@
       "researchPercent": 100,
       "numCitiesPolicyCostMod": 5.0,
       "numCitiesTechCostMod": 5.0,
-      "numCitiesUnhappinessPercent": 80
+      "numCitiesUnhappinessPercent": 80,
+      "estimatedNumCities": 80
     },
     {
       "name": "Huge",
@@ -12675,7 +12680,8 @@
       "researchPercent": 100,
       "numCitiesPolicyCostMod": 5.0,
       "numCitiesTechCostMod": 5.0,
-      "numCitiesUnhappinessPercent": 60
+      "numCitiesUnhappinessPercent": 60,
+      "estimatedNumCities": 132
     }
   ],
   "multiUnitFormations": [

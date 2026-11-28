@@ -1414,7 +1414,8 @@ class ModConstants {
      *  units city by city (DoFaithPurchasesInCities); Great Prophets convert the cities of VP's ChooseProphetConversionCity and build Holy
      *  Sites, enhance or spread as GetDirectiveProphet says; beliefs weigh the plots of CalculatePlotWeightsForBeliefSelection
      *  and value each plot's yields as ScoreBeliefAtPlot, and a pantheon's cities and player value as
-     *  ScorePantheonBeliefAtCity and ScorePantheonBeliefForPlayer, all totalled as ScoreBelief */
+     *  ScorePantheonBeliefAtCity and ScorePantheonBeliefForPlayer, all totalled as ScoreBelief, with its bonus belief modifier for a
+     *  belief of any type a unique grants */
     var religionCultureAiLikeVp = false
     // A concert tour is worth at least this much tourism, before the game speed
     var concertTourMinimumTourism = 100

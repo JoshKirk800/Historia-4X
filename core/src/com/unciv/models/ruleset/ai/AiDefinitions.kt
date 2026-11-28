@@ -234,6 +234,7 @@ class GameSpeedDiplomacyDef : INamed {
  *  @property numCitiesTechCostMod percent more per city on the cost of a technology (Vox Populi 5, BNW 5/3.75/2.5)
  *  @property researchPercent percent of the cost of a technology (Vox Populi 100, BNW 100/110/120/130)
  *  @property numCitiesUnhappinessPercent CvPolicyAI::WeightPolicyAttributes divides by it, the unhappiness from the number of cities is scaled by at most 100 of it
+ *  @property estimatedNumCities the cities a map of this size is expected to hold (CvWorldInfo::GetEstimatedNumCities)
  */
 class WorldSizeDef : INamed {
     override var name = ""
@@ -245,25 +246,28 @@ class WorldSizeDef : INamed {
     var numCitiesPolicyCostMod = 5f
     var numCitiesTechCostMod = 5f
     var numCitiesUnhappinessPercent = 100
+    var estimatedNumCities = 52
 
     companion object {
-        private fun row(name: String, players: Int, minors: Int, width: Int, height: Int, unhappiness: Int) = WorldSizeDef().also {
-            it.name = name
-            it.defaultPlayers = players
-            it.defaultMinorCivs = minors
-            it.gridWidth = width
-            it.gridHeight = height
-            it.numCitiesUnhappinessPercent = unhappiness
-        }
+        private fun row(name: String, players: Int, minors: Int, width: Int, height: Int, unhappiness: Int, cities: Int) =
+            WorldSizeDef().also {
+                it.name = name
+                it.defaultPlayers = players
+                it.defaultMinorCivs = minors
+                it.gridWidth = width
+                it.gridHeight = height
+                it.numCitiesUnhappinessPercent = unhappiness
+                it.estimatedNumCities = cities
+            }
 
         /** Vox Populi's Worlds table, for a ruleset or mod without the table in its AI.json */
         val defaultRows = listOf(
-            row("Duel", 2, 4, 40, 24, 150),
-            row("Tiny", 4, 8, 56, 36, 125),
-            row("Small", 6, 12, 66, 42, 115),
-            row("Standard", 8, 16, 80, 52, 100),
-            row("Large", 10, 20, 104, 64, 80),
-            row("Huge", 12, 24, 128, 80, 60),
+            row("Duel", 2, 4, 40, 24, 150, 13),
+            row("Tiny", 4, 8, 56, 36, 125, 26),
+            row("Small", 6, 12, 66, 42, 115, 39),
+            row("Standard", 8, 16, 80, 52, 100, 52),
+            row("Large", 10, 20, 104, 64, 80, 80),
+            row("Huge", 12, 24, 128, 80, 60, 132),
         )
     }
 }

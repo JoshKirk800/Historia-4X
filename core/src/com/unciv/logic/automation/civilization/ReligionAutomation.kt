@@ -1228,12 +1228,17 @@ object ReligionAutomation {
         civ.religionManager.chooseBeliefs(chooseBeliefs(civ, civ.religionManager.freeBeliefsAsEnums()).toList(), useFreeBeliefs = true)
     }
 
-    /** One belief per slot of [beliefsToChoose], each by [chooseBelief]; a bonus belief (BeliefType.Any) excludes the ones chosen here */
+    /**
+     *  One belief per slot of [beliefsToChoose], each by [chooseBelief]; a bonus belief (BeliefType.Any) excludes the ones chosen here.
+     *  With Vox Populi's AI a pantheon weighs the plots we may expand to (CvReligionAI::ChoosePantheonBelief, V:CvReligionClasses.cpp:6161-6191).
+     */
     private fun chooseBeliefs(civ: Civilization, beliefsToChoose: Counter<BeliefType>): LinkedHashSet<Belief> {
         val chosen = LinkedHashSet<Belief>()
-        val context = BeliefScoringContext(civ)
+        val contexts = HashMap<Boolean, BeliefScoringContext>()
         for (type in BeliefType.entries) {
             if (type == BeliefType.None) continue
+            val considerExpansion = religionAiLikeVp(civ) && type == BeliefType.Pantheon
+            val context = contexts.getOrPut(considerExpansion) { BeliefScoringContext(civ, considerExpansion) }
             repeat(beliefsToChoose[type]) { index ->
                 chosen.add(chooseBelief(civ, type, chosen, context, index) ?: return@repeat)
             }

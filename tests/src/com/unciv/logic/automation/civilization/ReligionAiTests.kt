@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.Constants
 import com.unciv.logic.automation.city.HurryChoice
 import com.unciv.logic.automation.civilization.ReligionAutomation.FaithPurchase
 import com.unciv.logic.automation.diplomacy.MajorCivOpinion
@@ -177,6 +178,97 @@ class ReligionAiTests {
         val belief = game.ruleset.beliefs["God of War"]!!
         // 5 base + 50 × 4 × 10 / 100, halved
         assertEquals((5 + 20) / 2, BeliefScoring.scoreBelief(belief, BeliefScoringContext(civ)))
+    }
+
+    private fun plotWeights(civ: Civilization, considerExpansion: Boolean): Map<Tile, Int> {
+        val context = BeliefScoringContext(civ, considerExpansion)
+        return context.plots.indices.associate { context.plots[it] to context.plotMultipliers[it] }
+    }
+
+    private fun mountain(tile: Tile) {
+        tile.baseTerrain = Constants.mountain
+        tile.setTransients()
+    }
+
+    @Test
+    fun `with Vox Populi belief plots weigh our cities and worked plots 10, our others in range 8, mountains 10 per city in range`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val civ = game.addCiv()
+        val capital = game.addCity(civ, tile(0, 0))
+        game.addCity(civ, tile(5, 0))
+        val other = game.addCiv()
+        val foreign = game.addCity(other, tile(-5, 0))
+        for (tile in game.tileMap.values) tile.setExplored(civ, true)
+        capital.workedTiles.clear()
+        capital.workedTiles.add(tile(1, 0).position)
+        mountain(tile(3, 0))
+        mountain(tile(-3, 0))
+        capital.expansion.takeOwnership(tile(0, 4))
+        assertEquals(4, tile(0, 4).aerialDistanceTo(capital.getCenterTile()))
+        val weights = plotWeights(civ, considerExpansion = false)
+        assertEquals("ours, out of reach", null, weights[tile(0, 4)])
+        assertEquals(10, weights[capital.getCenterTile()])
+        assertEquals(null, weights[foreign.getCenterTile()])
+        assertEquals("worked", 10, weights[tile(1, 0)])
+        assertEquals("ours, unworked", 8, weights[tile(0, 1)])
+        assertEquals("in reach of both cities", 20, weights[tile(3, 0)])
+        assertEquals("in reach of the capital only, unowned", 10, weights[tile(-3, 0)])
+        assertEquals("unowned plots only for a pantheon", null, weights[tile(2, 0)])
+        assertEquals(6, plotWeights(civ, considerExpansion = true)[tile(2, 0)])
+    }
+
+    @Test
+    fun `with Vox Populi a pantheon weighs unowned plots by our reach, the exploration range and nearer known cities`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val civ = game.addCiv()
+        val capital = game.addCity(civ, tile(0, 0))
+        val other = game.addCiv()
+        game.addCity(other, tile(-7, 0))
+        for (tile in game.tileMap.values) tile.setExplored(civ, true)
+        val center = capital.getCenterTile()
+        val probes = listOf(tile(2, 0), tile(3, 0), tile(4, 0), tile(-5, 0), tile(6, 0), tile(7, 0))
+        assertEquals(listOf(2, 3, 4, 5, 6, 7), probes.map { it.aerialDistanceTo(center) })
+        var weights = plotWeights(civ, considerExpansion = true)
+        assertEquals("in reach, next to ours", 6, weights[tile(2, 0)])
+        assertEquals("in reach", 3, weights[tile(3, 0)])
+        // exploration range 9, work range 3: (4 - 3) <= (9 - 3) / 2
+        assertEquals(2, weights[tile(4, 0)])
+        assertEquals(2, weights[tile(6, 0)])
+        assertEquals(1, weights[tile(7, 0)])
+        assertEquals("not yet met", 2, weights[tile(-5, 0)])
+        mountain(tile(7, 0))
+        other.diplomacyFunctions.makeCivilizationsMeet(civ)
+        val theirLand = other.cities.flatMap { it.getTiles().toList() }
+        for (tile in theirLand) tile.setExplored(civ, false)
+        tile(4, 0).setExplored(civ, false)
+        weights = plotWeights(civ, considerExpansion = true)
+        assertEquals("met, their land unseen", 2, weights[tile(-5, 0)])
+        assertEquals("unseen", null, weights[tile(4, 0)])
+        for (tile in theirLand) tile.setExplored(civ, true)
+        weights = plotWeights(civ, considerExpansion = true)
+        assertEquals("a mountain counts 4 times", 4, weights[tile(7, 0)])
+        assertEquals("their city is nearer", null, weights[tile(-5, 0)])
+        civ.policies.freePolicies = 1
+        civ.policies.adopt(game.ruleset.policyBranches["Tradition"]!!)
+        weights = plotWeights(civ, considerExpansion = true)
+        assertEquals("range 6", null, weights[tile(7, 0)])
+        assertEquals("(6 - 3) > (6 - 3) / 2", 1, weights[tile(6, 0)])
+    }
+
+    @Test
+    fun `with Vox Populi the exploration range counts from the capital, the work range from any of our cities`() {
+        game.ruleset.modOptions.constants.religionCultureAiLikeVp = true
+        val civ = game.addCiv()
+        val capital = game.addCity(civ, tile(-4, 0))
+        game.addCity(civ, tile(0, 0))
+        for (tile in game.tileMap.values) tile.setExplored(civ, true)
+        civ.policies.freePolicies = 1
+        civ.policies.adopt(game.ruleset.policyBranches["Tradition"]!!)
+        assertEquals(listOf(8, 4), listOf(capital.getCenterTile(), tile(0, 0)).map { it.aerialDistanceTo(tile(4, 0)) })
+        assertEquals(listOf(7, 3), listOf(capital.getCenterTile(), tile(0, 0)).map { it.aerialDistanceTo(tile(3, 0)) })
+        val weights = plotWeights(civ, considerExpansion = true)
+        assertEquals("beyond range 6 of the capital, 4 from a city", null, weights[tile(4, 0)])
+        assertEquals("beyond range 6 of the capital, in reach of a city", 3, weights[tile(3, 0)])
     }
     //endregion
 

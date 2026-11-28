@@ -1,5 +1,6 @@
 package com.unciv.logic.automation.civilization
 
+import com.unciv.Constants
 import com.unciv.logic.MultiFilter
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
@@ -11,6 +12,7 @@ import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.ai.AiDefine
 import com.unciv.models.ruleset.ai.Flavor
+import com.unciv.models.ruleset.ai.TraitCategory
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.Unique
@@ -321,9 +323,11 @@ class BeliefAiProfile private constructor() {
 
 /**
  *  The data CvReligionAI::ScoreBelief computes over the map and the player once per decision: the plots it scores (revealed, unowned or
- *  ours, within 3 of one of our cities) with their multipliers, and the player-level inputs.
+ *  ours, within 3 of one of our cities) with their multipliers, and the player-level inputs. With Vox Populi's AI
+ *  ([ReligionAutomation.religionAiLikeVp]) the plots and their weights are [plotWeightsLikeVp]'s, the unowned ones only when
+ *  [considerExpansion] (choosing a pantheon).
  */
-class BeliefScoringContext(val civ: Civilization) {
+class BeliefScoringContext(val civ: Civilization, considerExpansion: Boolean = false) {
     val plots: List<Tile>
     val plotMultipliers: IntArray
     /** CvReligionAI::ScoreBeliefAtCity: 3 if Offense×2 + Happiness − Defense > 15, 1 if < 6, else 2 */
@@ -334,23 +338,29 @@ class BeliefScoringContext(val civ: Civilization) {
     val religionsEnhancedPercent: Int
 
     init {
-        val ai = civ.gameInfo.ruleset.ai
-        val worked = ai.define(AiDefine.RELIGION_BELIEF_SCORE_WORKED_PLOT_MULTIPLIER)
-        val owned = ai.define(AiDefine.RELIGION_BELIEF_SCORE_OWNED_PLOT_MULTIPLIER)
-        val unowned = ai.define(AiDefine.RELIGION_BELIEF_SCORE_UNOWNED_PLOT_MULTIPLIER)
-        val tiles = LinkedHashSet<Tile>()
-        for (city in civ.cities)
-            for (tile in city.getCenterTile().getTilesInDistance(3)) {
-                val owner = tile.getOwner()
-                if ((owner == null || owner == civ) && tile.isExplored(civ)) tiles.add(tile)
-            }
-        plots = tiles.toList()
-        plotMultipliers = IntArray(plots.size) { i ->
-            val tile = plots[i]
-            when {
-                tile.isWorked() -> worked
-                tile.getOwner() != null -> owned
-                else -> unowned
+        if (ReligionAutomation.religionAiLikeVp(civ)) {
+            val weights = plotWeightsLikeVp(civ, considerExpansion)
+            plots = weights.map { it.first }
+            plotMultipliers = IntArray(weights.size) { weights[it].second }
+        } else {
+            val ai = civ.gameInfo.ruleset.ai
+            val worked = ai.define(AiDefine.RELIGION_BELIEF_SCORE_WORKED_PLOT_MULTIPLIER)
+            val owned = ai.define(AiDefine.RELIGION_BELIEF_SCORE_OWNED_PLOT_MULTIPLIER)
+            val unowned = ai.define(AiDefine.RELIGION_BELIEF_SCORE_UNOWNED_PLOT_MULTIPLIER)
+            val tiles = LinkedHashSet<Tile>()
+            for (city in civ.cities)
+                for (tile in city.getCenterTile().getTilesInDistance(3)) {
+                    val owner = tile.getOwner()
+                    if ((owner == null || owner == civ) && tile.isExplored(civ)) tiles.add(tile)
+                }
+            plots = tiles.toList()
+            plotMultipliers = IntArray(plots.size) { i ->
+                val tile = plots[i]
+                when {
+                    tile.isWorked() -> worked
+                    tile.getOwner() != null -> owned
+                    else -> unowned
+                }
             }
         }
 
@@ -366,6 +376,79 @@ class BeliefScoringContext(val civ: Civilization) {
 
         val enhanced = civ.gameInfo.civilizations.count { it.religionManager.religionState == ReligionState.EnhancedReligion }
         religionsEnhancedPercent = 100 * enhanced / max(1, civ.religionManager.maxNumberOfReligions())
+    }
+
+    private companion object {
+        /**
+         *  CvReligionAI::CalculatePlotWeightsForBeliefSelection (V:CvReligionClasses.cpp:7587-7804): every plot we have revealed, weighted
+         *  - our city 10, another's 0
+         *  - a mountain within the work range of our cities: 10 for each such city
+         *  - ours: 10 if worked, else 8 within the work range of the city it belongs to
+         *  - only when [considerExpansion], unowned within the exploration range of the capital or 3 of one of our cities: in the work range
+         *    of our nearest city 6 next to an owned plot, else 3; outside it none if a city of a known major civilization near us is nearer,
+         *    else 2 within half the exploration range beyond the capital's work range, else 1, × 4 on a mountain
+         */
+        fun plotWeightsLikeVp(civ: Civilization, considerExpansion: Boolean): List<Pair<Tile, Int>> {
+            val capital = civ.getCapital() ?: return emptyList()
+            val capitalTile = capital.getCenterTile()
+            val explorationRange = if (considerExpansion) explorationRange(civ) else 0
+            val workRange = capital.getWorkRange()
+            val knownCitiesWithinReach = if (!considerExpansion) emptyList() else civ.gameInfo.civilizations
+                .filter { it != civ && it.isMajorCiv && civ.knows(it) && hasFoundTerritory(civ, it) }
+                .flatMap { it.cities }
+                .filter { it.getCenterTile().aerialDistanceTo(capitalTile) < 2 * explorationRange }
+            val weights = ArrayList<Pair<Tile, Int>>()
+            for (tile in civ.gameInfo.tileMap.values) {
+                if (!tile.isExplored(civ)) continue
+                val owner = tile.getOwner()
+                var weight = 0
+                if (tile.isCityCenter()) weight = if (owner == civ) 10 else 0
+                else {
+                    val mountain = tile.baseTerrain == Constants.mountain
+                    if (mountain) weight = 10 * civ.cities.count { it.getCenterTile().aerialDistanceTo(tile) <= it.getWorkRange() }
+                    if (weight == 0 && owner == civ) {
+                        val city = tile.getCity()
+                        weight = when {
+                            tile.isWorked() -> 10
+                            city != null && city.getCenterTile().aerialDistanceTo(tile) <= city.getWorkRange() -> 8
+                            else -> 0
+                        }
+                    } else if (weight == 0 && considerExpansion && owner == null) {
+                        val distanceToCapital = tile.aerialDistanceTo(capitalTile)
+                        if (distanceToCapital <= explorationRange || closestCity(civ, tile, 3) != null) {
+                            val closest = closestCity(civ, tile, explorationRange)!!
+                            val ourDistance = closest.getCenterTile().aerialDistanceTo(tile)
+                            if (ourDistance <= closest.getWorkRange())
+                                weight = if (tile.neighbors.any { it.getOwner() != null }) 6 else 3
+                            else if (knownCitiesWithinReach.none { it.getCenterTile().aerialDistanceTo(tile) < ourDistance }) {
+                                weight = if (distanceToCapital - workRange <= (explorationRange - workRange) / 2) 2 else 1
+                                if (mountain) weight *= 4
+                            }
+                        }
+                    }
+                }
+                if (weight > 0) weights.add(tile to weight)
+            }
+            return weights
+        }
+
+        /** CvPlayer::GetClosestCity without the landmass test: our city nearest to [tile] within [radius], the first of equals */
+        private fun closestCity(civ: Civilization, tile: Tile, radius: Int): City? =
+            civ.cities.filter { it.getCenterTile().aerialDistanceTo(tile) <= radius }.minByOrNull { it.getCenterTile().aerialDistanceTo(tile) }
+
+        /** CvTeam::IsHasFoundPlayersTerritory: we have revealed a plot [other] owns */
+        private fun hasFoundTerritory(civ: Civilization, other: Civilization): Boolean =
+            other.cities.any { city -> city.getTiles().any { it.isExplored(civ) } }
+
+        /** The exploration range of CvReligionAI::CalculatePlotWeightsForBeliefSelection: 9, -3 with Tradition, else +1 with Honor, else +3
+         *  with Liberty, else +2 for an expansionist and -2 for a smaller civilization (CvPlayerTraits::IsExpansionist, IsSmaller) */
+        fun explorationRange(civ: Civilization): Int = 9 + when {
+            civ.policies.isAdopted("Tradition") -> -3
+            civ.policies.isAdopted("Honor") -> 1
+            civ.policies.isAdopted("Liberty") -> 3
+            else -> (if (civ.ai.hasTraitCategory(TraitCategory.Expansionist)) 2 else 0) -
+                (if (civ.ai.hasTraitCategory(TraitCategory.Smaller)) 2 else 0)
+        }
     }
 }
 

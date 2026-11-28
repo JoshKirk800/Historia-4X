@@ -249,15 +249,8 @@ object WarDamageAi {
      */
     @Readonly
     fun highestWarWearinessPercent(civ: Civilization): Int {
-        if (!civ.gameInfo.ruleset.modOptions.constants.warWearinessLikeVp || !civ.isMajorCiv) return 0
-        var highest = 0
-        for (other in metMajors(civ)) {
-            val weariness = warWeariness(civ, other)
-            if (weariness <= highest) continue
-            if (civ.isAtWarWith(other) && !canChangeWarPeace(civ, other)) continue
-            highest = weariness
-        }
-        return scaledWarWearinessPercent(civ, highest)
+        val player = highestWarWearinessPlayer(civ) ?: return 0
+        return scaledWarWearinessPercent(civ, warWeariness(civ, player))
     }
 
     /** CvPlayer::GetWarWearinessPercent: the same for the war weariness against [other] alone (0 when it is not a met major) */
@@ -267,6 +260,43 @@ object WarDamageAi {
         if (other == civ || !other.isMajorCiv || !civ.knows(other)) return 0
         val weariness = warWeariness(civ, other)
         return if (weariness == 0) 0 else scaledWarWearinessPercent(civ, weariness)
+    }
+
+    /**
+     *  CvPlayer::GetHighestWarWearinessPlayer (V:CvPlayer.cpp:37064-37099) for a happiness check (the AI's four callers all pass true): the met major
+     *  that [civ] is wearier of than of any other, in raw weariness and not in percent, not one at war with whom peace cannot be made; null for none
+     *  (a weariness of 0 is ignored), and without `warWearinessLikeVp` or for a non-major. The engine has no teams, so a team is one civilization.
+     *  Not built: the happiness that a war gives ([CvPlayer::getHappinessPerMajorWar], the building column GlobalHappinessPerMajorWar, which the engine does
+     *  not have) is taken off the weariness in the original; here it is 0.
+     */
+    @Readonly
+    fun highestWarWearinessPlayer(civ: Civilization): Civilization? {
+        if (!civ.gameInfo.ruleset.modOptions.constants.warWearinessLikeVp || !civ.isMajorCiv) return null
+        var player: Civilization? = null
+        var highest = 0
+        for (other in metMajors(civ)) {
+            val weariness = warWeariness(civ, other)
+            if (weariness <= highest) continue
+            if (civ.isAtWarWith(other) && !canChangeWarPeace(civ, other)) continue
+            highest = weariness
+            player = other
+        }
+        return player
+    }
+
+    /**
+     *  CvPlayer::GetUnhappinessFromWarWearinessWithTeam (V:CvPlayer.cpp:37117-37142) for a happiness check: how much unhappiness [civ]'s weariness of
+     *  [other] would cause, the percent against [other] ([warWearinessPercent], which counts the recent captures) x the citizens of all [civ]'s cities x
+     *  [ModConstants.WarWearinessConstants.populationPercentCap] (0 or more) / 10000, one product cut once, at least 0. 0 for a dead or non-major [other]
+     *  (its weariness fades whether or not there is peace) and without `warWearinessLikeVp`. The happiness per major war is not built (see
+     *  [highestWarWearinessPlayer]).
+     */
+    @Readonly
+    fun unhappinessFromWarWearinessWithTeam(civ: Civilization, other: Civilization): Int {
+        if (!other.isAlive() || !other.isMajorCiv) return 0
+        val citizens = civ.cities.sumOf { it.population.population }
+        val cap = maxOf(civ.gameInfo.ruleset.modOptions.constants.warWeariness.populationPercentCap, 0)
+        return maxOf(warWearinessPercent(civ, other) * citizens * cap / 10000, 0)
     }
 
     /**

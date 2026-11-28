@@ -20,8 +20,8 @@ import com.unciv.logic.civilization.Civilization
  *  under siege and falling or more than half destroyed, for a city we founded, or our capital, an original capital, a holy city of
  *  either founder, or a city with a wonder; theirs, falling or under siege and falling or more than half destroyed; and having no cities.
  *
- *  Inputs: the war allies are [WarAlliesAi.warAllies] (no vassals, D3); war weariness (BNW has none) counts as none, so the war score
- *  stands as it is; the thresholds are [WarIntentAi.warScoreThresholdPositive] and [WarIntentAi.warScoreThresholdNegative]; the last
+ *  Inputs: the war allies are [WarAlliesAi.warAllies] (no vassals, D3); war weariness scales the war score against the enemy we are wearier
+ *  of while we are very unhappy ([WarDamageAi.warStateScore], only with `warStateWarWearinessLikeVp`; else the score stands as it is); the thresholds are [WarIntentAi.warScoreThresholdPositive] and [WarIntentAi.warScoreThresholdNegative]; the last
  *  city capture is [MajorCivMemory.lastCityCaptureTurn] (-1 = never: more than any number of turns ago). The tactical zones are those of
  *  the last tactical analysis ([com.unciv.logic.automation.unit.tactical.TacticalMap]); a side without one (a city-state) has no zone.
  */
@@ -90,16 +90,18 @@ object WarStateUpdateAi {
     /**
      *  The state of a war from the danger of both sides and the war score: serious danger decides first (ours alone: defensive; theirs
      *  alone: offensive above the positive threshold, else stalemate; both: stalemate between the thresholds), else a score of at least 75
-     *  either way, else the danger compared after discounting the side with more safe cities, with the score splitting the cases.
+     *  either way, else the danger compared after discounting the side with more safe cities, with the score splitting the cases. [rawScore] is the
+     *  war score as it is (the "at least 75 either way" test, the original's bWeAreLosing and bTheyAreLosing), [score] the one that war weariness
+     *  may have scaled ([WarDamageAi.warStateScore]) for every other test.
      */
-    private fun stateByDanger(ours: Side, theirs: Side, score: Int, positive: Int, negative: Int): WarState {
+    private fun stateByDanger(ours: Side, theirs: Side, rawScore: Int, score: Int, positive: Int, negative: Int): WarState {
         var state: WarState? = when {
             ours.serious && !theirs.serious -> WarState.Defensive
             !ours.serious && theirs.serious -> if (score > positive) WarState.Offensive else WarState.Stalemate
             ours.serious && theirs.serious && score > negative && score < positive -> WarState.Stalemate
             else -> null
         }
-        if (state == null) state = if (score <= -75) WarState.Defensive else if (score >= 75) WarState.Offensive else null
+        if (state == null) state = if (rawScore <= -75) WarState.Defensive else if (rawScore >= 75) WarState.Offensive else null
         return state ?: stateByComparedDanger(ours, theirs, score, positive, negative)
     }
 
@@ -146,10 +148,11 @@ object WarStateUpdateAi {
             val ours = assess(civ, theirAllies, civ, religions, ownSide = true)
             val theirs = assess(other, ourAllies, civ, religions, ownSide = false)
 
-            val score = WarDamageAi.warScore(civ, other)
+            val rawScore = WarDamageAi.warScore(civ, other)
+            val score = WarDamageAi.warStateScore(civ, other, rawScore)
             val positive = WarIntentAi.warScoreThresholdPositive(civ)
             val negative = WarIntentAi.warScoreThresholdNegative(civ)
-            var state = stateByDanger(ours, theirs, score, positive, negative)
+            var state = stateByDanger(ours, theirs, rawScore, score, positive, negative)
             // If winning and the war score high enough, or losing and the war score low enough, the war state intensifies
             if (score >= positive * 2 && state == WarState.Offensive) state = WarState.NearlyWon
             else if (score <= negative * 2 && state == WarState.Defensive) state = WarState.NearlyDefeated

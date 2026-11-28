@@ -343,6 +343,11 @@ class ModConstants {
      *  [WarWearinessConstants.populationPercentCap] percent. false: the war weariness adds no unhappiness. Staged like [unitCostWarWearinessLikeVp]: its own switch, no ruleset row flips it */
     var needsWarWearinessLikeVp = false
 
+    /** VP 5.4.8 CvDiplomacyAI::DoUpdateWarStates (V:CvDiplomacyAI.cpp:10818-10832): true (with [warWearinessLikeVp]): the war score that decides the war state against the enemy the empire is
+     *  wearier of is doubled when it is negative and cut to 75 percent when it is not, while the empire is very unhappy and that war weariness would cost it unhappiness; the
+     *  raw score still decides the "losing" and "winning" flags. false: the war score stands as it is. Staged like [unitCostWarWearinessLikeVp]: its own switch, no ruleset row flips it */
+    var warStateWarWearinessLikeVp = false
+
     /** The defines of the war weariness (DEF-VP `(2) Vox Populi/Database Changes/DefineChanges.sql`; the same in `ref/db/vp.sqlite` `Defines`) */
     data class WarWearinessConstants(
         /** `WAR_WEARINESS_MINIMUM_TURNS`: a war must be this many turns old before it adds weariness */
